@@ -166,9 +166,18 @@ declared state.** Three readings, and a bare "has an active goal" test conflates
 
 | Reading | Predicate | Re-arm |
 |---|---|---|
-| **DRIVEN** | the evaluation is advancing (`turns_used > 0` **and** `updated_at > created_at`), **or** a turn is in flight | refused |
+| **DRIVEN** | `state='active'` **and** the evaluation is advancing (`turns_used > 0` **and** `updated_at > created_at`), **or** a turn is in flight | refused |
 | **ARMED-INERT** | `state='active'` **and** `turns_used = 0` **and** `updated_at = created_at` | permitted — an arm that has never been evaluated is not a driver |
 | **DRIVERLESS** | no active row **and** no turn in flight | permitted |
+
+**The motion half is scoped to a LIVE row, and the scope is load-bearing.** Read without it, a
+`paused` row that advanced before it stopped satisfies **DRIVEN** (`turns_used > 0`,
+`updated_at > created_at`) and **DRIVERLESS** (no active row, no turn in flight) at once — the
+rows overlap and the table never says which wins. It resolves toward **DRIVERLESS**: a stopped
+loop is not a driver, and reading it as one would refuse the only act that restarts it, so a
+paused lane holding a fortnight-old backlog would print DRIVEN and go unmentioned for ever —
+the exact failure this reading was added to end (#133). Motion is evidence of a driver only
+while the row is still being evaluated; after that it is a record of one that left.
 
 A lane holding an active goal is the case this bar exists for: an active goal means a driver
 is in the room. But `state='active'` is a **DECLARED** value and is not a measurement of a

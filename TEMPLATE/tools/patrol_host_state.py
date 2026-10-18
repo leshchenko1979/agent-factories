@@ -1872,6 +1872,85 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
         homes_read.append(db.parent.name)
     return rows, homes_read, unreached
 
+# THE GOAL STATE THAT MEANS A DRIVER IS RUNNING (#133). `goal_state.state` is the daemon's own
+# word for what a session's autonomous convergence loop is doing, and the three values it
+# emits mean three different things to a lane carrying an unclaimed backlog:
+#   * `active`        -- the loop is RUNNING and will take the next turn: DRIVEN.
+#   * `completed`     -- the loop RAN and stopped; nothing will wake it again until a lane
+#                        arms it. ARMED-INERT: the mechanism exists, no turn is coming.
+#   * `paused`        -- the loop was armed and STOPPED mid-flight; same consequence.
+# Read as a declared vocabulary, not a guess: the value is PRINTED on every line, so a state
+# this reader has never seen renders as its own name rather than being folded into a verdict.
+GOAL_DRIVEN_STATE = "active"
+
+def box_goal_rows(root: Path | None = None) -> dict:
+    """{rows, homes_read, homes_without_store, unreached} for every home's `goal_state`.
+
+    The driverless-lane leg (#133) asks whether a lane that is carrying an unclaimed backlog
+    has a DRIVER at all, and `goal_state` is the only surface that answers it: it is the
+    daemon's own record of each session's convergence loop, keyed by `session_id`.
+
+    FOUR OUTCOMES, FOUR NAMES, because three of them are absences that would otherwise render
+    identically. A home whose DB opened and carried the table is READ; a home that opened and
+    carries no `goal_state` at all is `homes_without_store` (a member factory's harness may
+    not ship the table, and calling that "unreached" would red a leg for a shape the kit
+    never promised); a home whose DB could not be opened is `unreached`; and the rows
+    themselves are the reading. Read IN PLACE through the same `mode=ro` URI as
+    `box_cron_rows`, for the same reason: a copy of a live WAL-mode database is stale state
+    and a disk leak.
+
+    The COLUMNS are probed, never assumed -- the same idiom `box_cron_rows` uses for
+    `cron_expr`: a home whose `goal_state` predates a column reads NULL for it and is still
+    READ, because `turns_used` and the instants are CARRIED for the report and no verdict is
+    derived from their presence.
+    """
+    registry = load_module("oc_registry", REGISTRY)
+    dbs, unreached = registry.opencrabs_home_dbs(root)
+    rows: list[dict] = []
+    homes_read: list[str] = []
+    homes_without_store: list[str] = []
+    for db in dbs:
+        try:
+            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        except sqlite3.Error as exc:
+            unreached.append(f"{db.parent.name}: {exc}")
+            continue
+        try:
+            present = conn.execute(
+                "select 1 from sqlite_master where type='table' and name='goal_state'"
+            ).fetchone()
+            if not present:
+                homes_without_store.append(db.parent.name)
+                continue
+            columns = {r[1] for r in conn.execute("PRAGMA table_info(goal_state)")}
+            wanted = ("state", "turns_used", "max_turns", "created_at", "updated_at")
+            select = ", ".join(
+                col if col in columns else f"NULL as {col}" for col in wanted
+            )
+            fetched = list(conn.execute(f"select session_id, {select} from goal_state"))
+        except sqlite3.Error as exc:
+            unreached.append(f"{db.parent.name}: {exc}")
+            continue
+        finally:
+            conn.close()
+        for session_id, state, turns_used, max_turns, created_at, updated_at in fetched:
+            rows.append({
+                "session_id": str(session_id or ""),
+                "state": state,
+                "turns_used": turns_used,
+                "max_turns": max_turns,
+                "created_at": created_at,
+                "updated_at": updated_at,
+                "home": db.parent.name,
+            })
+        homes_read.append(db.parent.name)
+    return {
+        "rows": rows,
+        "homes_read": homes_read,
+        "homes_without_store": homes_without_store,
+        "unreached": unreached,
+    }
+
 
 # THE DAEMON'S OWN WORDING for a round its trigger gate skipped (#477). Read from the run
 # record's `content` prose, which is the ONLY field that separates a suppressed fire from a
@@ -5908,6 +5987,22 @@ def stall_census_leg(
     owed.sort(key=lambda entry: -entry["age_days"])
     addressees_resolved = 0
     units_owed_on_draining_lanes = 0
+    # THE BACKLOG GROUPED ON THE SAME DECLARED ROUTING THE ADDRESSEE IS READ FROM (#133).
+    # The driverless-lane leg asks whether a lane carrying an unclaimed backlog has a DRIVER,
+    # and it must ask that about the SAME addressees this leg already resolved -- re-deriving
+    # the routing one leg over would be a second reader of the same declaration, and the two
+    # would drift apart on the first re-routing either of them missed. So the grouping is
+    # built HERE, from the entries this leg has just resolved, and travels in the coverage.
+    # The population of that leg is therefore exactly `owed_by_lane`, printed beside it.
+    owed_by_lane: dict[str, dict] = {}
+    for entry in owed:
+        key = entry["session_ref"] or ""
+        slot = owed_by_lane.setdefault(
+            key,
+            {"session_ref": key, "lane": None, "units": [], "oldest_age_days": 0.0},
+        )
+        slot["units"].append(entry["unit"])
+        slot["oldest_age_days"] = max(slot["oldest_age_days"], entry["age_days"])
     for entry in owed:
         unit = entry["unit"]
         # THE ASSIGNEE IS RENDERED, NEVER PREDICATED ON (#423). An assigned-but-unclaimed
@@ -5930,6 +6025,9 @@ def stall_census_leg(
         name = lane_names.get(session_ref) if session_ref else None
         if session_ref and name:
             addressees_resolved += 1
+            slot = owed_by_lane.get(session_ref)
+            if slot is not None:
+                slot["lane"] = name
             addressee_note = (
                 f"the routing standing at read time (row n={entry['ref_row_n']}) was "
                 f"ADDRESSED to {name}"
@@ -6013,6 +6111,16 @@ def stall_census_leg(
             # question was never asked.
             "addressees_resolved": addressees_resolved,
             "addressees_unresolved": len(owed) - addressees_resolved,
+            # THE BACKLOG BY ADDRESSEE (#133). The driverless-lane leg's population, printed
+            # here so the two legs cannot disagree about which lane a unit sits on. A lane
+            # whose routing does not resolve to a name appears with `lane: null` and its
+            # units, which is the UNRESOLVED line this leg already reds -- carried, never
+            # silently dropped from the grouping.
+            "owed_by_lane": sorted(
+                owed_by_lane.values(),
+                key=lambda slot: (-slot["oldest_age_days"], slot["session_ref"]),
+            ),
+            "lanes_with_backlog": len(owed_by_lane),
             # THE DRAIN EVIDENCE TRAVELS WITH THE VERDICT (#465 criterion 1). A reader who
             # sees `units_owed: 9` must be able to read WHY that is a LANE reading and not
             # nine independent findings, and the count of OWED units sitting on a draining
@@ -6023,6 +6131,264 @@ def stall_census_leg(
             "lane_drain": lane_drain,
             "threshold_days": threshold_days,
             "threshold_basis": STALL_CENSUS_THRESHOLD_BASIS,
+            "read_at": read_at,
+        },
+    }
+
+DRIVERLESS_READINGS = ("DRIVEN", "ARMED-INERT", "DRIVERLESS")
+
+def _newest_goal_row(goal_rows: list[dict]) -> dict | None:
+    """The row that decides a session's current state, or None for no rows.
+
+    Ordered by `updated_at` then `created_at` then row order, because a session may carry
+    several rows over its life and the last one is its current state. A row whose instants are
+    NULL still sorts (as the empty string), which keeps the ordering TOTAL rather than partial:
+    "the newest row" must be a defined answer for every input.
+    """
+    if not goal_rows:
+        return None
+    return max(
+        goal_rows,
+        key=lambda row: (str(row.get("updated_at") or ""), str(row.get("created_at") or "")),
+    )
+
+def _goal_turns_used(row: dict) -> int:
+    """`turns_used` as an int, with an unreadable value counting as ZERO.
+
+    The card's DRIVEN predicate needs `turns_used > 0`, so an unparseable value must not read
+    as motion: zero is the conservative direction -- it withholds the "driven" claim rather
+    than inventing one.
+    """
+    try:
+        return int(row.get("turns_used") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+def _goal_advanced(row: dict) -> bool:
+    """Whether the row was touched AFTER it was created -- the card's motion half.
+
+    Both instants must be present and comparable; a missing one is NOT evidence of motion.
+    """
+    created = str(row.get("created_at") or "")
+    updated = str(row.get("updated_at") or "")
+    return bool(created) and bool(updated) and updated > created
+
+def driver_reading(goal_rows: list[dict], *, turn_open: bool = False) -> tuple[str, dict | None]:
+    """(reading, newest goal row) for ONE session's goal rows -- the CARD's predicates.
+
+    THE PREDICATES ARE THE CARD'S, not this reader's invention: `TEMPLATE/roles/triage.md`
+    carries the three-reading table, and #460's second criterion requires the runner and the
+    card to AGREE, so a change here owes the card a change in the same commit.
+
+    * DRIVEN      -- the evaluation is ADVANCING: `turns_used > 0` and `updated_at >
+                     created_at`, or a turn is in flight. MOTION, never declared state -- a goal
+                     is evaluated only at a turn's END, so an armed goal cannot summon a turn,
+                     and `state='active'` is a declaration that a driver exists rather than a
+                     measurement that one is in the room.
+    * ARMED-INERT -- an active row that is not advancing: `turns_used = 0` and `updated_at =
+                     created_at` is the card's named case, and it covers every other active-but-
+                     motionless row too. The loop exists and steers a turn that is not coming.
+    * DRIVERLESS  -- no active row and no turn in flight: nothing will evaluate this session's
+                     goal, so the backlog behind it has no driver at all.
+
+    THE MOTION CLAUSE IS SCOPED TO A LIVE ROW, and that scoping is the ONE place the card's
+    three rows did not already agree. Read literally, a `paused` row that advanced before it
+    stopped satisfies DRIVEN (`turns_used > 0`, `updated_at > created_at`) AND DRIVERLESS (no
+    active row, no turn in flight) at the same time, so the two rows overlapped and the table
+    never said which won. The card now states the scope and this reader matches it, because the
+    alternative is a reading that calls a stopped loop "driven" and therefore REFUSES the one
+    act that would restart it: a paused lane holding a fortnight-old backlog would print DRIVEN
+    and go unmentioned for ever, which is the exact failure #133 was filed to end.
+
+    A turn in flight is tested FIRST and decides on its own: the card states that a lane whose
+    turn is in flight is driven by that turn EVEN WHEN ITS ARM IS INERT.
+    """
+    if turn_open:
+        return "DRIVEN", _newest_goal_row(goal_rows)
+    newest = _newest_goal_row(goal_rows)
+    if newest is None:
+        return "DRIVERLESS", None
+    state = str(newest.get("state") or "").strip().lower()
+    if state != GOAL_DRIVEN_STATE:
+        # No active row and no turn in flight: the card's DRIVERLESS row, whose re-arm is
+        # PERMITTED. A terminal or paused row is not a driver whatever its history.
+        return "DRIVERLESS", newest
+    if _goal_turns_used(newest) > 0 and _goal_advanced(newest):
+        return "DRIVEN", newest
+    return "ARMED-INERT", newest
+
+def stall_lane_turn_open() -> dict[str, bool]:
+    """Live session id -> whether a turn is IN FLIGHT, from the box's own bindings (#133).
+
+    The card's DRIVEN row admits a lane "whose turn is in flight" even when its arm is inert,
+    so the reading needs a fact `goal_state` does not carry. It comes from the SAME
+    `all_bindings()` read the lane names come from -- `session_bindings.turn_open_at` -- so the
+    leg costs one binding read and the two facts cannot disagree about which sessions exist.
+
+    A read that fails returns an EMPTY map rather than raising. That makes every session read
+    as "no turn in flight", which WITHHOLDS the driven claim and lets the goal-row test decide:
+    the honest direction, because a binding store this read could not open must not be able to
+    declare a lane driven.
+    """
+    try:
+        registry = load_module("oc_registry", REGISTRY)
+        bindings, _errors = registry.all_bindings()
+    except Exception:
+        return {}
+    open_turns: dict[str, bool] = {}
+    for row in bindings:
+        session_id = str(row.get("session_id") or "")
+        if not session_id or session_id in open_turns:
+            continue
+        open_turns[session_id] = bool(row.get("turn_open_at"))
+    return open_turns
+
+def driverless_leg(
+    census: dict,
+    *,
+    goals: dict,
+    read_at: str,
+    lane_names_fn=None,
+    lane_turn_open_fn=None,
+) -> dict:
+    """Does a lane carrying an UNCLAIMED BACKLOG have a driver at all? (#133)
+
+    The stall census names units; this leg names the LANE STATE behind them. A lane with
+    eleven dispatched-and-never-claimed units and no convergence loop running is not eleven
+    problems, it is one: nobody is driving that lane, and every re-dispatch aimed at it lands
+    in the same queue. That distinction is the whole reason this leg exists, and it is
+    invisible to every other leg -- the census reds the units, the pacemaker leg asks whether
+    a cron wakes the session, and NEITHER asks whether the woken session has a goal to
+    converge on.
+
+    THE POPULATION IS THE CENSUS'S OWN GROUPING, never a second read of the routing. It comes
+    from `census["coverage"]["owed_by_lane"]`, which the census built from the same declared
+    routing its OWED lines name, so the two legs cannot disagree about which lane a unit sits
+    on. A census that did not run (or ran NOT RUN) yields an EMPTY population and this leg
+    says so in words -- it never reads that as a clean bill.
+
+    DETECT ONLY. This leg NOTIFIES NOTHING and RE-ARMS NOTHING (#133): arming another lane's
+    goal is that lane's act or its owner's, and a patrol that armed lanes would be inventing
+    work rather than reporting it. The remedy sentence says exactly that, so a reader is never
+    left thinking this leg did something about what it found.
+    """
+    coverage = census.get("coverage") or {}
+    grouped = coverage.get("owed_by_lane")
+    lanes: list[dict] = []
+    problems: list[str] = []
+    names = lane_names_fn() if lane_names_fn else {}
+    # "a turn is in flight" is a BINDING fact, not a goal fact (the card's DRIVEN row admits
+    # it even when the arm is inert), so it rides its own injected read. A read that fails
+    # returns {} -- see `stall_lane_turn_open`, and note the direction it fails in.
+    open_turns = (lane_turn_open_fn or stall_lane_turn_open)()
+    rows = goals.get("rows") or []
+    by_session: dict[str, list[dict]] = {}
+    for row in rows:
+        by_session.setdefault(str(row.get("session_id") or ""), []).append(row)
+    counts = {reading: 0 for reading in DRIVERLESS_READINGS}
+    unresolved_lanes = 0
+    backlog_units = 0
+    if grouped is None:
+        # NOT the same as "no lane has a backlog": the census never produced a grouping, so
+        # this leg judged NOTHING and says so rather than reading green over an empty list.
+        return {
+            "name": "driverless-lane",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "reason": (
+                    "the stall census produced no `owed_by_lane` grouping this round, so the "
+                    "population this leg asks about does not exist -- an unasked question, "
+                    "never a clean lane (board #133)"
+                ),
+                "census_status": census.get("status"),
+                "read_at": read_at,
+            },
+        }
+    for slot in grouped:
+        session_ref = str(slot.get("session_ref") or "")
+        units = list(slot.get("units") or [])
+        backlog_units += len(units)
+        if not session_ref:
+            # The census already reds this unit's routing as UNRESOLVED; counting it here is
+            # the honest population arithmetic, and re-redding it would be the same fact
+            # reported twice under two names.
+            unresolved_lanes += 1
+            continue
+        lane = slot.get("lane") or names.get(session_ref) or session_ref
+        reading, newest = driver_reading(
+            by_session.get(session_ref, []),
+            turn_open=bool(open_turns.get(session_ref)),
+        )
+        counts[reading] += 1
+        state = str((newest or {}).get("state") or "")
+        turns_used = (newest or {}).get("turns_used")
+        lanes.append({
+            "lane": lane,
+            "session_ref": session_ref,
+            "reading": reading,
+            "turn_open": bool(open_turns.get(session_ref)),
+            "state": state,
+            "turns_used": turns_used,
+            "updated_at": (newest or {}).get("updated_at"),
+            "units": units,
+            "oldest_age_days": slot.get("oldest_age_days"),
+        })
+        if reading == "DRIVEN":
+            continue
+        held = ", ".join(units[:6]) + (", ..." if len(units) > 6 else "")
+        if newest is None:
+            detail = (
+                "NO goal row for that session in any home this read reached, so nothing was "
+                "ever armed to drive it"
+            )
+        elif reading == "ARMED-INERT":
+            detail = (
+                f"its goal row is `{state}` (turns used {turns_used}, last touched "
+                f"{newest.get('updated_at')}), so the convergence loop EXISTS and has never "
+                f"been evaluated -- an arm that has never run steers a turn that is not coming"
+            )
+        else:
+            # A row EXISTS here and it is not active, so this branch must never claim "no goal
+            # row": the row's own state is the finding, and printing an absence beside a row
+            # that is sitting right there is the misreport this split exists to prevent.
+            detail = (
+                f"its newest goal row is `{state}` (turns used {turns_used}, last touched "
+                f"{newest.get('updated_at')}) and no turn is in flight, so nothing will "
+                f"evaluate it again -- a stopped loop is not a driver, whatever it did before "
+                f"it stopped"
+            )
+        problems.append(
+            f"DRIVERLESS LANE {lane}: {len(units)} unit(s) dispatched and NEVER CLAIMED "
+            f"({held}; oldest {float(slot.get('oldest_age_days') or 0.0):.2f} d) while "
+            f"{detail}. The ACT is the lane's own or the sweep owner's: this leg detects "
+            f"and prints, and MUST NOT re-arm another lane's goal (board #133)"
+        )
+    return {
+        "name": "driverless-lane",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        "coverage": {
+            # THE POPULATION IS PRINTED WITH ITS ZEROS (#133): a round where no lane carries
+            # a backlog and a round where the grouping was never read must not render alike.
+            "lanes_with_backlog": len(grouped),
+            "lanes_judged": len(lanes),
+            "lanes_routing_unresolved": unresolved_lanes,
+            "backlog_units": backlog_units,
+            "driven": counts["DRIVEN"],
+            "armed_inert": counts["ARMED-INERT"],
+            "driverless": counts["DRIVERLESS"],
+            "readings": DRIVERLESS_READINGS,
+            "lanes": lanes,
+            "lanes_with_a_turn_in_flight": sum(
+                1 for lane in lanes if lane["turn_open"]
+            ),
+            "goal_rows_read": len(rows),
+            "goal_homes_read": list(goals.get("homes_read") or []),
+            "goal_homes_without_store": list(goals.get("homes_without_store") or []),
+            "goal_homes_unreached": list(goals.get("unreached") or []),
             "read_at": read_at,
         },
     }
@@ -8957,8 +9323,90 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"unit(s) name the lane the work was handed to; "
                 f"{cov['addressees_unresolved']} declare none"
             )
+            # THE BACKLOG GROUPED BY ADDRESSEE IS PRINTED HERE (#133): it is the population
+            # the driverless-lane leg asks about, so a reader can see the grouping without
+            # opening that leg's block, and the two legs cannot disagree about whose lane a
+            # unit sits on.
+            lines.append(
+                f"  backlog by addressee: {cov['lanes_with_backlog']} lane(s) carry the "
+                f"{cov['units_owed']} OWED unit(s)"
+            )
+            for slot in cov.get("owed_by_lane") or []:
+                label = slot.get("lane") or "ROUTING UNRESOLVED"
+                lines.append(
+                    f"    {label}: {len(slot.get('units') or [])} unit(s), oldest "
+                    f"{float(slot.get('oldest_age_days') or 0.0):.2f} d — "
+                    f"{', '.join(slot.get('units') or [])}"
+                )
             lines.append(f"  threshold basis: {cov['threshold_basis']}")
             lines.append(f"  read at {cov['read_at']}")
+        elif leg["name"] == "driverless-lane":
+            # A leg that did NOT RUN says WHY, and never renders as a clean population
+            # (#133): an unasked question and a lane with nothing on it must not read alike.
+            if cov.get("reason"):
+                lines.append(f"  NOT RUN: {cov['reason']}")
+                if cov.get("census_status"):
+                    lines.append(f"  census status this round: {cov['census_status']}")
+            else:
+                lines.append(
+                    f"  population: {cov['lanes_with_backlog']} lane(s) carrying an "
+                    f"unclaimed backlog ({cov['backlog_units']} unit(s)); "
+                    f"{cov['lanes_judged']} judged by their own goal row, "
+                    f"{cov['lanes_routing_unresolved']} skipped because the census could "
+                    f"not resolve a routing to a lane"
+                )
+                # THE THREE READINGS PRINT WITH THEIR ZEROS, so a round that found no
+                # driverless lane is distinguishable from one that never looked.
+                # EACH LABEL NAMES ITS OWN PREDICATE, and DRIVERLESS deliberately does not
+                # claim "no goal row": the card reads a lane with a STOPPED loop as
+                # DRIVERLESS too (a paused row is not a driver), so a label asserting an
+                # absent row would sit beside a row the very next line prints. The reading
+                # is about whether anything will EVALUATE the lane, not whether a row exists.
+                lines.append(
+                    f"  readings: {cov['driven']} DRIVEN (advancing, or a turn in flight), "
+                    f"{cov['armed_inert']} ARMED-INERT (active arm never evaluated), "
+                    f"{cov['driverless']} DRIVERLESS (no active row and no turn in flight)"
+                )
+                lines.append(
+                    f"  turns in flight: {cov.get('lanes_with_a_turn_in_flight', 0)} of "
+                    f"{cov['lanes_judged']} judged lane(s)"
+                )
+                for entry in cov.get("lanes") or []:
+                    state = entry.get("state") or "no goal row"
+                    lines.append(
+                        f"    {entry['reading']}: {entry['lane']} — state `{state}`, "
+                        f"turns used {entry.get('turns_used')}, last touched "
+                        f"{entry.get('updated_at')}, turn in flight "
+                        f"{'yes' if entry.get('turn_open') else 'no'}, "
+                        f"{len(entry.get('units') or [])} "
+                        f"unclaimed unit(s) ({', '.join(entry.get('units') or [])})"
+                    )
+                # THE STORE POPULATION IS PRINTED, because a driverless reading is only as
+                # good as the read behind it: a home whose `goal_state` could not be opened
+                # would otherwise make every lane look driverless.
+                lines.append(
+                    f"  goal store: {cov['goal_rows_read']} row(s) read from "
+                    f"{len(cov.get('goal_homes_read') or [])} home(s)"
+                    + (
+                        f"; {len(cov['goal_homes_without_store'])} home(s) carry no "
+                        f"goal_state table ({', '.join(cov['goal_homes_without_store'])})"
+                        if cov.get("goal_homes_without_store")
+                        else ""
+                    )
+                    + (
+                        f"; {len(cov['goal_homes_unreached'])} UNREACHED "
+                        f"({', '.join(cov['goal_homes_unreached'])}) — a lane on an "
+                        f"unreached home reads DRIVERLESS for want of a read, not for want "
+                        f"of a driver"
+                        if cov.get("goal_homes_unreached")
+                        else ""
+                    )
+                )
+                lines.append(
+                    "  remedy: the ACT is the lane's own or the sweep owner's — this leg "
+                    "DETECTS and prints, and MUST NOT re-arm another lane's goal (#133)"
+                )
+            lines.append(f"  read at {cov.get('read_at')}")
         elif leg["name"] == "board-unruled":
             # The population is PRINTED BESIDE THE VERDICT (acceptance criterion 2), so an
             # empty sweep reads as "examined 0, 0 problems" rather than as silence -- which
@@ -9381,6 +9829,14 @@ def main(
     # live factory happens to hold, and a probe that CANNOT drive an exemption cannot
     # prove the store is reconciled at all.
     ref_role_exemptions_path: Path | None = None,
+    # #133: the box's goal store, injected for the eighth time and the same reason -- a probe
+    # must never have its verdict decided by whichever goal rows this box happens to hold,
+    # and a probe that CANNOT place a lane's goal row cannot prove a reading at all.
+    driverless_goals_fn=None,
+    # #133: "a turn is in flight" is a BINDING fact, so it is injected separately from the goal
+    # store -- a probe must be able to put a turn in flight without inventing a goal row, since
+    # the card's DRIVEN row admits that case precisely when the arm is inert.
+    driverless_turn_open_fn=None,
     lane_names_fn=None,
     shared_tree_fn=None,
     out=print,
@@ -9531,6 +9987,22 @@ def main(
             f"shared tree rider: NOT RUN -- it raised {type(exc).__name__}: {exc} at "
             f"{read_at}; the round continues and the board legs' read is UNATTRIBUTED"
         )
+    # THE STALL CENSUS IS BUILT ONCE AND SHARED (#133). The driverless-lane leg's population
+    # IS the census's own `owed_by_lane` grouping, so the two legs must read the SAME census:
+    # a second call would re-read the board and could group a different round, and the two
+    # blocks would then disagree about which lane a unit sits on. Lazy rather than eager, so
+    # `leg_guard` still contains a census that raises -- the census leg reports its own FAILED
+    # verdict, and the driverless leg's guard reports the raise it inherited.
+    census_cache: dict[str, dict] = {}
+
+    def _census() -> dict:
+        if "v" not in census_cache:
+            census_cache["v"] = stall_census_leg(
+                issues, rows, read_at=read_at,
+                lane_names_fn=lane_names_fn or stall_lane_names,
+            )
+        return census_cache["v"]
+
     legs = [
         leg_guard("board-intake", lambda: board_intake_leg(issues, rows, predicate=predicate, bound=board_bound), read_at),
         leg_guard("board-close", lambda: board_close_leg(issues, rows, read_at=read_at, bound=board_bound), read_at),
@@ -9572,9 +10044,16 @@ def main(
             exemptions_path=ref_role_exemptions_path,
         ), read_at),
         leg_guard("workspace-blocked", lambda: workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn), read_at),
-        leg_guard("stall-census", lambda: stall_census_leg(
-            issues, rows, read_at=read_at,
+        leg_guard("stall-census", _census, read_at),
+        # #133: the LANE STATE behind the census's units. Its population is the census's own
+        # grouping, and the goal store is injected so no probe's verdict is decided by this
+        # box's live `goal_state` rows.
+        leg_guard("driverless-lane", lambda: driverless_leg(
+            _census(),
+            goals=(driverless_goals_fn or box_goal_rows)(),
+            read_at=read_at,
             lane_names_fn=lane_names_fn or stall_lane_names,
+            lane_turn_open_fn=driverless_turn_open_fn,
         ), read_at),
         leg_guard("board-unruled", lambda: board_unruled_leg(issues, rows, read_at=read_at, predicate=predicate), read_at),
         leg_guard("criterion-paths", lambda: criterion_path_leg(

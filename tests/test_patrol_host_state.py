@@ -129,6 +129,20 @@ _NO_CRITERION_EXEMPTIONS = (
     / "criterion-path-exemptions.json"
 )
 
+# The driverless-lane leg's goal store (#133) defaults to an EMPTY STORE THAT WAS READ, not to
+# the live one and not to an unreachable one. Both halves matter: reading the live `goal_state`
+# would decide a probe's verdict with whichever convergence loops THIS box happens to be
+# running, and defaulting to an UNREACHED store would be worse still — it would make every lane
+# read DRIVERLESS for want of a read, so a probe asserting a clean round would red for a reason
+# it never named. `homes_read` is populated precisely so the default is distinguishable in the
+# output from a store nobody could open.
+_EMPTY_GOAL_STORE = {
+    "rows": [],
+    "homes_read": ["probe-home"],
+    "homes_without_store": [],
+    "unreached": [],
+}
+
 # The stall-census leg's park clause (#331) needs NO injection point, and that is the point:
 # a park is declared by a `park:owner:<question>` line on the unit's OWN ledger row, so the
 # rows a probe already passes ARE the declaration. A probe that declares no park therefore
@@ -210,7 +224,8 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          board_scope=None, lane_names_fn=None, cron_fires=None, scores_dir=None,
          shared_tree_fn=None, duty_scope=None, publish_fn=None, worktree_fn=None,
          duty_exemptions=None, ref_role_exemptions_path=None,
-         criterion_exemptions_path=None):
+         criterion_exemptions_path=None, driverless_goals=None,
+         driverless_turn_open=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -364,6 +379,19 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # from whichever lanes this box happens to have bound. The park clause (clause 1)
         # needs no injection: it reads the unit's own rows, which the probe already supplies.
         lane_names_fn=lane_names_fn or (lambda: {}),
+        # The driverless-lane leg's goal store (#133) is injected for the same reason as every
+        # other live surface here, and the default is an EMPTY STORE that was READ: a probe
+        # must never have its reading decided by whichever goal rows THIS box happens to hold,
+        # and a lane judged against an unread store would read DRIVERLESS for want of a read
+        # rather than for want of a driver. A probe that asserts a reading passes its own.
+        driverless_goals_fn=lambda: (
+            _EMPTY_GOAL_STORE if driverless_goals is None else driverless_goals
+        ),
+        # ... and "a turn is in flight" rides its own read (#133), injected for the same
+        # reason and with the same safe default: NO session has a turn open. That default
+        # WITHHOLDS the driven claim rather than granting it, so a probe that forgets to
+        # inject cannot accidentally read a live turn as a driver it never asserted.
+        driverless_turn_open_fn=lambda: dict(driverless_turn_open or {}),
         # The shared-tree rider (#241) shells out three times against the tree the patrol
         # is running in, so it is stubbed by default for the same reason the publish and
         # worktree legs are: a probe must not pay for live state it never asserts. The
@@ -548,6 +576,12 @@ def test_a_board_that_could_not_be_read_is_not_a_clean_board() -> None:
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg,
         shared_tree_fn=_stub_shared_tree_rider,
+        # #133: the driverless-lane leg's goal store and its turn-in-flight read are
+        # injected here for the same reason every other live surface is -- and the
+        # defaults WITHHOLD the driven claim (empty store, no turn open) rather than
+        # granting one, so a probe that never asserts a driver cannot read one.
+        driverless_goals_fn=lambda: _EMPTY_GOAL_STORE,
+        driverless_turn_open_fn=lambda: {},
         # #330: the ref-role store is injected for the same reason the ruling table is.
         ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
@@ -3261,6 +3295,12 @@ def test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback() -> None:
             err=lambda *a, **k: None,
             publish_fn=_stub_publish_leg,
             shared_tree_fn=_stub_shared_tree_rider,
+            # #133: the driverless-lane leg's goal store and its turn-in-flight read are
+            # injected here for the same reason every other live surface is -- and the
+            # defaults WITHHOLD the driven claim (empty store, no turn open) rather than
+            # granting one, so a probe that never asserts a driver cannot read one.
+            driverless_goals_fn=lambda: _EMPTY_GOAL_STORE,
+            driverless_turn_open_fn=lambda: {},
             # #330: the ref-role store is injected for the same reason the ruling table is.
             ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
@@ -3339,6 +3379,12 @@ def test_the_leg_reaches_the_RENDERED_report() -> None:
             err=lambda *a, **k: None,
             publish_fn=_stub_publish_leg,
             shared_tree_fn=_stub_shared_tree_rider,
+            # #133: the driverless-lane leg's goal store and its turn-in-flight read are
+            # injected here for the same reason every other live surface is -- and the
+            # defaults WITHHOLD the driven claim (empty store, no turn open) rather than
+            # granting one, so a probe that never asserts a driver cannot read one.
+            driverless_goals_fn=lambda: _EMPTY_GOAL_STORE,
+            driverless_turn_open_fn=lambda: {},
             # #330: the ref-role store is injected for the same reason the ruling table is.
             ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
@@ -4889,6 +4935,12 @@ def test_the_board_read_abort_path_is_UNCHANGED_by_the_containment_guard() -> No
         out=lambda *a, **k: print(*a, file=out, **k),
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg, shared_tree_fn=_stub_shared_tree_rider,
+        # #133: the driverless-lane leg's goal store and its turn-in-flight read are
+        # injected here for the same reason every other live surface is -- and the
+        # defaults WITHHOLD the driven claim (empty store, no turn open) rather than
+        # granting one, so a probe that never asserts a driver cannot read one.
+        driverless_goals_fn=lambda: _EMPTY_GOAL_STORE,
+        driverless_turn_open_fn=lambda: {},
     )
     assert rc == 2, f"the board-read abort must be unchanged, got rc={rc}"
     assert "NOT RUN: every leg" in err.getvalue(), err.getvalue()
@@ -5043,6 +5095,12 @@ def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
             err=lambda *a, **k: None,
             publish_fn=_stub_publish_leg,
             shared_tree_fn=_stub_shared_tree_rider,
+            # #133: the driverless-lane leg's goal store and its turn-in-flight read are
+            # injected here for the same reason every other live surface is -- and the
+            # defaults WITHHOLD the driven claim (empty store, no turn open) rather than
+            # granting one, so a probe that never asserts a driver cannot read one.
+            driverless_goals_fn=lambda: _EMPTY_GOAL_STORE,
+            driverless_turn_open_fn=lambda: {},
             # #330: the ref-role store is injected for the same reason the ruling table is.
             ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
@@ -5903,6 +5961,12 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
         err=lambda *a, **k: print(*a, file=err, **k),
         publish_fn=_stub_publish_leg, worktree_fn=_stub,
         shared_tree_fn=_stub_shared_tree_rider,
+        # #133: the driverless-lane leg's goal store and its turn-in-flight read are
+        # injected here for the same reason every other live surface is -- and the
+        # defaults WITHHOLD the driven claim (empty store, no turn open) rather than
+        # granting one, so a probe that never asserts a driver cannot read one.
+        driverless_goals_fn=lambda: _EMPTY_GOAL_STORE,
+        driverless_turn_open_fn=lambda: {},
         # #330: the ref-role store is injected for the same reason the ruling table is.
         ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
@@ -9187,3 +9251,207 @@ def test_the_STALE_exemption_line_prints_on_every_round_zero_included() -> None:
     rc, out, err = _run([], [], cron_rows=[_duty_row()], prefixes=["factory-"],
                         cron_fires=_fires((0.5,)), duty_exemptions=lambda: ({}, None))
     assert "stale exemptions: 0" in out, out[-2500:]
+
+# --- #133: the driverless-lane leg -------------------------------------------------------
+#
+# The leg's whole value is the SPLIT it makes: a lane carrying an unclaimed backlog is stuck
+# either because its loop is running (DRIVEN), because a goal row exists and nothing will wake
+# it (ARMED-INERT), or because nothing was ever armed (DRIVERLESS). A leg that only asked
+# "does a goal row exist" would call the middle reading healthy, and the middle reading is the
+# one this box actually carries.
+
+def _census_with(*lanes, status="ASSERTED"):
+    """A census leg carrying ONLY the grouping the driverless leg reads.
+
+    Deliberately minimal: this leg's population is the census's `owed_by_lane`, so a fixture
+    that rebuilt the census's own routing would be asserting a second implementation of it.
+    """
+    return {
+        "name": "stall-census",
+        "status": status,
+        "problems": [],
+        "excused": [],
+        "coverage": {
+            "owed_by_lane": list(lanes),
+            "lanes_with_backlog": len(lanes),
+            "read_at": "2026-10-18T00:00:00Z",
+        },
+    }
+
+def _lane_slot(session_ref, units, *, lane=None, age=2.0):
+    return {"session_ref": session_ref, "lane": lane, "units": list(units),
+            "oldest_age_days": age}
+
+_GOAL_CREATED = "2026-10-01T00:00:00+00:00"
+
+def _goal_row(session_id, state, *, turns=1, updated=_GOAL_CREATED):
+    """One `goal_state` row. `updated` defaults to `created`, i.e. an arm never evaluated.
+
+    The default is deliberate: the card's ARMED-INERT row is defined by `updated_at =
+    created_at`, so the motionless shape is the one a fixture should get by NOT asking for
+    motion. A fixture that had to remember to suppress the timestamp would be encoding the
+    predicate a second time.
+    """
+    return {"session_id": session_id, "state": state, "turns_used": turns,
+            "max_turns": 20, "created_at": _GOAL_CREATED,
+            "updated_at": updated}
+
+def _goal_store(*rows, unreached=(), without_store=()):
+    return {"rows": list(rows), "homes_read": ["probe-home"],
+            "homes_without_store": list(without_store), "unreached": list(unreached)}
+
+def test_the_three_readings_are_DISTINCT_and_counted_separately() -> None:
+    """#133's acceptance: DRIVEN, ARMED-INERT and DRIVERLESS are three different findings.
+
+    Non-vacuity rides THIS fixture rather than a loud-fail-on-zero: the live population of
+    driverless lanes is legitimately empty on a healthy day, so an empty reading is a normal
+    reading. What must never be empty is the leg's ability to tell the three apart, which is
+    exactly what a fixture carrying one of each proves -- a leg that collapsed ARMED-INERT into
+    DRIVEN would report two DRIVEN and one DRIVERLESS here and pass a count-only assertion.
+
+    THE FOURTH LANE IS THE CARD'S OWN COLLISION (#460 criterion 2). Read literally, the card's
+    DRIVEN row (motion) and DRIVERLESS row (no active row, no turn in flight) both matched a
+    `paused` row that advanced before it stopped, so a reader could report either. It reads
+    DRIVERLESS, because a stopped loop is not a driver and calling it one refuses the only act
+    that restarts it -- and that is asserted here so the two halves cannot drift apart again.
+    """
+    census = _census_with(
+        _lane_slot("sess-driven", ["#1", "#2"], lane="Driven Lane"),
+        _lane_slot("sess-inert", ["#3"], lane="Inert Lane"),
+        _lane_slot("sess-none", ["#4", "#5", "#6"], lane="Driverless Lane"),
+        _lane_slot("sess-stopped", ["#7"], lane="Stopped Lane"),
+    )
+    goals = _goal_store(
+        # ADVANCING: active, evaluated, touched after creation.
+        _goal_row("sess-driven", "active", turns=4, updated="2026-10-17T00:00:00+00:00"),
+        # ARMED AND NEVER EVALUATED: active, zero turns, updated == created.
+        _goal_row("sess-inert", "active", turns=0),
+        # STOPPED AFTER RUNNING: motion in its history, but nothing will evaluate it again.
+        _goal_row("sess-stopped", "paused", turns=20, updated="2026-10-17T00:00:00+00:00"),
+    )
+    leg = RUNNER.driverless_leg(census, goals=goals, read_at="2026-10-18T00:00:00Z",
+                                lane_names_fn=lambda: {})
+
+    assert leg["status"] == "ASSERTED", leg
+    cov = leg["coverage"]
+    assert (cov["driven"], cov["armed_inert"], cov["driverless"]) == (1, 1, 2), cov
+    assert cov["lanes_judged"] == 4, cov
+    assert cov["backlog_units"] == 7, cov
+    assert cov["lanes_with_a_turn_in_flight"] == 0, cov
+
+    readings = {entry["lane"]: entry["reading"] for entry in cov["lanes"]}
+    assert readings == {
+        "Driven Lane": "DRIVEN",
+        "Inert Lane": "ARMED-INERT",
+        "Driverless Lane": "DRIVERLESS",
+        "Stopped Lane": "DRIVERLESS",
+    }, readings
+
+    # THE BITE: only the three non-DRIVEN lanes are problems, and each names its OWN cause --
+    # a never-evaluated arm, a stopped loop and an absent one are three remedies, so one
+    # sentence for all of them would be the collapse this probe exists to forbid.
+    assert len(leg["problems"]) == 3, leg["problems"]
+    by_lane = {p.split("LANE ", 1)[1].split(":", 1)[0]: p for p in leg["problems"]}
+    assert set(by_lane) == {"Inert Lane", "Driverless Lane", "Stopped Lane"}, by_lane
+    assert "`active`" in by_lane["Inert Lane"], by_lane["Inert Lane"]
+    assert "never" in by_lane["Inert Lane"] and "evaluated" in by_lane["Inert Lane"], by_lane["Inert Lane"]
+    assert "NO goal row" in by_lane["Driverless Lane"], by_lane["Driverless Lane"]
+    assert "`paused`" in by_lane["Stopped Lane"], by_lane["Stopped Lane"]
+    # ... and the stopped lane must NOT be described as never armed: it carries a row, and
+    # printing an absence beside a row that exists is the misreport this split prevents.
+    assert "NO goal row" not in by_lane["Stopped Lane"], by_lane["Stopped Lane"]
+    assert "`active`" not in by_lane["Stopped Lane"], by_lane["Stopped Lane"]
+    # ... and ALL of them say the leg will not act, so no reader thinks a re-arm happened.
+    for problem in leg["problems"]:
+        assert "MUST NOT re-arm another lane's goal" in problem, problem
+
+def test_a_TURN_IN_FLIGHT_drives_a_lane_whose_arm_is_INERT() -> None:
+    """The card's DRIVEN row admits a turn in flight EVEN WHEN THE ARM IS INERT.
+
+    This is the reading the goal store alone cannot produce: an armed-but-never-evaluated lane
+    is ARMED-INERT by its rows, and yet it is being driven right now by the turn that is
+    running. A reader that consulted only `goal_state` would call it inert and refuse a re-arm
+    that the card permits only because nothing is in the room -- so the binding fact decides.
+    """
+    census = _census_with(_lane_slot("sess-busy", ["#1"], lane="Busy Lane"))
+    goals = _goal_store(_goal_row("sess-busy", "active", turns=0))
+    leg = RUNNER.driverless_leg(
+        census, goals=goals, read_at="2026-10-18T00:00:00Z",
+        lane_names_fn=lambda: {},
+        lane_turn_open_fn=lambda: {"sess-busy": True},
+    )
+
+    cov = leg["coverage"]
+    assert cov["driven"] == 1 and cov["armed_inert"] == 0, cov
+    assert cov["lanes_with_a_turn_in_flight"] == 1, cov
+    assert cov["lanes"][0]["reading"] == "DRIVEN", cov["lanes"]
+    assert leg["problems"] == [], leg["problems"]
+
+    # THE CONTROL, same fixture, turn closed: without the binding fact the very same rows read
+    # ARMED-INERT and the lane IS a problem. Both halves in one probe, so the assertion cannot
+    # pass by the binding fact being ignored in both directions.
+    idle = RUNNER.driverless_leg(
+        census, goals=goals, read_at="2026-10-18T00:00:00Z",
+        lane_names_fn=lambda: {},
+        lane_turn_open_fn=lambda: {"sess-busy": False},
+    )
+    assert idle["coverage"]["armed_inert"] == 1, idle["coverage"]
+    assert len(idle["problems"]) == 1, idle["problems"]
+
+def test_a_census_with_NO_grouping_renders_NOT_RUN_never_a_clean_lane() -> None:
+    """An unasked question must not render like a lane with nothing on it (#133).
+
+    The failure this forbids is the one every zero-shaped leg is one refactor away from: the
+    census ran NOT RUN, its grouping is absent, and a leg that iterated `coverage.get(...) or
+    []` would print `0 DRIVERLESS` — a clean bill of health for a question nobody asked.
+    """
+    leg = RUNNER.driverless_leg({"name": "stall-census", "status": "NOT RUN",
+                                 "problems": [], "excused": [],
+                                 "coverage": {"reason": "the ledger could not be read"}},
+                                goals=_goal_store(), read_at="2026-10-18T00:00:00Z")
+    assert leg["status"] == "NOT RUN", leg
+    assert leg["problems"] == [], leg
+    assert "owed_by_lane" in leg["coverage"]["reason"], leg["coverage"]
+    assert leg["coverage"]["census_status"] == "NOT RUN", leg["coverage"]
+
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-18T00:00:00Z",
+                        issues=[])
+    assert "LEG driverless-lane — NOT RUN" in out, out
+    assert "NOT RUN: " in out, out
+    assert "census status this round: NOT RUN" in out, out
+    # THE DISCRIMINATING HALF: no reading counts at all, so nothing can be read as clean.
+    assert "DRIVEN" not in out, out
+    assert "DRIVERLESS" not in out, out
+    assert "readings:" not in out, out
+
+def test_an_UNREACHED_goal_store_prints_as_UNREACHED_not_as_a_driverless_lane() -> None:
+    """A lane on an unopened home reads DRIVERLESS for want of a READ (#133).
+
+    That is a true statement about this reader and a false one about the lane, so the render
+    must name the unreached home beside the reading — otherwise the leg manufactures exactly
+    the finding it is meant to report, and a reader has no way to tell the two apart.
+    """
+    census = _census_with(_lane_slot("sess-x", ["#9"], lane="Unread Lane"))
+    leg = RUNNER.driverless_leg(
+        census,
+        goals=_goal_store(unreached=["ops: unable to open database file"]),
+        read_at="2026-10-18T00:00:00Z",
+        lane_names_fn=lambda: {},
+    )
+    # The reading itself is honest: no row was found, so nothing was armed AS FAR AS THIS READ.
+    assert leg["coverage"]["driverless"] == 1, leg["coverage"]
+    assert leg["coverage"]["goal_homes_unreached"] == ["ops: unable to open database file"]
+
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-18T00:00:00Z",
+                        issues=[])
+    assert "1 UNREACHED" in out, out
+    assert "ops: unable to open database file" in out, out
+    assert "for want of a read, not for want of a driver" in out, out
+    # DISCRIMINATING CONTROL: the same leg with a store that WAS read carries no UNREACHED
+    # line, so the sentence is attributable to the unread home and not to the leg's shape.
+    clean = RUNNER.driverless_leg(census, goals=_goal_store(_goal_row("sess-x", "active")),
+                                  read_at="2026-10-18T00:00:00Z", lane_names_fn=lambda: {})
+    assert clean["coverage"]["driverless"] == 0, clean["coverage"]
+    clean_out = RUNNER.render([clean], [], slug="owner/repo",
+                              read_at="2026-10-18T00:00:00Z", issues=[])
+    assert "UNREACHED" not in clean_out, clean_out
