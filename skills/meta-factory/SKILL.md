@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.62
+version: 0.1.63
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -177,11 +177,24 @@ governs what is sent from here, and it does not narrow the notifies that DO earn
 because a dispatch, a return leg, a correction, a finding or an ask carries a state change or an
 ask by construction.
 
-**A dispatch notify names the unit it routes in its opening non-blank line.** The patrol reads
-the delivery's header — `DELIVERY_HEADER_LINES = 1` in `tools/patrol_host_state.py` — to learn
-which unit a notify is about, so a dispatch that names its subject only in the body is invisible
-to the leg that checks it: the reader keys on the one line a delivery DECLARES itself on, and it
-is deliberately NOT widened (#433). Writer-side twin of #433.
+**A dispatch notify's opening non-blank line carries the ROW'S SUBJECT, verbatim.** The patrol
+reads the delivery's header — `DELIVERY_HEADER_LINES = 1` in `tools/patrol_host_state.py` — and
+matches it against the SUBJECT FIELD of the `dispatch` row it is meant to corroborate, so a
+dispatch that names its subject only in the body is invisible to the leg that checks it: the
+reader keys on the one line a delivery DECLARES itself on, and it is deliberately NOT widened
+(#433). Writer-side twin of #433.
+
+**The SUBJECT is what is matched, not the units inside it** (#3763, measured
+2026-10-18T19:00:43Z). When a row's subject is a descriptive slug, naming the work units it
+covers does NOT satisfy the sentence above: a header reading `#465 / #467 / #470 — consolidated
+brief` leaves the slug out, and `delivery_subject_matches` returns **False** for it, while the
+same line prefixed with `stall-census-consolidation-2026-10-18T18` returns **True**. So a
+consolidated or escalation row — whose subject is a slug and whose body lists units — must carry
+BOTH in the opening line: the slug first, then the units. Five such rows read as false absences
+before this was written (`n=2863`, `n=3533`, `n=3534`, `n=3535`, `n=3763`), while the sibling
+`n=3523`, which DID carry its slug, was reported as a WINDOW MISMATCH rather than an absence —
+the shape was inconsistent, not systematic, which is why this is a writer rule and not a leg
+widening.
 
 Before dispatching work to any lane, check it is not already claimed.
 
