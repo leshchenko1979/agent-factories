@@ -70,6 +70,20 @@ the count of visible debt while excusing nothing. And a SECOND exemption of the 
 shape is a process defect, not an exemption — one is a debt; two mean the mechanism
 (running `tools/audit.py` before a commit that touches the ledger) is not biting.
 
+**The detector's RECEIPT is read HERE, and reading it is what makes the third exemption
+lawful (#326, ruled at n=3354).** `tools/hooks/post-commit` writes one JSON line per
+unexempted bypass to `evidence/commit-subject-bypasses.jsonl` — the residual an interactive
+`--no-verify` commit leaves — and until this leg existed NOTHING read that file:
+`grep -rln "commit-subject-bypasses" tests/ tools/ docs/` matched the writer alone, which
+is the write-only-memory shape that `docs/instruments/ledger.md` §9.9 names. A receipt nobody
+reads is not the detector the q30 SHAPE A answer bundles the `ad400684` exemption WITH, so
+the receipt is a gate INPUT: every record whose sha still reaches this history REDS by name,
+a malformed line is an ERROR rather than a silent skip, and a record whose commit is no
+longer in this history prints as `superseded:` and counts, because the bypass it recorded
+never reached the trunk. The leg is judged BEFORE the marker decision — a receipt is a fact
+about this tree that no range declaration can excuse, and the SKIP arm below exists for a
+factory that has declared nothing.
+
 **The repo root is resolved, not assumed.** The gate's own file sits at `tests/` in a
 bootstrapped factory but under `TEMPLATE/tests/` in the template repo, so resolving the
 tree from `__file__` alone made the template copy run `git log` with a pathspec relative
@@ -115,6 +129,11 @@ from hook_installation import (  # noqa: E402
 REPO = Path(__file__).resolve().parent.parent
 LEDGER_PATH = "evidence/ledger.jsonl"
 EXEMPTIONS_PATH = "docs/ledger-commit-exemptions.json"
+
+# The DETECTOR's durable product (#326): one JSON line per unexempted bypass, written by
+# `tools/hooks/post-commit`. Read here as a gate INPUT — a receipt nobody reads is not the
+# detector the q30 SHAPE A answer (n=3354) bundles the exemption with.
+RECEIPT_PATH = "evidence/commit-subject-bypasses.jsonl"
 
 # The mechanism the clause makes its remedy (issue #47, ruled at n=405): a versioned
 # commit-msg hook, at the only point where the pending subject exists to be refused.
@@ -418,6 +437,97 @@ def load_exemptions(path: Path) -> tuple[dict[str, dict], list[str]]:
         entries[sha] = item
     return entries, problems
 
+
+def receipt_file() -> Path:
+    """The detector's receipt, resolved against the git top level like every other surface."""
+    return (repo_toplevel() or REPO) / RECEIPT_PATH
+
+
+def load_receipts(path: Path) -> tuple[list[dict], list[str]]:
+    """`(records, problems)`: the receipt as data, or the reason it cannot be read.
+
+    Absent means no bypass has been recorded — the state of every factory until one
+    happens — and is NOT an error. Anything present and malformed IS: a receipt that
+    quietly fails to parse is indistinguishable from no receipt, which is the vacuous-pass
+    shape the exemption loader already refuses one surface over.
+    """
+    problems: list[str] = []
+    if not path.is_file():
+        return [], problems
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return [], [f"{RECEIPT_PATH}: unreadable ({exc})"]
+    records: list[dict] = []
+    for i, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except ValueError as exc:
+            problems.append(f"{RECEIPT_PATH}: line {i} is not JSON ({exc})")
+            continue
+        if not isinstance(record, dict):
+            problems.append(f"{RECEIPT_PATH}: line {i} is not a JSON object")
+            continue
+        sha = record.get("sha")
+        if not isinstance(sha, str) or not FULL_SHA.match(sha):
+            problems.append(
+                f"{RECEIPT_PATH}: line {i} names no full 40-character sha: {sha!r}"
+            )
+            continue
+        records.append(record)
+    return records, problems
+
+
+def receipt_outcome(
+    records: list[dict], exemptions: dict[str, dict], *, in_history
+) -> tuple[list[dict], list[dict], list[str]]:
+    """`(excused, superseded, problems)` for the detector's receipt.
+
+    Factored pure, with `in_history` injected, because the three outcomes are decided by
+    two facts a fixture can supply — whether the sha is exempted, and whether it still
+    reaches this history — and driving them through git would leave the leg having only
+    ever seen a clean receipt.
+
+    A record is a RED unless it is excused: the writer only writes one for a subject that
+    cited rows and was NOT exempted when it landed. `superseded` is the one honest non-red
+    — the commit is not in this history (repaired before it reached the trunk, or its
+    branch discarded), so the bypass it recorded never reached history, which is exactly
+    the condition the q30 answer names. A truncated tree cannot read that as clean: the
+    DECLARED marker predates any receipt, so a shallow clone fails the marker check
+    before this leg runs.
+    """
+    excused: list[dict] = []
+    superseded: list[dict] = []
+    problems: list[str] = []
+    for record in records:
+        sha = record["sha"]
+        if sha in exemptions:
+            excused.append(record)
+        elif not in_history(sha):
+            superseded.append(record)
+        else:
+            problems.append(
+                f"BYPASS RECEIPT {sha[:12]} reached this history citing a row number and "
+                f"carries no exemption: {record.get('subject', '')}"
+            )
+    return excused, superseded, problems
+
+
+def sha_in_history(sha: str) -> bool:
+    """True when `sha` resolves AND is an ancestor of HEAD.
+
+    Ancestry, not mere existence: a commit on a discarded branch still resolves until it
+    is garbage-collected, and a bypass that never joined this history is not one the q30
+    answer's detector is asked to fail on.
+    """
+    rc, _, _ = _git("rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}")
+    if rc != 0:
+        return False
+    rc, _, _ = _git("merge-base", "--is-ancestor", sha, "HEAD")
+    return rc == 0
+
 def probe() -> list[str]:
     """Probe the predicate and the exemption loader against both shapes.
 
@@ -595,6 +705,59 @@ def probe() -> list[str]:
         if not probs:
             failures.append("probe: malformed JSON in the marker's own file must be an ERROR")
 
+    # The detector's RECEIPT (#326). Every arm that decides a red is exercised, because
+    # the point of the leg is that a FUTURE bypass fails rather than filing a record
+    # nobody reads — a probe that had only ever seen a clean receipt would prove nothing.
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        full = "1" * 40
+
+        absent = tmpdir / "absent.jsonl"
+        records, problems = load_receipts(absent)
+        if records or problems:
+            failures.append("probe: an absent receipt must mean no bypass, not an error")
+
+        empty = tmpdir / "empty.jsonl"
+        empty.write_text("", encoding="utf-8")
+        records, problems = load_receipts(empty)
+        if records or problems:
+            failures.append("probe: an empty receipt must mean no bypass, not an error")
+
+        good = tmpdir / "good.jsonl"
+        good.write_text(
+            json.dumps({"sha": full, "subject": "x n=1"}) + "\n", encoding="utf-8"
+        )
+        records, problems = load_receipts(good)
+        if problems or len(records) != 1 or records[0].get("sha") != full:
+            failures.append("probe: a well-formed receipt record must load cleanly")
+
+        for payload, why in (
+            ("not json\n", "a line that is not JSON"),
+            ('{"subject": "x n=1"}\n', "a record naming no sha"),
+            ('{"sha": "abc1234", "subject": "x n=1"}\n', "a sha that is not a full sha"),
+        ):
+            bad = tmpdir / "bad.jsonl"
+            bad.write_text(payload, encoding="utf-8")
+            records, problems = load_receipts(bad)
+            if not problems:
+                failures.append(f"probe: {why} in the receipt must be an ERROR")
+
+        exempt = {full: {"sha": full, "reason": "r"}}
+        for records_in, exemptions_in, reaches, want, why in (
+            ([{"sha": full, "subject": "x n=1"}], {}, True, "problem",
+             "an unexempted bypass that reached this history"),
+            ([{"sha": full, "subject": "x n=1"}], exempt, True, "excused",
+             "a bypass whose sha carries an exemption"),
+            ([{"sha": full, "subject": "x n=1"}], {}, False, "superseded",
+             "a bypass whose commit is not in this history"),
+        ):
+            excused_in, superseded_in, problems = receipt_outcome(
+                records_in, exemptions_in, in_history=lambda sha: reaches
+            )
+            got = "problem" if problems else ("excused" if excused_in else "superseded")
+            if got != want:
+                failures.append(f"probe: {why} must read {want}, got {got}")
+
     return failures
 
 def main() -> int:
@@ -609,6 +772,33 @@ def main() -> int:
     else:
         problems.extend(hook_installation_problems(top))
     excused: list[tuple[str, dict]] = []
+
+    # The detector's RECEIPT (#326), judged BEFORE the marker decision: a recorded bypass
+    # is a fact about this tree, and the SKIP arm below is for a factory that has declared
+    # nothing — a receipt filed under it must still red rather than vanish behind the skip.
+    receipt_excused: list[dict] = []
+    receipt_superseded: list[dict] = []
+    receipt_records, receipt_problems = load_receipts(receipt_file())
+    problems.extend(receipt_problems)
+    exemptions, data_problems = load_exemptions(exemptions_file())
+    problems.extend(data_problems)
+    if receipt_records:
+        receipt_excused, receipt_superseded, receipt_reds = receipt_outcome(
+            receipt_records, exemptions, in_history=sha_in_history
+        )
+        problems.extend(receipt_reds)
+        print(
+            f"bypass receipts: examined {len(receipt_records)} record(s) in {RECEIPT_PATH}"
+        )
+        for record in receipt_excused:
+            print(
+                f"  excused (receipt): {record['sha']} — {record.get('subject', '')}"
+            )
+        for record in receipt_superseded:
+            print(
+                f"  superseded: {record['sha']} — its commit is not in this history; "
+                f"{record.get('subject', '')}"
+            )
 
     declared, problems_read = declared_marker()
     problems.extend(problems_read)
@@ -626,12 +816,10 @@ def main() -> int:
         problems.extend(marker_problems)
         if skip_reason is not None:
             print(f"SKIP: {skip_reason}")
-            return 0
+            if not problems:
+                return 0
         marker_ok = not marker_problems
     if marker_ok:
-        exemptions, data_problems = load_exemptions(exemptions_file())
-        problems.extend(data_problems)
-
         commits = ledger_commits_after(marker)
         bad = offenders(commits)
         print(f"ledger clause: examined {len(commits)} commit(s) after {marker} ({source})")
