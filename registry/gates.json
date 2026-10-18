@@ -796,8 +796,9 @@
       "class": "always-satisfiable"
     },
     "tests/test_subject_form.py": {
-      "class": "exit-owed",
-      "board": 320
+      "class": "exemption-table",
+      "table": "docs/ledger-subject-form-exemptions.json",
+      "note": "#320 landed the exit this entry declared as owed: the store is factory data, each entry names one row and a reason, every excuse prints, and a stale entry is an ERROR"
     },
     "tests/test_synthesize_insights.py": {
       "class": "always-satisfiable"

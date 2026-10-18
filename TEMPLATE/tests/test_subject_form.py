@@ -87,6 +87,7 @@ Exit: 0 clean, fully excused, or skipped-with-reason; non-zero on any post-bound
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -111,6 +112,14 @@ REPO = Path(__file__).resolve().parent.parent
 # `docs/ledger-invariants.json`. The key is the gate's own name with the `test_` prefix
 # and `.py` suffix dropped, matching `close_row_revision` and `score_gate_recorded`.
 INVARIANT_KEY = "subject_form"
+
+# The factory's OWN declared exemption store, read by this gate and never shipped inside
+# it: this file is a declared byte pair with `TEMPLATE/tests/test_subject_form.py`, so a
+# factory's row numbers must not live here. The store exists because a SUBJECT is
+# identity -- `docs/instruments/ledger.md` section 9.2 (#52 clause 1) makes a published
+# row immutable, so a post-boundary bare-integer subject has an EMPTY REPAIR SPACE and the
+# original row fires forever. Section 9.6 names excusing as the remedy for that shape.
+EXEMPTIONS_PATH = "docs/ledger-subject-form-exemptions.json"
 
 # The form the law codifies, and the two ways a reference attempt misses it. Ordered as
 # the predicate applies them, because the clause-label arm must be consulted before the
@@ -144,10 +153,65 @@ def subject_form_problem(subject: object) -> str | None:
         )
     return None
 
+def load_exemptions(repo: Path) -> tuple[dict[int, dict], list[str]]:
+    """`({row_number: entry}, problems)` read from the factory's own data file.
+
+    Absent or empty data means NO exemptions -- the shipped state of a new factory, where
+    `docs/` carries only the `.example.json` skeleton. Anything malformed is a problem,
+    never a silent pass: an exemption list that quietly fails to load is indistinguishable
+    from no exemptions at all, which is the same vacuous-pass shape the boundary guard
+    exists to forbid.
+
+    Each entry must name a row and carry a reason. The PROOF obligation is not checked
+    here but in `evaluate`: an entry that names a row whose subject is NOT a bare integer
+    excuses nothing, so it is a STALE exemption and a gate ERROR. That is what keeps the
+    store from becoming a standing waiver list -- it can only ever hold rows that are
+    actually red.
+    """
+    problems: list[str] = []
+    path = repo / EXEMPTIONS_PATH
+    if not path.is_file():
+        return {}, problems
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return {}, [f"{path.name} is not JSON: {exc}"]
+    if not isinstance(data, dict):
+        return {}, [f"{path.name}: expected a JSON object with an 'exemptions' list"]
+    raw = data.get("exemptions", [])
+    if not isinstance(raw, list):
+        return {}, [f"{path.name}: 'exemptions' must be a list"]
+
+    entries: dict[int, dict] = {}
+    for i, item in enumerate(raw, 1):
+        if not isinstance(item, dict):
+            problems.append(f"{path.name}: entry {i} is not an object")
+            continue
+        row = item.get("row")
+        if not isinstance(row, int) or isinstance(row, bool) or row < 1:
+            problems.append(
+                f"{path.name}: entry {i} names a row that is not a positive integer: {row!r}"
+            )
+            continue
+        if not str(item.get("reason") or "").strip():
+            problems.append(f"{path.name}: entry {i} (n={row}) carries no reason")
+            continue
+        if row in entries:
+            problems.append(f"{path.name}: entry {i} repeats n={row}")
+            continue
+        entries[row] = item
+    return entries, problems
+
 def subject_form_problems(
-    rows: list[dict], boundary_text: str
-) -> tuple[list[str], list[str]]:
-    """Return (problems, excused) for the subjects of a ledger.
+    rows: list[dict], boundary_text: str, exemptions: dict[int, dict] | None = None
+) -> tuple[list[str], list[str], int, set[int]]:
+    """Return (problems, excused, declared) for the subjects of a ledger.
+
+    `exemptions` maps a row number to its declared entry. A post-boundary row whose
+    subject is bare is excused ONLY by a declared entry naming its exact row, and every
+    such excuse is PRINTED with its reason -- the gate reports what it let through, never
+    a bare "clean". `declared` counts those, so the population line can never read clean
+    over an excused row: 0 and 6 are different outputs.
 
     `problems` names every post-boundary row whose subject fails the form; `excused` names
     every PRE-boundary row that would have, so the two are never conflated and "clean" is
@@ -161,6 +225,8 @@ def subject_form_problems(
     boundary = parse_ts(boundary_text)
     problems: list[str] = []
     excused: list[str] = []
+    declared = 0
+    matched: set[int] = set()
 
     for row in rows:
         n, ts = row.get("n"), row.get("ts", "")
@@ -175,11 +241,20 @@ def subject_form_problems(
         if when < boundary:
             excused.append(f"n={n} ({ts}) predates the declared boundary ({boundary_text})")
             continue
+        entry = exemptions.get(n) if isinstance(n, int) else None
+        if entry is not None:
+            matched.add(n)
+            declared += 1
+            excused.append(
+                f"n={n} ({ts}) {problem} -- EXCUSED by {EXEMPTIONS_PATH} -- "
+                f"{entry.get('reason')}"
+            )
+            continue
         problems.append(f"n={n} ({ts}) {problem}")
 
-    return problems, excused
+    return problems, excused, declared, matched
 
-def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int]:
+def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int, int]:
     """`(status, reason, problems, excused, checked)` over `repo` — the probe-able core.
 
     `status` is `"pass"`, `"skip"` or `"fail"`. A real problem always outranks a skip: the
@@ -189,21 +264,35 @@ def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int]:
     try:
         boundary, boundary_text, rows = boundary_and_rows(repo, INVARIANT_KEY)
     except SkipGate as exc:
-        return "skip", str(exc), [], [], 0
+        return "skip", str(exc), [], [], 0, 0
     except GateError as exc:
-        return "fail", "", list(exc.problems), [], 0
+        return "fail", "", list(exc.problems), [], 0, 0
 
-    problems, excused = subject_form_problems(rows, boundary_text)
+    exemptions, problems = load_exemptions(repo)
+    judged, excused, declared, matched = subject_form_problems(rows, boundary_text, exemptions)
+    problems = problems + judged
+
+    # An entry that excuses nothing is a STALE exemption: it inflates visible debt while
+    # admitting no row, and it would let the store rot into a standing waiver list. The
+    # reconciliation reads the set the store ACTUALLY excused in this run, so an entry for
+    # a pre-boundary row (excused by its DATE, not by the store) surfaces by name too.
+    for stale in sorted(set(exemptions) - matched):
+        problems.append(
+            f"{EXEMPTIONS_PATH}: the exemption for n={stale} matches no governed row "
+            f"carrying a bare-integer subject -- a stale exemption excuses nothing and "
+            f"must be removed (the row was repaired, or was never red)"
+        )
+
     if problems:
-        return "fail", "", problems, excused, 0
+        return "fail", "", problems, excused, 0, declared
 
     # The population is EVERY row at or after the boundary — this invariant is unscoped,
     # so the reader is asked for all events rather than for one kind of row.
     population = post_boundary_rows(rows, boundary)
     reason = population_skip_reason(population, boundary_text)
     if reason:
-        return "skip", reason, [], excused, 0
-    return "pass", "", [], excused, len(population)
+        return "skip", reason, [], excused, 0, declared
+    return "pass", "", [], excused, len(population), declared
 
 # --- the live ledger: the boundary THIS factory declared, applied to its own rows -----
 
@@ -261,7 +350,7 @@ def _live_verdict() -> tuple[str, str, list[str], list[str], int]:
 def test_live_subjects_carry_the_codified_form() -> None:
     """The live ledger against the boundary this factory declared. A `fail` here is a real
     subject-form defect in a row written on or after the boundary — not a fixture."""
-    status, reason, problems, _, checked = _live_verdict()
+    status, reason, problems, _, checked, _ = _live_verdict()
     assert status in ("pass", "skip"), (status, reason, problems)
     if status == "pass":
         assert checked > 0, "a pass over an empty population is a silent pass"
@@ -275,7 +364,7 @@ def test_live_the_two_bare_integer_rows_are_excused_and_never_hits() -> None:
     file is a declared byte pair and SHIPS, so an inline row number is read against a
     MEMBER's ledger, which does not carry this factory's history."""
     facts, declared = _live_calibrations()
-    status, reason, problems, excused, _ = _live_verdict()
+    status, reason, problems, excused, _, _ = _live_verdict()
     if status != "pass":
         pytest.skip(f"no live population in this tree: {reason}")
     assert problems == [], problems
@@ -296,7 +385,7 @@ def test_live_the_four_clause_labels_never_fire() -> None:
         assert rows[n].get("subject") == expected, (n, rows[n].get("subject"))
         assert subject_form_problem(expected) is None, expected
 
-    _, _, problems, excused, _ = _live_verdict()
+    _, _, problems, excused, _, _ = _live_verdict()
     for n in calibration:
         marker = f"n={n} "
         assert not any(marker in line for line in problems), problems
@@ -312,10 +401,23 @@ def _row(n: int, ts: str, subject: object, event: str = "dispatch") -> dict:
 def _probe_tree(root: Path, rows: list[dict]) -> Path:
     return synthetic_tree(root, rows=rows, invariants={INVARIANT_KEY: _PROBE_BOUNDARY})
 
+def _write_exemptions(root: Path, payload: object) -> Path:
+    """Write the factory's exemption store into a synthetic tree, as the gate reads it.
+
+    The store is FACTORY DATA at a fixed path, so a probe exercises the real reader rather
+    than a stub: the file is written where `load_exemptions` looks for it and nothing about
+    the load path is mocked.
+    """
+    path = root / EXEMPTIONS_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = payload if isinstance(payload, str) else json.dumps(payload)
+    path.write_text(text, encoding="utf-8")
+    return path
+
 def test_probe_a_bare_integer_subject_fires_naming_the_row(tmp_path: Path) -> None:
     """Criterion 2: the report NAMES the row number, so a reader can find the row."""
     tree = _probe_tree(tmp_path / "bare", [_row(900, "2026-09-19T14:00:00Z", 79)])
-    status, _, problems, _, _ = evaluate(tree)
+    status, _, problems, _, _, _ = evaluate(tree)
     assert status == "fail", (status, problems)
     assert len(problems) == 1, problems
     assert "n=900" in problems[0] and "bare integer" in problems[0], problems
@@ -330,7 +432,7 @@ def test_probe_a_tree_with_no_skills_directory_is_judged_the_same(tmp_path: Path
     tree = _probe_tree(tmp_path / "root-level-law", [_row(913, "2026-09-19T14:00:00Z", 79)])
     (tree / "SKILL.md").write_text("# law\n", encoding="utf-8")
     assert not (tree / "skills").is_dir(), "the fixture must model the layout it claims"
-    status, _, problems, _, _ = evaluate(tree)
+    status, _, problems, _, _, _ = evaluate(tree)
     assert status == "fail", (status, problems)
     assert "n=913" in problems[0], problems
 
@@ -342,7 +444,7 @@ def test_probe_a_bare_integer_fires_in_every_event(tmp_path: Path) -> None:
         tree = _probe_tree(
             tmp_path / event, [_row(901, "2026-09-19T14:00:00Z", 7, event=event)]
         )
-        status, _, problems, _, _ = evaluate(tree)
+        status, _, problems, _, _, _ = evaluate(tree)
         assert status == "fail", (event, status)
         assert "bare integer" in problems[0], (event, problems)
 
@@ -375,7 +477,7 @@ def test_probe_the_predicate_is_pure_and_offline() -> None:
 
 def test_probe_a_pre_boundary_row_is_excused_not_a_hit(tmp_path: Path) -> None:
     tree = _probe_tree(tmp_path / "pre", [_row(902, "2026-09-19T12:00:00Z", 79)])
-    status, reason, problems, excused, checked = evaluate(tree)
+    status, reason, problems, excused, checked, _ = evaluate(tree)
     assert (status, problems, checked) == ("skip", [], 0), (status, reason, problems)
     assert len(excused) == 1, excused
     assert "predates the declared boundary" in excused[0], excused
@@ -395,12 +497,12 @@ def test_probe_the_boundary_comes_from_the_declaration_not_this_file(tmp_path: P
     assert evaluate(late)[0] == "fail", "the declared boundary was not applied"
 
 def test_probe_a_tree_with_no_ledger_skips_with_a_stated_reason(tmp_path: Path) -> None:
-    status, reason, _, _, _ = evaluate(synthetic_tree(tmp_path / "bare"))
+    status, reason, _, _, _, _ = evaluate(synthetic_tree(tmp_path / "bare"))
     assert status == "skip" and "no evidence/ledger.jsonl" in reason, (status, reason)
 
 def test_probe_a_tree_with_no_declaration_skips_with_a_stated_reason(tmp_path: Path) -> None:
     tree = synthetic_tree(tmp_path / "undeclared", rows=[_row(904, "2026-09-19T14:00:00Z", "#79")])
-    status, reason, _, _, _ = evaluate(tree)
+    status, reason, _, _, _, _ = evaluate(tree)
     assert status == "skip", (status, reason)
     assert "ledger-invariants.json" in reason, reason
     assert "DECLARED factory parameter" in reason, reason
@@ -413,12 +515,12 @@ def test_probe_a_declaration_missing_this_key_skips(tmp_path: Path) -> None:
         rows=[_row(905, "2026-09-19T14:00:00Z", "#79")],
         invariants={"close_row_revision": "2026-09-19T05:05:49Z"},
     )
-    status, reason, _, _, _ = evaluate(tree)
+    status, reason, _, _, _, _ = evaluate(tree)
     assert status == "skip" and INVARIANT_KEY in reason, (status, reason)
 
 def test_probe_an_empty_ledger_skips(tmp_path: Path) -> None:
     tree = synthetic_tree(tmp_path / "empty", rows=[], invariants={INVARIANT_KEY: _PROBE_BOUNDARY})
-    status, reason, _, _, _ = evaluate(tree)
+    status, reason, _, _, _, _ = evaluate(tree)
     assert status == "skip" and "carries no rows" in reason, (status, reason)
 
 def test_probe_an_empty_population_skips_rather_than_passing(tmp_path: Path) -> None:
@@ -427,7 +529,7 @@ def test_probe_an_empty_population_skips_rather_than_passing(tmp_path: Path) -> 
     the excused set is non-empty — an excused row is still a fired predicate, and that is
     what makes "clean" and "excused" different output rather than the same one."""
     tree = _probe_tree(tmp_path / "young", [_row(906, "2026-09-19T12:00:00Z", 79)])
-    status, reason, problems, excused, checked = evaluate(tree)
+    status, reason, problems, excused, checked, _ = evaluate(tree)
     assert (status, problems, checked) == ("skip", [], 0), (status, reason, problems)
     assert "population is empty" in reason, reason
     assert len(excused) == 1, excused
@@ -442,7 +544,7 @@ def test_probe_the_cross_repo_fact_is_accepted_on_form_alone(tmp_path: Path) -> 
     """
     assert subject_form_problem("#366") is None
     tree = _probe_tree(tmp_path / "cross-repo", [_row(912, "2026-09-19T14:00:00Z", "#366")])
-    status, reason, problems, _, checked = evaluate(tree)
+    status, reason, problems, _, checked, _ = evaluate(tree)
     assert (status, problems, checked) == ("pass", [], 1), (status, reason, problems)
 
 def test_live_the_cross_repo_rows_carry_the_strict_form() -> None:
@@ -463,7 +565,7 @@ def test_probe_a_defect_is_never_hidden_behind_a_skip(tmp_path: Path) -> None:
     tree = _probe_tree(
         tmp_path / "undated", [{"n": 907, "ts": "not-a-timestamp", "event": "dispatch", "subject": "#79"}]
     )
-    status, _, problems, _, _ = evaluate(tree)
+    status, _, problems, _, _, _ = evaluate(tree)
     assert status == "fail", (status, problems)
     assert "unparseable ts" in problems[0], problems
 
@@ -475,7 +577,7 @@ def test_probe_a_malformed_declaration_fails_rather_than_raising(tmp_path: Path)
         rows=[_row(908, "2026-09-19T14:00:00Z", "#79")],
         declaration="{ this is not json",
     )
-    status, _, problems, _, _ = evaluate(tree)
+    status, _, problems, _, _, _ = evaluate(tree)
     assert status == "fail" and problems, (status, problems)
     assert "not valid JSON" in problems[0], problems
 
@@ -485,7 +587,7 @@ def test_probe_an_unreadable_declared_boundary_fails(tmp_path: Path) -> None:
         rows=[_row(909, "2026-09-19T14:00:00Z", "#79")],
         invariants={INVARIANT_KEY: "yesterday"},
     )
-    status, _, problems, _, _ = evaluate(tree)
+    status, _, problems, _, _, _ = evaluate(tree)
     assert status == "fail", (status, problems)
     assert "not a readable ISO-8601 timestamp" in problems[0], problems
 
@@ -582,7 +684,7 @@ def test_probe_an_absent_field_is_a_STATED_SKIP_not_a_quiet_pass() -> None:
 def test_probe_a_corrupt_ledger_line_fails_rather_than_raising(tmp_path: Path) -> None:
     tree = synthetic_tree(tmp_path / "corrupt", invariants={INVARIANT_KEY: _PROBE_BOUNDARY})
     (tree / "evidence/ledger.jsonl").write_text('{"n": 1}\nnot a row\n', encoding="utf-8")
-    status, _, problems, _, _ = evaluate(tree)
+    status, _, problems, _, _, _ = evaluate(tree)
     assert status == "fail", (status, problems)
     assert "is not a JSON row" in problems[0], problems
 
@@ -605,6 +707,117 @@ def test_probe_the_script_form_prints_its_population(tmp_path: Path, capsys) -> 
     assert "1 post-boundary row(s) examined" in out, out
     assert "0 hit(s)" in out, out
 
+def test_probe_a_declared_exemption_excuses_the_row_and_prints_its_authority(
+    tmp_path: Path,
+) -> None:
+    """#320 criterion 1: a post-boundary bare subject is excused ONLY by a declared entry,
+    and the excuse is PRINTED with the reason the store gives — the gate reports what it
+    let through instead of a bare "clean"."""
+    tree = _probe_tree(tmp_path / "declared", [_row(920, "2026-09-19T14:00:00Z", 79)])
+    _write_exemptions(
+        tree, {"exemptions": [{"row": 920, "reason": "n=920 names #79 in the bare form"}]}
+    )
+    status, reason, problems, excused, checked, declared = evaluate(tree)
+    assert (status, problems) == ("pass", []), (status, reason, problems)
+    assert declared == 1, declared
+    assert checked == 1, checked
+    assert len(excused) == 1, excused
+    assert "EXCUSED by" in excused[0] and EXEMPTIONS_PATH in excused[0], excused
+    assert "names #79 in the bare form" in excused[0], excused
+
+def test_probe_the_control_bites_with_the_store_in_place(tmp_path: Path) -> None:
+    """The arm that makes the one above mean something: the SAME tree, the SAME store, and
+    a second bare row the store does NOT name still fails. A probe that only proved the
+    exempt case would pass on a leg that had stopped reporting anything at all."""
+    tree = _probe_tree(
+        tmp_path / "control",
+        [_row(921, "2026-09-19T14:00:00Z", 79), _row(922, "2026-09-19T14:00:01Z", 80)],
+    )
+    _write_exemptions(tree, {"exemptions": [{"row": 921, "reason": "declared for n=921"}]})
+    status, _, problems, _, _, declared = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert declared == 1, declared
+    assert any("n=922" in line for line in problems), problems
+    assert not any("n=921" in line for line in problems), problems
+
+def test_probe_a_stale_exemption_is_an_error(tmp_path: Path) -> None:
+    """An entry that excuses nothing inflates visible debt while admitting no row. It is a
+    PROBLEM, never a quiet no-op, so the store cannot rot into a standing waiver list."""
+    tree = _probe_tree(tmp_path / "stale", [_row(923, "2026-09-19T14:00:00Z", "#79")])
+    _write_exemptions(tree, {"exemptions": [{"row": 923, "reason": "was red once"}]})
+    status, _, problems, _, _, declared = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert declared == 0, declared
+    assert any("stale exemption" in line and "n=923" in line for line in problems), problems
+
+def test_probe_an_entry_for_a_pre_boundary_row_is_stale(tmp_path: Path) -> None:
+    """A pre-boundary row is excused by its DATE, not by the store. An entry naming it
+    therefore excuses nothing, and must surface by name rather than passing as live."""
+    tree = _probe_tree(tmp_path / "pre-stale", [_row(924, "2026-09-19T12:00:00Z", 79)])
+    _write_exemptions(tree, {"exemptions": [{"row": 924, "reason": "believed red"}]})
+    status, _, problems, excused, _, declared = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert declared == 0, declared
+    assert any("stale exemption" in line and "n=924" in line for line in problems), problems
+    assert any("predates the declared boundary" in line for line in excused), excused
+
+def test_probe_an_absent_store_is_not_a_failure(tmp_path: Path) -> None:
+    """The shipped state of a new factory: `docs/` carries the `.example.json` skeleton and
+    no live store. That is an EMPTY population, never a red — and never a silent pass
+    either, because the population line still prints the rows examined."""
+    tree = _probe_tree(tmp_path / "absent", [_row(925, "2026-09-19T14:00:00Z", "#79")])
+    status, reason, problems, _, checked, declared = evaluate(tree)
+    assert (status, problems, declared) == ("pass", [], 0), (status, reason, problems)
+    assert checked == 1, checked
+
+def test_probe_a_malformed_store_fails_closed(tmp_path: Path) -> None:
+    tree = _probe_tree(tmp_path / "malformed", [_row(926, "2026-09-19T14:00:00Z", 79)])
+    _write_exemptions(tree, "{not json")
+    status, _, problems, _, _, _ = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert any("is not JSON" in line for line in problems), problems
+
+def test_probe_an_entry_without_a_reason_fails(tmp_path: Path) -> None:
+    """An exemption nobody can check is forgiveness, and this list is debt."""
+    tree = _probe_tree(tmp_path / "no-reason", [_row(927, "2026-09-19T14:00:00Z", 79)])
+    _write_exemptions(tree, {"exemptions": [{"row": 927, "reason": "   "}]})
+    status, _, problems, _, _, _ = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert any("carries no reason" in line for line in problems), problems
+
+def test_probe_a_duplicated_entry_fails(tmp_path: Path) -> None:
+    tree = _probe_tree(tmp_path / "dupe", [_row(928, "2026-09-19T14:00:00Z", 79)])
+    _write_exemptions(
+        tree,
+        {"exemptions": [{"row": 928, "reason": "a"}, {"row": 928, "reason": "b"}]},
+    )
+    status, _, problems, _, _, _ = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert any("repeats n=928" in line for line in problems), problems
+
+def test_probe_a_non_integer_row_fails(tmp_path: Path) -> None:
+    tree = _probe_tree(tmp_path / "non-int", [_row(929, "2026-09-19T14:00:00Z", 79)])
+    _write_exemptions(tree, {"exemptions": [{"row": "929", "reason": "string"}]})
+    status, _, problems, _, _, _ = evaluate(tree)
+    assert status == "fail", (status, problems)
+    assert any("not a positive integer" in line for line in problems), problems
+
+def test_probe_the_live_store_reconciles_against_the_live_ledger() -> None:
+    """The live arm: THIS factory's store must name only rows this ledger actually reds.
+    A member factory has no store and no such rows, so it SKIPS with the reason stated —
+    the store is factory data and never ships populated."""
+    store = REPO / EXEMPTIONS_PATH
+    if not store.is_file():
+        pytest.skip(f"this tree declares no {EXEMPTIONS_PATH} — nothing to reconcile")
+    entries, problems = load_exemptions(REPO)
+    assert not problems, problems
+    verdict = evaluate(REPO)
+    status, reason, live_problems, excused, _, declared = verdict
+    assert status in ("pass", "skip"), (status, reason, live_problems)
+    assert declared == len(entries), (declared, sorted(entries))
+    for n in entries:
+        assert any(f"n={n} " in line and "EXCUSED by" in line for line in excused), (n, excused)
+
 def main(repo: Path = REPO) -> int:
     """Script form: the same verdict, with the population and the excused set on STDOUT.
 
@@ -613,7 +826,7 @@ def main(repo: Path = REPO) -> int:
     same output. `repo` is a parameter so a probe can exercise the printed form against a
     synthetic tree — the TEMPLATE copy has no ledger of its own to print.
     """
-    status, reason, problems, excused, checked = evaluate(repo)
+    status, reason, problems, excused, checked, declared = evaluate(repo)
     for line in excused:
         print(f"  excused: {line}")
     if status == "skip":
@@ -626,7 +839,8 @@ def main(repo: Path = REPO) -> int:
         return 1
     print(
         f"subject-form gate: clean — {checked} post-boundary row(s) examined, "
-        f"{len(problems)} hit(s), {len(excused)} excused (pre-boundary)"
+        f"{len(problems)} hit(s), {declared} declared-exempt row(s), "
+        f"{len(excused) - declared} excused (pre-boundary)"
     )
     return 0
 

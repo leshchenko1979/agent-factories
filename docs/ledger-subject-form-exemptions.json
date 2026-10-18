@@ -1,0 +1,29 @@
+{
+  "_note": "THIS factory's declared exemptions for tests/test_subject_form.py (#320). The gate judges the FORM of every ledger subject and reds when a post-boundary subject is a bare integer, because a bare integer names an issue to a human reader and NOTHING to a machine -- the strict form is `#<n>`. This store exists because a subject is IDENTITY: `docs/instruments/ledger.md` section 9.2 (#52 clause 1) makes a published row immutable, so a malformed subject's repair space is EMPTY -- the repair is a NEW row, and the ORIGINAL still fires forever. Section 9.6 names excusing as the remedy for exactly this shape. THE ADMISSION RULE: every entry names ONE row and carries a `reason` stating which issue number the bare subject named and why the row cannot be repaired in place -- an exemption nobody can check is forgiveness, and this list is debt. An entry that names a row whose subject is NOT a bare integer is a STALE exemption and a gate ERROR, so the store can only ever hold rows that are actually red. Every matched entry prints as an `excused:` line on EVERY run and is counted in the population line, so 'clean' and 'excused' are never the same output. A malformed or duplicated entry, or an unparseable store, is an ERROR. Absent or empty means no exemptions, never a failure. THE ONE CLASS OF ADMITTED ROW, named in every reason: a row written at or after the declared boundary (2026-09-19T13:07:51Z) by the Triage lane on 2026-10-05T01:38-01:44Z, whose subject is the raw issue number rather than `#<n>` -- the form the gate was written to forbid, already published, and therefore beyond repair. The store is FACTORY DATA, never a list inside the gate: the gate is a declared byte pair and SHIPS, and one factory's row numbers must not travel to another.",
+  "exemptions": [
+    {
+      "row": 2305,
+      "reason": "n=2305 (intake) names #318 in the bare form; the strict form is `#318`. INTAKE row for board item #318 (cron: factory-hq-pacemaker is a non-thin wake row). The subject is the raw issue number `318`; the strict form is `#318`. Written 2026-10-05T01:38:54Z, after the declared boundary, and published -- identity is immutable (ledger.md 9.2), so the form cannot be repaired in place."
+    },
+    {
+      "row": 2306,
+      "reason": "n=2306 (dispatch) names #318 in the bare form; the strict form is `#318`. DISPATCH row for #318 -> the HQ lane. Bare subject `318`; the strict form is `#318`. Published, post-boundary, identity immutable -- repair space empty. The row's own defect (a durable claim stamped before the act it named) was corrected FORWARD by n=2312, which does not and cannot remove this one."
+    },
+    {
+      "row": 2307,
+      "reason": "n=2307 (dispatch) names #319 in the bare form; the strict form is `#319`. DISPATCH row for #319 -> the Worker lane. Bare subject `319`; the strict form is `#319`. Published, post-boundary, identity immutable. The same inversion n=2306 carries was corrected forward by n=2313, which leaves this row in place."
+    },
+    {
+      "row": 2308,
+      "reason": "n=2308 (run) names #317 in the bare form; the strict form is `#317`. TRIAGE HANDLING RECEIPT for #317. Bare subject `317`; the strict form is `#317`. Published, post-boundary, identity immutable -- the form cannot be repaired in place, and the receipt's substance is correct as written."
+    },
+    {
+      "row": 2312,
+      "reason": "n=2312 (run) names #318 in the bare form; the strict form is `#318`. CORRECTING ROW for n=2306. Its subject repeats the bare form `318` of the row it corrects, which is what makes the correction traceable -- rewriting it as `#318` would break the pairing it exists to establish. Published, post-boundary, identity immutable."
+    },
+    {
+      "row": 2313,
+      "reason": "n=2313 (run) names #319 in the bare form; the strict form is `#319`. CORRECTING ROW for n=2307. Its subject repeats the bare form `319` of the row it corrects, for the same traceability reason as n=2312. Published, post-boundary, identity immutable."
+    }
+  ]
+}

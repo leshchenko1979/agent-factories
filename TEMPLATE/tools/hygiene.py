@@ -490,6 +490,11 @@ DECLARATION_SURFACES: tuple[
      "entries name a ledger ROW (`row`, `asserted`, `asserted_row`) and the ledger is "
      "append-only, so no number here can be stranded by a rename; the ref-role leg "
      "reconciles every entry against a LIVE read of the ledger"),
+    ("subject-form-exemptions", "docs/ledger-subject-form-exemptions.json", (),
+     "entries name a ledger ROW (`row`) and the ledger is append-only, so no number here "
+     "can be stranded by a rename; the subject-form gate reconciles every entry against a "
+     "LIVE read of the ledger's own rows, where an entry naming a row whose subject is not "
+     "a bare integer is a STALE exemption and an ERROR"),
     ("ledger-refs-kinds", "docs/ledger-refs-kinds.json", (),
      "entries are ledger VOCABULARY names (kinds and events), not a target object"),
     ("ledger-retirements", "docs/ledger-retirements.json", (),

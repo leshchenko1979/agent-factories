@@ -1,0 +1,4 @@
+{
+  "_note": "SKELETON for a member factory's docs/ledger-subject-form-exemptions.json. Copy to docs/ledger-subject-form-exemptions.json and add one entry per POST-BOUNDARY ledger row whose subject is a bare integer rather than `#<n>`, each carrying the row number and a reason naming which issue number the bare subject meant. The gate reads this file; it is factory data and never ships with another factory's rows. An entry naming a row whose subject is NOT bare is a STALE exemption and a gate ERROR. Absent or empty means no exemptions -- never a failure.",
+  "exemptions": []
+}
