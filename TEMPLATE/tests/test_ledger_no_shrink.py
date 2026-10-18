@@ -586,6 +586,27 @@ def history_entries(
     return entries, ""
 
 
+# A BOUNDED rows cache, sized to the WALK's access pattern rather than to history (#510).
+#
+# The walk visits commits newest-first and reads TWO revisions per commit: the commit's own
+# rows and its first parent's. Consecutive commits SHARE a revision -- commit i's first
+# parent IS commit i+1 -- so `after(commit i+1)` is the very list `before(commit i)` just
+# parsed. Holding the last few parses turns that into a hit: measured 235 `git show` calls
+# and 235 parses become 168, and the walk's 108.7 s drops with them.
+#
+# The bound is the point. This is NOT the cache #510 removed: that one retained EVERY
+# deletion commit's two sides for the process lifetime (1.17 GiB). Two entries hold at most
+# ~56 MiB and are evicted by the walk itself as it advances.
+_ROWS_CACHE: dict[str, list[dict] | None] = {}
+_ROWS_CACHE_MAX = 2
+
+def _cache_rows(key: str, rows: list[dict] | None) -> list[dict] | None:
+    """Store one revision's parse, evicting the oldest insertion past the bound."""
+    _ROWS_CACHE[key] = rows
+    while len(_ROWS_CACHE) > _ROWS_CACHE_MAX:
+        _ROWS_CACHE.pop(next(iter(_ROWS_CACHE)))
+    return rows
+
 def rows_at(rev: str, rel_path: str, cwd: Path) -> list[dict] | None:
     """The ledger's rows at a revision, or None when the revision/path does not resolve.
 
@@ -593,10 +614,17 @@ def rows_at(rev: str, rel_path: str, cwd: Path) -> list[dict] | None:
     a commit that introduces it, the parent has no ledger and nothing can have been removed.
     An unparseable line is skipped rather than raised — it cannot carry an identity, so its
     disappearance is reported as the removal it is.
+
+    Memoised through `_ROWS_CACHE` (#510): see that cache's own comment for why the bound is
+    two and why it is not the retention #510 removed. A `None` is cached too — "this parent
+    has no ledger" is a fact the walk asks about repeatedly at the shallow end of history.
     """
+    key = f"{cwd}\x00{rev}\x00{rel_path}"
+    if key in _ROWS_CACHE:
+        return _ROWS_CACHE[key]
     rc, out, _ = _git("show", f"{rev}:{rel_path}", cwd=cwd)
     if rc != 0:
-        return None
+        return _cache_rows(key, None)
     rows: list[dict] = []
     for line in out.splitlines():
         line = line.strip()
@@ -606,7 +634,7 @@ def rows_at(rev: str, rel_path: str, cwd: Path) -> list[dict] | None:
             rows.append(json.loads(line))
         except json.JSONDecodeError:
             continue
-    return rows
+    return _cache_rows(key, rows)
 
 
 def commit_parents(sha: str, cwd: Path) -> list[str]:
@@ -651,6 +679,13 @@ def iter_transitions(
     entries, err = history_entries(ref, rel_path, cwd)
     if entries is None:
         return None, None, err
+    # THE CACHE LIVES FOR EXACTLY ONE WALK. Inside a walk every key is an immutable sha
+    # (`entry["sha"]` or its `^`), so the entries cannot go stale; but a caller that passes a
+    # MOVABLE ref ("HEAD", "origin/main") would otherwise be served a parse from before a
+    # commit it just made -- the synthetic probes commit into a throwaway repo between
+    # assertions. Clearing here keeps the within-walk hits (the whole point) and makes a
+    # stale read impossible across walks.
+    _ROWS_CACHE.clear()
     return _transition_stream(entries, rel_path, cwd), entries, ""
 
 def _transition_stream(
@@ -1490,10 +1525,10 @@ def main() -> int:
         problems.extend(decl_problems)
         problems.extend(surviving_problems(surviving, tip_rows))
         # DROP THE TIP SIDE BEFORE THE WALK (#510). `surviving` holds identity tuples, not
-        # rows, so nothing below reads `tip_rows` again -- but it is a THIRD full parse of
-        # the ledger (measured 28 MiB at 3,761 rows) held live across a walk that already
-        # allocates two sides per transition. The gate's peak is what OOM-killed the shared
-        # ops daemon, so a side that is finished with is freed at the point it is finished.
+        # rows, so nothing below reads `tip_rows` again. The local name is dropped here even
+        # though `_ROWS_CACHE` may still hold the parse: that cache is bounded at two entries
+        # and the walk evicts this one within its first two reads, so the tip side costs at
+        # most one slot rather than being held for the whole walk.
         del tip_rows
         gate_problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(
             _counted(stream), exemptions, declared
