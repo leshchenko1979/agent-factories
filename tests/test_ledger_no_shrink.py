@@ -95,6 +95,7 @@ import json
 import re
 import subprocess
 import sys
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -179,7 +180,7 @@ def _remint_successor(row: dict, after_rows: list[dict]) -> int | None:
 
 
 def no_shrink_problems(
-    transitions: list[dict],
+    transitions: Iterable[dict],
     exemptions: dict[str, dict],
     declared: set[tuple] | frozenset = frozenset(),
 ) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
@@ -189,6 +190,10 @@ def no_shrink_problems(
     at the commit, at its FIRST parent, and at every OTHER parent. Pure, so a synthetic
     history can drive it: a rule that has only ever seen good input has not been shown to
     reject bad input.
+
+    `transitions` is CONSUMED ONCE and may be a lazy stream (#510): every comparison is
+    within a single transition, so nothing here needs the population at once. Callers pass
+    `iter_transitions`' stream on live history and a list in the probes.
 
     A removal is accounted for by an EXEMPTION (keyed by the commit's sha) or by a DECLARED
     RECONCILIATION (keyed by the removed identity itself). The two are returned separately
@@ -495,7 +500,15 @@ def resolvable(ref: str, cwd: Path) -> bool:
     return rc == 0 and bool(out.strip())
 
 
-_WALK_CACHE: dict[tuple[str, str, str], tuple] = {}
+# METADATA ONLY, and deliberately so (#510). This cache holds `history_entries` -- one small
+# dict per commit touching the ledger (sha, subject, added, deleted). It must NEVER hold
+# TRANSITIONS, which is what it held until #510: a transition carries the FULL row list on
+# both sides, so caching 67 deletion commits retained 67 x 2 x 3,761 parsed dicts at once and
+# the gate peaked at 1.17 GiB (VmHWM 1202884 kB), OOM-killing the shared `opencrabs-ops`
+# daemon four times in one day. The population moves ONE WAY -- 15 deletion commits when this
+# cache was introduced, 67 at #510 -- so the retention was O(deletion_commits x rows) and got
+# worse every week. `iter_transitions` streams instead; the rows walk has no cache at all.
+_WALK_CACHE: dict[tuple, tuple] = {}
 
 
 def history_entries(
@@ -611,18 +624,45 @@ def commit_parents(sha: str, cwd: Path) -> list[str]:
     return parts[1:] if parts else []
 
 
-def build_transitions(
+def iter_transitions(
     ref: str, rel_path: str, cwd: Path
-) -> tuple[list[dict] | None, list[dict] | None, str]:
-    """`(transitions, entries, error)` — a transition per commit that deleted any line."""
-    _key = ("transitions", ref, rel_path, str(cwd))
-    if _key in _WALK_CACHE:
-        return _WALK_CACHE[_key]
+) -> tuple[Iterator[dict] | None, list[dict] | None, str]:
+    """`(transition_stream, entries, error)` — one transition per commit that deleted a line.
 
+    STREAMED, never materialised (#510). The predicate compares identity sets WITHIN one
+    transition and never across two, so the walk needs the row lists on both sides of ONE
+    commit at a time. Retaining them all buys nothing and costs O(deletion_commits x rows):
+    measured on this tree at 2026-10-18, 67 deletion commits x 2 sides x 3,761 rows =
+    484,410 live dicts, a 1.17 GiB peak (VmHWM 1202884 kB) that OOM-killed the shared
+    `opencrabs-ops` daemon four times in one day -- and `gate_select --paths
+    evidence/ledger.jsonl` SELECTS this gate, so every lane's ledger commit ran it.
+
+    The multiplier moves ONE WAY. `history_entries` records 15 deletion commits at
+    2026-09-28 and there are 67 now, while the row count only grows; a cost of
+    O(deletion_commits x rows) is a cost that gets worse every week, on a 2 GiB cgroup
+    shared by every lane in the daemon.
+
+    `entries` is still returned and still CACHED: it is metadata -- four short fields per
+    commit -- and the `git log --numstat` walk behind it is the expensive read (measured
+    55.7 s at 831 commits), so a second identical walk would cost the run its budget
+    (rc=124 against a 200 s cap, 2026-09-28). The ROWS walk is deliberately NOT cached:
+    that cache WAS the memory, and there is exactly one consumer pass over the stream.
+    """
     entries, err = history_entries(ref, rel_path, cwd)
     if entries is None:
         return None, None, err
-    transitions: list[dict] = []
+    return _transition_stream(entries, rel_path, cwd), entries, ""
+
+def _transition_stream(
+    entries: list[dict], rel_path: str, cwd: Path
+) -> Iterator[dict]:
+    """Yield one `{sha, subject, before, after, merged_in}` at a time, then forget it.
+
+    Module-level rather than a closure so the loop keeps the indentation it had as
+    `build_transitions`' body: a reader comparing this against the pre-#510 version sees the
+    SAME comparison with only the RETENTION removed. No predicate moved -- the three shapes,
+    the re-mint signature and the merged-in read are byte-for-byte what they were.
+    """
     for entry in entries:
         if entry["deleted"] <= 0:
             continue
@@ -644,17 +684,29 @@ def build_transitions(
         merged_in: list[dict] = []
         for parent in commit_parents(entry["sha"], cwd)[1:]:
             merged_in.extend(rows_at(parent, rel_path, cwd) or [])
-        transitions.append(
-            {
-                "sha": entry["sha"],
-                "subject": entry["subject"],
-                "before": before or [],
-                "after": after,
-                "merged_in": merged_in,
-            }
-        )
-    _WALK_CACHE[("transitions", ref, rel_path, str(cwd))] = (transitions, entries, "")
-    return transitions, entries, ""
+        yield {
+            "sha": entry["sha"],
+            "subject": entry["subject"],
+            "before": before or [],
+            "after": after,
+            "merged_in": merged_in,
+        }
+
+def build_transitions(
+    ref: str, rel_path: str, cwd: Path
+) -> tuple[list[dict] | None, list[dict] | None, str]:
+    """`(transitions, entries, error)` — `iter_transitions` MATERIALISED.
+
+    Kept for the PROBES, which drive throwaway synthetic repos of a handful of rows: there
+    the whole history is smaller than one live transition, so materialising is free and the
+    arms read naturally (`transitions[0]`, a filter by sha). The LIVE path in `main` uses
+    `iter_transitions` and must never call this -- materialising the live history is exactly
+    the 1.17 GiB peak #510 removed.
+    """
+    stream, entries, err = iter_transitions(ref, rel_path, cwd)
+    if stream is None:
+        return None, entries, err
+    return list(stream), entries, ""
 
 
 def _transition(
@@ -1333,19 +1385,28 @@ def report_the_live_history_walk() -> str:
     consequence of bootstrapping and not a defect. The two HARD arms are retained --
     a walk that ERRORS and a walk that finds ZERO commits are both defects of the
     tooling or the tree, and neither is a statement about history depth.
+
+    It reads the walk's METADATA (`history_entries`), never the transitions (#510). The
+    figures it prints are the population and its deletion-carrying share, both of which
+    `entries` already carries; building transitions to count them made this arm a SECOND
+    consumer, and a second consumer is what the retired transitions cache existed to serve
+    -- at the cost of the whole history's row lists. The rows walk itself is still exercised
+    on live history, by `main`'s single streaming pass, so nothing this arm used to prove
+    has stopped being proved; only the retention is gone.
     """
     cwd = repo_toplevel() or REPO
     ref = PRIMARY_REF if resolvable(PRIMARY_REF, cwd) else FALLBACK_REF
-    transitions, entries, err = build_transitions(ref, LEDGER_PATH, cwd)
-    if transitions is None:
+    entries, err = history_entries(ref, LEDGER_PATH, cwd)
+    if entries is None:
         return f"FAIL the live walk errored: {err}"
     if not entries:
         return "FAIL the live walk found zero commits touching the ledger"
-    if not transitions:
+    with_deletions = sum(1 for e in entries if e["deleted"] > 0)
+    if not with_deletions:
         return (f"REPORTED {len(entries)} live commit(s) touch the ledger and none "
                 f"carries a deletion -- shallow history, not a defect")
     return (f"REPORTED {len(entries)} live commit(s) touch the ledger, "
-            f"{len(transitions)} carry a deletion")
+            f"{with_deletions} carry a deletion")
 
 
 def main() -> int:
@@ -1391,12 +1452,29 @@ def main() -> int:
     if ref != PRIMARY_REF:
         print(f"  note: {PRIMARY_REF} is unreadable here — degrading to {FALLBACK_REF}")
 
-    transitions, entries, err = build_transitions(ref, LEDGER_PATH, cwd)
+    stream, entries, err = iter_transitions(ref, LEDGER_PATH, cwd)
+    counts = {"transitions": 0, "content_only": 0}
+
+    def _counted(rows: Iterator[dict]) -> Iterator[dict]:
+        """Pass the stream through, counting the two figures the summary line prints.
+
+        The counts are taken HERE rather than from a materialised list (#510): the summary
+        needs the population's SIZE and its content-only share, never the transitions
+        themselves, and retaining them to print a number is what made this gate a gigabyte.
+        `removed_identities` is a pure set difference, so counting adds no retained memory --
+        the two identity sets are built, compared and dropped inside the loop.
+        """
+        for transition in rows:
+            counts["transitions"] += 1
+            if not removed_identities(transition["before"], transition["after"]):
+                counts["content_only"] += 1
+            yield transition
+
     excused: list[str] = []
     reconciled: list[str] = []
     stale: list[str] = []
     stale_declarations: list[tuple] = []
-    if transitions is None:
+    if stream is None:
         problems.append(f"could not read {LEDGER_PATH}'s committed history from {ref}: {err}")
     elif not entries:
         problems.append(
@@ -1411,8 +1489,14 @@ def main() -> int:
         declared, surviving, decl_problems = load_reconciliations(tip_rows)
         problems.extend(decl_problems)
         problems.extend(surviving_problems(surviving, tip_rows))
+        # DROP THE TIP SIDE BEFORE THE WALK (#510). `surviving` holds identity tuples, not
+        # rows, so nothing below reads `tip_rows` again -- but it is a THIRD full parse of
+        # the ledger (measured 28 MiB at 3,761 rows) held live across a walk that already
+        # allocates two sides per transition. The gate's peak is what OOM-killed the shared
+        # ops daemon, so a side that is finished with is freed at the point it is finished.
+        del tip_rows
         gate_problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(
-            transitions, exemptions, declared
+            _counted(stream), exemptions, declared
         )
         problems.extend(gate_problems)
         for line in excused:
@@ -1431,12 +1515,11 @@ def main() -> int:
                 f"accounts for nothing; correct the declaration or remove it"
             )
 
-    if transitions is not None and entries:
+    if stream is not None and entries:
         print(
             f"ledger no-shrink: examined {len(entries)} commit(s) on {ref}, "
-            f"{len(transitions)} carrying deletions, "
-            f"{len(transitions) - len([t for t in transitions if removed_identities(t['before'], t['after'])])} "
-            f"of them content-only"
+            f"{counts['transitions']} carrying deletions, "
+            f"{counts['content_only']} of them content-only"
         )
 
     if problems or fails:
