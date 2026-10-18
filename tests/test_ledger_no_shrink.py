@@ -154,6 +154,30 @@ def removed_identities(before_rows: list[dict], after_rows: list[dict]) -> list[
     return sorted(removed, key=lambda key: (key[0] is None, key[0]))
 
 
+def _remint_successor(row: dict, after_rows: list[dict]) -> int | None:
+    """The `n` that re-mints `row` in `after_rows`, or None when nothing does.
+
+    A re-mint is the SAME ACT under a NEW number: `event`, `actor` and `subject` are the
+    row's identity of act, and a re-mint keeps all three while moving `n` UP (a re-mint
+    never reuses a number at or below the one it replaces -- that would be a different row
+    wearing a published number). `ts` and `detail` are deliberately NOT compared: a re-mint
+    is normally stamped at a new instant and its prose often names the number it replaced,
+    so requiring those to match would fail on exactly the rows the law permits.
+    """
+    n = row.get("n")
+    if not isinstance(n, int):
+        return None
+    want = (row.get("event"), row.get("actor"), row.get("subject"))
+    candidates = [
+        r.get("n")
+        for r in after_rows
+        if (r.get("event"), r.get("actor"), r.get("subject")) == want
+        and isinstance(r.get("n"), int)
+        and r["n"] > n
+    ]
+    return min(candidates) if candidates else None
+
+
 def no_shrink_problems(
     transitions: list[dict],
     exemptions: dict[str, dict],
@@ -161,15 +185,37 @@ def no_shrink_problems(
 ) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
     """Return `(problems, excused, stale, reconciled, stale_declarations)`.
 
-    Each transition is `{"sha", "subject", "before", "after"}` — the row lists at a commit
-    and at its parent. Pure, so a synthetic history can drive it: a rule that has only ever
-    seen good input has not been shown to reject bad input.
+    Each transition is `{"sha", "subject", "before", "after", "merged_in"}` -- the row lists
+    at the commit, at its FIRST parent, and at every OTHER parent. Pure, so a synthetic
+    history can drive it: a rule that has only ever seen good input has not been shown to
+    reject bad input.
 
     A removal is accounted for by an EXEMPTION (keyed by the commit's sha) or by a DECLARED
     RECONCILIATION (keyed by the removed identity itself). The two are returned separately
     and printed separately, so `clean`, `excused` and `reconciled` are never the same output.
     `declared` holds the identity tuples a reconciliation row named, and each is matched
     VERBATIM against an identity the walk observed removed.
+
+    A RE-MINT IS NOT A SHRINK (#301, and §9.1's own bound). Three shapes are distinguished,
+    because conflating them is the trap the #301 ruling names -- a guard that fires on a
+    legal re-mint is worse than none, since the lane learns to ignore it:
+
+      1. REMOVED AND PRESENT ON A MERGED-IN LINE -- the identity was published, and the
+         merge resolution dropped it. This is a PROBLEM: the one class the pre-#301 walker
+         could not see, and the reason the gate exists.
+      2. REMOVED AND ABSENT FROM EVERY MERGED-IN LINE -- the identity never reached the
+         published line, so §9.1's re-mint is free. EXCUSED, and printed, because "clean"
+         and "a re-mint happened here" must not read the same.
+      3. REMOVED BY A SINGLE-PARENT COMMIT -- there is no merged-in line to compare
+         against, so absence proves nothing. The row must carry the re-mint SIGNATURE (the
+         same event/actor/subject at a higher `n` in `after`), or be exempted, or be named
+         by a reconciliation. A bare authored deletion of a published row stays a PROBLEM,
+         which is what keeps shape 2 from becoming a blanket excuse.
+
+    The INVERSE case is its own leg: an identity present on a merged-in line and absent from
+    the merge, that was never on the first-parent line, was dropped ON THE WAY IN. A
+    first-parent diff reports nothing for it, so `removed_identities` cannot see it, and it
+    is a problem by the same predicate -- a published row is gone.
 
     `stale` names exemptions that matched nothing, and `stale_declarations` names declared
     identities that no transition removed. Both are gate ERRORS rather than silent passes:
@@ -184,31 +230,87 @@ def no_shrink_problems(
 
     for transition in transitions:
         sha = transition["sha"]
-        removed = removed_identities(transition["before"], transition["after"])
-        if not removed:
+        merged_in_rows = transition.get("merged_in") or []
+        merged_in_ids = {identity_of(r) for r in merged_in_rows}
+        after_rows = transition["after"]
+        after_ids = {identity_of(r) for r in after_rows}
+        before_ids = {identity_of(r) for r in transition["before"]}
+        is_merge = bool(merged_in_rows)
+        removed = removed_identities(transition["before"], after_rows)
+
+        # The inverse leg: published rows the resolution dropped on the way in. A row that
+        # is ALSO absent from the first parent is invisible to `removed_identities`, and a
+        # row present on both parents is already covered above, so only the difference is
+        # taken here to keep one removal from being reported twice.
+        dropped_on_the_way_in = sorted(
+            merged_in_ids - after_ids - before_ids,
+            key=lambda key: (key[0] is None, key[0]),
+        )
+
+        if not removed and not dropped_on_the_way_in:
             continue
+
         entry = exemptions.get(sha)
         if entry is not None:
             matched_exemptions.add(sha)
             excused.append(f"{sha} — {entry.get('reason', '')}")
+
         # Declarations are read for EVERY transition, exempted or not: an exemption and a
         # reconciliation can both be on the record for one removal, and a declaration that
         # is true must not read as stale merely because an exemption also covers it.
         named = [key for key in removed if key in declared]
         matched_declarations.update(named)
-        undeclared = [key for key in removed if key not in declared]
         if named:
             reconciled.append(
                 f"{sha[:12]} — {len(named)} identity(ies) named by a reconciliation row: "
                 + ", ".join(f"n={key[0]} ({key[2]} {key[3]} {key[4]})" for key in named)
             )
-        if undeclared and entry is None:
+
+        before_by_id = {identity_of(r): r for r in transition["before"]}
+        shrunk: list[tuple] = []
+        reminted: list[tuple] = []
+        for key in removed:
+            if key in declared or entry is not None:
+                continue
+            if key in merged_in_ids:
+                shrunk.append(key)          # shape 1: it was published
+                continue
+            row = before_by_id.get(key, {})
+            successor = _remint_successor(row, after_rows)
+            if is_merge:
+                reminted.append(key)        # shape 2: never published, free to re-mint
+            elif successor is not None:
+                reminted.append(key)        # shape 3: the re-mint signature is present
+            else:
+                shrunk.append(key)          # shape 3 without a signature: a real deletion
+
+        if reminted:
+            excused.append(
+                f"re-mint {sha[:12]} — {len(reminted)} identity(ies) re-minted above the "
+                "published line: "
+                + ", ".join(f"n={key[0]} ({key[2]} {key[3]} {key[4]})" for key in reminted)
+            )
+        if shrunk:
             described = ", ".join(
-                f"n={key[0]} ({key[2]} {key[3]} {key[4]})" for key in undeclared
+                f"n={key[0]} ({key[2]} {key[3]} {key[4]})" for key in shrunk
+            )
+            why = (
+                "published on a merged-in line, dropped by the resolution"
+                if any(key in merged_in_ids for key in shrunk)
+                else "no re-mint signature and no sanctioning row"
             )
             problems.append(
-                f"{sha[:12]} removes {len(undeclared)} row identity(ies) from "
+                f"{sha[:12]} removes {len(shrunk)} row identity(ies) from "
                 f"{LEDGER_PATH} without a sanctioning row: {described} "
+                f"— {why} — subject: {transition['subject'][:70]}"
+            )
+        if dropped_on_the_way_in:
+            described = ", ".join(
+                f"n={key[0]} ({key[2]} {key[3]} {key[4]})" for key in dropped_on_the_way_in
+            )
+            problems.append(
+                f"{sha[:12]} drops {len(dropped_on_the_way_in)} PUBLISHED row identity(ies) "
+                f"that existed only on the merged-in line: {described} "
                 f"— subject: {transition['subject'][:70]}"
             )
 
@@ -409,13 +511,37 @@ def history_entries(
     file. That is why the result is CACHED: the gate walks the live ledger twice, and a
     second identical walk of immutable history buys nothing and cost the run its budget
     (rc=124 against a 200 s cap, 2026-09-28).
+
+    `--diff-merges=first-parent` IS LOAD-BEARING (#301). A plain `git log --numstat`
+    prints NO diffstat at all for a merge commit, so a merge whose resolution drops a
+    row contributed `deleted=0` and the optimisation above silently skipped it -- the
+    walker was blind to exactly the commit class where a conflict resolution can delete
+    an identity without any authored commit deleting one. Measured on a three-line
+    scratch history (/tmp/mtest): plain `--numstat` printed `5e8d48d merge resolution
+    drops row 2` with NO numbers, while `--diff-merges=first-parent` printed
+    `0 1 led.jsonl` for it and the same three other commits unchanged.
+
+    The flag is `--diff-merges=first-parent`, NOT `-m` and NOT `-m --first-parent`:
+    `-m` emits a merge ONCE PER PARENT (the same sha twice, here `0 1` then `1 2`), which
+    double-counts the commit in the transition list; and `-m --first-parent` drops
+    side-branch commits from the population entirely (the fixture's `8755a06 side adds
+    row 4` vanished), which would hide real deletions. `first-parent` also pairs exactly
+    with `build_transitions`' `before = rows_at(f"{sha}^")` -- `^` IS the first parent,
+    so the diffstat and the before-side now describe the same comparison.
     """
     _key = ("history", ref, rel_path, str(cwd))
     if _key in _WALK_CACHE:
         return _WALK_CACHE[_key]
 
     rc, out, err = _git(
-        "log", "--numstat", "--format=%x01%H%x01%s", ref, "--", rel_path, cwd=cwd
+        "log",
+        "--diff-merges=first-parent",
+        "--numstat",
+        "--format=%x01%H%x01%s",
+        ref,
+        "--",
+        rel_path,
+        cwd=cwd,
     )
     if rc != 0:
         return None, (err.strip() or f"git log failed for {ref}")
@@ -468,6 +594,21 @@ def rows_at(rev: str, rel_path: str, cwd: Path) -> list[dict] | None:
     return rows
 
 
+def commit_parents(sha: str, cwd: Path) -> list[str]:
+    """The commit's parent shas in git's own order, first parent first.
+
+    An empty list is not an error: a root commit has none, and an unreadable sha is already
+    a problem the caller's own read reports. `rev-list --parents` resolves the same way
+    `rows_at` does, by revision, so the two reads cannot disagree about which commit they
+    describe.
+    """
+    rc, out, _ = _git("rev-list", "--parents", "-n", "1", sha, cwd=cwd)
+    if rc != 0:
+        return []
+    parts = out.split()
+    return parts[1:] if parts else []
+
+
 def build_transitions(
     ref: str, rel_path: str, cwd: Path
 ) -> tuple[list[dict] | None, list[dict] | None, str]:
@@ -487,20 +628,53 @@ def build_transitions(
         if after is None:
             continue
         before = rows_at(f"{entry['sha']}^", rel_path, cwd)
+        # A MERGE's remaining parents are the line that came IN, and
+        # `--diff-merges=first-parent` diffs only against the first. Reading them is what
+        # lets the predicate tell a RE-MINT from a SHRINK: an identity absent from every
+        # merged-in parent was never on the published line, so §9.1 makes re-minting it
+        # free; an identity PRESENT on one of them was published, and a merge that drops it
+        # is the removal this gate exists to catch. It is also the only read that sees the
+        # inverse case -- a row that lived ONLY on the merged-in line and vanished in the
+        # resolution appears in neither `before` nor `after`, so a first-parent diff reports
+        # nothing at all (#301). Cost: one `show` per extra parent, and only for commits
+        # already carrying a deletion.
+        merged_in: list[dict] = []
+        for parent in commit_parents(entry["sha"], cwd)[1:]:
+            merged_in.extend(rows_at(parent, rel_path, cwd) or [])
         transitions.append(
             {
                 "sha": entry["sha"],
                 "subject": entry["subject"],
                 "before": before or [],
                 "after": after,
+                "merged_in": merged_in,
             }
         )
     _WALK_CACHE[("transitions", ref, rel_path, str(cwd))] = (transitions, entries, "")
     return transitions, entries, ""
 
 
-def _transition(sha: str, before: list[dict], after: list[dict], subject: str = "s") -> dict:
-    return {"sha": sha, "subject": subject, "before": before, "after": after}
+def _transition(
+    sha: str,
+    before: list[dict],
+    after: list[dict],
+    subject: str = "s",
+    merged_in: list[dict] | None = None,
+) -> dict:
+    """A synthetic transition.
+
+    `merged_in` defaults to empty, which is the SINGLE-PARENT shape: an authored commit has
+    no merged-in line, so every removal it makes must carry the re-mint signature or be
+    sanctioned. That default is deliberate -- a fixture that quietly supplied an empty
+    merged-in list for a merge would make every merge removal look like a free re-mint.
+    """
+    return {
+        "sha": sha,
+        "subject": subject,
+        "before": before,
+        "after": after,
+        "merged_in": merged_in or [],
+    }
 
 
 def _row(n: int, event: str = "close", actor: str = "hq", subject: str = "#1") -> dict:
@@ -849,6 +1023,264 @@ def probe_the_walker_DETECTS_a_deletion_when_one_is_present() -> list[str]:
             )
     return fails
 
+def _synthetic_repo_with_a_MERGE_deletion(root: Path) -> tuple[Path, str, str]:
+    """A throwaway repo whose ledger deletion happens in a MERGE RESOLUTION (#301).
+
+    The plain-deletion fixture above cannot reach this class: its removal is an authored
+    commit, and `git log --numstat` reports those. A MERGE commit gets no diffstat at all
+    from the plain form, so a row dropped by a conflict resolution left `deleted` at 0 and
+    `build_transitions` skipped the commit before any before/after comparison -- the
+    walker was blind to the one commit class where a resolution can delete an identity
+    that no authored commit deleted.
+    """
+    import subprocess
+
+    rel = LEDGER_PATH
+    ledger = root / rel
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+
+    def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
+        proc = subprocess.run(
+            ["git", "-c", "user.email=probe@example.invalid", "-c", "user.name=probe",
+             "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", *args],
+            cwd=root, capture_output=True, text=True,
+        )
+        if check and proc.returncode != 0:
+            raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
+        return proc
+
+    def rows(*ns: int) -> str:
+        return "".join(
+            f'{{"n": {n}, "event": "close", "ts": "2026-01-01T00:0{n}:00Z"}}\n' for n in ns
+        )
+
+    git("init", "-q")
+    ledger.write_text(rows(1, 2, 3), encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "base three rows")
+
+    git("checkout", "-q", "-b", "side")
+    ledger.write_text(rows(1, 2, 3, 4), encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "side adds row 4")
+
+    git("checkout", "-q", "main")
+    ledger.write_text(rows(1, 2, 3, 5), encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "main adds row 5")
+
+    # Both sides append at the same tail, so the merge conflicts. The RESOLUTION drops
+    # row 2 -- that is the only place row 2 leaves the file, and it lives in no authored
+    # commit's diff.
+    git("merge", "--no-ff", "side", "-m", "merge side", check=False)
+    ledger.write_text(rows(1, 3, 4, 5), encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "merge resolution drops row 2")
+    return root, "HEAD", rel
+
+def probe_a_MERGE_resolution_that_removes_a_row_is_DETECTED() -> list[str]:
+    """#301: a removal performed by a MERGE RESOLUTION must be seen by the walker.
+
+    Bites BOTH ways by construction. Leg 1 is the optimisation's own gate: the merge
+    commit must appear in `entries` carrying `deleted > 0`. With the pre-#301 plain
+    `git log --numstat` it carried 0 and `build_transitions` skipped it, so this leg
+    fails on the old code with no help from any other arm. Leg 2 is the predicate: a
+    transition for that merge whose `before` holds n=2 and whose `after` does not -- a
+    walker that counted deletions but read the wrong side would still be caught.
+    """
+    fails: list[str] = []
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            cwd, ref, rel = _synthetic_repo_with_a_MERGE_deletion(Path(tmp))
+        except RuntimeError as exc:
+            fails.append(f"the synthetic merge repo could not be built: {exc}")
+            return fails
+        transitions, entries, err = build_transitions(ref, rel, cwd)
+        if transitions is None or entries is None:
+            fails.append(f"the synthetic merge walk failed: {err}")
+            return fails
+
+        merge = [e for e in entries if "merge resolution" in e["subject"]]
+        if len(merge) != 1:
+            fails.append(
+                f"the merge commit was not read exactly once: {len(merge)} entry(s) in "
+                f"{[e['subject'] for e in entries]}"
+            )
+            return fails
+        if merge[0]["deleted"] <= 0:
+            fails.append(
+                "the merge resolution reports deleted=0 -- the diffstat is missing, so "
+                "the row removal was never compared"
+            )
+            return fails
+
+        hit = [t for t in transitions if t["sha"] == merge[0]["sha"]]
+        if not hit:
+            fails.append(
+                "the merge resolution produced no transition: "
+                f"{[t['subject'] for t in transitions]}"
+            )
+            return fails
+        before = {r.get("n") for r in hit[0]["before"]}
+        after = {r.get("n") for r in hit[0]["after"]}
+        if 2 not in before:
+            fails.append(f"the transition's before-side lacks the removed row: {before}")
+        if 2 in after:
+            fails.append(f"the transition's after-side still holds row 2: {after}")
+    return fails
+
+
+def probe_a_MERGE_that_only_REMINTS_does_not_raise_the_alarm() -> list[str]:
+    """#301's second acceptance arm: a legal re-mint must NOT be reported as a shrink.
+
+    The #301 ruling is explicit that "a guard that fires on a legal re-mint is worse than
+    none, because the lane learns to ignore it". This probe is that arm, and it is built as
+    a PAIR so the same fixture shape yields opposite verdicts on the one field that decides
+    it -- whether the removed identity was on the merged-in line:
+
+      * arm A: the removed row is ABSENT from every merged-in parent -> it never reached the
+        published line, so §9.1 makes the re-mint free. The gate must be SILENT on it, and
+        must PRINT that a re-mint happened (a silent excuse is indistinguishable from no
+        removal at all).
+      * arm B: the SAME removal with the identity PRESENT on a merged-in parent -> it was
+        published and the resolution dropped it. The gate must RED.
+
+    A probe with only arm A would pass on a walker that reports nothing; only the pair
+    shows the discriminator is the merged-in line and not some incidental field.
+    """
+    fails: list[str] = []
+    removed = _row(2, event="claim", actor="worker", subject="#488")
+    successor = _row(5, event="claim", actor="worker", subject="#488")
+    kept = _row(1, event="claim", actor="worker", subject="#487")
+
+    # arm A -- never published, re-minted above the line
+    legal = [
+        _transition(
+            SHA_A,
+            [kept, removed],
+            [kept, successor],
+            subject="merge: reconcile origin/main — re-mint the claim",
+            merged_in=[kept],
+        )
+    ]
+    problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(legal, {})
+    if problems:
+        fails.append(f"a legal re-mint was reported as a shrink: {problems}")
+    if stale or reconciled or stale_declarations:
+        fails.append(
+            f"unexpected stale/reconciled on a clean re-mint: {stale} {reconciled} "
+            f"{stale_declarations}"
+        )
+    if not any("re-mint" in line and "n=2" in line for line in excused):
+        fails.append(
+            "the re-mint was not PRINTED -- an excused removal must be visible, or it "
+            f"reads exactly like a clean walk: {excused}"
+        )
+
+    # arm B -- the identical removal, but the identity WAS on the merged-in line
+    illegal = [
+        _transition(
+            SHA_A,
+            [kept, removed],
+            [kept, successor],
+            subject="merge resolution drops a published claim",
+            merged_in=[kept, removed],
+        )
+    ]
+    problems_b, excused_b, _, _, _ = no_shrink_problems(illegal, {})
+    if not problems_b:
+        fails.append(
+            "a merge that dropped a row PRESENT on the merged-in line raised no problem -- "
+            "the discriminator is not reading the merged-in line"
+        )
+    elif "n=2" not in problems_b[0]:
+        fails.append(f"the problem does not name the dropped identity: {problems_b[0]}")
+    elif "published on a merged-in line" not in problems_b[0]:
+        fails.append(f"the problem does not say WHY it is a shrink: {problems_b[0]}")
+    return fails
+
+
+def probe_a_removal_only_on_the_MERGED_IN_line_is_DETECTED() -> list[str]:
+    """The inverse #301 case: a row that existed ONLY on the merged-in line.
+
+    `removed_identities` compares the first parent against the merge, so a row that came in
+    from the other branch and vanished in the resolution appears in NEITHER side and the
+    ordinary predicate cannot see it. A first-parent diff reports nothing at all for it. It
+    is a published row disappearing, which is the whole predicate of this gate, so it gets
+    its own leg.
+    """
+    fails: list[str] = []
+    kept = _row(1, event="claim", actor="worker", subject="#487")
+    in_only = _row(9, event="close", actor="triage", subject="#499")
+    transitions = [
+        _transition(
+            SHA_A,
+            [kept],
+            [kept],
+            subject="merge: reconcile origin/main — resolution loses a row",
+            merged_in=[kept, in_only],
+        )
+    ]
+    problems, _, _, _, _ = no_shrink_problems(transitions, {})
+    if not problems:
+        fails.append(
+            "a published row present only on the merged-in line vanished with no problem "
+            "raised -- the inverse leg is not reading the merged-in line"
+        )
+    elif "n=9" not in problems[0]:
+        fails.append(f"the problem does not name the lost identity: {problems[0]}")
+    return fails
+
+
+def probe_a_SINGLE_PARENT_removal_needs_the_re_mint_signature() -> list[str]:
+    """Shape 3 of #301: with no merged-in line, absence proves nothing.
+
+    An authored commit has no other parent to compare against, so "absent from every
+    merged-in line" is vacuously true and would excuse ANY deletion. The signature is what
+    carries the law there: the same event/actor/subject must reappear at a HIGHER `n`. Both
+    arms use one fixture shape and differ only in whether that successor exists, so the
+    probe shows the signature -- not the commit's subject, not its parent count -- is what
+    decides the verdict.
+    """
+    fails: list[str] = []
+    removed = _row(2, event="claim", actor="worker", subject="#488")
+    kept = _row(1, event="claim", actor="worker", subject="#487")
+
+    # arm A -- the successor is present, so this is a re-mint on an unpublished line
+    legal = [_transition(SHA_A, [kept, removed], [kept, _row(5, event="claim",
+                                                              actor="worker",
+                                                              subject="#488")])]
+    problems, excused, _, _, _ = no_shrink_problems(legal, {})
+    if problems:
+        fails.append(f"a single-parent re-mint WITH a successor was called a shrink: {problems}")
+    if not any("re-mint" in line and "n=2" in line for line in excused):
+        fails.append(f"the single-parent re-mint was not printed: {excused}")
+
+    # arm B -- the identical removal with NO successor: a bare authored deletion
+    illegal = [_transition(SHA_A, [kept, removed], [kept])]
+    problems_b, _, _, _, _ = no_shrink_problems(illegal, {})
+    if not problems_b:
+        fails.append(
+            "a single-parent deletion with NO re-mint signature passed -- the signature "
+            "leg is not being read, and every authored deletion would be excused"
+        )
+    elif "no re-mint signature" not in problems_b[0]:
+        fails.append(f"the problem does not name the missing signature: {problems_b[0]}")
+
+    # arm C -- the signature must move UP: a same-subject row at a LOWER n is not a re-mint
+    downward = [_transition(SHA_A, [_row(9, event="claim", actor="worker", subject="#488")],
+                            [_row(4, event="claim", actor="worker", subject="#488")])]
+    problems_c, excused_c, _, _, _ = no_shrink_problems(downward, {})
+    if not problems_c:
+        fails.append(
+            "a removal whose only same-act row sits at a LOWER n was excused as a re-mint "
+            "-- a re-mint moves the number up, and reusing a lower one is a different row "
+            "wearing a published number"
+        )
+    return fails
+
 
 def report_the_live_history_walk() -> str:
     """The live-history walk, REPORTED and never asserted (#169, ruling n=1128).
@@ -891,6 +1323,10 @@ def main() -> int:
         probe_a_reconciliation_whose_surviving_identity_does_not_exist_is_an_error,
         probe_the_reader_anchors_and_rejects_malformed_declarations,
         probe_the_walker_DETECTS_a_deletion_when_one_is_present,
+        probe_a_MERGE_resolution_that_removes_a_row_is_DETECTED,
+        probe_a_MERGE_that_only_REMINTS_does_not_raise_the_alarm,
+        probe_a_removal_only_on_the_MERGED_IN_line_is_DETECTED,
+        probe_a_SINGLE_PARENT_removal_needs_the_re_mint_signature,
     )
     # The probe set is PRINTED, by count and by name, so a probe deleted from this tuple is
     # VISIBLE: a run that silently stops exercising a leg reads exactly like one that
