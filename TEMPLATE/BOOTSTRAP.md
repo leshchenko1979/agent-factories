@@ -272,10 +272,34 @@ enforces is law.
 
 Write the gate so it **parses the banned-synonyms table** rather than repeating
 the list in code: with the table as the source of truth, adding a row is what
-enforces it, and the ban list cannot drift from the check. Exempt a historical
-mention by `(path, substring)` — the line must also contain a justifying
-substring — so a rename record can still name the old word without opening the
-whole repo to it.
+enforces it, and the ban list cannot drift from the check.
+
+**The gate's forgiveness is factory data in a file, never a constant in the gate.**
+Copy `docs/ontology-exemptions.example.json` to `docs/ontology-exemptions.json`;
+the example ships with no roots and no entries, and that is the correct starting
+state. It declares two classes, and they are not interchangeable:
+
+- **`dated_artifacts`** — DIRECTORIES whose files are dated records: a survey, a
+  score, a review written at an instant and never rewritten. The gate cannot judge
+  them, because the banned word inside one is the evidence that the drift happened.
+  They are excluded from judgement and **counted in the gate's own output**
+  (`dated: <path> (N hit(s) not judged)`), so an exclusion is never silent. A root
+  here must be an existing directory: a class whose root is absent excludes nothing
+  and must not pass quietly.
+- **`exemptions`** — ONE line inside a document that is not a dated record, where
+  the banned term is **quoted rather than used**, so a rename record can still name
+  the old word without opening the whole repo to it. Every entry carries all four
+  fields — `path`, `substring`, `reason`, `proof` — because a path and a substring
+  without a reason and a proof is forgiveness, not a declaration. `proof` names the
+  file and line a reader can open to check the quote. An entry that matches 0 hits
+  is **stale and fails the gate**: an exemption excuses nothing once the line it
+  named is gone.
+
+Paths are exact and matched literally, with **no globs**, deliberately — an
+exemption cannot widen into a class by accident. This is the same shape as
+`docs/ledger-exemptions.json`: an exemption table holds its entries as factory data
+in its own file, because the gate is paired byte-identically with its template copy
+and this factory's records are not yours.
 
 Run the gate before the initial commit and **fix what it finds**: the first run
 is what proves the ban list describes words people actually use, rather than

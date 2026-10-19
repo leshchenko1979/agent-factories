@@ -719,7 +719,8 @@
       "table": "docs/ledger-schema-exemptions.json"
     },
     "tests/test_ontology.py": {
-      "class": "always-satisfiable"
+      "class": "exemption-table",
+      "table": "docs/ontology-exemptions.json"
     },
     "tests/test_patrol_host_state.py": {
       "class": "exemption-table",

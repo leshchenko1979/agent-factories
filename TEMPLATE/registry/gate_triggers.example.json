@@ -521,7 +521,9 @@
       "TEMPLATE/*.tmpl",
       "TEMPLATE/ONTOLOGY.md.tmpl",
       "docs/best-practices.md",
+      "docs/ontology-exemptions.json",
       "evidence/factories.md",
+      "evidence/rework.md",
       "skills/**"
     ],
     "tests/test_duty_receipt_exemptions.py": [

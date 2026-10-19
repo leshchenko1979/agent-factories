@@ -501,6 +501,8 @@ DECLARATION_SURFACES: tuple[
      "entries name LEDGER ROWS, and the ledger is append-only -- a row cannot be stranded"),
     ("ledger-schema-exemptions", "docs/ledger-schema-exemptions.json", (),
      "entries are keyed by ledger row `n`; the same append-only reason as above"),
+    ("ontology-exemptions", "docs/ontology-exemptions.json",
+     (("exemptions", "path", DECL_PATH),), ""),
     ("products", "docs/products.json", (),
      "entries are product records, whose `id` is an internal label and not a tree object"),
     ("rework-relative-revision-exemptions",

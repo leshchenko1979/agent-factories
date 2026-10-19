@@ -1,0 +1,33 @@
+{
+  "_note": "THE TWO CLASSES THIS GATE RECOGNISES, declared as data so the next reader can check every forgiveness instead of trusting the code. Read by tests/test_ontology.py; the skeleton a new factory copies is docs/ontology-exemptions.example.json. `dated_artifacts` names DIRECTORIES whose files are DATED RECORDS — a survey, a score, a review written at an instant and never rewritten. A vocabulary gate cannot judge those: the banned word inside one is the evidence that the drift happened. They are EXCLUDED from judgement and COUNTED in the gate's own output, so an exclusion is never silent; a root here must be an existing directory, because a class whose root is absent excludes nothing and must not pass quietly. `exemptions` names ONE line inside a document that is NOT a dated record, where the banned term is QUOTED rather than used. Every entry carries all four fields — path, substring, reason, proof — because a path and a substring without a reason and a proof is forgiveness, not a declaration; `proof` points at a file and the line or section a reader can OPEN to check the quote. An entry matching 0 hits is STALE and fails the gate: an exemption excuses nothing once the line it named is gone. Paths are exact and matched literally, with NO globs, deliberately — an exemption cannot widen into a class. The roots and entries below are THIS factory's records; the kit ships the example file instead, because a member has neither these dated directories nor this history.",
+  "dated_artifacts": [
+    "evidence/scores/",
+    "reviews/"
+  ],
+  "exemptions": [
+    {
+      "path": "docs/best-practices.md",
+      "substring": "SUPERVISOR / TRIAGE / TOOLSMITH",
+      "reason": "P5 names the original role set as the evidence for the pattern; the roles were real under those names.",
+      "proof": "docs/best-practices.md:48 — the `*Proven:*` line lists the roles as they stood when the pattern was evidenced."
+    },
+    {
+      "path": "docs/best-practices.md",
+      "substring": "was renamed **HQ**",
+      "reason": "the rename record itself — rewriting it would delete the provenance",
+      "proof": "docs/best-practices.md:50 — the sentence that records the rename, which is the provenance being preserved."
+    },
+    {
+      "path": "evidence/factories.md",
+      "substring": "renamed",
+      "reason": "dated survey evidence of the pre-rename state",
+      "proof": "evidence/factories.md:34 — the dated survey line carrying the pre-rename role name."
+    },
+    {
+      "path": "evidence/rework.md",
+      "substring": "`meta-layer`",
+      "reason": "the rework log records defects that WERE vocabulary drift; the banned term appears backticked as the quoted term of art, and rewriting it would delete the evidence that the defect happened.",
+      "proof": "evidence/rework.md:127-128 — two rework rows whose subject IS the drift; the term is quoted, not used."
+    }
+  ]
+}

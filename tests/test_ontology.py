@@ -6,8 +6,31 @@ own prose uses a banned word. The table is the source of truth, so the ban list
 and the gate cannot drift apart: add a row to ONTOLOGY.md and the next run
 enforces it.
 
+THE SUBJECT, AND WHY IT HAS A DECLARED CLASS (#512). The gate judges the
+factory's LIVING vocabulary. Two kinds of line are outside that subject rather
+than forgiven by it, and both are declared as FACTORY DATA in
+`docs/ontology-exemptions.json` -- never inline here, because this file is a
+declared byte pair with its TEMPLATE twin and a factory's own paths must not
+live in a file that ships to every new factory:
+
+  * `dated_artifacts` -- directory roots holding DATED RECORDS (a measurement
+    run's evidence, a review cycle's reports). A dated record states what was
+    said at the time; rewriting it to satisfy a vocabulary gate would falsify
+    the record. Correcting a population is a MECHANISM, so a class never needs
+    a second exemption row. Every file excluded this way is PRINTED with its hit
+    count on every run, so the class is visible and never silently empty.
+  * `exemptions` -- a single line whose banned word is the historical mention
+    itself, justified at the point of use by a `substring`, a `reason` and a
+    `proof` a reader can check. An entry must match at least one live hit: an
+    exemption that excuses nothing is an ERROR rather than a leftover, so the
+    store can never rot into a standing waiver list.
+
+Absent or empty declaration means no class and no exemptions -- the shipped
+state of a new factory. A malformed or unreadable declaration is an ERROR,
+never a silent pass.
+
 Run:  python3 tests/test_ontology.py
-Exit: 0 clean, 1 drift found.
+Exit: 0 clean, 1 drift found or the declaration is broken.
 
 Why a gate and not a review checklist: the rubric's Vocabulary conformance
 criterion (L2) counts an ontology that a test enforces as law, and one nobody
@@ -16,6 +39,7 @@ can violate as documentation. This is the difference.
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -28,38 +52,18 @@ ONTOLOGY = REPO / "ONTOLOGY.md"
 # the ontology itself is excluded because it must name every banned word.
 SCAN_SUFFIXES = {".md", ".tmpl"}
 SKIP_DIRS = {".git", "node_modules", "__pycache__"}
-# A document shipped in both trees is one document — see `is_exempt`.
+# A document shipped in both trees is one document -- see `mirrored`.
 TEMPLATE_PREFIX = "TEMPLATE/"
 
-# Lines that may use a banned word, each with the substring that justifies it.
-# An entry exempts a line only when the line ALSO contains `substring`, so a
-# historical mention stays visible and is justified at the point of use rather
-# than silently tolerated everywhere the word appears.
-EXEMPTIONS: list[tuple[str, str, str]] = [
-    (
-        "docs/best-practices.md",
-        "SUPERVISOR / TRIAGE / TOOLSMITH",
-        "P5 names the original role set as the evidence for the pattern; "
-        "the roles were real under those names.",
-    ),
-    (
-        "docs/best-practices.md",
-        "was renamed **HQ**",
-        "the rename record itself — rewriting it would delete the provenance",
-    ),
-    (
-        "evidence/factories.md",
-        "renamed",
-        "dated survey evidence of the pre-rename state",
-    ),
-    (
-        "evidence/rework.md",
-        "`meta-layer`",
-        "the rework log records defects that WERE vocabulary drift; the banned "
-        "term appears backticked as the quoted term of art, and rewriting it "
-        "would delete the evidence that the defect happened.",
-    ),
-]
+# The declared class and exemption surface (#512). FACTORY DATA, read here and
+# never listed inline: the gate is a declared byte pair with its TEMPLATE twin,
+# so a factory's own paths must not live in a file that ships to every factory.
+EXEMPTIONS_PATH = "docs/ontology-exemptions.json"
+DATED_KEY = "dated_artifacts"
+EXEMPT_KEY = "exemptions"
+# Every field is REQUIRED: a path and a substring without a reason and a proof
+# is forgiveness, not a declaration -- nobody can check it.
+ENTRY_FIELDS = ("path", "substring", "reason", "proof")
 
 
 def parse_banned(ontology: Path) -> list[tuple[str, str]]:
@@ -153,23 +157,119 @@ def tracked_files() -> list[Path]:
         ]
 
 
-def is_exempt(rel: str, line: str) -> bool:
-    """Is this line justified? A file shipped in BOTH trees is one document.
+def mirrored(rel: str) -> str:
+    """A file shipped in BOTH trees is one document.
 
     `TEMPLATE/docs/best-practices.md` is the copy of `docs/best-practices.md`,
     and `tests/test_docs_sync.py` already requires the two to be byte-identical.
     So a justification that holds for one holds for the other, and keying the
-    list on the exact path would force a duplicate entry per mirrored path —
-    a duplicate that can drift from its pair while both read as justified. The
-    `TEMPLATE/` prefix is therefore stripped before the lookup, which covers
-    every current and future mirror without weakening the list: the exemption
-    still needs its own file, its own substring, and its own reason.
+    declaration on the exact path would force a duplicate entry per mirrored
+    path — a duplicate that can drift from its pair while both read as
+    justified. The `TEMPLATE/` prefix is therefore stripped before BOTH lookups
+    (the exemption match and the dated class), which covers every current and
+    future mirror without weakening either: an exemption still needs its own
+    file, its own substring, its own reason and its own proof.
     """
     if rel.startswith(TEMPLATE_PREFIX):
-        rel = rel[len(TEMPLATE_PREFIX) :]
-    return any(
-        rel == path and substring in line for path, substring, _ in EXEMPTIONS
-    )
+        return rel[len(TEMPLATE_PREFIX) :]
+    return rel
+
+
+def load_declaration(repo: Path) -> tuple[list[str], list[dict], list[str]]:
+    """`(dated_roots, entries, problems)` read from the factory's own data file.
+
+    Absent or empty data means NO class and NO exemptions -- the shipped state of
+    a new factory, where `docs/` carries only the `.example.json` skeleton.
+    Anything malformed is a problem, never a silent pass: a declaration that
+    quietly fails to load is indistinguishable from no declaration at all, which
+    is the vacuous-pass shape this gate exists to forbid.
+
+    The stale check (an entry that matches no live hit) is not made here but in
+    `main`, where the population is known: an entry that excuses nothing is an
+    ERROR, and that is what keeps the store from becoming a standing waiver
+    list -- it can only ever hold lines that are actually red.
+    """
+    problems: list[str] = []
+    path = repo / EXEMPTIONS_PATH
+    if not path.is_file():
+        return [], [], problems
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return [], [], [f"{EXEMPTIONS_PATH} is not readable JSON: {exc}"]
+    if not isinstance(data, dict):
+        return [], [], [
+            f"{EXEMPTIONS_PATH}: expected a JSON object with `{DATED_KEY}` and `{EXEMPT_KEY}`"
+        ]
+
+    raw_dated = data.get(DATED_KEY, [])
+    if not isinstance(raw_dated, list):
+        problems.append(f"{EXEMPTIONS_PATH}: `{DATED_KEY}` must be a list of directory roots")
+        raw_dated = []
+    dated: list[str] = []
+    for i, root in enumerate(raw_dated, 1):
+        if not isinstance(root, str) or not root.strip():
+            problems.append(
+                f"{EXEMPTIONS_PATH}: `{DATED_KEY}` entry {i} is not a non-empty string: {root!r}"
+            )
+            continue
+        norm = root.strip().replace("\\", "/")
+        while norm.startswith("./"):
+            norm = norm[2:]
+        if not norm.endswith("/"):
+            norm += "/"
+        if norm.startswith("/") or ".." in norm.split("/"):
+            problems.append(
+                f"{EXEMPTIONS_PATH}: `{DATED_KEY}` entry {i} ({root!r}) is not a path "
+                f"inside this tree — a root that escapes the tree can never name a record"
+            )
+            continue
+        if not (repo / norm).is_dir():
+            problems.append(
+                f"{EXEMPTIONS_PATH}: `{DATED_KEY}` entry {i} ({root!r}) is not an existing "
+                f"directory in this tree — a class whose root is absent excludes nothing "
+                f"and must not pass silently"
+            )
+            continue
+        if norm in dated:
+            problems.append(f"{EXEMPTIONS_PATH}: `{DATED_KEY}` entry {i} repeats {norm!r}")
+            continue
+        dated.append(norm)
+
+    raw_entries = data.get(EXEMPT_KEY, [])
+    if not isinstance(raw_entries, list):
+        problems.append(f"{EXEMPTIONS_PATH}: `{EXEMPT_KEY}` must be a list of objects")
+        raw_entries = []
+    entries: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for i, item in enumerate(raw_entries, 1):
+        if not isinstance(item, dict):
+            problems.append(f"{EXEMPTIONS_PATH}: `{EXEMPT_KEY}` entry {i} is not an object")
+            continue
+        fields: dict[str, str] = {}
+        missing = False
+        for field in ENTRY_FIELDS:
+            value = item.get(field)
+            if not isinstance(value, str) or not value.strip():
+                problems.append(
+                    f"{EXEMPTIONS_PATH}: `{EXEMPT_KEY}` entry {i} carries no {field} — an "
+                    f"exemption nobody can check is forgiveness, not a declaration"
+                )
+                missing = True
+            else:
+                fields[field] = value.strip()
+        if missing:
+            continue
+        key = (fields["path"], fields["substring"])
+        if key in seen:
+            problems.append(
+                f"{EXEMPTIONS_PATH}: `{EXEMPT_KEY}` entry {i} repeats path "
+                f"{key[0]!r} + substring {key[1]!r}"
+            )
+            continue
+        seen.add(key)
+        entries.append(fields)
+    return dated, entries, problems
 
 
 def main() -> int:
@@ -200,7 +300,13 @@ def main() -> int:
         for word, canonical in sorted(banned, key=lambda p: -len(p[0]))
     ]
 
+    dated, entries, problems = load_declaration(REPO)
+
     findings: list[str] = []
+    excused: list[str] = []
+    dated_lines: list[str] = []
+    matched: set[int] = set()
+    dated_files = 0
     scanned = 0
     for path in tracked_files():
         if path.suffix not in SCAN_SUFFIXES or not path.is_file():
@@ -209,28 +315,84 @@ def main() -> int:
             continue
         scanned += 1
         rel = str(path.relative_to(REPO))
+        judged = mirrored(rel)
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except (UnicodeDecodeError, OSError):
             continue
-        for n, line in enumerate(lines, 1):
-            for pattern, word, canonical in patterns:
-                if pattern.search(line) and not is_exempt(rel, line):
-                    findings.append(f"{rel}:{n}: '{word}' -> use '{canonical}'")
+        hits = [
+            (n, line, word, canonical)
+            for n, line in enumerate(lines, 1)
+            for pattern, word, canonical in patterns
+            if pattern.search(line)
+        ]
+        if not hits:
+            continue
+        # A DATED RECORD is outside the gate's subject: printed with its count on
+        # every run, never judged, never silently dropped.
+        if any(judged.startswith(root) for root in dated):
+            dated_lines.append(f"dated: {rel} ({len(hits)} hit(s) not judged)")
+            dated_files += 1
+            continue
+        for n, line, word, canonical in hits:
+            entry = next(
+                (
+                    i
+                    for i, e in enumerate(entries)
+                    if e["path"] == judged and e["substring"] in line
+                ),
+                None,
+            )
+            if entry is None:
+                findings.append(f"{rel}:{n}: '{word}' -> use '{canonical}'")
+            else:
+                matched.add(entry)
+                excused.append(f"excused: {rel}:{n} '{word}' — {entries[entry]['reason']}")
+
+    for line in excused:
+        print(line)
+    for line in dated_lines:
+        print(line)
+
+    for i, entry in enumerate(entries):
+        if i not in matched:
+            problems.append(
+                f"{EXEMPTIONS_PATH}: the exemption for {entry['path']} (substring "
+                f"{entry['substring']!r}) matches 0 hit(s) — a stale exemption excuses "
+                f"nothing; remove it or correct its path/substring"
+            )
 
     if findings:
         print(f"vocabulary drift: {len(findings)} hit(s)\n")
         for f in findings:
             print(f"  {f}")
         print(
-            "\nFix the prose, or add a justified exemption to "
-            "tests/test_ontology.py EXEMPTIONS."
+            "\nFix the prose, or — when the line is a dated record or a justified "
+            "historical mention — declare it in "
+            f"{EXEMPTIONS_PATH}: a dated record belongs under `{DATED_KEY}`, and a "
+            f"single justified line is an `{EXEMPT_KEY}` entry carrying "
+            + ", ".join(ENTRY_FIELDS)
+            + "."
         )
+
+    if problems:
+        print(f"\nvocabulary gate: ERROR — {len(problems)} declaration problem(s)\n")
+        for p in problems:
+            print(f"  {p}")
+        return 1
+    if findings:
         return 1
 
+    state = ""
+    if excused and dated_files:
+        state = f" ({len(excused)} excused, {dated_files} dated file(s) excluded)"
+    elif excused:
+        state = f" ({len(excused)} excused)"
+    elif dated_files:
+        state = f" ({dated_files} dated file(s) excluded)"
     print(
         f"vocabulary clean: {len(terms)} canonical term(s), "
-        f"{len(banned)} banned term(s), {scanned} file(s) scanned"
+        f"{len(banned)} banned term(s), {scanned} file(s) scanned{state}"
     )
     return 0
 
