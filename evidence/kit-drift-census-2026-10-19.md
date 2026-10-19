@@ -53,6 +53,12 @@ inert for owner taps.
 - **every manifest cell** (955 pairs): same 55 · DIFF 151 · ABSENT 749
 - **bootstrap-named subset** (50 cells, the 10 files `TEMPLATE/BOOTSTRAP.md` names): same 6 · DIFF 25 · ABSENT 19
 
+- **one member of the five cannot consume the manifest at all**: `opencrabs-dev`'s
+  measured tree (`/root/opencrabs`) carries no `tools/`, no `registry/` and no `TEMPLATE/`,
+  so its **191 cells are 20.0% of 955** and its **190 ABSENT are 25.4% of 749**. Those cells
+  are DELIBERATE ABSENCE declared by the member itself (§6), not drift, and it asked that the
+  tree be named wherever they are counted.
+
 Two populations are reported because a number must travel with its own predicate:
 the bootstrap subset is what the earlier 1/20/29 baseline was taken over, and quoting
 only one of them would leave the other unreproducible.
@@ -65,7 +71,7 @@ only one of them would leave the other unreproducible.
 | `infra-factory` | 4 | 32 | 155 | vendored · 0 exempt | ABSENT | 6/8 | 2026-10-18T06:09:03Z · attested |
 | `inferhub-watch` | 12 | 31 | 148 | vendored · 29 exempt | ABSENT | 7/6 | 2026-10-18T06:07:26Z · attested |
 | `miidas` | 3 | 29 | 159 | vendored · 23 exempt | inert | 8/5 | 2026-10-18T06:07:43Z · attested |
-| `opencrabs-dev` | 0 | 1 | 190 | **none** | ABSENT | 5/5 | 2026-10-18T06:08:38Z · attested |
+| `opencrabs-dev` | 0 | 1 | 190 | **none** — tree holds no kit surface (§7) | ABSENT | 5/5 | 2026-10-18T06:08:38Z · attested |
 
 Four columns carry the point. **own pin** is the member-actionable half: a
 member with no pin has no figure of its own, and the DIFF beside it is against
@@ -195,7 +201,14 @@ MEMBER STATED THEM, so some are approximate; the round's own ledger rows
   forked, and those need opposite actions.
 - **ABSENT is not a verdict.** A factory ports a subset by design; a path it
   never took cannot diverge from anything.
-- **The pin gate is the member's own view.** 1 of 5 members have vendored no pin (`opencrabs-dev`), so for those the figure above is against OUR manifest and is not theirs to
-  act on. The vehicle exists (`TEMPLATE/registry/kit.example.json`) and `tests/test_kit_pin.py`
-  is the gate that judges it; this census is where that adoption is observed.
+- **The pin gate is the member's own view.** 4 of 5 members have vendored a pin; the fifth,
+  `opencrabs-dev`, has none — and that is STRUCTURAL, not non-adoption. The tree this census
+  measures for it is `/root/opencrabs`, the binary crate, which carries no `tools/`, no
+  `registry/` and no `TEMPLATE/`: there is no kit surface there to pin, so a pin at
+  `registry/kit.json` would compare a manifest against a tree holding none of its paths.
+  The member declared this in September and asked that the measured tree be NAMED, because
+  the reading is structural and carries no information. Its 190 ABSENT cells are 25.4% of the
+  ABSENT column and must not be read as drift. The vehicle exists
+  (`TEMPLATE/registry/kit.example.json`) and `tests/test_kit_pin.py` is the gate that judges it;
+  this census is where that adoption is observed — for the four trees that can hold one.
 
