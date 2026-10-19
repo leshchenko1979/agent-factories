@@ -3103,12 +3103,20 @@ def test_the_runner_PRINTS_the_prior_round_and_the_malformed_class() -> None:
 
 # ------------------------------------------------------------------- kit-drift leg
 
-def _synthetic_kit(tmp: Path, *, files: dict[str, bytes], members: dict[str, dict]) -> tuple[Path, Path]:
+def _synthetic_kit(
+    tmp: Path, *, files: dict[str, bytes], members: dict[str, dict],
+    classes: dict[str, str] | None = None,
+) -> tuple[Path, Path]:
     """A throwaway manifest + fleet pair over synthetic member trees.
 
     Returns (manifest_path, fleet_path). The member trees are built by the caller under
     `tmp`, so nothing here reads a live repository: the leg's population is five OTHER
     repos, and a probe that read them would be measuring whatever they happen to hold.
+
+    `classes` is keyed by the SAME repo-relative spelling as `files` (no `TEMPLATE/`
+    prefix) so a caller states the class once, beside the bytes it describes; the manifest
+    gets the prefixed key the leg actually reads. Omitting it leaves the manifest carrying
+    no `classes` map at all, which is the pre-#514 shape and the control arm's fixture.
     """
     import hashlib
     manifest = {"kit_version": "probe", "files": {}}
@@ -3117,6 +3125,8 @@ def _synthetic_kit(tmp: Path, *, files: dict[str, bytes], members: dict[str, dic
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(body)
         manifest["files"][f"TEMPLATE/{rel}"] = hashlib.sha256(body).hexdigest()
+    if classes:
+        manifest["classes"] = {f"TEMPLATE/{rel}": cls for rel, cls in classes.items()}
     mpath = tmp / "kit.json"
     mpath.write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -3169,6 +3179,59 @@ def test_a_member_is_never_a_PROBLEM_even_when_fully_stale() -> None:
         leg = RUNNER.kit_drift_leg(manifest_path=mpath, fleet_path=fpath, read_at="probe")
         assert leg["problems"] == [], f"drift must not red the patrol: {leg['problems']}"
         assert leg["coverage"]["manifest_cells"]["DIFF"] == 1
+
+def test_a_STALE_SHARED_SURFACE_writer_is_a_PROBLEM_and_an_absent_one_is_not() -> None:
+    """#514, ruled at ledger n=3792. THE TWO ARMS ARE THE WHOLE POINT.
+
+    A `shared-surface` file writes a box-wide store, so a member's stale copy mutates state
+    every factory reads -- that is not that member's backlog, it is this factory's hazard,
+    and it must red here. Its ABSENCE is the SAFE state: a factory that does not carry the
+    writer never writes the surface, so flagging absence would punish the members that did
+    nothing wrong.
+
+    The third arm is the CONTROL the first would pass without: the SAME diverging tree with
+    the classification removed reads clean. That is what makes the problem a function of the
+    declaration rather than of the bytes -- and it is why the class is read from the
+    manifest's own map instead of being inferred from what the file looks like.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        # ARM 1 -- declared shared-surface, member's copy DIFFERS -> exactly one problem,
+        # naming BOTH the member and the file.
+        mpath, fpath = _synthetic_kit(
+            root, files={"tools/questions": b"current"},
+            members={"stale": {"diff": {"tools/questions": b"superseded"}}},
+            classes={"tools/questions": "shared-surface"},
+        )
+        leg = RUNNER.kit_drift_leg(manifest_path=mpath, fleet_path=fpath, read_at="probe")
+        assert len(leg["problems"]) == 1, leg["problems"]
+        assert "`stale`" in leg["problems"][0], leg["problems"][0]
+        assert "tools/questions" in leg["problems"][0], leg["problems"][0]
+        cells = leg["coverage"]["shared_surface"]["cells"]
+        assert cells == {"same": 0, "DIFF": 1, "ABSENT": 0}, cells
+
+        # ARM 2 -- same fixture, the member does NOT carry the file -> no problem, and the
+        # safe state is RECORDED rather than inferred from a total.
+        mpath2, fpath2 = _synthetic_kit(
+            root / "absent", files={"tools/questions": b"current"},
+            members={"silent": {"same": {"tools/other.py": b"x"}}},
+            classes={"tools/questions": "shared-surface"},
+        )
+        leg2 = RUNNER.kit_drift_leg(manifest_path=mpath2, fleet_path=fpath2, read_at="probe")
+        assert leg2["problems"] == [], leg2["problems"]
+        assert leg2["coverage"]["shared_surface"]["cells"]["ABSENT"] == 1, \
+            leg2["coverage"]["shared_surface"]["cells"]
+
+        # ARM 3 -- CONTROL: the identical DIFF with NO classification reads clean, so arm 1
+        # is measuring the declaration and not the divergence.
+        mpath3, fpath3 = _synthetic_kit(
+            root / "unclassified", files={"tools/questions": b"current"},
+            members={"stale": {"diff": {"tools/questions": b"superseded"}}},
+        )
+        leg3 = RUNNER.kit_drift_leg(manifest_path=mpath3, fleet_path=fpath3, read_at="probe")
+        assert leg3["problems"] == [], f"the class must be load-bearing: {leg3['problems']}"
+        assert leg3["coverage"]["shared_surface"]["files"] == [], \
+            leg3["coverage"]["shared_surface"]
 
 def test_an_unreachable_member_is_reported_never_silently_skipped() -> None:
     """A member whose repo is absent is NAMED. A sweep that silently dropped it would

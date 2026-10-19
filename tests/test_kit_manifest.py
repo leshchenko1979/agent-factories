@@ -97,6 +97,20 @@ def main() -> int:
           not any("__pycache__" in p or p.endswith(".pyc") or ".pytest_cache" in p for p in files),
           "no cache or bytecode paths")
 
+    # ARM 1c — THE WRITE-TARGET CLASS IS DECLARED IN BOTH HALVES (#514, ruled at ledger
+    # n=3792). A class living only in the generator's source is a declaration no consumer
+    # can read; a class the manifest carries but the vocabulary does not know is the
+    # phantom-artefact shape one layer down. `--check`'s breakdown iterates the vocabulary
+    # itself, so its printed `shared-surface=<n>` IS the generator's half, and the manifest
+    # entry is the consumer's. The path named is the ruling's own first member, not a
+    # synthetic one, so the arm cannot pass on a class nobody actually carries.
+    classes = declared.get("classes") or {}
+    check("the manifest classes the shared-surface writer the ruling names",
+          classes.get("TEMPLATE/tools/questions") == "shared-surface",
+          repr(classes.get("TEMPLATE/tools/questions")))
+    check("and the generator's vocabulary carries that class into its own census line",
+          "shared-surface=" in proc.stdout, proc.stdout.strip()[-120:])
+
     # ARM 1b — THE IDENTITY QUERY, whose answer must be CHECKABLE rather than trusted.
     # `--identity` reports which copy of a shipped file the caller holds, and it is not a
     # gate (it exits 0 for a mismatch too), so nothing else here would notice it drifting

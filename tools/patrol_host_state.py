@@ -430,6 +430,11 @@ LEDGER_TOOL = REPO / "tools" / "ledger.py"
 KIT_MANIFEST_REL = "registry/kit.json"
 FLEET_MANIFEST = REPO / "registry" / "fleet.json"
 
+# THE MUST-ADOPT CLASS (#514, ruled at ledger n=3792). A manifest class value, READ from
+# the pin's own `classes` map and never derived here: a second classification would be a
+# second copy of the declaration, which is the drift class this leg exists to report.
+SHARED_SURFACE_CLASS = "shared-surface"
+
 # The files `TEMPLATE/BOOTSTRAP.md` step 4c instructs a factory to copy, by their
 # repo-relative path in a member tree. Read as a CONSTANT because the bootstrap states
 # them in prose across several paragraphs; a parser over that prose would be a second
@@ -6958,12 +6963,22 @@ def kit_drift_leg(
 ) -> dict:
     """Per-member drift against `registry/kit.json`: same / DIFF / ABSENT, with names.
 
-    A REPORT, not a verdict on the members. `problems` carries only this factory's own
-    defects — a manifest or fleet file it cannot read, a manifest that describes no files,
-    or no reachable member at all — because those are the examined-nothing cases. A member
-    being stale is a fact about THAT member, reported in `coverage` and acted on by the
-    notify step; reddening this factory's patrol for it would make our verdict a function
-    of another lane's backlog, which is the coupling the design exists to avoid.
+    A REPORT, not a verdict on the members, with ONE DECLARED EXCEPTION. `problems` carries
+    this factory's own defects — a manifest or fleet file it cannot read, a manifest that
+    describes no files, or no reachable member at all — because those are the
+    examined-nothing cases. A member being stale is ORDINARILY a fact about THAT member,
+    reported in `coverage` and acted on by the notify step; reddening this factory's patrol
+    for it would make our verdict a function of another lane's backlog, which is the
+    coupling the design exists to avoid.
+
+    THE EXCEPTION IS THE `shared-surface` CLASS (#514, ruled at ledger n=3792). A file whose
+    STORE is a box-wide surface is not a per-factory adoption choice: a superseded copy keeps
+    WRITING that surface with old semantics, so the blast radius is every factory rather than
+    that member. A DIFF cell for such a file is therefore a problem here, naming the member
+    and the file. An ABSENT cell is NOT: a factory that does not carry the writer never
+    writes the surface, which is the safe state, and it is printed as such rather than folded
+    into a coverage count. The class comes from the manifest's own `classes` map — never from
+    a heuristic over file content, which would be a second copy of the declaration.
 
     Each member's repo is read from `registry/fleet.json`'s own `repo` field, so a member
     that moves is followed by the manifest rather than by a second list. A manifest path is
@@ -6975,6 +6990,7 @@ def kit_drift_leg(
     members: list[dict] = []
     totals = {"same": 0, "DIFF": 0, "ABSENT": 0}
     boot_totals = {"same": 0, "DIFF": 0, "ABSENT": 0}
+    shared_totals = {"same": 0, "DIFF": 0, "ABSENT": 0}
 
     if manifest_path is None:
         # THE #185 REMEDY: the live reference is the COMMITTED manifest, never the file on
@@ -7018,6 +7034,7 @@ def kit_drift_leg(
                 "excused": [], "coverage": {"reason": str(exc), "read_at": read_at}}
 
     files: dict[str, str] = manifest.get("files") or {}
+    classes: dict[str, str] = manifest.get("classes") or {}
     if not files:
         problems.append(
             f"the kit manifest {manifest_path} declares NO files — a reference over an empty "
@@ -7077,6 +7094,27 @@ def kit_drift_leg(
         absent = res["counts"]["ABSENT"]
         diff_files = res["diff_files"]
         absent_files = res["absent_files"]
+        # MUST-ADOPT, NOT PER-FACTORY (#514). `diff_files` are MEMBER-relative paths, so the
+        # manifest key is recovered through the pin's own `member_path` rather than by
+        # re-deriving the prefix here -- one mapping, shared with the predicate that produced
+        # the names.
+        shared_map = {
+            kit_pin.member_path(rel): rel
+            for rel, cls in classes.items() if cls == SHARED_SURFACE_CLASS
+        }
+        shared_diff = sorted(p for p in diff_files if p in shared_map)
+        shared_absent = sorted(p for p in absent_files if p in shared_map)
+        shared_totals["DIFF"] += len(shared_diff)
+        shared_totals["ABSENT"] += len(shared_absent)
+        shared_totals["same"] += len(shared_map) - len(shared_diff) - len(shared_absent)
+        for shared_path in shared_diff:
+            problems.append(
+                f"member `{slug}` carries a STALE SHARED-SURFACE writer: {shared_path} "
+                f"({shared_map[shared_path]}) differs from the kit, and that file writes a "
+                f"store every factory reads and writes — a superseded copy mutates state "
+                f"another factory's law governs, so it is a problem here rather than a "
+                f"coverage statistic (#514)"
+            )
         totals["same"] += same
         totals["DIFF"] += diff
         totals["ABSENT"] += absent
@@ -7091,6 +7129,14 @@ def kit_drift_leg(
             "slug": slug, "root": str(root), "reachable": True,
             "same": same, "DIFF": diff, "ABSENT": absent,
             "diff_files": sorted(diff_files), "absent_files": sorted(absent_files),
+            # The class's own cells, so a reader can see the must-adopt population apart from
+            # the per-factory one -- and can see an ABSENT shared-surface file as the SAFE
+            # state it is rather than inferring it from a total.
+            "shared_surface": {
+                "same": len(shared_map) - len(shared_diff) - len(shared_absent),
+                "diff": shared_diff,
+                "absent": shared_absent,
+            },
         })
 
     reachable = [m for m in members if m["reachable"]]
@@ -7122,6 +7168,15 @@ def kit_drift_leg(
             "members_unreachable": [m["slug"] for m in members if not m["reachable"]],
             "manifest_cells": dict(totals),
             "manifest_cells_total": totals["same"] + totals["DIFF"] + totals["ABSENT"],
+            # THE MUST-ADOPT POPULATION, reported apart from the per-factory one (#514). Its
+            # DIFF cells are the leg's problems; its ABSENT cells are the safe state and are
+            # counted so a reader can tell "no member carries it" from "no member was read".
+            "shared_surface": {
+                "class": SHARED_SURFACE_CLASS,
+                "files": sorted(rel for rel, cls in classes.items()
+                                if cls == SHARED_SURFACE_CLASS),
+                "cells": dict(shared_totals),
+            },
             "bootstrap_cells": dict(boot_totals),
             "bootstrap_cells_total": sum(boot_totals.values()),
             "bootstrap_named": list(bootstrap_named),

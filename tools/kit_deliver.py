@@ -9,6 +9,8 @@ drifted and had no mechanism to hand it the update — the law corpus carried `v
 
 WHAT IT MOVES, AND WHY THOSE CLASSES. The `classes` map in the pin decides:
 `standalone` and `closure` are delivered (a tool and the modules it needs to run);
+`shared-surface` is delivered for the same reason and more urgently -- the file writes
+a box-wide store, so leaving a stale copy in place is what the census reds (#514);
 `seed` is NEVER written, because those are the factory's own law and data — its
 `SKILL.md`, its `gates.json`, its exemption lists. An update that overwrote a declaration
 would destroy the thing the declaration exists to record.
@@ -45,7 +47,9 @@ import kit_manifest as KM  # noqa: E402
 import kit_pin as KP  # noqa: E402
 
 # The classes an update may write. `seed` is absent on purpose -- see the docstring.
-DELIVERED_CLASSES = ("standalone", "closure")
+# `shared-surface` is PRESENT on purpose: it is a file every factory writes through, so
+# refusing to deliver it would leave the stale writer the census exists to report.
+DELIVERED_CLASSES = ("standalone", "closure", "shared-surface")
 
 # What the plan says about each path. `seed` and `LOCAL-MODIFICATION` are both refusals
 # to write, but they are DIFFERENT facts and a reader must be able to tell them apart.

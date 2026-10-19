@@ -57,7 +57,10 @@ PIN_VEHICLE_REL = "TEMPLATE/registry/kit.example.json"
 
 TEMPLATE_PREFIX = "TEMPLATE/"
 
-CLASSES = ("standalone", "closure", "seed")
+# The class vocabulary a pin may declare. `shared-surface` is a WRITE-TARGET class (#514):
+# the file writes a box-wide store, so a stale copy mutates another factory's state
+# rather than merely lagging -- a consumer must accept it rather than refuse the pin.
+CLASSES = ("standalone", "closure", "seed", "shared-surface")
 
 
 def member_path(manifest_path: str) -> str:

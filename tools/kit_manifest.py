@@ -281,7 +281,25 @@ SEEDS = frozenset({
     "TEMPLATE/registry/kit.example.json",      # the pin vehicle -- a factory data file
 })
 
-CLASSES = ("standalone", "closure", "seed")
+# THE WRITE-TARGET DECLARATION (issue #514, ruled at ledger n=3792). A shipped file whose
+# STORE is a cross-factory surface is not a per-factory adoption choice: a member that has
+# not adopted the current kit still WRITES that surface, so its staleness mutates every
+# factory's state rather than merely lagging behind. DECLARED here, never derived -- a
+# heuristic over file content would be a second copy of the manifest, which is the drift
+# this file exists to prevent.
+#
+# The first member, and the measurement that settles it: `tools/questions` defaults its
+# store to `<profile home>/questions/open.json`, profile defaulting to `ops` -- the box-wide
+# register every lane reads and writes. Three generations of that tool sat on this box at
+# the ruling (template 6374 lines carrying the #494 retraction contract; ai-antispam 4660
+# with ZERO `clear_answer` calls and a selftest asserting `withdrawn_at` must NOT exist, the
+# inverse of current law; miidas 3721, stamping `withdrawn_at` with no `clear_answer`), and
+# all three write the same file.
+SHARED_SURFACES = frozenset({
+    "TEMPLATE/tools/questions",   # writes <profile home>/questions/open.json (box-wide)
+})
+
+CLASSES = ("standalone", "closure", "seed", "shared-surface")
 
 # THE RUNNABLE PREDICATE -- one home, consumed by `class_gaps` below and by
 # `tools/kit_surfaces.py`'s census. Two call sites, ONE predicate: a second copy is how
@@ -308,7 +326,13 @@ def is_runnable(src: str) -> bool:
 def classify(rel: str) -> str:
     """One class per shipped path. `standalone` is the residual, so a NEW file is never
     silently unclassified -- and `--check` refuses a closure/seed path that is no
-    longer shipped, which is how the declaration itself cannot rot."""
+    longer shipped, which is how the declaration itself cannot rot.
+
+    `shared-surface` is asked FIRST, because it is a fact about the file's WRITE TARGET
+    rather than about how it is imported or instantiated: a file that writes a box-wide
+    store is must-adopt whatever else is true of it (#514)."""
+    if rel in SHARED_SURFACES:
+        return "shared-surface"
     if rel in CLOSURE_MODULES:
         return "closure"
     if rel in SEEDS:
@@ -326,7 +350,11 @@ NOTE = (
     "its absence means the factory is BEHIND; `closure` = a module with no interface of "
     "its own, so its absence means the factory ported its parent without its closure and "
     "the parent is BROKEN at import (the #137 defect); `seed` = a seed the factory "
-    "instantiates under a different name, never compared byte-for-byte. Every shipped "
+    "instantiates under a different name, never compared byte-for-byte. `shared-surface` = "
+    "a file whose STORE is a cross-factory surface -- a box-wide register every factory "
+    "reads and writes -- so a stale copy is not merely behind: it mutates state another "
+    "factory's law governs, and the census reports a DIFF cell for it as a PROBLEM rather "
+    "than as a coverage statistic (#514). Every shipped "
     "path carries a class and a path without one is a `--check` failure, not a default. "
     "Transient artifacts (__pycache__, .pytest_cache, .audit.lock, *.pyc) are excluded: "
     "they are build residue, not kit. Regenerate with `python3 tools/kit_manifest.py`; "
@@ -649,11 +677,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     for entry in bad_class:
         print(f"  BAD-CLASS {entry} — not one of {', '.join(CLASSES)}")
+    # A DECLARED WRITE TARGET THAT NO LONGER SHIPS is the phantom-artefact shape applied to
+    # the declaration itself: the class would keep being asked of a file the kit stopped
+    # shipping, and every factory would be judged against a surface nobody writes. The
+    # `classes` map catches a stale CLASS; this catches a stale DECLARATION, which the map
+    # cannot see because a path that is not shipped never enters it.
+    stale_shared = sorted(rel for rel in SHARED_SURFACES if rel not in (declared.get("files") or {}))
+    for rel in stale_shared:
+        print(f"  STALE-SHARED {rel} — declared a shared-surface writer, but the kit no "
+              f"longer ships that path")
 
-    if changed or missing or unlisted or unclassified or stale or bad_class or unrunnable:
+    if changed or missing or unlisted or unclassified or stale or bad_class or unrunnable \
+            or stale_shared:
         print(f"kit manifest DRIFTED: {len(changed)} changed, {len(missing)} missing, "
               f"{len(unlisted)} unlisted, {len(unclassified)} unclassified, "
-              f"{len(stale)} stale-class, {len(unrunnable)} unrunnable-standalone — "
+              f"{len(stale)} stale-class, {len(unrunnable)} unrunnable-standalone, "
+              f"{len(stale_shared)} stale-shared — "
               f"regenerate with `python3 tools/kit_manifest.py`")
         return 1
 
