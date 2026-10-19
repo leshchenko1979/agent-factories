@@ -156,7 +156,7 @@
     },
     {
       "id": "agents-old-degraded",
-      "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after the owner answered infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, swap 2047 MiB, miidas.l1979.ru 200. The wedge class is MITIGATED, not fixed \u2014 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe, miidas-ru-proxy unbounded. 6 cgroup OOM kills this boot, all task=git (4 in maple's cgroup before its 768 MiB cap raise, 2 the lane's own 256 MiB-capped repack attempts inside throwaway scopes). THE MONITORING BLIND IS CLOSED: agents-old carries FIVE green Gatus endpoints \u2014 infra agents-old (host-diag, 5m), the miidas group re-pointed from the dead apps IP to ssh://89.125.120.5:52676 (miidas-manager, miidas-cdp, miidas-landing), plus miidas-slots (unhealthy-slot probe, 2m, telegram alerts, failure-threshold 2) \u2014 so a fourth wedge now PAGES. Swap in use has climbed 770 \u2192 1031 MiB of 2047 since the 10-15 measurement with no new kills: the mitigation is carrying the host, the oversubscription has not gone away.",
+      "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, miidas.l1979.ru 200. The wedge class is MITIGATED, not fixed \u2014 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe, miidas-ru-proxy unbounded. 6 cgroup OOM kills this boot, all task=git, the last 2026-10-14 10:15:15Z, none since. Read swap as a gauge, not a trend: 2047 MiB total, 221 MiB used at 06:04Z, down from 1031 MiB because both slots were restarted at 00:24:00Z and 00:25:53Z today \u2014 a slot restart releases its swap, so the figure resets. Those restarts arrived over inbound SSH (2.27.120.75), not from the manager (its log shows only scrape cycles) nor from this lane; same container ids, RestartCount still 0. Per-container cgroup counters reset with the container: maple reads oom_kill 0 since 00:24:01Z and says nothing about its 4 earlier kills \u2014 the kernel's 6 are the lifetime figure. THE MONITORING BLIND IS CLOSED: agents-old carries FIVE green Gatus endpoints \u2014 infra agents-old (host-diag, 5m), the miidas group re-pointed from the dead apps IP to ssh://89.125.120.5:52676 (miidas-manager, miidas-cdp, miidas-landing), plus miidas-slots (2m, telegram alerts, failure-threshold 2) \u2014 so a fourth wedge now PAGES.",
       "severity": "warning",
       "affects": [
         "miidas",
@@ -210,7 +210,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-18T06:07:43Z",
+  "attested_at": "2026-10-19T06:08:45Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

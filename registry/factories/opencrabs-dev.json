@@ -74,7 +74,7 @@
       ],
       "since": "2026-09-19",
       "review_by": "2026-12-19",
-      "evidence": "RE-VERIFIED 2026-10-16T06:31Z against the CURRENT deployed sha 466e7dfb33a894e61ad7826ef4516f68486313cb (deployed.sha; swapped 2026-10-15T21:40:32Z, run 38810307913, auth=auto-swap, version 0.5.4; prev_sha 552ecd82b1a9b46554dca499e81c1ea5f56ef017): `git show 466e7dfb:src/brain/agent/service/notify_policy.rs` carries the enum {TurnEnd, Interrupt, Quiet}, `Some(\"interrupt\")` -> DeliveryMode::Interrupt, the legacy interrupt==Some(true) upgrade -> Interrupt, `None | Some(\"turn-end\")` -> TurnEnd, and `Some(\"now\")` -> Err. Code legs 07b6372c4 and 4b3765dc4 are BOTH ancestors of 466e7dfb (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-12 re-verification against 81a5edd5, itself an ancestor of 466e7dfb."
+      "evidence": "RE-VERIFIED 2026-10-19T06:10Z against the CURRENT deployed sha e8f2e03d1820fa34e1292e8d1c706e1543c9f82e (deployed.sha; swapped 2026-10-19T02:37:55Z, run 39190058958, auth=auto-swap; prev_sha bf2b7141ecb1872b237bf1094ab95dbbcf\u2026): `git show e8f2e03d:src/brain/agent/service/notify_policy.rs` carries the enum {TurnEnd, Interrupt, Quiet} at :31 and `Some(\\\"now\\\") => Err(` at :206, with src/tests/subagent_notify_test.rs:79-87 asserting the error. e8f2e03d IS an ancestor of origin/main (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-16 re-verification against 466e7dfb, itself an ancestor of e8f2e03d."
     },
     {
       "id": "commit-signing-live-identity-retired",
@@ -337,7 +337,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-18T06:08:38Z",
+  "attested_at": "2026-10-19T06:06:38Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",
