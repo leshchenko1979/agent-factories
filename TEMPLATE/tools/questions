@@ -820,7 +820,9 @@ CLOSED_STATUSES = ("answered", "withdrawn", "expired", "resolved_mechanically")
 # and it repairs the rows already on disk, which the writer leg cannot reach.
 DELIVERABLE_STATUSES = ("answered", "clarifying", "clarified")
 
-# EVERY field the ANSWER wrote. A RETRACTION owes all six (#451, #494).
+# EVERY field the ANSWER wrote. A RETRACTION owes ALL of them (#451, #494) --
+# named as a set rather than a count, because #513 added two and a hardcoded
+# number would have gone stale the moment it did.
 #
 # The rule is retraction => clear, NOT closed => clear: `answered` is itself in
 # CLOSED_STATUSES and it is the ONE status that HOLDS the answer, so a rule
@@ -4064,6 +4066,27 @@ def selftest():
         ck(not _probe,
            "clear_answer takes the provenance WITH the answer (#451/#513)")
 
+        # The arms above ADDED a question to the shared set, and qids are
+        # POSITIONAL (`"q%d" % (len + 1)`), so leaving it behind shifts every
+        # later probe's qid: the withdraw fixture below addresses `q5` by
+        # LITERAL, and a stolen q5 handed it a row that was already CLOSED --
+        # which made `withdraw` read as a re-withdraw (rc=3) and left the
+        # retraction assertions judging a row the verb never touched. Remove
+        # the probe's question so the sequence this file addresses is restored.
+        _dpath = os.path.join(env["OC_QUESTIONS_DIR"], "open.json")
+        with open(_dpath, encoding="utf-8") as _dfh:
+            _ddata = json.load(_dfh)
+        for _ds in _ddata["sets"]:
+            if _ds.get("id") == set_id:
+                _ds["questions"] = [q for q in _ds.get("questions", [])
+                                    if q.get("qid") != _dq]
+        with open(_dpath, "w", encoding="utf-8") as _dfh:
+            json.dump(_ddata, _dfh)
+        ck(not any(q.get("qid") == _dq
+                   for q in (get_set(set_id) or {}).get("questions", [])),
+           "the declared-instant arms remove their own question, so the "
+           "POSITIONAL qids every later probe addresses are unchanged")
+
         # -- 5b-2. an EMPTY clarify is a COMPLETE request (#183, 2026-09-26,
         # superseding this probe's same-titled 2026-09-25 predecessor, which
         # asserted the refusal rc=2). The property protected — unchanged in
@@ -4217,6 +4240,13 @@ def selftest():
                     _q["delivery"] = {"attempted_at": now_iso(),
                                       "outcome": "delivered", "http": 200,
                                       "mode": "turn-end", "attempts": 1}
+                    # #513 widened ANSWER_FIELDS, so the two-sided control
+                    # stamps THEM too: a fixture that carried only the older
+                    # six would fail its own all-fields assertion and the
+                    # retraction probe below would test a row the clear never
+                    # had to reach.
+                    _q["answered_at_source"] = "declared"
+                    _q["evidence"] = "messages/50fbb144"
         with open(_wdir, "w", encoding="utf-8") as _fh:
             json.dump(_wdata, _fh)
 
@@ -4226,7 +4256,7 @@ def selftest():
 
         _wbefore = _withdraw_row()
         ck(all(_wbefore.get(_f) is not None for _f in ANSWER_FIELDS),
-           "the withdraw fixture CARRIES all six answer fields BEFORE the "
+           "the withdraw fixture CARRIES every answer field BEFORE the "
            "retraction (%r)"
            % ({_f: _wbefore.get(_f) for _f in ANSWER_FIELDS},))
         rc, out, _ = run("withdraw", "--set", set_id, "--qid", "q5",
@@ -4379,12 +4409,17 @@ def selftest():
                     _q["delivery"] = {"attempted_at": now_iso(),
                                       "outcome": "delivered", "http": 200,
                                       "mode": "turn-end", "attempts": 1}
+                    # #513 widened ANSWER_FIELDS: the two-sided control owes
+                    # the declared marker and its evidence too, or the row it
+                    # asserts is "carrying every field" is not.
+                    _q["answered_at_source"] = "declared"
+                    _q["evidence"] = "messages/50fbb144"
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(data, fh)
         _gexp = next((q for q in (get_set("f-leaky-lane") or {}).get("questions", [])
                       if q.get("status") != "expired"), {})
         ck(all(_gexp.get(_f) is not None for _f in ANSWER_FIELDS),
-           "the expiry fixture CARRIES all six answer fields BEFORE the run "
+           "the expiry fixture CARRIES every answer field BEFORE the run "
            "(%r)" % ({_f: _gexp.get(_f) for _f in ANSWER_FIELDS},))
         rc, out, _ = run("gc", "--dry-run", "--json")
         dry = json.loads(out)
