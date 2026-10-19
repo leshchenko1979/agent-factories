@@ -8615,17 +8615,22 @@ def score_conversion_leg(
     # nothing said so. A lapse was survivable by exactly one round -- the failure mode the
     # per-artifact join exists to catch.
     #
-    # THE BASELINE IS THE NEWEST ARTIFACT A ROW NAMES, never "all artifacts": a factory's
-    # pre-mechanism rounds carry no obligation, and widening the population to them would
-    # report a lapse for every round taken before the conversion existed. With no named
-    # artifact at all there is no baseline, so the read is NOT RUN with its reason rather
-    # than reporting the whole tree (#112: "no lapse" and "no baseline" must not render
-    # the same).
+    # THE POPULATION IS THE MECHANISM'S EPOCH FORWARD (ruling n=3820, 2026-10-19), never
+    # "all artifacts" and never "the newest artifact a row names". The epoch is the
+    # artifact named by the EARLIEST `conversion` row in the ledger: a factory's rounds
+    # before the conversion existed carry no obligation, so widening to them would report
+    # a lapse for every pre-mechanism round. Anchoring at the NEWEST named artifact instead
+    # is blind to a mid-history gap -- rows for artifacts A and C with none for B reports
+    # ZERO lapses there, which is the same blind spot wearing a different name. With no
+    # named artifact at all there is no epoch, so the read is NOT RUN with its reason
+    # rather than reporting the whole tree (#112: "no lapse" and "no epoch" must not
+    # render the same).
     #
-    # A LAPSED ROUND IS A PROBLEM ONLY WHEN IT OWES A CONVERSION -- that is, when it
-    # carries a regression (docs/measurement-procedure.md section 5.4: "A run whose
-    # artifact shows a regression declares the conversion on a row of its own"). A
-    # regression-free round owes nothing, so calling it a violation would teach the next
+    # A LAPSE IS AN UNANSWERED ARTIFACT IN THAT POPULATION -- one whose exact path no
+    # `converted_from=` row names -- and it is a PROBLEM only when it owes a conversion,
+    # that is, when it carries a regression (docs/measurement-procedure.md section 5.4: "A
+    # run whose artifact shows a regression declares the conversion on a row of its own").
+    # A regression-free round owes nothing, so calling it a violation would teach the next
     # reader to ignore the leg. The NEWEST artifact is excluded from the problem arm: its
     # unanswered regressions are already reported above, and one fact must not be counted
     # twice.
@@ -8646,11 +8651,21 @@ def score_conversion_leg(
             f"finding invented from a missing declaration"
         )
     else:
-        baseline_date = max(named_dates)
-        coverage["lapsed_baseline"] = f"{SCORES_DIR_REL}/{baseline_date}.md"
+        epoch_date = min(named_dates)
+        coverage["lapsed_epoch"] = f"{SCORES_DIR_REL}/{epoch_date}.md"
+        # The POPULATION prints beside the lapse count (#112, #242): "0 lapsed" and "no
+        # artifact parsed at or after the epoch" must never render the same line.
+        coverage["lapsed_population"] = sum(
+            1 for date, _path in artifacts if date >= epoch_date
+        )
         totals_by_date: dict[str, dict[str, int]] = {}
         for index, (date, artifact_path) in enumerate(artifacts):
-            if date <= baseline_date:
+            if date < epoch_date:
+                continue
+            # ANSWERED BY ITS OWN ROW: the join is per-artifact on the EXACT path, so a row
+            # naming this artifact clears it and it is not a lapse (docs/measurement-
+            # procedure.md section 5.4.2 -- a 10-18 row cannot answer 10-17).
+            if f"{SCORES_DIR_REL}/{artifact_path.name}" in named_sources:
                 continue
             try:
                 artifact_text = artifact_path.read_text(encoding="utf-8")
@@ -9779,8 +9794,9 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 else:
                     lapsed_entries = cov.get("lapsed") or []
                     lines.append(
-                        f"  lapsed rounds since {cov.get('lapsed_baseline')}: "
-                        f"{len(lapsed_entries)} examined — "
+                        f"  lapsed rounds since epoch {cov.get('lapsed_epoch')}: "
+                        f"{cov.get('lapsed_population')} examined, "
+                        f"{len(lapsed_entries)} lapsed — "
                         + (
                             "; ".join(
                                 f"{entry['artifact']} "

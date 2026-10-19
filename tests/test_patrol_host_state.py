@@ -8780,8 +8780,11 @@ def test_the_score_conversion_leg_reports_a_LAPSED_round_by_NAME() -> None:
     leg = RUNNER.score_conversion_leg(rows, read_at="probe", scores_dir=directory)
     assert leg["status"] == "ASSERTED", leg
     cov = leg["coverage"]
-    # The BASELINE is the newest artifact a row NAMES, never the newest artifact present.
-    assert cov["lapsed_baseline"] == "evidence/scores/2026-10-09.md", cov
+    # The EPOCH is the artifact the EARLIEST row NAMES, and the population is every
+    # artifact at or after it (ruling n=3820) -- never the newest artifact present, and
+    # never only the newest artifact a row happens to name.
+    assert cov["lapsed_epoch"] == "evidence/scores/2026-10-09.md", cov
+    assert cov["lapsed_population"] == 2, cov
     assert cov["lapsed_examined"] == 1, cov
     assert [e["artifact"] for e in cov["lapsed"]] == ["evidence/scores/2026-10-10.md"], cov
     assert cov["lapsed"][0]["owed"] is True, cov["lapsed"]
@@ -8791,7 +8794,10 @@ def test_the_score_conversion_leg_reports_a_LAPSED_round_by_NAME() -> None:
     # ... and the population PRINTS, so "no lapse" and "no artifact parsed" differ.
     rc, out, _ = _run([], rows, scores_dir=directory)
     assert rc == 1, out  # the newest round carries an unanswered regression
-    assert "lapsed rounds since evidence/scores/2026-10-09.md: 1 examined" in out, out
+    assert (
+        "lapsed rounds since epoch evidence/scores/2026-10-09.md: 2 examined, 1 lapsed"
+        in out
+    ), out
     assert "evidence/scores/2026-10-10.md (1 regression(s)" in out, out
 
 def test_the_score_conversion_leg_reports_ZERO_lapsed_rounds_once_rows_land_for_BOTH() -> None:
@@ -8811,16 +8817,51 @@ def test_the_score_conversion_leg_reports_ZERO_lapsed_rounds_once_rows_land_for_
     leg = RUNNER.score_conversion_leg(rows, read_at="probe", scores_dir=directory)
     assert leg["status"] == "ASSERTED", leg
     cov = leg["coverage"]
-    assert cov["lapsed_baseline"] == "evidence/scores/2026-10-10.md", cov
+    # The epoch is the EARLIEST named artifact, not the newest: rows naming 10-09 and
+    # 10-10 leave the population at BOTH rounds, and neither is a lapse.
+    assert cov["lapsed_epoch"] == "evidence/scores/2026-10-09.md", cov
+    assert cov["lapsed_population"] == 2, cov
     assert cov["lapsed"] == [], cov
     assert cov["lapsed_examined"] == 0, cov
     assert leg["problems"] == [], leg["problems"]
+
+def test_the_epoch_anchor_reports_a_MID_HISTORY_gap_the_newest_anchor_cannot_see() -> None:
+    """#517 ruling n=3820 section 4: the discriminator between the two candidate anchors.
+
+    Rows name A (2026-10-08) and C (2026-10-10) with NONE for B (2026-10-09). The
+    newest-converted anchor sets the population to C alone -- one round, answered by its own
+    row -- and reports ZERO lapses. The epoch anchor sets it to A, B, C and names B, which is
+    the round a mid-history gap strands. In the ruling's words: a leg that reports zero here
+    has not been widened, it has been renamed.
+    """
+    directory = _scores_tree({
+        "2026-10-08": _score_artifact(total=70, cells=["4", "4"]),
+        "2026-10-09": _score_artifact(total=70, cells=["2", "4"]),
+        "2026-10-10": _score_artifact(total=70, cells=["2", "4"]),
+    })
+    rows = [
+        _conversion_row("evidence/scores/2026-10-08.md"),
+        _conversion_row("evidence/scores/2026-10-10.md", subject="#68"),
+    ]
+    leg = RUNNER.score_conversion_leg(rows, read_at="probe", scores_dir=directory)
+    assert leg["status"] == "ASSERTED", leg
+    cov = leg["coverage"]
+    # The epoch is the EARLIEST named artifact; the newest-named anchor would read 10-10.
+    assert cov["lapsed_epoch"] == "evidence/scores/2026-10-08.md", cov
+    assert cov["lapsed_population"] == 3, cov
+    # EXACTLY B: A and C each carry their own answering row, so neither is a lapse.
+    assert [e["artifact"] for e in cov["lapsed"]] == ["evidence/scores/2026-10-09.md"], cov
+    assert cov["lapsed"][0]["owed"] is True, cov["lapsed"]
+    # The newest round is clean against B, so the ONE problem can only be the lapsed arm --
+    # a leg that read the newest anchor would find nothing to report at all.
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "evidence/scores/2026-10-09.md" in leg["problems"][0], leg["problems"]
 
 def test_an_OLDER_lapsed_round_that_OWES_a_conversion_is_a_PROBLEM() -> None:
     """#517 criterion 1: the round that is neither newest nor predecessor is still read.
 
     This is the arm the defect was named for. 2026-10-09 sits BELOW the newest artifact and
-    ABOVE the baseline, so a leg that read only `artifacts[-1]` could never see it. It owes
+    ABOVE the epoch, so a leg that read only `artifacts[-1]` could never see it. It owes
     a conversion because it carries a regression (docs/measurement-procedure.md section
     5.4); the newest round is clean, so the problem can only come from the lapsed arm.
     """
@@ -8833,6 +8874,7 @@ def test_an_OLDER_lapsed_round_that_OWES_a_conversion_is_a_PROBLEM() -> None:
     leg = RUNNER.score_conversion_leg(rows, read_at="probe", scores_dir=directory)
     assert leg["status"] == "ASSERTED", leg
     cov = leg["coverage"]
+    assert cov["lapsed_population"] == 3, cov
     assert cov["lapsed_examined"] == 2, cov
     owed = {e["artifact"]: e["owed"] for e in cov["lapsed"]}
     assert owed == {
@@ -8850,7 +8892,7 @@ def test_the_score_conversion_leg_reports_NO_BASELINE_rather_than_EVERY_artifact
     must read as NOT RUN and never as "every round lapsed".
 
     Triage measured the boundary: of 37 score artifacts, 30 predate the conversion
-    mechanism. A lapsed read with no baseline that reported them all would invent 30
+    mechanism. A lapsed read with no epoch that reported them all would invent 30
     findings out of a declaration that does not exist (#112, #242).
     """
     directory = _scores_tree({
@@ -8865,7 +8907,8 @@ def test_the_score_conversion_leg_reports_NO_BASELINE_rather_than_EVERY_artifact
     assert cov["lapsed"] == [], cov
     assert cov["lapsed_examined"] == 0, cov
     assert "no baseline to measure a lapse against" in cov["lapsed_reason"], cov
-    assert "lapsed_baseline" not in cov, cov
+    assert "lapsed_epoch" not in cov, cov
+    assert "lapsed_population" not in cov, cov
     assert leg["problems"] == [], leg["problems"]
 
 def test_the_stall_census_leg_PRINTS_the_lane_drain_beside_the_OWED_total() -> None:
