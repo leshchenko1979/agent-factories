@@ -4,29 +4,42 @@
 **Target:** the OpenCrabs harness (runtime behaviour), reaching every factory through the
 harness binding
 **Author:** meta-factory (this lane)
-**Date:** 2026-10-03 · **rev.12** 2026-10-05 — **the read path is named**. rev.11's §4.5 said
-*"the full rows stay pullable"* — **false of the substrate**: there is no per-session read (only a
-global `all()`, `notify_queue.rs:98`), and `session_notify --status` polls the *sender's*
-in-memory receipt, not a target-side row. rev.12 adds the read half (**`rows_for_session`**), the
-render half (**`digest_for_session`**, renamed from `drain_for_session` — it never consumed), the
-**verb an agent calls** (`opencrabs session held` / `session/held` / `session_notify
-action="list"`), and the **`push_sender`** column the digest needs to render a sender at all.
-rev.11 fixed Appendix E diagram syntax (no design content changed). rev.10 added the **usage
-sequence diagrams**
-(Appendix E: one
-diagram per tool/surface). rev.9 restored the **CLI verbs and the wait graph as a first-class
-surface** (one of the proposal's main surfaces, not an afterthought), removed the Open Questions
-register from scope (an external add-on that *uses* the CLI verbs, never part of the harness), and
-**restored the AFK section** to first-class standing. All load-bearing
-citations re-verified at harness HEAD `717dfcd90` (2026-10-05).
-**Status:** design input — **not law**. Owner ruled 2026-10-05: **HOLD + rework** (q59);
-Q1 (q60) and Q6 (q61) answered and folded (§4.1, §9). On approval the issue is filed on
-**`opencrabs/opencrabs`** (the binary tracker — owner order 2026-10-05). **Nothing is
-implemented** — the proposed names are absent from the tree (checked this turn).
+**Date:** 2026-10-03 · **rev.13** 2026-10-19 — **no retention; every interface pinned**. The owner
+asked *"why would we need a retention window?"* — and the answer is that we do not, because the
+substrate forbids one in its own words: *"A row exists only while the push is still undelivered"*
+(`notify_queue.rs`, module doc), enforced by `clear_on_delivery` and the 72 h reap. rev.13
+**withdraws the "rows stay put / stay pullable" claim entirely** (rev.11 asserted it; rev.12 built a
+read path on top of it), makes `session held` a **pre-drain** verb, and closes the loss that
+withdrawal exposes: with no retention, a first-line digest would lose the bodies at drain, so the
+digest **carries the full bodies** with the index as its header (§4.5). It also pins every
+interface the AX review found unspecified — 5 blockers, 5 majors, 8 minors — in a new **§4.8**:
+the `held` verdict, the JSON shape of each read surface, the A2A method params, the
+`key`/`correlation_id` names, the new columns, and the per-action `required` sets.
+rev.12 named the read half (**`rows_for_session`**) and the render half (**`digest_for_session`**),
+and added the **`push_sender`** column. rev.11 fixed Appendix E diagram syntax. rev.10 added the
+**usage sequence diagrams** (Appendix E: one diagram per tool/surface). rev.9 restored the **CLI
+verbs and the wait graph as a first-class surface** (one of the proposal's main surfaces, not an
+afterthought), removed the Open Questions register from scope (an external add-on that *uses* the
+CLI verbs, never part of the harness), and **restored the AFK section** to first-class standing.
+All load-bearing citations re-verified at harness HEAD `e8f2e03d1` (2026-10-19); issue numbers
+resolve through the key in §C.1.
+**Status:** design input — **not law**. Owner ruled **HOLD + rework** twice: 2026-10-05 (q59) and
+2026-10-19 (q63 — *"Hold - rework again"*, after the grill and the AX review). Q1 (q60) and Q6
+(q61) answered and folded (§4.1, §9). On approval the issue is filed on the **fork**
+`leshchenko1979/opencrabs` — the tracker that takes every binary issue (owner order 2026-10-09,
+which supersedes the 2026-10-05 upstream routing this document previously carried). **Nothing is
+implemented** — the proposed names are absent from the tree (checked this turn, §C).
 **Related:** `PROP-01` (cron-gated goal pipeline), `PROP-02` (human-load pacing),
-`docs/addons/harness/opencrabs.md`; harness issues upstream — #13 (in-flight failsafe),
-#43/#50 (notify quiet mode), #344 (durable await record), #393 (delivery modes).
-Adversarial review: `docs/proposals/08-owner-gated-lane-intake.review.md`.
+`docs/addons/harness/opencrabs.md`; harness issues —
+[fork#13](https://github.com/leshchenko1979/opencrabs/issues/13) (in-flight failsafe),
+[fork#43](https://github.com/leshchenko1979/opencrabs/issues/43) and
+[fork#50](https://github.com/leshchenko1979/opencrabs/issues/50) (notify quiet mode),
+[fork#344](https://github.com/leshchenko1979/opencrabs/issues/344) (durable await record),
+[fork#393](https://github.com/leshchenko1979/opencrabs/issues/393) (delivery modes). Every other
+bare `#N` in this document resolves through the citation key at **§C.1**.
+Reviews: `docs/proposals/08-owner-gated-lane-intake.review.md` (adversarial) and
+`docs/proposals/08-owner-gated-lane-intake.ax-review.md` (AX — calling-agent usability, against
+rev.12; every finding is closed in §4.8).
 
 ---
 
@@ -137,13 +150,21 @@ resolvable edge: `peer_lane` with `ref="the Notifications lane"` cannot be walke
 `ref` stays: the human-readable handle. `target` is what the graph walks.
 
 **The harness tool** — `await_external` gains the field and a read action, so an agent declares
-its wait *and* reads the graph from inside its own loop:
+its wait *and* reads the graph from inside its own loop. Tool arguments are **JSON keys**, never
+CLI flags (AX m8 — the two syntaxes were conflated in rev.12 and that is a real source of agent
+error):
 
+```json
+{"action":"set",  "kind":"peer_lane", "target":"<uuid>", "ref":"Notifications lane", "prompt":"…"}
+{"action":"clear"}
+{"action":"graph", "session":"<uuid>"}
 ```
-await_external set   --kind <k> --target <id> [--ref <handle>] [--prompt <text>]
-await_external clear
-await_external graph [--session <id>]        # read the wait-for graph
-```
+
+`target` **required-ness by kind** (AX M2): `peer_lane` — **required**, and it must resolve to a
+live session binding, else the call is refused with
+`await target '<id>' is not a live session — a peer wait on a dead session is a silent stall`;
+`ci_run` — optional (the run id); `owner_gate` and `external` — optional and ignored (both are
+graph roots). `graph` accepts `session` optionally; **omitted means the whole graph**.
 
 `graph` **derives** the graph and stores nothing:
 
@@ -159,11 +180,14 @@ await_external graph [--session <id>]        # read the wait-for graph
 opencrabs session await set   --session <id> --kind <k> [--target <id>] [--ref <h>] [--prompt <t>]
 opencrabs session await clear --session <id>
 opencrabs session await graph [--session <id>] [--json]
-opencrabs session held        <id> [--full] [--json]     # the READ — pull the parked rows (§4.5)
+opencrabs session held        <id> [--full] [--json]   # PRE-DRAIN inspection only (§4.5)
 ```
 
-posting to new A2A methods `session/await` (set/clear) and `session/await/graph` (read). This is
-the **public interface** every caller uses — a cron, a shell, an external agent, and any add-on.
+posting to new A2A methods **`session/await`** (set/clear), **`session/await/graph`** and
+**`session/held`**, all keyed on `session_id` exactly as `session/notify` is (AX B4 — rev.12's
+example used `session`, and an agent that had learned `session_id` would fail). This is the
+**public interface** every caller uses — a cron, a shell, an external agent, and any add-on.
+Exact params and return shapes: **§4.8**.
 
 **What the graph answers.** The owner's ask (2026-10-05) — *"an external agent can follow the
 graph to see what the bottleneck is."* `graph` prints, for any node, its **root**: the terminal
@@ -223,60 +247,97 @@ clearing on it drains the wave and buries the question again — contradicting �
   `QueuedUserMessage` carries no sender (`:311`). Key the clear on the channel's configured owner
   id inside the handler; drop the owner predicate from the delivery gate.
 
-### 4.5 Drain as a digest — an index, not a summary
+### 4.5 Drain as a digest — one turn, full bodies, no retention
 
 When the state clears, **do not** deliver the parked rows as N turns — that reproduces the flood,
 merely delayed, and re-buries the question the hold protected. Deliver **one** turn.
 
-**How information is not lost.** The digest is an **index**, not a summary, and the rows stay put.
-`notify_queue` is durable and already holds every held push (§2); the digest renders **one line
-per held row** — sender/origin · instant · first line of the body — with the pending question
-first. Nothing is compressed away, so nothing is lost: the digest changes *the order of
-attention*, never the *set of facts*. A model-written summary would paraphrase and drop; this
-renders, so it cannot.
+**No retention window — the substrate forbids one.** The owner asked *"why would we need a
+retention window?"* (2026-10-19), and there is no good answer, because the queue's own contract
+already rules it out:
 
-**How the owner pulls the full rows — the read path this design ADDS.** *"The rows stay pullable"*
-is **not true of the substrate today**, and writing it without building the read is exactly the
-trap this paragraph closes. There is **no per-session read**: `NotifyQueueRepository` exposes only
-a global `all()` (`notify_queue.rs:98` — every surviving row, oldest first), and the tool's
+> *"A row exists only while the push is still undelivered. It is recorded when a push parks,
+> consumed the moment delivery succeeds."* — `notify_queue.rs`, module doc
+
+Three mechanisms enforce that sentence, and any one of them breaks a retained row:
+`clear_on_delivery` (a content-exact `clear_matching`, `notify_queue.rs:229`, fired from
+`restart_recovery.rs:180,209`, `session_routes.rs:435,466`, `telegram/resume.rs:569,617` and
+`telegram/state.rs:1867`), `clear_for_session` (`notify_queue.rs:203`, when a route claims the
+in-memory copies), and the 72 h `reap_stale_unclaimed` (`notify_queue.rs:328`). And even without
+them, `redeliver_persisted` (`notify_queue.rs:169`) re-offers **every surviving row** at boot
+through `deliver_or_park` — the path §4.3 warns bypasses the gate — so a row deliberately left
+behind after its digest would be **re-delivered as its own turn**, which is exactly the flood the
+digest exists to prevent. A retention window is therefore not a missing feature to add; it is an
+invariant to keep.
+
+**What that costs, and the fix.** With no retention the rows are gone at drain, so a digest of
+*first lines* would silently destroy the bodies — the opposite of the "nothing is lost" claim
+rev.11 and rev.12 made. So the digest carries them:
+
+- **header** — one line per row, question first: `sender · HH:MMZ · first line`;
+- **bodies** — every held row's `context_text` **verbatim**, in the same single turn, under its
+  index line.
+
+It is one turn because *N turns* is the flood; it is not a summary because a summary is lossy and
+this is a concatenation. The losslessness test is literal (§7): every row's `context_text` appears
+byte-exact in the delivered digest.
+
+**The question first.** "The question" is the binding's **`await_prompt`** (§4.2 — a new column
+beside `await_ref`), set by the declaration that parked the lane. When it is null the header
+renders `QUESTION: (not recorded — parked on <kind>)`. That is the only prose in the template, and
+it is pinned here so the losslessness test can count what it renders (AX m5).
+
+**`session held` is pre-drain.** The read verb added in rev.12 answers *"what is parked for me
+right now"* — the owner's original question. It does **not** survive the drain, and rev.13 stops
+pretending otherwise: once the digest lands the rows are cleared and the verb returns an empty
+set. That is correct, because the digest already carries everything the rows held. `--full`
+returns the rows verbatim **while they exist**; its schema is §4.8.
+
+**Why a per-session read is still part of the build.** There is no per-session read today:
+`NotifyQueueRepository` exposes only a global `all()` (`notify_queue.rs:98`), and
 `session_notify --status` polls the **sender's** in-memory receipt (`notify_receipts.rs:15,34` — a
-`Mutex<HashMap>` keyed by the sender's `notify_id`; its own header: *"the session message queue is
-per-target … every notify queued for that target is consumed by definition"*), never a
-target-side row. So the read half is part of what this design builds, and **the verb an agent
-actually calls** is named here:
+`Mutex<HashMap>` keyed by the sender's `notify_id`), never a target-side row. So
+**`rows_for_session(id)`** is new (`WHERE session_id = ?`, `created_at ASC`), and it is what both
+the digest and `session held` read.
 
-- **New repo read `rows_for_session(id)`** — beside `all()`, the same SELECT with
-  `WHERE session_id = ?`, ordered `created_at ASC`. (A zero-hit name today.)
-- **New verb on three surfaces** — the digest is the **default rendering** of this same read, so
-  one path serves both:
-  - CLI `opencrabs session held <id> [--full] [--json]`
-  - A2A `session/held`
-  - tool `session_notify action="list"` — so a lane can pull on the owner's behalf
+**The mechanism, exactly.** A synthesized digest matches no row's `(context_text, display_text)`
+pair, so `clear_on_delivery`'s content-exact match would retire **nothing** — the rows would
+survive and be re-offered at boot. The digest path therefore clears explicitly, and the ordering
+matters for the same reason it did in #439/#366: clear **after** the route settles, never before.
 
-  `--full` returns the rows verbatim; the default returns the one-line index. This is how a human
-  at a shell, an external agent, or the owner-through-the-lane actually pulls a row.
+1. compose the digest from `rows_for_session(id)` where `held_for_await = 1`;
+2. deliver it as one message through `deliver_to_session`;
+3. on `Delivery::Delivered` → **`clear_batch(&ids)`** for exactly the rows rendered;
+4. on `Parked` / `NoRoute` / `RefusedInFlight` → **clear nothing**; the rows stay and the digest is
+   recomposed on the next delivery attempt.
+
+That yields one invariant, and it replaces the `digested_at` marker an earlier draft proposed (a
+new column that is unnecessary once clear-on-delivery is respected): **a gate-held row exists iff
+its digest has not yet landed.** No retention column, no tombstones, no second table.
+
+**Who makes it.** The **harness drain code**, mechanically: a deterministic template over the row
+set — `digest_for_session` (§5) is the **render** half, `rows_for_session` the **read** half. It is
+**not** a model call — a model would be lossy and non-repeatable, and the point is that the same
+rows always render the same digest. The seam exists (`wrap_busy_once`, the `queued_message_join`
+coalescing path, `notify_queue.rs:85`).
+
+**Ordering.** The digest runs **after** the answer turn, framed with a reference to the question:
+*"While you were answering X, 14 pushes were held — [index, then bodies]."*
+
+**Scope.** Only rows held **by the gate** are digested; ordinary queued traffic (a lane busy
+mid-turn) keeps its existing delivery. The two share one table, so the gate's rows carry
+`held_for_await = 1` (§4.8) — without that marker the digest would re-render ordinary mid-turn
+queueing as "held while you were away".
 
 **A field the digest needs that the row does not carry.** `NotifyQueueRow`
 (`notify_queue.rs:24-32`) is `id, session_id, context_text, display_text, origin, bg_meta,
-created_at` — **no sender, no title, no key**. `origin` is a coarse tag (`PushOrigin::tag()` →
-`session`/`subagent`/`task`/`system`/`user`) and `bg_meta.label` names a background task, but a
-**`session_notify` push carries no sender label** — it lives only inside the
-`[session-notify from=<id>]` header of `context_text`. So the digest's "sender" column requires a
-**new `push_sender` column** on `notify_queue` (written by `record`), not a header parse. One
-additive field; it is what makes "sender · instant · first line" renderable at all.
-
-**Who makes it.** The **harness drain code**, mechanically: a deterministic template over the row
-set — `digest_for_session` (§5) is the **render** half, `rows_for_session` the **read** half, and
-neither consumes a row (the *wave* is drained into one turn; the rows stay put). It is **not** a
-model call — a model would be lossy and non-repeatable, and the point is that the same rows always
-render the same digest. The seam exists (`wrap_busy_once`, the `queued_message_join` coalescing
-path, `notify_queue.rs:85`).
-
-**Ordering.** The digest runs **after** the answer turn, framed with a reference to the question:
-*"While you were answering X, 14 pushes were held — [one line each]."*
-
-**Scope.** Only rows held **by the gate** are digested; ordinary queued traffic (a lane busy
-mid-turn) keeps its existing delivery.
+created_at` — **no sender**. `origin` is a coarse tag and `bg_meta.label` names a background task,
+but a `session_notify` push's sender survives only inside the `[session-notify from=<id>]` header
+of `context_text`. The A2A surface **does** accept a `sender` label and a `title`
+(`a2a/handler/notify.rs:92-108`) and folds both into `display_text` (`:245-250`) — but the row
+stores neither, so a digest that rendered a sender would have to parse model-facing text. Hence a
+**new `push_sender` column**, written at `persist` from a new `sender` field on
+`QueuedUserMessage`.
 
 ### 4.6 Sender-side — a sender replaces its own un-drained push
 
@@ -284,22 +345,43 @@ Today a sender cannot tell whether its push was consumed or is still queued, so 
 re-notifies hourly leaves twelve rows and buries the owner's question under its own duplicates.
 Two additions close this at the source (owner ask 2026-10-05):
 
-- **A stable key.** `session_notify` (and the tool) takes an optional **`key`** — stable per
-  (sender, target, purpose). A re-send carrying a key that matches an **un-drained** row
-  **supersedes** it in place, rather than appending.
-- **A truthful verdict.** The send returns whether the push was `queued` (held, not yet drained)
-  or `injected` (consumed by a turn). The tool's existing `status` action already distinguishes
-  these two states, so the receipt reuses it.
+- **A stable key on all three surfaces** (AX B5 — rev.12 named it on the tool only): tool param
+  `key`, A2A param `key`, CLI flag `--key` — stable per (sender, target, purpose). A re-send
+  carrying a key that matches an **un-drained** row **supersedes** it in place rather than
+  appending. The mechanism is a partial unique index —
+  `CREATE UNIQUE INDEX … ON notify_queue(session_id, push_sender, key) WHERE key IS NOT NULL` —
+  with `INSERT … ON CONFLICT DO UPDATE` at `record`, so the database enforces the rule instead of
+  a read-then-write race.
+- **A truthful verdict — `queued` or `superseded`.** rev.12 claimed the send returns `injected`;
+  that is wrong and is withdrawn: `injected` is a **receipt** state read by `status`
+  (`notify_receipts.rs:20-30,131-135`), never a send-path return, and a send cannot know
+  synchronously that a turn consumed the push. The send-path vocabulary is
+  `delivered | queued | held | refused | redirected` (tool) and
+  `delivered | parked | deferred | held | refused_in_flight | no_route` (A2A); `superseded` is the
+  keyed-replace outcome and is added to both.
 
 **The guard that makes it safe.** Replace is scoped to **un-drained** rows only. Once the target
-has read a push, a later re-send with the same key appends a **new** row — a replace would
-silently rewrite history the target has already seen. So the rule is *supersede while un-drained,
-append after drain*, and the key never crosses the drain boundary.
+has read a push, the row is gone (§4.5), so a later re-send with the same key appends a **new**
+row by construction — a replace would silently rewrite history the target has already seen. So the
+rule is *supersede while un-drained, append after drain*, and the key never crosses the drain
+boundary.
 
 ### 4.7 Receipts — a hold must print itself
 
-- A held push logs and reports itself (`HELD: awaiting owner since <ts>`), so "held
-  deliberately" and "silently dropped" are never the same output.
+- **A machine verdict, not just a log line** (AX B1 — rev.12 gave only
+  `HELD: awaiting owner since <ts>`, which an agent cannot branch on). `Delivery::HeldForOwner
+  { since: i64 }` (unix seconds, the `await_at` type) becomes a first-class outcome on every
+  surface:
+  - tool `session_notify` → `notify_state = "held"` + `held_since` in the result metadata;
+  - A2A `session/notify` → `{"outcome":"held","held_since":<i64>}`;
+  - CLI → outcome `held`, **exit 0** (the push is safe and durable, exactly like `parked`), with
+    `held_since` in the detail line. A sender that must distinguish them reads the outcome string.
+- **A receipt, so `status` keeps working** (AX m7): the `HeldForOwner` arm calls `record_queued`
+  like `Delivered`/`Parked`/`Redirected` do (`a2a/handler/notify.rs:355,377,409`). Without it,
+  `session_notify --status <notify_id>` on a held push would answer `unknown_id` — the one answer
+  that looks like the message vanished.
+- A held push also logs itself (`HELD: awaiting owner since <ts>`), so "held deliberately" and
+  "silently dropped" are never the same output.
 - The state is readable from the binding, and the **graph (§4.2)** makes it readable across a
   chain, so a third party can tell why a lane is quiet and where the block really is.
 ```mermaid
@@ -317,20 +399,138 @@ flowchart TD
     style E fill:#d4edda,stroke:#2e7d32
 ```
 
+### 4.8 The interfaces, pinned — the AX review's findings, closed
+
+The AX review (a read-only sub-agent, run against rev.12) returned **5 blockers, 5 majors and 8
+minors** — every one of them interface specification, none a disagreement with the design. All are
+closed here; the review itself ships beside this proposal as
+`08-owner-gated-lane-intake.ax-review.md`.
+
+| ID | Finding | Resolution in rev.13 |
+|---|---|---|
+| B1 | `HeldForOwner` had no verdict string | `notify_state="held"` + `held_since` (§4.7) |
+| B2 | the read surfaces had no return shape | `session held` JSON below; `full` adds the row texts |
+| B3 | `graph` had no machine shape | graph JSON below |
+| B4 | new A2A methods unspecified | params below, all keyed `session_id` |
+| B5 | `injected` verdict wrong; `key` unbound | `queued`/`superseded`; `key` on three surfaces (§4.6) |
+| M1 | the tool is unavailable headless | headless guard moves into the `send` arm; `status`/`list` work headless |
+| M2 | `target` contract unstated | required + validated for `peer_lane`; error text in §4.2 |
+| M3 | the correlation field had two names | **`correlation_id`** everywhere |
+| M4 | enum members not updated | `await_external` → `set\|clear\|graph`; `session_notify` → `send\|status\|list` |
+| M5 | `required` ran before action dispatch | `required: ["action"]`; per-action validation |
+| m1 | field-name drift | (column, param) pairs below |
+| m2 | `since` units | unix seconds, `i64` — the `await_at` type |
+| m3 | `graph` without `--session` | the whole graph |
+| m4 | `--json` vs prose | `--json` is the machine path; the prose default is human-only |
+| m5 | digest template | pinned in §4.5 |
+| m6 | column list incomplete | three columns below |
+| m7 | held-receipt linkage | `record_queued` on the `HeldForOwner` arm (§4.7) |
+| m8 | tool vs CLI syntax | JSON keys for tools, flags for the CLI (§4.2) |
+
+**`session held` — CLI `--json`, A2A `session/held`, tool `session_notify action="list"`.** One
+shape on all three surfaces, **pre-drain only** (§4.5):
+
+```json
+{
+  "session_id": "…",
+  "awaiting": true,
+  "held": [
+    {"id": "…", "sender": "cli:hq", "origin": "session_notify",
+     "created_at": 1791100000, "first_line": "CI run 1234 is GREEN"}
+  ]
+}
+```
+
+`full` (CLI `--full`, A2A `"full": true`, tool `"full": true`) adds `context_text` and
+`display_text` to each row. `sender` is `push_sender` (nullable); `origin` is `PushOrigin::tag()`.
+An empty set is `{"session_id":"…","awaiting":<bool>,"held":[]}` — never an error, because "nothing
+is parked" is an answer.
+
+**`session await graph` — CLI `--json`, A2A `session/await/graph`, tool `action="graph"`.**
+
+```json
+{
+  "nodes": [
+    {"session_id": "A", "kind": "peer_lane", "target": "B", "broken": false,
+     "root": {"kind": "owner_gate", "session_id": null}},
+    {"session_id": "B", "kind": "owner_gate", "target": null, "broken": false,
+     "root": {"kind": "owner_gate", "session_id": null}}
+  ],
+  "cycles": []
+}
+```
+
+`root` is the terminal object of the node's chain; `broken: true` marks a `peer_lane` target that
+resolves to no binding (the silent stall §6 guards), and such a node is its own root. `cycles`
+lists each cycle as a session-id array; empty means acyclic.
+
+**A2A methods — params.**
+
+| Method | Params |
+|---|---|
+| `session/await` | `session_id` (required), `action` (`"set"`\|`"clear"`, required), `kind` (required when setting), `target`, `ref`, `prompt`, `correlation_id` |
+| `session/await/graph` | `session_id` (optional — omitted means the whole graph) |
+| `session/held` | `session_id` (required), `full` (bool, default false) |
+
+All three emit JSON-RPC errors for protocol faults only (bad uuid, unknown action, unresolvable
+`peer_lane` target); a legitimate empty result is a result, never an error.
+
+**Tool schemas — the discovery surface** (AX M4). An agent learns actions from `input_schema()`,
+so an action missing from the enum is invisible however well it is documented:
+
+- `await_external`: `action.enum = ["set","clear","graph"]`; `target` and `prompt` added to
+  `properties`; the description gains one sentence per action.
+- `session_notify`: `action.enum = ["send","status","list"]`; `key` and `full` added; `required`
+  relaxed from `["target_session"]` to `["action"]` with per-action validation — `send` →
+  `target_session` + `message`; `status` → `notify_id`; `list` → `target_session`, which names
+  whose rows are read (AX M5).
+- **Headless** (AX M1): the guard at `subagent/notify.rs:204-210` moves **inside the `send` arm**.
+  Its reason is that a one-shot process cannot deliver parked notifications; reading is not
+  delivering, so `status` and `list` become available headless. The CLI and A2A routes remain the
+  headless path for `send`.
+
+**New columns — all three on `notify_queue`** (AX m6; `record()` at `notify_queue.rs:69-95` takes
+none of them today):
+
+| Column | Type | Written by | Why |
+|---|---|---|---|
+| `push_sender` | `TEXT NULL` | `persist`, from a new `sender` field on `QueuedUserMessage` | the digest's sender column (§4.5) |
+| `key` | `TEXT NULL` | `record`, from the send's `key` | supersede-while-un-drained (§4.6) |
+| `held_for_await` | `INTEGER NOT NULL DEFAULT 0` | `persist`, from the gate's arm | digest scope: gate-held vs mid-turn (§4.5) |
+
+One additive migration under `src/migrations/` (the ordered `include_str!` list,
+`database.rs:59+`), plus the partial unique index on `(session_id, push_sender, key)`.
+
+**Name pairs** (AX m1) — the DB and the wire deliberately differ, so both are named:
+
+| DB column | Tool / A2A param | CLI flag |
+|---|---|---|
+| `await_target` | `target` | `--target` |
+| `await_prompt` | `prompt` | `--prompt` |
+| `push_sender` | `sender` (send side) | `--sender` |
+| `key` | `key` | `--key` |
+| — | `correlation_id` | `--correlation-id` |
+
+**`--json` is the machine path** (AX m4). The default output of `session await graph` and
+`session held` is human prose and is explicitly **not** a stable interface; anything parsing these
+uses `--json`.
+
 ---
 
 ## 5. What changes, per file
 
 | File | Change | Risk |
 |---|---|---|
-| `db/repository/session_binding.rs` | add **`await_target`** (§4.2) beside `await_ref`; `await_prompt`, `last_nudge_at` | migration-light (await columns already exist) |
-| `brain/tools/await_external.rs` | `target` param on `set`; new **`graph`** action (§4.2) | new read path; no new state |
-| `brain/tools/plan_tool.rs`, `suggest_options.rs` | set the state for the approvable plan card, or a card the lane flagged blocking | opt-in only; must not fire on non-interactive surfaces |
-| `cli/session_notify.rs` + new `cli/session_await.rs`; A2A `session/await` + `session/await/graph` + **`session/held`** | the **declaration and query surface** (§4.2) — the main public interface | new public interface; the harness names no add-on |
-| `brain/agent/service/session_routes.rs` | new `Delivery::HeldForOwner`; gate at the **route layer**; plumb the resolved `DeliveryMode` in | the one behavioural change; unit-testable |
-| `db/repository/notify_queue.rs` | new per-session read **`rows_for_session(id)`** — the **read half** (today only a global `all()` exists, §4.5); new **`push_sender`** column written by `record` | additive read path + one column |
-| `brain/agent/service/notify_queue.rs` | **`digest_for_session(id)`** emitting the **digest** — the **render half** over `rows_for_session`, non-consuming (§4.5); sender **`key`** + supersede-while-un-drained (§4.6) | reuses `redeliver_persisted` internals |
-| `brain/tools/subagent/notify.rs` (`session_notify` tool) | optional `key` param; return the `queued`/`injected` verdict | additive |
+| `db/migrations/<new>.sql` | **one additive migration**: `notify_queue.push_sender`, `notify_queue.key`, `notify_queue.held_for_await` (§4.8) + the partial unique index on `(session_id, push_sender, key)` | additive; ordered `include_str!` list (`database.rs:59+`) |
+| `db/repository/session_binding.rs` | add **`await_target`** and **`await_prompt`** (§4.2) beside `await_ref`; `set_await` gains both; `last_nudge_at` | migration-light (await columns already exist) |
+| `db/repository/notify_queue.rs` | new per-session read **`rows_for_session(id, held_only)`** — today only a global `all()` exists (§4.5); `record` takes the three new columns with `ON CONFLICT` on the key index | additive read path + columns |
+| `brain/agent/service/notify_queue.rs` | **`digest_for_session(id)`** — the **render** half over `rows_for_session`; `persist` writes `push_sender` + `held_for_await`; the digest path clears with **`clear_batch(&ids)`** after `Delivered` (§4.5) | reuses `redeliver_persisted` internals; the clear is the new part |
+| `brain/agent/service/session_routes.rs` | new `Delivery::HeldForOwner { since: i64 }`; gate at the **route layer**; plumb the resolved `DeliveryMode` in; digest hook before delivery | the one behavioural change; unit-testable |
+| `brain/tools/await_external.rs` | `target` + `prompt` params; **`graph`** action; enum → `set\|clear\|graph` (§4.8) | new read path; no new state |
+| `brain/tools/subagent/notify.rs` (`session_notify`) | `key` + `full` params; **`list`** action; enum → `send\|status\|list`; `required` → `["action"]`; **headless guard moves into the `send` arm** (§4.8) | additive; the guard move is a behaviour change for headless reads only |
+| `brain/tools/plan_tool.rs`, `suggest_options.rs` | set the state for the approvable plan card, or a card the lane flagged blocking; write `await_prompt` | opt-in only; must not fire on non-interactive surfaces |
+| `cli/session_notify.rs` + new `cli/session_await.rs` | the **declaration and query surface** (§4.2): `session await set\|clear\|graph`, `session held`; A2A `session/await`, `session/await/graph`, `session/held`; `--key`, `--correlation-id`, `--json` | new public interface; the harness names no add-on |
+| `a2a/handler/notify.rs` | `held` outcome + `held_since`; `record_queued` on the `HeldForOwner` arm; `key` + `correlation_id` params | additive |
 | `channels/*/handler.rs` + `agent.rs` (callback / reaction hooks) | clear the state on the correlated signal, on **all three** surfaces | must be the owner, not any member |
 | `channels/telegram/await_sweep.rs` | for a gated wait: nudge the **owner** (no wake), `last_nudge_at`, geometric backoff | changes sweep semantics for one kind only |
 | `cron/scheduler.rs` | none — already routes through `deliver_to_session` | — |
@@ -343,7 +543,7 @@ flowchart TD
 |---|---|
 | A lane wrongly marked awaiting → its automation stalls | fail open: unknown/unreadable state delivers; the state clears on the correlated signal; a TTL expires the held rows |
 | A push is held and then lost | `notify_queue` is already durable; held rows ride the existing boot redelivery; the 72 h reap logs every drop loudly |
-| The digest drops information | it is an **index** rendered mechanically over the rows, never a model summary (§4.5); the rows remain readable through the new per-session read + verb (`rows_for_session` / `session held`; §4.5) |
+| The digest drops information | it is rendered mechanically over the rows, never a model summary (§4.5), and it carries **full bodies** — the index is its header, not its content. Because the rows are cleared at drain (no retention), the digest is the only surviving record, so losslessness is a property of the digest itself, not of a later read |
 | A sender's re-send rewrites history already read | replace is scoped to **un-drained** rows; after drain the same key appends (§4.6) |
 | A lane is never answered | the sweep re-nudges the owner (no-wake); a nudge budget then a terminal state (§11) |
 | An urgent alert is held | `Interrupt` bypasses the gate |
@@ -358,15 +558,27 @@ flowchart TD
 ## 7. Verification
 
 - **Unit — the gate says no:** a binding with a gated wait + a `session_notify` push →
-  `Delivery::HeldForOwner`, one row in `notify_queue`, no turn started.
+  `Delivery::HeldForOwner { since }`, one row in `notify_queue` with `held_for_await = 1`, no turn
+  started.
 - **Unit — the signal:** a correlated owner signal → `Delivered`, state cleared.
 - **Unit — urgent bypass:** same binding + `Interrupt` → `Delivered`.
-- **Unit — the digest:** N held rows + a clear → **one** summary turn (not N), question first,
-  **N lines present** (losslessness: the digest's line count equals the row count).
-- **Unit — the graph:** three bindings `A→B→C(owner_gate)` → `graph --session A` reports the root
-  as `(owner)`; a dangling target is reported as a broken edge.
+- **Unit — the digest, full bodies:** 3 held rows → **one** summary turn (not 3); the question
+  first; **each row's `context_text` and `display_text` appear verbatim** — a fixture whose body is
+  longer than one line must survive whole, because the digest is the only surviving record
+  (§4.5). Assert on substring identity, not on line count.
+- **Unit — the digest's scope:** a mid-turn push (`held_for_await = 0`) is absent from the digest;
+  only gate-held rows are indexed.
+- **Unit — pre-drain `held`:** with rows still un-drained, `rows_for_session(id, true)` returns
+  them and the JSON matches the §4.8 shape; after the digest lands and `clear_batch(&ids)` runs,
+  the same call returns `held: []` — the invariant "a gate-held row exists iff its digest has not
+  yet landed" is asserted in both directions.
+- **Unit — the graph:** three bindings `A→B→C(owner_gate)` → the §4.8 JSON reports `A.root` as
+  `{"kind":"owner_gate","session_id":null}` and `cycles: []`; a `peer_lane` target with no binding
+  reports `broken: true` and is its own root.
 - **Unit — sender replace:** a keyed re-send while un-drained → the prior row is superseded (row
-  count unchanged); after drain → a new row is appended.
+  count unchanged, verdict `superseded`); after drain → a new row is appended (verdict `queued`).
+- **Unit — headless read:** `session_notify action="list"` returns rows in a one-shot process
+  (no binding); `action="send"` still refuses with the existing message (§4.8, AX M1).
 - **Positive control:** no binding / unreadable state → `Delivered` (proves the gate can return
   "no", so its "yes" is not vacuous).
 - **Integration:** a lane parked on a plan card; a cron with `deliver_to: session:<uuid>` fires →
@@ -608,8 +820,8 @@ reader who saw an earlier revision can find where each landed.
 | `oc-questions` is an **external add-on**; the harness must not depend on it | **removed from scope** — the declaration surface is the **CLI verb → `session/await`**; direction is caller → harness, and the harness names no add-on (§4.1, §4.2) |
 | **CLI verbs are a main surface, not an afterthought** (owner, 2026-10-05) | promoted to their own section, with the **wait-graph** verbs and A2A methods (§4.2) |
 | **a harness tool to set the wait on a session id, so an external agent can follow the graph** (owner, 2026-10-05) | structured **`await_target`** + the **`graph`** action on `await_external`, and the CLI `session await graph` (§4.2) |
-| **digest: how to avoid info loss, and who makes it** (owner, 2026-10-05) | the digest is an **index rendered mechanically** by the harness drain code, never a model summary; the rows are readable through the **new per-session read + verb** the design adds (`rows_for_session` / `session held`, §4.5) |
-| **a sender must be able to replace its own un-drained push** (owner, 2026-10-05) | stable **`key`** + supersede-while-un-drained; the `queued`/`injected` verdict (§4.6) |
+| **digest: how to avoid info loss, and who makes it** (owner, 2026-10-05) | the digest is rendered **mechanically** by the harness drain code, never a model summary, and carries the **full bodies**; the rows are readable **pre-drain** through the new per-session read + verb (`rows_for_session` / `session held`, §4.5). rev.13 withdrew the claim that they outlive the drain |
+| **a sender must be able to replace its own un-drained push** (owner, 2026-10-05) | stable **`key`** + supersede-while-un-drained; the `queued`/`superseded` verdict (§4.6) |
 | **the issue goes to `opencrabs/opencrabs`** (owner, 2026-10-05) | §8 boundary + header updated |
 | **the AFK section vanished** (owner, 2026-10-05) | **restored** to first-class standing — the six rules and the owner-scoped clock (§11) |
 | the sweep has **no payload to re-emit** | new optional **`await_prompt`** (the owner-facing text/card); cadence bounded, `last_nudge_at` dedup (§4.1, §5) |
@@ -621,15 +833,47 @@ reader who saw an earlier revision can find where each landed.
 
 Every load-bearing citation was re-read through the **code index** (`scope="external"`, which
 covers `/root/opencrabs/src`) **and** confirmed against source, then re-confirmed at HEAD
-`717dfcd90` for this revision. Two line slips were found and fixed in rev.8: `resolve_mode` is
+**`e8f2e03d1`** for rev.13. Two line slips were found and fixed in rev.8: `resolve_mode` is
 **`notify_policy.rs:155`** (rev.6 wrote `:151`); the binding setter is **`set_await:229`** and
 `:288` is `clear_await_of_kind` (rev.5 wrote `:288`). The instrument was characterised before
 trusting a zero (AGENTS.md rule 7): the index answers a bare symbol well but returns "No matches"
-for an English query against a *type* — a phrasing artifact, not an absence. The proposed names
-(`HeldForOwner`, `await_target`, `await_prompt`, `last_nudge_at`, `note_owner_activity`,
-`rows_for_session`, `digest_for_session`, `push_sender`, `held_at`, `session/held`,
-`session/await`) return **0 hits each** — the positive check that this is
-still a design, not code.
+for an English query against a *type* — a phrasing artifact, not an absence.
+
+**The 0-hit check, re-run at `e8f2e03d1` for every name rev.13 introduces:**
+
+| Name | Hits in `src/` | Verdict |
+|---|---|---|
+| `HeldForOwner` · `await_target` · `await_prompt` · `last_nudge_at` · `note_owner_activity` | 0 each | free |
+| `rows_for_session` · `digest_for_session` · `push_sender` | 0 each | free |
+| `held_since` · `held_for_await` · `correlation_id` | 0 each | free |
+| `session/held` · `session/await` | 0 each | free |
+| `sender_label` | **48** | **taken** — `channels/group_history.rs:65` et al.; the sender column is `push_sender` instead |
+
+### C.1 Citation key — every bare `#N`, with its tracker
+
+Issue numbers **collide across the three trackers** (fork #522 is memory reclaim; upstream #522 is
+Plan Mode), so a bare `#N` in the body is a shorthand for this table and nothing else. Body text
+keeps the short form for readability; **the link is here.**
+
+| Ref | Tracker | Resolves to |
+|---|---|---|
+| `#2` | fork | https://github.com/leshchenko1979/opencrabs/issues/2 |
+| `#13` | fork | https://github.com/leshchenko1979/opencrabs/issues/13 — the mid-turn gate |
+| `#43` | fork | https://github.com/leshchenko1979/opencrabs/issues/43 |
+| `#50` | fork | https://github.com/leshchenko1979/opencrabs/issues/50 — notify quiet mode |
+| `#344` | fork | https://github.com/leshchenko1979/opencrabs/issues/344 — durable await record |
+| `#366` | fork | https://github.com/leshchenko1979/opencrabs/issues/366 |
+| `#373` | fork | https://github.com/leshchenko1979/opencrabs/issues/373 — what the TRAP literal protects |
+| `#393` | fork | https://github.com/leshchenko1979/opencrabs/issues/393 — delivery modes |
+| `#439` | fork | https://github.com/leshchenko1979/opencrabs/issues/439 |
+| `#501` | **upstream** | https://github.com/opencrabs/opencrabs/issues/501 — channel gate |
+| `#522` | fork | https://github.com/leshchenko1979/opencrabs/issues/522 — memory reclaim (`LAST_ACTIVITY`) |
+| `#845` | **upstream** | https://github.com/opencrabs/opencrabs/issues/845 — channel gate |
+
+Where the body already writes `fork#N`, the qualifier is inline and the row above is its receipt.
+The harness implementation issue this proposal becomes is filed on the **fork**
+(`leshchenko1979/opencrabs`) per the two-stream routing order — the tracker that takes every binary
+issue.
 
 ### D. Revision log
 
@@ -646,6 +890,7 @@ still a design, not code.
 | **10** | **2026-10-05** | **usage sequence diagrams added — Appendix E, one per tool/surface (await_external, CLI + A2A, plan, suggest_options, the gate, the clear, the digest, session_notify key, await_sweep, peer-lane)** |
 | **11** | **2026-10-05** | **Appendix E diagram syntax fixed — every mermaid label renders (`;` and em-dash removed from labels); no design content changed** |
 | **12** | **2026-10-05** | **§4.5's "rows stay pullable" corrected: it was false of the substrate. Adds the read half (`rows_for_session`), renames the render half (`digest_for_session`, non-consuming), names the verb an agent calls (`session held` / `session/held` / `session_notify action="list"`), and the `push_sender` column the digest needs.** |
+| **13** | **2026-10-05** | **Owner ruling q63 "Hold - rework again". No retention: the queue's own doc comment says a row exists only while the push is undelivered, so the digest is the durable record and `session held` is pre-drain — the retention window rev.12 implied is WITHDRAWN. Because nothing survives the drain, the digest now carries full bodies, not first lines. New §4.8 pins every interface the AX review (5 blockers / 5 majors / 8 minors) found unspecified: `session held` + `graph` JSON, A2A param schemas, enum members and `required` in `input_schema()`, the headless read route, three new columns, and the name pairs. `injected` send verdict withdrawn (`queued`/`superseded`). New §C.1 citation key: every bare `#N` mapped to its tracker.** |
 
 ---
 
@@ -772,7 +1017,7 @@ sequenceDiagram
     Note over O,B: only the CORRELATED signal clears, an unrelated owner message is input, not the signal
 ```
 
-#### E.8 `digest_for_session` + `rows_for_session` — the digest, an index (§4.5)
+#### E.8 `digest_for_session` + `rows_for_session` — the digest, the durable record (§4.5)
 
 ```mermaid
 sequenceDiagram
@@ -782,17 +1027,22 @@ sequenceDiagram
     participant Q as notify_queue
     participant L as Lane turn
     participant A as any agent
+    A->>R: session held S with full flag, pre-drain
+    R->>Q: SELECT where session_id is S and held_for_await is 1
+    Q-->>R: N rows with origin, push_sender, instant, full bodies
+    R-->>A: the rows verbatim
+    Note over A,Q: the read half this design ADDS, today only a global all exists
     C->>D: state cleared for S
-    D->>R: read the rows for S
-    R->>Q: SELECT where session_id is S
-    Q-->>R: N rows with origin, push_sender, instant, first line
+    D->>R: read the gate-held rows for S
+    R->>Q: SELECT where session_id is S and held_for_await is 1
+    Q-->>R: N rows, full bodies
     R-->>D: N rows, non-consuming
-    D->>D: render ONE index, question first
-    D-->>L: one digest turn, N lines
-    Note over D,Q: an index not a summary, nothing compressed away, so nothing lost
-    A->>R: session held S --full
-    R-->>A: the full rows verbatim
-    Note over A,Q: the read half this design ADDS, today only a global all() exists
+    D->>D: render ONE turn, question first, index header plus full bodies
+    D-->>L: one digest turn, everything the rows held
+    D->>Q: clear_batch of exactly those ids, only on Delivered
+    Note over D,Q: no retention, so the digest IS the record, the rows are gone after it
+    A->>R: session held S again
+    R-->>A: empty, the digest has landed
 ```
 
 #### E.9 `session_notify` — a sender replaces its own un-drained push (§4.6)
