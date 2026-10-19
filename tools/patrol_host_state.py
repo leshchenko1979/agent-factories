@@ -8378,6 +8378,49 @@ def scorecard_blocks(text: str) -> list[dict]:
     return blocks
 
 
+def score_regressions(blocks: list[dict], previous: dict[str, int]) -> tuple[list[dict], int, int]:
+    """Every regression a round carries, by the ONE predicate (#517).
+
+    A regression is a measurable criterion cell under the floor (3) OR a factory whose net
+    total fell against the round before it. `(UNM)` cells are EXCLUDED, never scored: `0
+    (UNM)` under the floor would make every round read as a regression (ruling n=2747).
+
+    ONE HOME because the leg now applies it to TWO populations -- the newest artifact (with
+    its own predecessor) and every LAPSED round (each with the artifact before it). Two
+    copies of this predicate would be two verdicts about one fact, and the lapsed read
+    exists precisely because the newest-only read could not answer an older round.
+
+    Returns `(regressions, cells_examined, unmeasurable_cells)`.
+    """
+    regressions: list[dict] = []
+    cells = 0
+    unmeasurable = 0
+    for block in blocks:
+        below: list[str] = []
+        for criterion, value, unm in block["cells"]:
+            cells += 1
+            if unm:
+                unmeasurable += 1
+                continue
+            if value < SCORE_FLOOR:
+                below.append(f"{criterion} {value}")
+        reasons: list[str] = []
+        if below:
+            reasons.append(
+                f"criterion cell(s) below the floor: {', '.join(below)}"
+            )
+        was = previous.get(block["name"])
+        if was is not None and block["total"] < was:
+            reasons.append(f"net total fell {was} -> {block['total']}")
+        if reasons:
+            regressions.append({
+                "factory": block["name"],
+                "total": block["total"],
+                "reasons": reasons,
+            })
+    return regressions, cells, unmeasurable
+
+
 def score_conversion_leg(
     rows: list[dict],
     *,
@@ -8387,6 +8430,14 @@ def score_conversion_leg(
     scores_dir: Path | None = None,
 ) -> dict:
     """Every regression in the NEWEST survey artifact, and whether a row ANSWERS it.
+
+    AND EVERY LAPSED ROUND SINCE (#517). The newest-only population healed a lapse by
+    accident: a round whose `conversion` row never landed dropped out of the population the
+    moment a newer artifact arrived, so its regressions could never be answered and nothing
+    said so. This docstring declared exactly that scope -- *"every regression in the NEWEST
+    survey artifact"* -- and the declared behaviour's consequence was never measured, which
+    is why the repair is a widened COVERAGE read rather than a wider regression read: the
+    floor verdict and the delta still need the newest round and its predecessor.
 
     The statute (`skills/meta-factory/SKILL.md` §6) carried the word "automatically" over a
     conversion no trigger performed. The ruling's repair is not a promise in prose but a
@@ -8483,32 +8534,7 @@ def score_conversion_leg(
         except OSError:
             previous = {}
 
-    regressions: list[dict] = []
-    cells = 0
-    unmeasurable = 0
-    for block in blocks:
-        below: list[str] = []
-        for criterion, value, unm in block["cells"]:
-            cells += 1
-            if unm:
-                unmeasurable += 1
-                continue
-            if value < SCORE_FLOOR:
-                below.append(f"{criterion} {value}")
-        reasons: list[str] = []
-        if below:
-            reasons.append(
-                f"criterion cell(s) below the floor: {', '.join(below)}"
-            )
-        was = previous.get(block["name"])
-        if was is not None and block["total"] < was:
-            reasons.append(f"net total fell {was} -> {block['total']}")
-        if reasons:
-            regressions.append({
-                "factory": block["name"],
-                "total": block["total"],
-                "reasons": reasons,
-            })
+    regressions, cells, unmeasurable = score_regressions(blocks, previous)
 
     artifact_rel = f"{SCORES_DIR_REL}/{path.name}"
 
@@ -8556,6 +8582,7 @@ def score_conversion_leg(
         }
 
     answered: list[str] = []
+    named_sources: set[str] = set()
     for row in rows:
         if str(row.get("event") or "") != "conversion":
             continue
@@ -8563,6 +8590,7 @@ def score_conversion_leg(
         if source is None:
             continue
         coverage["conversion_rows"] += 1
+        named_sources.add(source)
         if source == artifact_rel:
             answered.append(str(row.get("subject") or ""))
 
@@ -8580,6 +8608,110 @@ def score_conversion_leg(
             + "; ".join(f"{r['factory']} ({'; '.join(r['reasons'])})" for r in regressions)
             + " -- a regression no row answers reads as converted and is not (#67)"
         )
+
+    # THE LAPSED READ (#517). The newest-only population had a blind spot the next round
+    # healed by ACCIDENT: a round whose `conversion` row never landed left the population
+    # the moment a newer artifact arrived, so its regressions could never be answered and
+    # nothing said so. A lapse was survivable by exactly one round -- the failure mode the
+    # per-artifact join exists to catch.
+    #
+    # THE BASELINE IS THE NEWEST ARTIFACT A ROW NAMES, never "all artifacts": a factory's
+    # pre-mechanism rounds carry no obligation, and widening the population to them would
+    # report a lapse for every round taken before the conversion existed. With no named
+    # artifact at all there is no baseline, so the read is NOT RUN with its reason rather
+    # than reporting the whole tree (#112: "no lapse" and "no baseline" must not render
+    # the same).
+    #
+    # A LAPSED ROUND IS A PROBLEM ONLY WHEN IT OWES A CONVERSION -- that is, when it
+    # carries a regression (docs/measurement-procedure.md section 5.4: "A run whose
+    # artifact shows a regression declares the conversion on a row of its own"). A
+    # regression-free round owes nothing, so calling it a violation would teach the next
+    # reader to ignore the leg. The NEWEST artifact is excluded from the problem arm: its
+    # unanswered regressions are already reported above, and one fact must not be counted
+    # twice.
+    named_dates = {
+        match.group("date")
+        for match in (
+            _SCORE_ARTIFACT_RE.match(Path(source).name) for source in named_sources
+        )
+        if match
+    }
+    lapsed: list[dict] = []
+    if not named_dates:
+        coverage["lapsed_reason"] = (
+            f"no `conversion` row in the {len(rows)} row(s) read names any "
+            f"`{SCORES_DIR_REL}/<date>.md` artifact, so the leg has no baseline to measure "
+            f"a lapse against -- a factory whose rounds all predate the conversion "
+            f"mechanism owes none, and reporting every artifact as lapsed would be a "
+            f"finding invented from a missing declaration"
+        )
+    else:
+        baseline_date = max(named_dates)
+        coverage["lapsed_baseline"] = f"{SCORES_DIR_REL}/{baseline_date}.md"
+        totals_by_date: dict[str, dict[str, int]] = {}
+        for index, (date, artifact_path) in enumerate(artifacts):
+            if date <= baseline_date:
+                continue
+            try:
+                artifact_text = artifact_path.read_text(encoding="utf-8")
+            except OSError as exc:
+                lapsed.append({
+                    "artifact": f"{SCORES_DIR_REL}/{artifact_path.name}",
+                    "regressions": [],
+                    "owed": False,
+                    "reason": f"could not be read: {exc}",
+                })
+                continue
+            lapsed_blocks = scorecard_blocks(artifact_text)
+            if not lapsed_blocks:
+                lapsed.append({
+                    "artifact": f"{SCORES_DIR_REL}/{artifact_path.name}",
+                    "regressions": [],
+                    "owed": False,
+                    "reason": (
+                        "carries no `## Detailed Factory Scorecards` section this leg can "
+                        "parse, so no regression can be read from it"
+                    ),
+                })
+                continue
+            if index > 0:
+                prev_date, prev_path = artifacts[index - 1]
+                if prev_date not in totals_by_date:
+                    try:
+                        totals_by_date[prev_date] = {
+                            block["name"]: block["total"]
+                            for block in scorecard_blocks(
+                                prev_path.read_text(encoding="utf-8")
+                            )
+                        }
+                    except OSError:
+                        totals_by_date[prev_date] = {}
+                previous_totals = totals_by_date[prev_date]
+            else:
+                previous_totals = {}
+            lapsed_regressions, _cells, _unm = score_regressions(
+                lapsed_blocks, previous_totals
+            )
+            lapsed_rel = f"{SCORES_DIR_REL}/{artifact_path.name}"
+            lapsed.append({
+                "artifact": lapsed_rel,
+                "regressions": [r["factory"] for r in lapsed_regressions],
+                "owed": bool(lapsed_regressions),
+            })
+            if lapsed_regressions and lapsed_rel != artifact_rel:
+                problems.append(
+                    f"{lapsed_rel} is a LAPSED round -- no ledger row declares "
+                    f"`converted_from={lapsed_rel}` -- and it carries "
+                    f"{len(lapsed_regressions)} regression(s): "
+                    + "; ".join(
+                        f"{r['factory']} ({'; '.join(r['reasons'])})"
+                        for r in lapsed_regressions
+                    )
+                    + " -- a round outside the newest-only population can never be "
+                    "answered, which is the blind spot #517 names"
+                )
+    coverage["lapsed"] = lapsed
+    coverage["lapsed_examined"] = len(lapsed)
 
     coverage.update({
         "factories": len(blocks),
@@ -9639,6 +9771,28 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{', '.join(cov['answered']) or 'none'}; unanswered: "
                     f"{', '.join(cov['unanswered']) or 'none'}"
                 )
+                # #517: the lapsed population prints with its baseline, so "no lapse",
+                # "no baseline" and "no artifact parsed" are three different lines rather
+                # than one clean verdict.
+                if cov.get("lapsed_reason"):
+                    lines.append(f"  lapsed rounds: NOT RUN — {cov['lapsed_reason']}")
+                else:
+                    lapsed_entries = cov.get("lapsed") or []
+                    lines.append(
+                        f"  lapsed rounds since {cov.get('lapsed_baseline')}: "
+                        f"{len(lapsed_entries)} examined — "
+                        + (
+                            "; ".join(
+                                f"{entry['artifact']} "
+                                f"({len(entry['regressions'])} regression(s): "
+                                f"{', '.join(entry['regressions']) or 'none'}"
+                                f"{'' if entry.get('owed') else ', no conversion owed'}"
+                                f"{'; ' + entry['reason'] if entry.get('reason') else ''})"
+                                for entry in lapsed_entries
+                            )
+                            or "none"
+                        )
+                    )
             lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
         elif leg["name"] == "ledger-ref-roles":
             # THE POPULATION PRINTS, zeros included (#242): a leg that examined nothing and
