@@ -72,7 +72,8 @@ FLAG_SPEC = {
         "positional": "none",
     },
     "answer": {
-        "valued": {"text": "--text", "via": "--via", "by": "--by"},
+        "valued": {"text": "--text", "via": "--via", "by": "--by",
+                   "at": "--at", "evidence": "--evidence"},
         "boolean": {
             "json": "--json", "clarify": "--clarify",
             "no_publish": "--no-publish", "notify": "--notify",
@@ -826,7 +827,17 @@ DELIVERABLE_STATUSES = ("answered", "clarifying", "clarified")
 # keyed on closure would wipe a real answer at the very moment cmd_answer writes
 # it.
 ANSWER_FIELDS = ("answer", "answer_kind", "answered_at", "answered_via",
-                 "answered_by", "delivery")
+                 "answered_by", "delivery", "answered_at_source", "evidence")
+
+# `answered_at_source` is ALWAYS written by an answer (#513): `declared` when
+# the caller supplied --at, `recorded` otherwise. The register cannot verify a
+# declaration, so it must not pretend to -- it records the declaration AND the
+# fact that it is one. A silent --at would let any caller mint a plausible
+# backdated owner decision indistinguishable from a real one, which is strictly
+# worse than the false status the defect was found through. `evidence` carries
+# the corroborating artifact (a message id, a callback record) when the caller
+# has one, and is rendered beside the marker.
+ANSWERED_AT_SOURCES = ("declared", "recorded")
 
 def clear_answer(question):
     """Take the answer AND its provenance off a row that no longer holds one.
@@ -1567,6 +1578,9 @@ def cmd_list(argv):
                      "kind": question.get("kind") or "single",
                      "age": fmt_age(question.get("asked_at")
                                     or entry.get("asked_at")),
+                     "answered_at": question.get("answered_at"),
+                     "answered_at_source": question.get("answered_at_source"),
+                     "evidence": question.get("evidence"),
                      "delivery": question.get("delivery")}
                     for (entry, question) in pairs],
             })
@@ -1602,6 +1616,7 @@ def cmd_list(argv):
                     detail += " [multi-select]"
                 if question.get("answer") is not None:
                     detail += f": {question.get('answer')}"
+                detail += answered_at_note(question)
                 detail += delivery_note(question)
             print(detail)
     return 0
@@ -1640,6 +1655,25 @@ def cmd_answer(argv):
     via = flags.get("--via") or "cli"
     if via not in ("card", "page", "cli"):
         die(2, "--via must be card, page or cli")
+
+    # THE DECLARED-INSTANT PATH (#513). A lane recording an owner's answer on its
+    # next turn can only stamp `now` -- which is the RECORD time, not the answer
+    # time. Without --at the only alternatives are a fabricated instant or a
+    # false status, and the defect was found through a lane choosing the false
+    # status. Validated BEFORE the lock and before any mutation, so a refusal
+    # writes nothing at all.
+    declared_at = flags.get("--at")
+    if declared_at is not None:
+        _parsed = parse_iso(declared_at)
+        if _parsed is None:
+            die(2, "--at %r is not an ISO-8601 instant" % (declared_at,))
+        if _parsed.tzinfo is None:
+            _parsed = _parsed.replace(tzinfo=datetime.timezone.utc)
+        if _parsed > datetime.datetime.now(datetime.timezone.utc):
+            die(2, "--at %r is in the FUTURE -- a declared instant records "
+                   "something that already happened" % (declared_at,))
+        declared_at = _parsed.isoformat()
+    evidence = flags.get("--evidence")
 
     with RegisterLock():
         data = read_register()
@@ -1740,9 +1774,17 @@ def cmd_answer(argv):
                 question["answer"] = flags.get("--text")
                 question["answer_kind"] = "text"
             question["status"] = "answered"
-        question["answered_at"] = now_iso()
+        question["answered_at"] = declared_at or now_iso()
+        # ALWAYS written, on every path that writes an instant (#513): the
+        # register records the declaration AND the fact that it is one, so a
+        # backdated row is visible rather than indistinguishable from a
+        # measured one.
+        question["answered_at_source"] = ("declared" if declared_at
+                                          else "recorded")
         question["answered_by"] = flags.get("--by")
         question["answered_via"] = via
+        if evidence:
+            question["evidence"] = evidence
 
         remaining = [q for q in entry.get("questions", [])
                      if not question_is_closed(q)]
@@ -2213,6 +2255,26 @@ def delivery_note(question):
         return "  [delivered %s]" % (delivery.get("attempted_at") or "?")
     return "  [delivery FAILED: %s %s]" % (delivery.get("outcome"),
                                            delivery.get("attempted_at") or "?")
+
+def answered_at_note(question):
+    """The instant AND its provenance, as a READER sees them (#513).
+
+    A write-only provenance field is the failure class `answered_at` is itself
+    named as a cautionary example of, so the marker renders wherever the
+    instant renders: in `list`, and on the published page. The instant is shown
+    WITH the marker because a declared instant is only meaningful next to the
+    fact that it was declared; `evidence` rides beside both when the caller
+    supplied one.
+    """
+    at = question.get("answered_at")
+    if not at:
+        return ""
+    source = question.get("answered_at_source") or "unmarked"
+    note = "  [answered %s, %s" % (at, source)
+    evidence = question.get("evidence")
+    if evidence:
+        note += ", evidence: %s" % (evidence,)
+    return note + "]"
 
 def a2a_deliver(session, body, mode="turn-end"):
     import urllib.error
@@ -2766,6 +2828,30 @@ def build_spec(entries, slug, expires_at, action):
                                  "text": "Nothing is waiting on you right now."}]},
             "children": []}
         section_keys = ["empty-head", "empty-body"]
+    # DECLARED INSTANTS ARE VISIBLE ON THE PAGE (#513). Answered questions are
+    # deliberately NOT rendered (owner order 2026-09-28), so the marker cannot
+    # ride on a question card -- it renders as its own block instead, and ONLY
+    # when a declared instant exists. A page carrying no declaration is
+    # unchanged by this, so no existing state moves.
+    declared = []
+    for entry in entries:
+        for question in entry.get("questions", []):
+            if question.get("answered_at_source") != "declared":
+                continue
+            note = "%s/%s %s" % (entry.get("id"), question.get("qid"),
+                                 question.get("answered_at"))
+            if question.get("evidence"):
+                note += " (evidence: %s)" % (question.get("evidence"),)
+            declared.append(note)
+    if declared:
+        elements["declared-instants"] = {
+            "type": "Paragraph",
+            "props": {"spans": [{"kind": "Text", "text":
+                "Declared instant(s) -- recorded as the time the answer was "
+                "GIVEN, not the time it was written: "
+                + "; ".join(sorted(declared))}]},
+            "children": []}
+        section_keys.append("declared-instants")
     elements["page"] = {
         "type": "Page",
         "props": {"title": "Open questions", "expires_at": expires_at},
@@ -3912,6 +3998,71 @@ def selftest():
         ck(q4.get("answer") == "A" and q4.get("answer_kind") == "option",
            "an index with NO text still records the OPTION (%r/%r)"
            % (q4.get("answer"), q4.get("answer_kind")))
+        ck(q4.get("answered_at_source") == "recorded",
+           "an answer with NO --at records source=recorded (%r) -- the marker "
+           "is ALWAYS written, never conditional on the caller opting in"
+           % (q4.get("answered_at_source"),))
+
+        # -- 5b-1. the DECLARED-INSTANT path (#513) -----------------------
+        # A lane recording an owner's answer on its NEXT turn can only stamp
+        # `now`, which is the RECORD time -- so without --at its only options
+        # are a fabricated instant or a false status, and the defect was found
+        # through a lane choosing the false status. The MARKER is the load-
+        # bearing half: a silent --at would let any caller mint a plausible
+        # backdated owner decision. Every arm below asserts the marker, not
+        # just the instant.
+        rc, out, _ = run("ask", "--factory", set_id, "--title", "declared",
+                         "--description", "d", "--option", "A", "--option", "B")
+        ck(rc == 0, "a question is registered for the declared-instant arms")
+        _dq = (get_set(set_id) or {}).get("questions", [{}])[-1].get("qid")
+        rc, _, _ = run("answer", set_id, _dq, "0", "--at", "2999-01-01T00:00:00Z")
+        ck(rc == 2, "a FUTURE --at is refused rc=2 (rc=%d)" % rc)
+        _fq = next((q for q in (get_set(set_id) or {}).get("questions", [])
+                    if q.get("qid") == _dq), {})
+        ck(_fq.get("status") == "open" and not _fq.get("answered_at"),
+           "\u2026and a refused instant writes NOTHING (status=%r, at=%r)"
+           % (_fq.get("status"), _fq.get("answered_at")))
+        rc, _, _ = run("answer", set_id, _dq, "0", "--at", "yesterday")
+        ck(rc == 2, "a MALFORMED --at is refused rc=2 (rc=%d)" % rc)
+        _fq2 = next((q for q in (get_set(set_id) or {}).get("questions", [])
+                     if q.get("qid") == _dq), {})
+        ck(_fq2.get("status") == "open" and not _fq2.get("answered_at"),
+           "\u2026and a malformed instant writes NOTHING too")
+        rc, out, _ = run("answer", set_id, _dq, "0",
+                         "--at", "2026-10-18T22:42:02Z",
+                         "--evidence", "messages/50fbb144")
+        ck(rc == 0, "a PAST --at is accepted (rc=%d)" % rc)
+        _dq_rec = next((q for q in (get_set(set_id) or {}).get("questions", [])
+                        if q.get("qid") == _dq), {})
+        ck(str(_dq_rec.get("answered_at", "")).startswith("2026-10-18T22:42:02"),
+           "\u2026and records the DECLARED instant, not the record time (%r)"
+           % (_dq_rec.get("answered_at"),))
+        ck(_dq_rec.get("answered_at_source") == "declared",
+           "\u2026with answered_at_source=declared (%r)"
+           % (_dq_rec.get("answered_at_source"),))
+        ck(_dq_rec.get("evidence") == "messages/50fbb144",
+           "\u2026and --evidence keeps the corroborating ref (%r)"
+           % (_dq_rec.get("evidence"),))
+        rc, out, _ = run("list")
+        ck("declared" in out and "2026-10-18T22:42:02" in out,
+           "list RENDERS the instant AND its marker, not merely stores it "
+           "(%r)" % out.strip()[:90])
+        ck("messages/50fbb144" in out,
+           "\u2026and the evidence beside them")
+        _spec = build_spec([get_set(set_id) or {}], "tok", "2099-01-01", "submit")
+        ck("declared-instants" in _spec["elements"],
+           "the PUBLISHED page carries the declared-instant block (#513)")
+        _spec2 = build_spec([{"id": "x", "questions": [
+            {"qid": "q", "title": "t", "status": "answered",
+             "answered_at": "2026-10-18T00:00:00+00:00",
+             "answered_at_source": "recorded"}]}], "tok", "2099-01-01", "submit")
+        ck("declared-instants" not in _spec2["elements"],
+           "\u2026and a RECORDED answer adds NO block, so no existing page moves")
+        _probe = {"answer": "a", "answered_at_source": "declared",
+                  "evidence": "e"}
+        clear_answer(_probe)
+        ck(not _probe,
+           "clear_answer takes the provenance WITH the answer (#451/#513)")
 
         # -- 5b-2. an EMPTY clarify is a COMPLETE request (#183, 2026-09-26,
         # superseding this probe's same-titled 2026-09-25 predecessor, which
