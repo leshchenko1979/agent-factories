@@ -20,6 +20,7 @@
 
 import datetime
 import fcntl
+import hashlib
 import html
 import json
 import os
@@ -130,7 +131,8 @@ FLAG_SPEC = {
             "set_id": "--set", "lane": "--lane", "qid": "--qid",
             "mode": "--mode",
         },
-        "boolean": {"json": "--json", "dry_run": "--dry-run"},
+        "boolean": {"json": "--json", "dry_run": "--dry-run",
+                    "force": "--force"},
         "positional": "[set-id]",
     },
     "redeliver": {
@@ -2161,6 +2163,45 @@ def find_set_anywhere(set_id):
             return entry
     return None
 
+def delivery_key(entry, qids=None):
+    """The IDENTITY of a delivery: which SET, which QUESTIONS, which ANSWERS.
+
+    #251: a set id alone cannot decide whether a notify is a duplicate. The
+    same set is amended and re-answered all the time, and that is NEW INPUT a
+    lane must see -- so the key covers the answers, and only an identical body
+    for an identical question set collides. Shape is the ruling's exactly:
+    (set id + qids + answer digest).
+    """
+    questions = answerable_questions(entry, qids)
+    payload = {
+        "set": entry.get("id"),
+        "answers": [[q.get("qid"), q.get("status"), q.get("answer"),
+                     q.get("answer_text")] for q in questions],
+    }
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+
+def already_delivered(entry, qid, key):
+    """The questions a delivery would DUPLICATE: stamped `delivered` already,
+    under this same key (#251).
+
+    A stamp written BEFORE keys existed carries none, and what it delivered is
+    therefore unknown -- a duplicate cannot be PROVEN from it, so it is not
+    refused. That gap closes itself: every stamp written from this version on
+    records its key, so the guard is exact for anything delivered after it. It
+    is the same shape as DELIVERY_STAMP_EPOCH -- a boundary that is a fact
+    about the CODE, never a guess about the data.
+    """
+    duplicates = []
+    for question in answerable_questions(entry, qid):
+        delivery = question.get("delivery") or {}
+        if delivery.get("outcome") != "delivered":
+            continue
+        if not delivery.get("key") or delivery.get("key") != key:
+            continue
+        duplicates.append(question.get("qid"))
+    return duplicates
+
 def compose_answer_body(entry, qid=None):
     answered = answerable_questions(entry, qid)
     if not answered:
@@ -2211,7 +2252,7 @@ def delivery_outcome(status):
         return "unreachable"
     return "refused"
 
-def stamp_delivery(set_id, qids, outcome, http, mode):
+def stamp_delivery(set_id, qids, outcome, http, mode, key=None):
     """Record that a delivery was ATTEMPTED and what happened. Returns the count
     stamped, or None when the set is not in the live register.
 
@@ -2222,6 +2263,13 @@ def stamp_delivery(set_id, qids, outcome, http, mode):
     ATTEMPTS is cumulative, and its default for a PRE-EXISTING stamp is 1: a
     stamp that carries no counter was written before this key existed, and it
     records one attempt. A missing `delivery` object is 0 -- nothing was tried.
+
+    KEY (#251) is what this delivery CARRIED -- the digest of the set, the
+    questions and their answers. Without it a later notify can only ask "was
+    this set delivered?", which is the wrong question and was the defect; with
+    it the gate can ask "was THIS body delivered?", which is the one that
+    decides a duplicate. A refused delivery is not an attempt and writes
+    nothing, so a stamp's presence still means something reached the wire.
 
     BOUND: this stamps the LIVE register. A set that has been archived carries
     its questions in archive.jsonl, which this does not rewrite -- an archive is
@@ -2240,9 +2288,12 @@ def stamp_delivery(set_id, qids, outcome, http, mode):
             prior_attempts = prior.get("attempts")
             if prior_attempts is None:
                 prior_attempts = 1 if prior else 0
-            question["delivery"] = {"attempted_at": now_iso(), "outcome": outcome,
-                                    "http": http, "mode": mode,
-                                    "attempts": prior_attempts + 1}
+            stamp = {"attempted_at": now_iso(), "outcome": outcome,
+                     "http": http, "mode": mode,
+                     "attempts": prior_attempts + 1}
+            if key:
+                stamp["key"] = key
+            question["delivery"] = stamp
         write_register_atomic(data)
         return len(targets)
 
@@ -2294,7 +2345,8 @@ def a2a_deliver(session, body, mode="turn-end"):
     except Exception as exc:  # noqa: BLE001
         return 0, "transport error: %s" % (exc,)
 
-def deliver_answer(set_id, qid=None, mode="turn-end", dry_run=False, entry=None):
+def deliver_answer(set_id, qid=None, mode="turn-end", dry_run=False, entry=None,
+                   force=False):
     """Resolve -> compose -> deliver -> stamp, for ONE question (qid given) or a
     batch (qid None). THE single delivery path: `notify` formats one result for
     a caller, `redeliver` calls it in a loop over the pending population.
@@ -2337,6 +2389,31 @@ def deliver_answer(set_id, qid=None, mode="turn-end", dry_run=False, entry=None)
         result["dry_run"] = True
         return result
 
+    # #251: THE STAMP IS A GATE, NOT A DIARY. Until now nothing on this path
+    # read `delivery`, so a re-notify of answers the lane already holds was
+    # indistinguishable from new input at both ends -- one lane received the
+    # same body EIGHT times in a day against a register that recorded ONE
+    # delivery, and it correctly treated each as a re-push.
+    #
+    # The key is what makes "duplicate" decidable: it covers the SET, the
+    # QUESTIONS and the ANSWERS, so an amended or re-answered set is new input
+    # and delivers, while an identical body does not. The refusal happens
+    # BEFORE the wire (a duplicate is never sent and never stamped, so a stamp
+    # still means something reached a2a) and is overridable with --force.
+    #
+    # A DRY RUN RETURNS ABOVE, deliberately: it delivers nothing, so gating it
+    # would break the `notify --dry-run` probe that runs after a delivery to
+    # read the composed body, and would guard nothing a real send does not.
+    key = delivery_key(entry, qid)
+    result["delivery_key"] = key
+    if not force:
+        duplicate = already_delivered(entry, qid, key)
+        if duplicate:
+            return {"error": "set %s already delivered to %s for %s (key %s) — "
+                             "refusing a duplicate; pass --force to send it again"
+                             % (entry.get("id"), session, ", ".join(duplicate), key),
+                    "rc": 3, "duplicate": duplicate, "delivery_key": key}
+
     status, response = a2a_deliver(session, body, mode)
     result["http"] = status
     result["response"] = response
@@ -2348,7 +2425,7 @@ def deliver_answer(set_id, qid=None, mode="turn-end", dry_run=False, entry=None)
     result["stamped"] = stamp_delivery(
         entry.get("id"),
         [q.get("qid") for q in answerable_questions(entry, qid)],
-        result["delivery"], status, mode)
+        result["delivery"], status, mode, key)
 
     result["rc"] = 4 if status == 0 else (3 if status >= 400 else 0)
     return result
@@ -2362,6 +2439,13 @@ def cmd_notify(argv):
     mode = flags.get("--mode") or "turn-end"
     if mode not in ("turn-end", "interrupt", "quiet"):
         die(2, "--mode must be turn-end, interrupt or quiet")
+    # #251: --force overrides the duplicate gate, and it is meaningless on a
+    # dry run -- a dry run delivers nothing, so "send it anyway" describes no
+    # action. Refusing the pair is cheaper than silently honouring half of it.
+    force = bool(flags.get("--force"))
+    if force and flags.get("--dry-run"):
+        die(2, "--force cannot be combined with --dry-run: a dry run delivers "
+               "nothing to force")
 
     if set_id:
         entry = find_set_anywhere(set_id)
@@ -2374,7 +2458,8 @@ def cmd_notify(argv):
             % (set_id or lane,))
 
     result = deliver_answer(entry.get("id"), flags.get("--qid"), mode,
-                            bool(flags.get("--dry-run")), entry=entry)
+                            bool(flags.get("--dry-run")), entry=entry,
+                            force=force)
     if result.get("error"):
         die(result["rc"], result["error"])
 
@@ -6050,6 +6135,98 @@ def selftest():
            "a DRY RUN stamps nothing (attempted_at %r -> %r)"
            % (_before, _after))
 
+        # -- 12b. THE STAMP IS A GATE (#251) ------------------------------
+        # The defect this pins: nothing on the notify path READ `delivery`, so
+        # a re-notify of answers the lane already held was indistinguishable
+        # from new input at both ends. One lane received the same body EIGHT
+        # times in a day against a register that recorded ONE delivery, and it
+        # correctly treated each as a re-push.
+        #
+        # The wire is counted, not inferred: `posts` is how many requests the
+        # endpoint actually received, so "refused" cannot pass by suppressing
+        # the exit code while still sending.
+        _posts = []
+
+        class _Counting(_Ok):
+            def do_POST(self):
+                _posts.append(self.path)
+                _Ok.do_POST(self)
+
+        _srv2 = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Counting)
+        threading.Thread(target=_srv2.serve_forever, daemon=True).start()
+        idem_env = dict(env)
+        idem_env["OC_QUESTIONS_A2A"] = ("http://127.0.0.1:%d/a2a/v1"
+                                        % _srv2.server_address[1])
+        try:
+            rc, out, _ = run("ask", "--factory", "f-idem",
+                             "--title", "Deliver once?", "--description", "d",
+                             "--option", "yes", "--option", "no", "--json")
+            iset = json.loads(out)["set"]
+            rc, _, _ = run("answer", iset, "q1", "0")
+            ck(rc == 0, "idempotency arm: the set is answered (rc=%d)" % rc)
+
+            _p1 = subprocess.run([tool, "notify", "--set", iset], env=idem_env,
+                                 capture_output=True, text=True, timeout=90)
+            ck(_p1.returncode == 0 and len(_posts) == 1,
+               "the FIRST notify delivers (rc=%d, posts=%d)"
+               % (_p1.returncode, len(_posts)))
+            _stamp = ((get_set(iset) or {}).get("questions", [{}])[0]
+                      .get("delivery") or {})
+            ck(bool(_stamp.get("key")),
+               "\u2026and the stamp records the delivery KEY, which is what a "
+               "later notify can compare (%r)" % (_stamp.get("key"),))
+            _attempts_before = _stamp.get("attempts")
+
+            _p2 = subprocess.run([tool, "notify", "--set", iset], env=idem_env,
+                                 capture_output=True, text=True, timeout=90)
+            ck(_p2.returncode == 3,
+               "a REPEAT notify of the SAME answers is REFUSED, rc=3 (rc=%d)"
+               % _p2.returncode)
+            ck("--force" in (_p2.stderr or ""),
+               "\u2026and the refusal NAMES the override (%r)"
+               % ((_p2.stderr or "").strip()[:90],))
+            # MUTATION KILL: delete the gate read in deliver_answer and this
+            # leg reddens -- the duplicate reaches the wire while the exit code
+            # still looks like a normal delivery.
+            ck(len(_posts) == 1,
+               "\u2026and NOTHING reached the wire (posts=%d): the gate is "
+               "BEFORE the delivery, not after it" % (len(_posts),))
+            _attempts_after = ((get_set(iset) or {}).get("questions", [{}])[0]
+                               .get("delivery") or {}).get("attempts")
+            ck(_attempts_before == _attempts_after,
+               "\u2026and a REFUSAL is not an ATTEMPT (attempts %r -> %r)"
+               % (_attempts_before, _attempts_after))
+
+            _p3 = subprocess.run([tool, "notify", "--set", iset, "--force"],
+                                 env=idem_env, capture_output=True, text=True,
+                                 timeout=90)
+            ck(_p3.returncode == 0 and len(_posts) == 2,
+               "--force OVERRIDES the gate (rc=%d, posts=%d)"
+               % (_p3.returncode, len(_posts)))
+
+            _p4 = subprocess.run([tool, "notify", "--set", iset, "--force",
+                                  "--dry-run"], env=idem_env,
+                                 capture_output=True, text=True, timeout=90)
+            ck(_p4.returncode == 2,
+               "--force with --dry-run is a USAGE error, rc=2 (rc=%d)"
+               % _p4.returncode)
+
+            # An AMENDED answer is NEW INPUT, not a duplicate: the key covers
+            # the answers, so the gate must let it through. This is the half
+            # that keeps the guard from silencing a genuine re-notify.
+            run("amend", "--set", iset, "--qid", "q1", "--title",
+                "Deliver once? (amended)")
+            rc, _, _ = run("answer", iset, "q1", "1")
+            ck(rc == 0, "the amended question is re-answerable (rc=%d)" % rc)
+            _p5 = subprocess.run([tool, "notify", "--set", iset], env=idem_env,
+                                 capture_output=True, text=True, timeout=90)
+            ck(_p5.returncode == 0 and len(_posts) == 3,
+               "an AMENDED answer DELIVERS (rc=%d, posts=%d) -- a changed "
+               "answer is not a duplicate" % (_p5.returncode, len(_posts)))
+        finally:
+            _srv2.shutdown()
+            _srv2.server_close()
+
         # An answered question that was NEVER notified must read as NOT RECORDED
         # rather than as delivered -- the absence is the finding, so it prints.
         rc, out, _ = run("ask", "--factory", "f-delivery-arm",
@@ -6429,7 +6606,8 @@ USAGE = """questions — the Open Questions register (#547)
            [--option O]... [--recommended <0-based-index|LABEL|LETTER>]... [--clear-options]
            the CLARIFY return leg: edits the question and reopens it
   notify   --set <id> | --lane <NAME> [--qid Q] [--mode turn-end|interrupt|quiet]
-           [--dry-run] [--json]        the RETURN PATH: delivers the answer to
+           [--dry-run] [--force] [--json]
+                                       the RETURN PATH: delivers the answer to
                                        the session recorded in the register.
                                        --lane accepts a bare display name OR the
                                        qualified `<factory>/<lane>`; a bare name
@@ -6447,6 +6625,17 @@ USAGE = """questions — the Open Questions register (#547)
                                        Every attempt stamps `attempts` beside
                                        the outcome; that counter is what bounds
                                        `redeliver`.
+                                       A DUPLICATE IS REFUSED (#251): if every
+                                       question the body carries was already
+                                       stamped `delivered` under the SAME key,
+                                       nothing is sent and the verb exits 3.
+                                       The key is (set id + qids + answer
+                                       digest), so an amended or re-answered
+                                       set is new input and delivers -- only an
+                                       identical body collides. --force
+                                       overrides the refusal; it cannot be
+                                       combined with --dry-run, which delivers
+                                       nothing to force.
   redeliver [--pending] [--max-attempts N] [--mode M] [--dry-run] [--json]
            RETRY leg: re-notifies the deliveries the register RECORDS as
            failed, and NOTHING else. Two classes qualify:
