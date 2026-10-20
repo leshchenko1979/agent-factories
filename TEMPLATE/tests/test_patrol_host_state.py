@@ -6485,6 +6485,205 @@ def test_a_BODY_MENTION_neither_ADMITS_a_unit_nor_SUPERSEDES_its_park() -> None:
     assert cov["units_in_population"] == 2, cov
     assert cov["units_named_only_as_mentions"] == 1, cov
 
+def _disposition_row(n, unit, days_ago, token=None, *, now, mention=None):
+    """A ledger row that DECLARES a disposition on `unit` (#473).
+
+    The token stands ALONE on the last line, which is the shape a ruling uses and the shape
+    the reader requires. `mention` writes a sentence that QUOTES a token without declaring
+    one -- the `n=2883` lesson, which withdrew a park on exactly those terms -- and `token`
+    is left free-form so a probe can write the REFUSED forms as well as the accepted one.
+    """
+    body = f"RULING -- {unit} is DISPOSED OF.\n\n"
+    if mention:
+        body += f"{mention}\n\n"
+    if token:
+        body += token
+    return _stall_row(n, "ruling", unit, days_ago, now=now, detail=body.rstrip())
+
+
+def test_the_stall_census_leg_holds_a_RULED_VOID_unit_out_of_the_owed_total() -> None:
+    """#473 acceptance, the whole point: a unit a RULING disposed of stops reading OWED even
+    though its board item is still OPEN, and the declaring row travels with the verdict.
+
+    THE MEASURED FAILURE THIS ANSWERS. `#453`: intake n=3032, dispatch n=3033, ruled
+    "UNSUBSTANTIATED -- not-a-defect ... dispatch at n=3033 is void" at n=3041. The board item
+    stayed OPEN, so the census kept printing `OWED #453`, and a Worker lane claimed it at
+    n=3202, built a 266-probe arm for a defect ruled non-existent, withdrew it (8dc9a206) and
+    closed the unit `outcome=abandoned` at n=3203. The ruling was loud; nothing could read it.
+
+    TWO-SIDED, because a one-sided probe would pass a leg that voids everything: `#981`
+    carries the declaration and leaves the owed total, `#982` carries none and stays OWED.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(981, "OPEN"), _issue(982, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#981", 5, now=now),
+        _disposition_row(2, "#981", 4, "disposition:void", now=now),
+        _stall_row(3, "dispatch", "#982", 5, now=now),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #981" not in named, (
+        f"a unit a RULING disposed of is not a finding, and its board item being OPEN is "
+        f"exactly the state #473 exists to read\n{named}"
+    )
+    assert "OWED #982" in named, (
+        f"the CONTROL: an undeclared unit must stay OWED, or the probe above would pass a "
+        f"census that voids everything\n{named}"
+    )
+    voided = "\n".join(leg["coverage"]["dispositions"])
+    assert "VOID #981" in voided, leg["coverage"]["dispositions"]
+    # THE DECLARING ROW TRAVELS WITH THE VERDICT: a disposition no reader can trace to a row
+    # is a claim, not a declaration -- and the row is what lets a reader go and read the
+    # ruling that decided it.
+    assert "row n=2" in voided and "disposition:void" in voided, voided
+
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 1, cov
+    assert cov["dispositions_declared"] == 1, cov
+    assert cov["units_voided"] == 1, cov
+    assert cov["units_disposition_superseded"] == 0, cov
+
+    # ... and the exclusion reaches the REPORT, not only the dict: a reader who sees an owed
+    # total smaller than the dispatched population must be able to read WHY.
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"the control unit is OWED, so the run must fail, got rc={rc}\n{out}"
+    assert "ruled VOID and EXCLUDED from the owed total" in out, out
+    assert "dispositions (disposition:void on the unit's own rows): 1 declared, 1 OWED" in out, out
+
+
+def test_the_stall_census_leg_reads_a_disposition_ONLY_from_a_standalone_token() -> None:
+    """#473, the READ discipline, two-sided: a declaration is a LINE OF ITS OWN, a token
+    quoted inside a sentence is a MENTION, and an unimplemented kind is a PROBLEM.
+
+    The mention arm is not hypothetical -- it is the `n=2883` shape, the row that withdrew a
+    park while quoting two park tokens mid-sentence. A reader matching the substring would
+    dispose of a unit on a row that merely DISCUSSED disposing of it, which is a worse
+    failure than the one #473 repairs: it would silently drop live work.
+
+    The refused forms are PROBLEMS rather than silent passes: a factory that believes it
+    disposed of a unit the census cannot see is back in the #453 state with the ruling
+    present and unread.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(n, "OPEN") for n in (991, 992, 993, 994)]
+    rows = [
+        _stall_row(1, "dispatch", "#991", 5, now=now),
+        _disposition_row(2, "#991", 4, now=now,
+                         mention="n=3041 declared `disposition:void` for it; this row "
+                                 "WITHDRAWS that and CARRIES NO DISPOSITION TOKEN"),
+        _stall_row(3, "dispatch", "#992", 5, now=now),
+        _disposition_row(4, "#992", 4, "disposition:", now=now),
+        _stall_row(5, "dispatch", "#993", 5, now=now),
+        _disposition_row(6, "#993", 4, "disposition:reopened", now=now),
+        _stall_row(7, "dispatch", "#994", 5, now=now),
+        _disposition_row(8, "#994", 4, "disposition:void", now=now),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    for quiet in ("#991", "#992", "#993"):
+        assert f"OWED {quiet}" in named, (
+            f"{quiet} must stay OWED: a mention is not a declaration, and an unreadable "
+            f"declaration cannot be obeyed\n{named}"
+        )
+    assert "OWED #994" not in named, (
+        f"the standalone declaration is the CONTROL -- if it did not hold, the probe above "
+        f"would pass a reader that voids nothing\n{named}"
+    )
+    assert "cannot read" in named, named
+    assert "row n=4" in named and "row n=6" in named, named
+    assert "disposition:reopened" in named, named
+
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 3, cov
+    assert cov["dispositions_declared"] == 1, cov
+    assert cov["units_voided"] == 1, cov
+
+
+def test_the_stall_census_leg_SUPERSEDES_a_void_a_LATER_dispatch_lifted() -> None:
+    """#473 clause 3: a void holds until a LATER dispatch puts the unit back in play, and the
+    supersession is PRINTED rather than obeyed.
+
+    Without this the clause would be a permanent gag: the ledger keeps every ruling forever,
+    so a unit ruled void and then RE-DISPATCHED would stay silently excluded for good and
+    nothing in the report would say why. The two units carry the same two acts in OPPOSITE
+    order, which is the property under test.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(995, "OPEN"), _issue(996, "OPEN")]
+    rows = [
+        # #995: ruled void FIRST, then re-dispatched -- the ruling is stale, the unit is OWED.
+        _stall_row(1, "dispatch", "#995", 6, now=now),
+        _disposition_row(2, "#995", 5, "disposition:void", now=now),
+        _stall_row(3, "dispatch", "#995", 4, now=now),
+        # #996: dispatched, then ruled void -- the ruling is the newest act.
+        _stall_row(4, "dispatch", "#996", 6, now=now),
+        _disposition_row(5, "#996", 4, "disposition:void", now=now),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    named = "\n".join(leg["problems"])
+    assert "OWED #995" in named, (
+        f"a dispatch NEWER than the ruling puts the unit back in play\n{named}"
+    )
+    assert "OWED #996" not in named, named
+    notes = "\n".join(leg["coverage"]["dispositions"])
+    assert "VOID #996" in notes, leg["coverage"]["dispositions"]
+    assert "#995" in notes and "SUPERSEDED" in notes, (
+        f"the stale ruling is PRINTED, not merely obeyed\n{notes}"
+    )
+    assert "row n=2" in notes and "row n=3" in notes, notes
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 1, cov
+    assert cov["units_voided"] == 1, cov
+    assert cov["units_disposition_superseded"] == 1, cov
+
+
+def test_a_DISPOSITION_that_matches_no_OWED_line_is_PRINTED_once() -> None:
+    """#473 clause 4 + the #471 rule: a disposition the census cannot act on is PRINTED, and
+    a unit carrying BOTH a park and a void is printed under ONE heading.
+
+    Two arms. `#997` was never ROUTED (its token stands in a row's body), so it was never in
+    the population -- the declaration STANDS and the note says the routing is absent rather
+    than accusing the declaration of naming the wrong subject. `#998` WAS routed and the board
+    carries it CLOSED, so it is dropped by the off-board filter: the "matched NO OWED line"
+    arm. `#999` carries a park token AND a void token, and must read VOID alone -- one unit
+    printed with two contradictory dispositions is the defect #471 reports.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(998, "CLOSED"), _issue(999, "OPEN")]
+    rows = [
+        _disposition_row(1, "#997", 4, "disposition:void", now=now),
+        _stall_row(2, "dispatch", "#998", 5, now=now),
+        _disposition_row(3, "#998", 4, "disposition:void", now=now),
+        _stall_row(4, "dispatch", "#999", 5, now=now),
+        _park_row(5, "#999", 4, "park:owner:q43", now=now),
+        _disposition_row(6, "#999", 3, "disposition:void", now=now),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    notes = "\n".join(leg["coverage"]["dispositions"])
+    assert "VOID #997" in notes and "no dispatch ROUTED it" in notes, notes
+    assert "#998" in notes and "matched NO OWED line" in notes, notes
+    assert "VOID #999" in notes, notes
+    parks = "\n".join(leg["coverage"]["parks"])
+    assert "#999" not in parks, (
+        f"a unit a ruling DISPOSED OF must not also print a park note -- the void decided "
+        f"the census, and two dispositions on one unit is the #471 defect\n{parks}"
+    )
+    cov = leg["coverage"]
+    assert cov["units_owed"] == 0, cov
+    assert cov["units_voided"] == 1, cov
+    assert cov["parks_declared"] == 1, cov
+    assert cov["units_parked"] == 0, cov
+
+
 def test_the_stall_census_leg_names_the_ADDRESSEE_and_never_the_AUTHOR() -> None:
     """#331 clause 2, two-sided: the OWED line names the LANE the dispatch was handed to, and
     a unit whose dispatch declares no target SAYS SO rather than printing the row's author.

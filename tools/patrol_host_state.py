@@ -5379,6 +5379,86 @@ def declared_parks(
         parks[unit] = items[-1]
     return parks, problems
 
+# THE DECLARED DISPOSITION (#473). A ruling can DISPOSE of a unit -- rule it
+# UNSUBSTANTIATED, void, not-a-defect -- without the board item being closed, and until this
+# leg existed the census could not see that at all: it read the board, saw OPEN, saw a
+# dispatch with no claim, and printed OWED.
+#
+# THE MEASURED FAILURE (#453). Intake n=3032, dispatch n=3033, and at n=3041 HQ ruled the
+# unit "UNSUBSTANTIATED -- not-a-defect ... dispatch at n=3033 is void". The board item
+# stayed OPEN, the census kept printing `OWED #453`, and a Worker lane claimed it at n=3202
+# and spent a whole repair cycle building a 266-probe arm for a defect that had been ruled
+# non-existent 26 hours earlier, then withdrew it (commit 8dc9a206) and closed the unit
+# `outcome=abandoned` at n=3203. The cost was not the ruling -- the ruling was correct and
+# loud -- it was that nothing downstream could READ it.
+#
+# THE MECHANISM IS THE PARK TOKEN'S, deliberately (#473's decided shape). `disposition:void`
+# stands alone on a line of the unit's OWN row. That adds no event type and no vocabulary
+# token to `tools/ledger_declaration.py`'s role-to-event matrix, so the blast radius is this
+# reader and the fixture beside it. A new record type was considered and refused for exactly
+# that widening; a prose parser was refused in ruling n=3206 and refused again here -- a
+# finding invented from an unparsed file is worse than no finding.
+#
+# THE TOKEN MUST STAND ALONE ON A LINE OF ITS OWN, for the reason the park token must: a row
+# that QUOTES the shape in prose carries no declaration (n=2883 withdrew a park on those
+# terms), so a reader matching the substring would dispose of a unit on a row that only
+# discussed disposing of it.
+DISPOSITION_TOKEN_RE = re.compile(r"^disposition:void$")
+DISPOSITION_TOKEN_PREFIX = "disposition:"
+
+def declared_dispositions(
+    rows: list[dict], is_unit, precedes_filing=None
+) -> tuple[dict[str, tuple[str, dict]], list[str]]:
+    """Read every `disposition:void` declaration off the units' own ledger rows.
+
+    Returns `{unit: (kind, row)}` holding the NEWEST declaration per unit, plus problem
+    strings. The declaring ROW travels with the kind because the census must be able to
+    print which row disposed of the unit -- a disposition no reader can trace to a row is a
+    claim, not a declaration, and the row is the only thing that makes "this was ruled, not
+    forgotten" checkable.
+
+    A LINE THAT TRIES TO DECLARE AND CANNOT BE READ IS A PROBLEM, never a silent pass: the
+    factory believes a ruling disposed of a unit the census cannot see, and the census goes
+    on serving that unit to a lane as live work -- the #453 failure with the declaration
+    present and unread. `disposition:void` is the ONE shape today; a bare `disposition:`, a
+    `disposition:<anything-else>` and a prose line that merely STARTS with the prefix all
+    land here. Refusing the unknown rather than guessing is the honest direction: a
+    disposition this reader does not implement is a law question, not a reading to invent.
+
+    A unit whose rows declare two DIFFERENT dispositions is not adjudicated: the newest wins
+    and the line names the row it read, so a re-disposition is a traceable act rather than a
+    silent overwrite.
+    """
+    declarations: dict[str, list[tuple[str, dict]]] = {}
+    problems: list[str] = []
+    for row in rows:
+        subject = str(row.get("subject") or "").strip()
+        if not is_unit(subject):
+            continue
+        if precedes_filing is not None and precedes_filing(row.get("ts"), subject):
+            continue
+        for line in str(row.get("detail") or "").splitlines():
+            stripped = line.strip()
+            if not stripped.startswith(DISPOSITION_TOKEN_PREFIX):
+                continue
+            match = DISPOSITION_TOKEN_RE.match(stripped)
+            if not match:
+                problems.append(
+                    f"row n={row.get('n')} ({subject}) declares a disposition in a shape "
+                    f"this leg cannot read: {stripped!r} -- the ONE shape is "
+                    f"`disposition:void`, standing alone on a line of its own. A bare "
+                    f"`disposition:`, an unimplemented kind, or a prose line that merely "
+                    f"STARTS with the prefix all land here: reword it, or make the "
+                    f"declaration a line of its own (#473)"
+                )
+                continue
+            declarations.setdefault(subject, []).append(("void", row))
+    dispositions: dict[str, tuple[str, dict]] = {}
+    for unit, items in declarations.items():
+        items.sort(key=lambda item: _ledger_row_order(item[1]))
+        dispositions[unit] = items[-1]
+    return dispositions, problems
+
 def _ledger_row_order(row: dict) -> tuple:
     """A dispatch row's append order: its `n` where the read declares one, else its stamp.
 
@@ -5576,6 +5656,12 @@ def stall_census_leg(
     # after `precedes_filing`, because a park row that predates the board item's own filing
     # is a cross-namespace subject collision (#415) and not a declaration about this unit.
     parks, park_problems = declared_parks(rows, is_unit, precedes_filing)
+    # THE DECLARED DISPOSITIONS (#473), read on the SAME terms and in the same place: a
+    # ruling that disposed of a unit predating the board item's own filing is a
+    # cross-namespace subject collision (#415), not a declaration about this unit.
+    dispositions, disposition_problems = declared_dispositions(
+        rows, is_unit, precedes_filing
+    )
 
     claimed: set[str] = set()
     closed: set[str] = set()
@@ -5784,12 +5870,20 @@ def stall_census_leg(
                 mention_units.add(unit)
             declare(unit, row, routed=unit in header_units)
 
-    problems: list[str] = list(park_problems)
+    problems: list[str] = list(park_problems) + list(disposition_problems)
     excused: list[str] = []
     owed: list[dict] = []
     parked: list[str] = []
     parked_units: set[str] = set()
     park_superseded: list[str] = []
+    # THE VOIDED UNITS (#473), the disposition's own three buckets, kept SEPARATE from the
+    # park's so neither declaration can be printed under the other's heading: `voided_units`
+    # are OWED units a ruling EXCLUDED from the owed total, `disposition_superseded` maps a
+    # unit whose void was lifted by a LATER dispatch to that dispatch, and the never-routed
+    # and matched-no-OWED-line notes are assembled after the loop.
+    voided: list[str] = []
+    voided_units: set[str] = set()
+    disposition_superseded: dict[str, tuple[str, dict, dict]] = {}
     # THE SUPERSEDED UNITS (#470), by name: those units are listed in `park_superseded`, and
     # they must NOT also be listed among the declarations that "matched NO OWED line" -- one
     # park printed with two contradictory dispositions is the defect #471 reports.
@@ -5814,6 +5908,35 @@ def stall_census_leg(
         age_days = (now - fired).total_seconds() / 86400.0
         if age_days < threshold_days:
             continue
+        # THE DECLARED DISPOSITION (#473), checked BEFORE the park and after the age test,
+        # for the same reason the park is: a declaration can only ever REMOVE a line the
+        # census would otherwise report. Before the park because the two are not peers -- a
+        # park says the unit waits on the owner, a disposition says the unit is not a defect
+        # at all, so a unit carrying both must read VOID and must never also print "the park
+        # is SUPERSEDED, so the unit stays OWED", which would be false the moment the void
+        # was honoured.
+        disposition = dispositions.get(unit)
+        if disposition is not None:
+            kind, disposition_row = disposition
+            superseding = newest_dispatch.get(unit)
+            if (
+                superseding is not None
+                and _ledger_row_order(superseding) > _ledger_row_order(disposition_row)
+            ):
+                # SUPERSEDED, and printed rather than obeyed: the ledger keeps every ruling
+                # forever, so a unit re-dispatched AFTER it was ruled void would otherwise
+                # stay excluded for good and the stale ruling would read as live. The line
+                # stays OWED; the note says why the disposition no longer holds.
+                disposition_superseded[unit] = (kind, disposition_row, superseding)
+            else:
+                voided_units.add(unit)
+                voided.append(
+                    f"VOID {unit}: dispatched {age_days:.2f} d ago and NEVER CLAIMED, but a "
+                    f"ruling DECLARED it `disposition:{kind}` at row "
+                    f"n={disposition_row.get('n')} -- not a finding, and EXCLUDED from the "
+                    f"owed total (#473)."
+                )
+                continue
         # THE PARK STATE (#331 clause 1). The unit reaches the OWED predicate and a declared
         # park holds it: it reads PARKED, it is NOT a finding, and it leaves the owed total.
         # The park is checked HERE, after the age test, so the declaration can only ever
@@ -5899,7 +6022,54 @@ def stall_census_leg(
         if unit not in parked_units
         and unit not in superseded_units
         and unit not in never_routed_units
+        # A unit a ruling DISPOSED OF, or whose void a later dispatch lifted, must not also
+        # print a park note: one unit carrying two contradictory dispositions is the defect
+        # #471 reports, and the void line above is the one that decided the census (#473).
+        and unit not in voided_units
+        and unit not in disposition_superseded
     ] + park_superseded + park_never_routed_notes
+
+    # A DISPOSITION WHOSE UNIT IS NOT IN THE POPULATION AT ALL (#473), on the park's terms:
+    # the declaration STANDS and the unit is EXCLUDED from the owed total, but no dispatch
+    # ROUTED it, so it never entered the census population and no OWED line is owed for it.
+    disposition_never_routed = [
+        (unit, kind, row)
+        for unit, (kind, row) in dispositions.items()
+        if unit not in voided_units
+        and unit not in disposition_superseded
+        and unit not in carriers
+    ]
+    disposition_never_routed_units = {unit for unit, _, _ in disposition_never_routed}
+    disposition_never_routed_notes = [
+        f"VOID {unit}: declares `disposition:{kind}` at row n={row.get('n')} -- the "
+        f"declaration STANDS and the unit is EXCLUDED from the owed total; no dispatch "
+        f"ROUTED it (its token stands in a row's BODY, never in the opening line, or it is "
+        f"not a unit of this board), so it is not in the census population and no OWED line "
+        f"is owed (#473)"
+        for unit, kind, row in disposition_never_routed
+    ]
+    # A DISPOSITION DECLARED FOR A UNIT THAT IS NOT OWED IS PRINTED, never silently ignored,
+    # and never under the park heading: a declaration that matches no OWED line is
+    # indistinguishable from a typo'd subject, and one that quietly does nothing is the same
+    # failure an unreadable one is. A unit held PARKED is excluded here because the park
+    # already printed it -- the two declarations are exclusive in the printed census (#471).
+    disposition_superseded_notes = [
+        f"{unit} declares `disposition:{kind}` at row n={row.get('n')}, but a LATER "
+        f"dispatch-bearing row n={superseding.get('n')} puts it back in play -- the "
+        f"disposition is SUPERSEDED, so the unit stays OWED (#473)"
+        for unit, (kind, row, superseding) in disposition_superseded.items()
+        if unit not in parked_units
+    ]
+    disposition_notes = [
+        f"{unit} declares `disposition:{kind}` at row n={row.get('n')}, but matched NO OWED "
+        f"line this read -- the unit is claimed, closed, off this board, or no longer "
+        f"stalled; if none of those hold, the declaration names the wrong subject (#473)"
+        for unit, (kind, row) in dispositions.items()
+        if unit not in voided_units
+        and unit not in disposition_superseded
+        and unit not in parked_units
+        and unit not in disposition_never_routed_units
+    ] + disposition_superseded_notes + disposition_never_routed_notes
 
     # THE ADDRESSEE'S NAMES ARE RESOLVED ONCE, and only when there is a line to put them on:
     # the live read walks every profile's session bindings, so a census with nothing owed
@@ -6110,6 +6280,15 @@ def stall_census_leg(
             "units_parked": len(parked_units),
             "units_park_superseded": len(park_superseded),
             "parks": parked + park_notes,
+            # THE DISPOSITION EXCLUSION TRAVELS WITH THE VERDICT (#473), on the park's terms:
+            # a reader who sees an owed total smaller than the dispatched population must be
+            # able to read WHY, and `units_voided` beside `dispositions_declared` is that
+            # answer. A void lifted by a later dispatch is counted in neither -- it is named
+            # in `dispositions`, where the declaration and the dispatch that lifted it meet.
+            "dispositions_declared": len(dispositions),
+            "units_voided": len(voided_units),
+            "units_disposition_superseded": len(disposition_superseded_notes),
+            "dispositions": voided + disposition_notes,
             # THE ADDRESSEE COVERAGE (#331 clause 2): how many OWED lines could name the lane
             # the work was handed to. A line that names none says so in words; this pair is
             # the count, so a read where NOTHING resolved is not mistaken for one where the
@@ -9517,6 +9696,23 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
             )
             for note in cov.get("parks", []):
+                lines.append(f"    {note}")
+            # THE DISPOSITION EXCLUSION IS PRINTED BESIDE THE VERDICT (#473), for the same
+            # reason: a unit ruled void is not a finding, and a reader who cannot see WHY it
+            # left the owed count cannot tell a ruled-away unit from a dropped one. The line
+            # prints even at zero, so a leg that read no rulings is distinguishable from one
+            # whose rulings it could not see.
+            lines.append(
+                f"  dispositions (disposition:void on the unit's own rows): "
+                f"{cov['dispositions_declared']} declared, {cov['units_voided']} OWED "
+                f"unit(s) ruled VOID and EXCLUDED from the owed total"
+                + (
+                    f", {cov['units_disposition_superseded']} SUPERSEDED by a later dispatch"
+                    if cov["units_disposition_superseded"]
+                    else ""
+                )
+            )
+            for note in cov.get("dispositions", []):
                 lines.append(f"    {note}")
             # ... and the ADDRESSEE coverage (#331 clause 2), so a run where NOTHING
             # resolved is not read as a run that never asked.
