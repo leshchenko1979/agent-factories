@@ -1049,6 +1049,59 @@ RULING_GOVERNS_KEY = "governs="
 _RULING_ISSUE_URL = re.compile(r"/issues/(\d+)\b")
 _RULING_BARE_NUMBER = re.compile(r"^(\d+)$")
 
+RULING_PAIRING_KEY = "comment="
+"""The trailer a `ruling` row carries to name the BOARD COMMENT it was stamped with (#511).
+
+`tools/rule.py` posts the comment and stamps the row in ONE invocation, and the row's detail
+ends `comment=<id>` — the pairing that makes the two surfaces one act. This is the READER's
+copy of that key. It is not imported from `field_predicate` (where the writer takes
+`PAIRING_KEY`) because this leg already owns its own leg-local readers for the ruling
+vocabulary (`RULING_GOVERNS_KEY`, `issue_from_row`) by the #243 shape-1 ruling: the shared
+predicate's `issue_reference` is strictly numeric by design and its own gate depends on that,
+so the patrol answers its own questions here. The two constants must MOVE TOGETHER; the
+`test_patrol_host_state.py` probe that drives a paired and an unpaired arm fails loudly if
+they ever disagree, which is the drift guard this copy needs.
+
+THE ID SPACE IS NUMERIC, and that is a measured trap rather than a preference. The board read
+returns GraphQL node ids (`IC_kwDOUWc1QM8AAAAB...`) in `comments[].id`, while the write path
+parses the post's own URL and stamps `#issuecomment-<digits>`. Comparing the two id spaces
+matches nothing, and a predicate that did so would report EVERY ruling as unpaired — a false
+red of the whole population, indistinguishable in shape from the false clean #511 removes.
+So the leg parses the same URL fragment the writer parses (`comment_numeric_id` below).
+"""
+_COMMENT_URL_FRAGMENT = re.compile(r"#issuecomment-(\d+)")
+
+
+def comment_numeric_id(comment: dict) -> str:
+    """The numeric id from a comment's own URL, or "" when the read carried none.
+
+    EMPTY IS A FAIL-CLOSED SIGNAL, never a pass: a comment whose id this leg cannot read
+    cannot be shown to be paired, and reporting it as paired would be the false clean the
+    leg exists to prevent. The caller reports it as a problem.
+    """
+    match = _COMMENT_URL_FRAGMENT.search(str(comment.get("url") or ""))
+    return match.group(1) if match else ""
+
+
+def ruling_paired_comment_ids(rows: list[dict]) -> dict[str, list]:
+    """`comment=<numeric id>` -> the `n`s of the RULING rows that name it (#511).
+
+    RULING ROWS ONLY, and the narrowing is the point. The leg's claim is "the ledger holds
+    no `ruling` row for it"; the write path stamps exactly one event with the pairing
+    trailer. A `dispatch` or `run` row that cites the same id is a CITATION of the ruling
+    act — #455 carries two such rows — never its record, so scanning every row's `comment=`
+    field would let a citation excuse an unrecorded ruling: the same false clean, one layer
+    down. The `n`s travel so a problem can name the row it found.
+    """
+    paired: dict[str, list] = {}
+    for row in rows:
+        if row.get("event") != "ruling":
+            continue
+        match = re.search(rf"{re.escape(RULING_PAIRING_KEY)}(\d+)", str(row.get("detail") or ""))
+        if match:
+            paired.setdefault(match.group(1), []).append(row.get("n"))
+    return paired
+
 
 def issue_from_row(row: dict, predicate) -> int | None:
     """The issue a row names, leg-locally: `#N` subject, bare `N` subject, or an issue URL.
@@ -1413,6 +1466,17 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
     through the one boundary reader; a probe passes `UNBOUNDED_SCOPE` (the leg's pure shape,
     every instance judged) or a synthetic bound of its own. `exemptions_path` is injectable
     for the same reason every other dependency is: a probe must not read the live file.
+
+    THE PAIRING IS PER ACT, NOT PER ISSUE (#511). Until it, the leg short-circuited on
+    `number in ruled` — a set of ISSUE numbers — so an issue carrying a `ruling` row for ANY
+    act had NO comment examined at all, and a post-boundary amendment on an already-ruled
+    issue was never judged. That is the false clean `ruling_comments` names as the worse half
+    of the #248 class, and the write path makes it a defect rather than a population choice:
+    `tools/rule.py` pairs ONE comment with ONE row per invocation, and `tools/ledger.py`
+    refuses `event=ruling` without `comment=<digits>`, so the obligation the mechanism
+    implements is per act. `ruled` KEEPS its membership role — `rulings_read` and
+    `rulings_resolved` are read off it, and narrowing it to fix the short-circuit would
+    silently shrink the printed population (ruling n=3768, constraint on the remedy).
     """
     predicate = predicate or load_predicate()
     bound, bound_text, bound_refusal = scope if scope is not None else ruling_board_scope()
@@ -1436,6 +1500,8 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
     problems: list[str] = list(exempt_problems)
     examined = 0
     pre_boundary = 0
+    paired_latest = 0
+    paired = ruling_paired_comment_ids(rows)
     exempted: list[str] = []
     matched_exemptions: set[str] = set()
     undatable: list[int] = []
@@ -1464,7 +1530,7 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
         # The POPULATION is counted even under a refusal: what was not judged must not read
         # as what was not there (#242).
         examined += 1
-        if bound_refusal or number in ruled:
+        if bound_refusal:
             continue
         # The INSTANCE is the LATEST accepted ruling comment on the issue: an amendment is a
         # new ruling act, so reading the first would let a pre-mechanism head excuse a
@@ -1480,27 +1546,55 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             if latest_instant is None or instant > latest_instant:
                 latest, latest_instant = candidate, instant
         assert latest is not None
-        comment_id = str(latest.get("id") or "")
+        # TWO ID SPACES, kept apart on purpose. `comment_node` is the board's GraphQL node id
+        # and is the key the exemption surface uses (docs/ruling-board-exemptions.example.json:
+        # "Key every entry by the RULING COMMENT ID the leg reads"). `comment_id` is the
+        # NUMERIC id from the comment's own URL — the id `tools/rule.py` stamps into the row.
+        # Comparing a node id to a `comment=` trailer can never match; see
+        # `ruling_paired_comment_ids`.
+        comment_node = str(latest.get("id") or "")
+        comment_id = comment_numeric_id(latest)
         created = str(latest.get("createdAt") or "")
-        entry = exempt.get(comment_id)
+        # THE PAIRING TEST (#511). The instance is this COMMENT, and it is clean only when a
+        # `ruling` row NAMES it. The issue-level `number in ruled` short-circuit that stood
+        # here asked a different question — "does this issue carry any ruling row" — so an
+        # amendment on an already-ruled issue was never judged at all, which is the false
+        # clean `ruling_comments` names as the worse half of the #248 class.
+        paired_rows = paired.get(comment_id) if comment_id else None
+        if paired_rows:
+            paired_latest += 1
+            continue
+        entry = exempt.get(comment_node)
         if entry is not None:
             # The lawful exit, PRINTED on every run with its reason: a debt made visible,
             # never forgiveness.
-            matched_exemptions.add(comment_id)
-            exempted.append(comment_id)
+            matched_exemptions.add(comment_node)
+            exempted.append(comment_node)
             excused.append(
-                f"#{number}: EXEMPTED — ruling comment {comment_id or '(no id)'} "
+                f"#{number}: EXEMPTED — ruling comment {comment_node or '(no id)'} "
                 f"({created or 'instant unstated'}) is declared in "
                 f"{RULING_EXEMPTIONS_PATH.name}: {entry.get('reason')}"
+            )
+            continue
+        if not comment_id:
+            # FAIL CLOSED on an unreadable id, and say WHICH read was empty: an id this leg
+            # cannot parse cannot be shown to be paired, and calling it paired is the false
+            # clean. The node id is printed so the exemption surface can still be keyed.
+            problems.append(
+                f"#{number} carries a ruling comment ({created or 'instant unstated'}, "
+                f"node id {comment_node or '(none)'}) whose own URL carries no "
+                f"`#issuecomment-<id>` fragment, so this leg cannot tell whether a `ruling` "
+                f"row pairs it (board read at {read_at}) — NOT JUDGED as paired, and never "
+                f"excused as if it were"
             )
             continue
         if bound is None:
             # UNBOUNDED scope: the leg's pure shape, every instance judged.
             problems.append(
-                f"#{number} carries a ruling comment on the board but the ledger holds no "
-                f"`ruling` row for it (board read at {read_at}) — the ruling's content is on "
-                f"the board, but every other row cites a ruling by `n`, and a ruling with no "
-                f"row has no `n` for a reader to resolve"
+                f"#{number} carries a ruling comment on the board (comment {comment_id}) but "
+                f"the ledger holds no `ruling` row naming it (board read at {read_at}) — the "
+                f"ruling's content is on the board, but every other row cites a ruling by "
+                f"`n`, and a ruling with no row has no `n` for a reader to resolve"
             )
             continue
         if latest_instant is None:
@@ -1522,10 +1616,11 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             )
             continue
         problems.append(
-            f"#{number} carries a ruling comment ({created}) on the board but the ledger "
-            f"holds no `ruling` row for it, and the comment is at or after the declared "
-            f"bound {bound_text} for `{RULING_BOUNDARY_KEY}` (board read at {read_at}) — the "
-            f"pairing mechanism existed, so this is a lane that diverged from it"
+            f"#{number} carries a ruling comment ({created}, comment {comment_id}) on the "
+            f"board but the ledger holds no `ruling` row NAMING it, and the comment is at or "
+            f"after the declared bound {bound_text} for `{RULING_BOUNDARY_KEY}` (board read "
+            f"at {read_at}) — the pairing mechanism existed, so this is a lane that diverged "
+            f"from it"
         )
     if not bound_refusal:
         for comment_id, entry in exempt.items():
@@ -1560,6 +1655,8 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             "bound_key": RULING_BOUNDARY_KEY,
             "pre_boundary_rulings": pre_boundary,
             "rulings_undatable": undatable,
+            "rulings_paired": paired_latest,
+            "rulings_pairing_rows": len(paired),
             "exemptions_path": RULING_EXEMPTIONS_PATH.name,
             "exemptions_declared": len(exempt),
             "exemptions_matched": sorted(matched_exemptions),

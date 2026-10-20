@@ -181,12 +181,37 @@ def _issue(number: int, state: str, assignees: "list[str] | None" = None) -> dic
 
 
 def _rows(*pairs) -> list[dict]:
-    """Ledger rows from (event, subject, n) triples."""
-    return [
-        {"n": n, "ts": _CLOSE_TS, "event": event, "actor": "triage",
-         "subject": subject, "detail": "probe"}
-        for event, subject, n in pairs
-    ]
+    """Ledger rows from (event, subject, n[, detail]) tuples.
+
+    The optional fourth element is the row's `detail`. It exists because #511 made the
+    board-ruling leg's pairing PER ACT: a `ruling` row clears a comment only when its detail
+    carries `comment=<numeric id>`, so a probe that wants a PAIRED arm has to be able to say
+    so. Rows built without it keep the `"probe"` detail every other leg ignores.
+    """
+    out = []
+    for pair in pairs:
+        event, subject, n = pair[0], pair[1], pair[2]
+        detail = pair[3] if len(pair) > 3 else "probe"
+        out.append({"n": n, "ts": _CLOSE_TS, "event": event, "actor": "triage",
+                    "subject": subject, "detail": detail})
+    return out
+
+
+def _comment_url(number: int, index: int = 1) -> str:
+    """A comment URL carrying the NUMERIC id the pairing surface compares (#511).
+
+    The board read returns GraphQL node ids in `comments[].id` and the numeric id only in
+    `comments[].url`, and the ledger's `comment=` trailer carries the numeric one — so a
+    fixture that omits `url` cannot be paired at all, and a probe built on one would exercise
+    the fail-closed arm while believing it exercised the paired one. That is the control this
+    helper re-arms.
+    """
+    return f"https://github.com/o/r/issues/{number}#issuecomment-{_comment_numeric(number, index)}"
+
+
+def _comment_numeric(number: int, index: int = 1) -> str:
+    """The numeric id `_comment_url` embeds, so a probe can name it in a row's detail."""
+    return f"{number}{index:03d}"
 
 
 _PROBE_KIT: tuple[Path, Path] | None = None
@@ -1169,11 +1194,20 @@ def test_the_bound_is_DECLARED_DATA_and_moves_the_population() -> None:
 # --- #223: the board-ruling leg --------------------------------------------------
 
 def _issue_with_comments(number: int, state: str, *bodies: str) -> dict:
-    """A board issue carrying comments, in the shape `gh issue list --json` returns."""
+    """A board issue carrying comments, in the shape `gh issue list --json` returns.
+
+    The instants are STAGGERED by index, and that is a re-arm rather than tidiness: since
+    #511 the leg judges the LATEST accepted comment, so two comments sharing one `createdAt`
+    made the tie-break decide which act was judged — the first one, by the loop's own `<`
+    comparison — and a fixture written to name the second read as unpaired. Real comments
+    cannot share an instant; this one now cannot either.
+    """
     issue = _issue(number, state)
     issue["comments"] = [
-        {"body": body, "author": {"login": "hq"}, "createdAt": _CLOSE_TS}
-        for body in bodies
+        {"body": body, "author": {"login": "hq"},
+         "createdAt": _plus(_CLOSE_TS, (i - 1) * 0.1),
+         "url": _comment_url(number, i)}
+        for i, body in enumerate(bodies, start=1)
     ]
     return issue
 
@@ -1188,7 +1222,8 @@ def test_the_ruling_leg_BITES_on_a_ruling_comment_with_no_row() -> None:
     rows = _rows(("intake", "#11", 1))
     rc, out, _ = _run(issues, rows)
     assert rc == 1, f"a ruling comment with no row must fail the run, got rc={rc}\n{out}"
-    assert "#11 carries a ruling comment on the board but the ledger holds no" in out, out
+    assert f"#11 carries a ruling comment on the board (comment {_comment_numeric(11)})" in out, out
+    assert "but the ledger holds no `ruling` row naming it" in out, out
     assert "LEG board-ruling" in out, f"the leg must be reported at all\n{out}"
 
 def test_a_MENTION_inside_a_comment_is_not_an_instance() -> None:
@@ -1229,15 +1264,57 @@ def test_a_CLOSED_item_is_still_in_the_population() -> None:
     assert "#31 carries a ruling comment" in out, out
 
 def test_a_ruling_row_for_the_subject_clears_it() -> None:
-    """The complement: the leg is discriminating, not a blanket red."""
+    """The complement: the leg is discriminating, not a blanket red.
+
+    #511 RE-ARMED this probe. It used to clear on `number in ruled` — ANY ruling row for the
+    subject — which is precisely the short-circuit the ruling removed. A row now clears the
+    comment only when it NAMES it, so the fixture's row carries the pairing trailer and the
+    assertion is that the pair reads clean; the `#511` test below supplies the same row
+    WITHOUT the trailer and asserts the opposite verdict on the same board.
+    """
     issues = [_issue_with_comments(41, "OPEN", "## RULED — stamped in the same turn.\n")]
-    rows = _rows(("intake", "#41", 1), ("ruling", "#41", 2))
+    rows = _rows(("intake", "#41", 1),
+                 ("ruling", "#41", 2, f"probe comment={_comment_numeric(41)}"))
     rc, out, _ = _run(issues, rows)
     section = out.split("LEG board-ruling")[1].split("LEG ")[0]
     assert "#41" not in section, f"a stamped ruling must not be reported: {section!r}"
     assert "1 examined" in section and "0 problem(s)" in section, (
         f"it must be EXAMINED and found clean, never skipped: {section!r}"
     )
+
+def test_the_pairing_is_PER_ACT_not_PER_ISSUE() -> None:
+    """#511, the two-arm control: ONE board, ONE issue, two ledgers, opposite verdicts.
+
+    The defect this pins is the issue-level short-circuit — `number in ruled`, "does this
+    issue carry ANY `ruling` row". Under it both arms below read CLEAN, because both carry a
+    `ruling` row for #42; the only difference between them is whether that row NAMES the
+    comment. A ruling is an ACT on a comment, so the trailer is the whole predicate, and the
+    arm WITHOUT it is the one that must bite.
+
+    Same fixture both sides, so the verdict is attributable to the trailer alone — the shape
+    #243's bridge control used. The board is LIVE state: the false-clean direction is the
+    dangerous one, so the bare arm is the arm that has to be red.
+    """
+    issues = [_issue_with_comments(42, "OPEN", "## RULED — a ruling.\n")]
+    numeric = _comment_numeric(42)
+
+    paired_rows = _rows(("intake", "#42", 1), ("ruling", "#42", 2, f"probe comment={numeric}"))
+    rc, out, _ = _run(issues, paired_rows)
+    section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+    assert rc == 0, f"a row NAMING the comment must clear it: {out[-3000:]}"
+    assert "#42" not in section, f"a paired ruling must not be reported: {section!r}"
+    assert "1 examined" in section and "0 problem(s)" in section, section
+
+    # The SAME row, the SAME issue, the SAME comment — only the trailer is gone. This is the
+    # arm the short-circuit made unreachable: the row exists, so `number in ruled` was true.
+    bare_rows = _rows(("intake", "#42", 1), ("ruling", "#42", 2))
+    rc, out, _ = _run(issues, bare_rows)
+    section = out.split("LEG board-ruling")[1].split("LEG ")[0]
+    assert rc == 1, f"a ruling row that does not NAME the comment must NOT clear it: {out[-3000:]}"
+    assert "#42" in section, section
+    assert "1 problem(s)" in section, section
+    assert f"comment {numeric}" in section, f"the comment judged must be NAMED: {section!r}"
+    assert "holds no `ruling` row naming it" in section, section
 
 def test_the_leg_states_its_population_and_the_board_read_instant() -> None:
     """A clean read over an examined population, never a clean read over nothing.
@@ -1249,8 +1326,11 @@ def test_the_leg_states_its_population_and_the_board_read_instant() -> None:
         _issue_with_comments(51, "OPEN", "## RULED — one.\n"),
         _issue_with_comments(52, "OPEN", "## RULING — two.\n"),
     ]
-    rows = _rows(("intake", "#51", 1), ("ruling", "#51", 2),
-                 ("intake", "#52", 3), ("ruling", "#52", 4))
+    # Both rows NAME their comment: since #511 a `ruling` row clears a comment only when its
+    # detail carries `comment=<numeric id>`, so a bare row would make this a probe about the
+    # pairing instead of about the printed population.
+    rows = _rows(("intake", "#51", 1), ("ruling", "#51", 2, f"probe comment={_comment_numeric(51)}"),
+                 ("intake", "#52", 3), ("ruling", "#52", 4, f"probe comment={_comment_numeric(52)}"))
     rc, out, _ = _run(issues, rows)
     assert rc == 0, f"both rulings are stamped, so the run is clean: {out}"
     section = out.split("LEG board-ruling")[1].split("LEG ")[0]
@@ -5462,16 +5542,27 @@ def test_probe_the_leg_PRINTS_an_unbridgeable_row_instead_of_dropping_it() -> No
     assert cov["rulings_read"] == cov["rulings_resolved"] + cov["rulings_unbridgeable"], cov
 
 def test_probe_the_BRIDGE_is_the_thing_that_moves_the_population() -> None:
-    """The NON-VACUITY control for clause 3.
+    """The NON-VACUITY control for clause 3 — re-armed by #511, on the surface it still owns.
 
-    Neutering the bridge returns a bridged issue to the problem list. The probe drives the
-    REAL leg twice over one fixture: once with the dispatch present, once without — so the
-    difference is attributable to the bridge and not to the fixture.
+    Neutering the bridge moves the bridged row out of the RESOLVED population. The probe
+    drives the REAL leg twice over one fixture: once with the dispatch present, once without
+    — so the difference is attributable to the bridge and not to the fixture.
+
+    WHAT #511 CHANGED HERE, and why the old assertion was wrong rather than merely failing.
+    This probe used to assert that dropping the bridge produced a PROBLEM, because the
+    issue-level short-circuit judged a comment only when its issue resolved to a `ruling`
+    row. Under per-act pairing the verdict belongs to the COMMENT ID: the row names
+    `comment=<id>`, the id is globally unique, and so the act IS recorded whether or not the
+    row's SUBJECT can be attributed to an issue. Keeping the old assertion would have
+    restored the short-circuit it was written against — a problem invented from an
+    unresolvable subject, which is the same false red one layer over. The bridge's remaining
+    job is the POPULATION question, and that is what is asserted: the row is resolved, or it
+    is PRINTED as unbridgeable, never silently dropped (#243 clause 2).
     """
     pred = RUNNER.load_predicate()
     issues = [_issue_with_comments(85, "OPEN", "## RULED — settled on the board.\n")]
     ruling = {"n": 545, "event": "ruling", "subject": "foreign-instrument-coupling",
-              "detail": "the clause"}
+              "detail": f"the clause comment={_comment_numeric(85)}"}
     dispatch = {"n": 546, "event": "dispatch", "subject": "#85", "detail": "Ruling n=545"}
 
     with_bridge = RUNNER.board_ruling_leg(issues, [ruling, dispatch], read_at="probe",
@@ -5479,13 +5570,22 @@ def test_probe_the_BRIDGE_is_the_thing_that_moves_the_population() -> None:
                                           scope=RUNNER.UNBOUNDED_SCOPE,
                                           exemptions_path=_NO_RULING_EXEMPTIONS)
     assert with_bridge["problems"] == [], with_bridge["problems"]
+    assert with_bridge["coverage"]["rulings_resolved"] == 1, with_bridge["coverage"]
+    assert with_bridge["coverage"]["rulings_unbridgeable"] == 0, with_bridge["coverage"]
+    assert with_bridge["coverage"]["rulings_paired"] == 1, with_bridge["coverage"]
 
-    # Remove ONLY the bridge row: the same fixture must now report the false-unruled item.
+    # Remove ONLY the bridge row: the row leaves the resolved population and is PRINTED.
     without = RUNNER.board_ruling_leg(issues, [ruling], read_at="probe", predicate=pred,
                                       scope=RUNNER.UNBOUNDED_SCOPE,
                                       exemptions_path=_NO_RULING_EXEMPTIONS)
-    assert len(without["problems"]) == 1, without["problems"]
-    assert "#85 carries a ruling comment" in without["problems"][0], without["problems"]
+    assert without["coverage"]["rulings_resolved"] == 0, without["coverage"]
+    assert without["coverage"]["rulings_unbridgeable"] == 1, without["coverage"]
+    assert without["coverage"]["unbridgeable_rows"] == [
+        {"n": 545, "subject": "foreign-instrument-coupling"}
+    ], without["coverage"]["unbridgeable_rows"]
+    # The ACT is still recorded, so the comment is still paired: two questions, two surfaces.
+    assert without["coverage"]["rulings_paired"] == 1, without["coverage"]
+    assert without["problems"] == [], without["problems"]
 
 # --- #245: the ruling predicate's head alternation, and the clause that keeps it honest ---
 
@@ -5537,7 +5637,7 @@ def test_the_leg_PRINTS_a_head_it_did_NOT_match() -> None:
     # point that it reads unruled — but the ROUND's population is read from the LEDGER, and
     # a row exists for it, so the patrol's board-unruled leg stays quiet here.
     rows = _rows(("intake", "#7", 1), ("ruling", "#7", 4), ("intake", "#8", 2),
-                 ("ruling", "#8", 3))
+                 ("ruling", "#8", 3, f"probe comment={_comment_numeric(8)}"))
     leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe",
                                   predicate=RUNNER.load_predicate(),
                                   scope=RUNNER.UNBOUNDED_SCOPE,
@@ -5576,8 +5676,11 @@ def test_the_counter_counts_ISSUES_not_COMMENTS() -> None:
     # `ruling` #76 is added for #332: #76 carries no ruling COMMENT (which is this probe's
     # point), but the round's population is read from the LEDGER, so a row keeps the
     # board-unruled leg quiet over a fixture that is about the ruling leg.
-    rows = _rows(("intake", "#75", 1), ("ruling", "#75", 2), ("intake", "#76", 3),
-                 ("ruling", "#76", 4))
+    # #75 carries TWO ruling comments and the leg judges the LATEST act (#511), so the row
+    # must name the SECOND one; #76 carries no accepted head at all, so no pairing is owed.
+    rows = _rows(("intake", "#75", 1),
+                 ("ruling", "#75", 2, f"probe comment={_comment_numeric(75, 2)}"),
+                 ("intake", "#76", 3), ("ruling", "#76", 4))
     leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=RUNNER.load_predicate(),
                                   scope=RUNNER.UNBOUNDED_SCOPE,
                                   exemptions_path=_NO_RULING_EXEMPTIONS)
@@ -5658,6 +5761,7 @@ def _ruling_issue(number: int, created: str, *, body: str = "## RULED — a ruli
         "body": body,
         "author": {"login": "leshchenko1979"},
         "createdAt": created,
+        "url": _comment_url(number),
     }]
     return issue
 
@@ -5718,17 +5822,28 @@ def test_the_ruling_bound_reads_the_LATEST_accepted_comment_not_the_first() -> N
     the assertion is that it is JUDGED.
     """
     issue = _issue(7, "OPEN")
+    # `url` is NOT decoration: the pairing surface compares the NUMERIC id that only the URL
+    # carries (#511). A fixture without it drives the fail-closed arm while reading as if it
+    # drove the paired one, so this control is re-armed with the helper that supplies it.
     issue["comments"] = [
         {"id": "IC_pre", "body": "## RULED — the original.\n",
-         "author": {"login": "leshchenko1979"}, "createdAt": _RULING_PRE},
+         "author": {"login": "leshchenko1979"}, "createdAt": _RULING_PRE,
+         "url": _comment_url(7, 1)},
         {"id": "IC_post", "body": "## RULED — amended.\n",
-         "author": {"login": "leshchenko1979"}, "createdAt": _RULING_POST},
+         "author": {"login": "leshchenko1979"}, "createdAt": _RULING_POST,
+         "url": _comment_url(7, 2)},
     ]
     leg = RUNNER.board_ruling_leg([issue], _rows(("intake", "#7", 1)), read_at="probe",
                                   scope=_scope_at(_RULING_BOUND),
                                   exemptions_path=_NO_RULING_EXEMPTIONS)
     assert len(leg["problems"]) == 1, leg["problems"]
-    assert f"({_RULING_POST})" in leg["problems"][0], leg["problems"]
+    # The INSTANT is the amendment's and the COMMENT named is the amendment's. Reading the
+    # first comment would print the pre-boundary instant, excuse the instance, and report a
+    # clean leg — so the negative assertion on `_RULING_PRE` is the control, not decoration.
+    assert _RULING_POST in leg["problems"][0], leg["problems"]
+    assert f"comment {_comment_numeric(7, 2)}" in leg["problems"][0], leg["problems"]
+    assert _RULING_PRE not in leg["problems"][0], leg["problems"]
+    assert leg["excused"] == [], leg["excused"]
     assert leg["coverage"]["pre_boundary_rulings"] == 0, leg["coverage"]
 
 def test_the_ruling_leg_REFUSES_rather_than_judging_UNBOUNDED() -> None:
