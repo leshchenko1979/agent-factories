@@ -1316,6 +1316,58 @@ def test_the_pairing_is_PER_ACT_not_PER_ISSUE() -> None:
     assert f"comment {numeric}" in section, f"the comment judged must be NAMED: {section!r}"
     assert "holds no `ruling` row naming it" in section, section
 
+def test_the_pairing_reads_the_DECLARATION_not_a_QUOTATION() -> None:
+    """#511, ARM A/B: a `comment=` in PROSE is a citation; the TRAILER is the declaration.
+
+    The per-act test above varies WHETHER a trailer exists. This one varies WHICH token a
+    scan picks, which is the defect the ruling actually names (`n=3845`) and the one a
+    first-match regex hides: the row DOES name the act, and the reader reports that it does
+    not. Two live rows already read wrongly under it —
+
+      n=3029 (#455) quotes a #454 act's `comment=6091047134` in prose, then DECLARES
+                    `comment=6091268072` in its canonical run; first-match pairs the citation.
+      n=2135 (#297) carries the prose placeholder `comment=123456` before its trailer.
+
+    ARM B is the half that stops the cheap fix: a reader that simply took the LAST token
+    would pass ARM A and still be wrong, so the quotation is left standing with the
+    declaration removed, and the row must declare NOTHING rather than fall back to prose.
+    ARM C pins the placeholder shape — a non-digit value OCCUPIES the key while naming no
+    comment, so it reads as ABSENT and never as a pairing.
+    """
+    citation, declared = "6091047134", "6091268072"
+
+    # ARM A — prose citation AND a canonical trailer, SEPARATED BY PROSE as the live rows are.
+    # The separation is the point rather than fixture decoration: `trailer_tokens` reads the
+    # maximal CONTIGUOUS run of `=`-carrying tokens at the end, so two tokens written
+    # back-to-back are BOTH in the run and the citation is a declaration of the same row.
+    # n=3029's citation sits mid-prose with the trailer alone at the end — that is the shape
+    # a reader has to get right, so that is the shape probed here.
+    arm_a = _rows(("ruling", "#455", 1,
+                   f"the #454 post carries comment={citation} in its own record.\n\n"
+                   f"The remedy is this act's own pairing.\n\ncomment={declared}"))
+    paired = RUNNER.ruling_paired_comment_ids(arm_a)
+    assert declared in paired, f"the row's OWN trailer must pair: {paired!r}"
+    assert citation not in paired, (
+        f"a PROSE citation must never pair — it names ANOTHER act's comment: {paired!r}"
+    )
+    assert paired[declared] == [1], f"the pairing must name the row it found: {paired!r}"
+
+    # ARM B — the same body with the canonical run removed. A quotation declares nothing.
+    arm_b = _rows(("ruling", "#455", 1,
+                   f"the #454 post carries comment={citation} in its own record, and no "
+                   f"trailer follows it."))
+    assert RUNNER.ruling_paired_comment_ids(arm_b) == {}, (
+        "a `comment=` outside the canonical run is a QUOTATION, not a declaration — pairing "
+        "it would let a citation excuse an unrecorded ruling act, the same false clean the "
+        "issue-level short-circuit produced one layer up"
+    )
+
+    # ARM C — `comment=none` occupies the key and names no comment (the #297 clause 2 shape).
+    arm_c = _rows(("ruling", "#297", 2, "no id known yet\n\ncomment=none"))
+    assert RUNNER.ruling_paired_comment_ids(arm_c) == {}, (
+        "a non-digit value occupies the key while naming no comment; it must never pair"
+    )
+
 def test_the_leg_states_its_population_and_the_board_read_instant() -> None:
     """A clean read over an examined population, never a clean read over nothing.
 

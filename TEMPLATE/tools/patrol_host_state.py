@@ -1049,26 +1049,38 @@ RULING_GOVERNS_KEY = "governs="
 _RULING_ISSUE_URL = re.compile(r"/issues/(\d+)\b")
 _RULING_BARE_NUMBER = re.compile(r"^(\d+)$")
 
-RULING_PAIRING_KEY = "comment="
-"""The trailer a `ruling` row carries to name the BOARD COMMENT it was stamped with (#511).
+# THE PAIRING READER IS THE SHARED PREDICATE, never a leg-local copy (#511, ruled at
+# `n=3845`). `tools/rule.py` posts the board comment and stamps the `ruling` row in ONE
+# invocation, and the row's detail ends `comment=<id>` — the pairing that makes the two
+# surfaces one act. BOTH halves of that predicate live in `tools/field_predicate.py`:
+# `PAIRING_KEY` (the writer's key) and `declared_comment_id` (the reader). This leg asks
+# THAT predicate by path — `field_predicate_readers()` below — and never by import, because
+# the runner is copied into every member factory where the layout above it is not the same.
+#
+# A LEG-LOCAL COPY OF THE READ IS THE DEFECT, and that is measured rather than argued
+# (ruling `n=3845`). This block used to carry its own `re.search(r"comment=(\d+)", detail)`
+# and defend it on the #243 shape-1 ground that the leg owns its ruling-vocabulary readers.
+# That ground is about the KEY and the SUBJECT forms; the POSITIONAL question — is this
+# token the row's DECLARATION or a QUOTATION — was never asked, and a first-match scan
+# answers it wrongly on rows that already exist:
+#   n=3029 (#455) quotes a #454 act's `comment=6091047134` in prose and DECLARES
+#                 `comment=6091268072` in its canonical run — first-match pairs the citation.
+#   n=2135 (#297) carries the prose placeholder `comment=123456` and DECLARES
+#                 `comment=5973889388` — first-match pairs the placeholder.
+# `declared_comment_id` reads the CANONICAL TRAILER RUN only (`trailer_tokens`: the maximal
+# run of `=`-carrying tokens at the END of the detail) and digit-filters it, so a quotation
+# cannot shadow a declaration and `comment=none` reads as ABSENT. That is the SAME predicate
+# the write path refuses on (`tools/ledger.py append --event ruling`), so the writer and the
+# reader cannot disagree about what a row declares (SKILL.md section 11, one field one
+# predicate; #297 clause 2).
 
-`tools/rule.py` posts the comment and stamps the row in ONE invocation, and the row's detail
-ends `comment=<id>` — the pairing that makes the two surfaces one act. This is the READER's
-copy of that key. It is not imported from `field_predicate` (where the writer takes
-`PAIRING_KEY`) because this leg already owns its own leg-local readers for the ruling
-vocabulary (`RULING_GOVERNS_KEY`, `issue_from_row`) by the #243 shape-1 ruling: the shared
-predicate's `issue_reference` is strictly numeric by design and its own gate depends on that,
-so the patrol answers its own questions here. The two constants must MOVE TOGETHER; the
-`test_patrol_host_state.py` probe that drives a paired and an unpaired arm fails loudly if
-they ever disagree, which is the drift guard this copy needs.
-
-THE ID SPACE IS NUMERIC, and that is a measured trap rather than a preference. The board read
-returns GraphQL node ids (`IC_kwDOUWc1QM8AAAAB...`) in `comments[].id`, while the write path
-parses the post's own URL and stamps `#issuecomment-<digits>`. Comparing the two id spaces
-matches nothing, and a predicate that did so would report EVERY ruling as unpaired — a false
-red of the whole population, indistinguishable in shape from the false clean #511 removes.
-So the leg parses the same URL fragment the writer parses (`comment_numeric_id` below).
-"""
+# THE ID SPACE IS NUMERIC, and that is a measured trap rather than a preference. The board
+# read returns GraphQL node ids (`IC_kwDOUWc1QM8AAAAB...`) in `comments[].id`, while the
+# write path parses the post's own URL and stamps `#issuecomment-<digits>`. Comparing the
+# two id spaces matches nothing, and a predicate that did so would report EVERY ruling as
+# unpaired — a false red of the whole population, indistinguishable in shape from the false
+# clean #511 removes. So the leg parses the same URL fragment the writer parses
+# (`comment_numeric_id` below) and keeps the node id for the exemption surface only.
 _COMMENT_URL_FRAGMENT = re.compile(r"#issuecomment-(\d+)")
 
 
@@ -1083,23 +1095,32 @@ def comment_numeric_id(comment: dict) -> str:
     return match.group(1) if match else ""
 
 
-def ruling_paired_comment_ids(rows: list[dict]) -> dict[str, list]:
-    """`comment=<numeric id>` -> the `n`s of the RULING rows that name it (#511).
+def ruling_paired_comment_ids(rows: list[dict], predicate=None) -> dict[str, list]:
+    """`comment=<numeric id>` -> the `n`s of the RULING rows that DECLARE it (#511).
 
     RULING ROWS ONLY, and the narrowing is the point. The leg's claim is "the ledger holds
-    no `ruling` row for it"; the write path stamps exactly one event with the pairing
+    no `ruling` row NAMING it"; the write path stamps exactly one event with the pairing
     trailer. A `dispatch` or `run` row that cites the same id is a CITATION of the ruling
-    act — #455 carries two such rows — never its record, so scanning every row's `comment=`
+    act — #455 carries such a row — never its record, so scanning every row's `comment=`
     field would let a citation excuse an unrecorded ruling: the same false clean, one layer
     down. The `n`s travel so a problem can name the row it found.
+
+    THE VALUE IS READ THROUGH THE SHARED PREDICATE (`field_predicate.declared_comment_id`),
+    never a local scan, and the POSITION is why (ruling `n=3845`). A first-match regex over
+    the whole detail reads a row that QUOTES another act's `comment=` in prose as declaring
+    that act: `n=3029` pairs a #454 citation instead of its own `comment=6091268072`, and
+    `n=2135` pairs the placeholder `123456` instead of `comment=5973889388`. The predicate
+    reads the CANONICAL TRAILER RUN only, which is the row's declaration by definition, and
+    digit-filters it, so `comment=none` reads as ABSENT rather than as a pairing.
     """
+    predicate = predicate or field_predicate_readers()
     paired: dict[str, list] = {}
     for row in rows:
         if row.get("event") != "ruling":
             continue
-        match = re.search(rf"{re.escape(RULING_PAIRING_KEY)}(\d+)", str(row.get("detail") or ""))
-        if match:
-            paired.setdefault(match.group(1), []).append(row.get("n"))
+        declared = predicate.declared_comment_id(str(row.get("detail") or ""))
+        if declared:
+            paired.setdefault(declared, []).append(row.get("n"))
     return paired
 
 
