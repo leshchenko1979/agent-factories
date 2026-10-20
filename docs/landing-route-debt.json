@@ -1,28 +1,8 @@
 {
-  "_note": "THIS factory's landing-route debt, read by tests/test_cron_landing_route.py. Each entry is a cron envelope that DECLARES a `receipt_subject:` -- so it produces a receipt row -- and names no landing route for it, or names a route whose target is the pre-#445 pusher in the shared tree. The gate is a LIVE read over registry/state.json, so it reconciles this declaration against the measurement: an UNDECLARED violation is a new instance of the class and REDs, and a DECLARED entry that no longer reproduces REDs as stale -- a repaired envelope must be struck from this file in the same change that repairs it. An entry here is a TRACKED, VISIBLE defect, not an excuse: the gate prints every declared job on every run.",
-  "_measured_at": "2026-10-17T06:58Z",
-  "_measured_against": "registry/state.json (70 rows, 9 judged: rows declaring a receipt_subject other than none; factory-publish declares none and is excluded by construction -- it is the pusher)",
+  "_note": "THIS factory's landing-route debt, read by tests/test_cron_landing_route.py. Each entry is a cron envelope that DECLARES a `receipt_subject:` -- so it produces a receipt row -- and names no landing route for it, or names a route whose target is the pre-#445 pusher in the shared tree. The gate is a LIVE read over registry/state.json, so it reconciles this declaration against the measurement: an UNDECLARED violation is a new instance of the class and REDs, and a DECLARED entry that no longer reproduces REDs as stale -- a repaired envelope must be struck from this file in the same change that repairs it. An entry here is a TRACKED, VISIBLE defect, not an excuse: the gate prints every declared job on every run. REPAIRED 2026-10-20T12:44Z: factory-triage-patrol, factory-hq-pacemaker, factory-template-weekly and factory-growth-map-biweekly now name the landing route in the text their WOKEN LANE reads (the notify --text for the three thin triggers, the goal_template for the pacemaker) and in the prompt the gate reads; their entries were struck in the same change. factory-triage-patrol had stranded its patrol commit THREE times in eighteen hours before the repair, each strand landing by hand.",
+  "_measured_at": "2026-10-20T12:44Z",
+  "_measured_against": "registry/state.json (70 rows, 9 judged; refreshed 2026-10-20T12:44:02Z by the HQ lane after repairing four route-absent envelopes)",
   "declared": [
-    {
-      "job": "factory-growth-map-biweekly",
-      "shape": "route-absent",
-      "measured": "0 census hits for push|publish|land|origin/main over 2311 chars; declares `receipt_subject: growth-map`; no `tools/publish.py`"
-    },
-    {
-      "job": "factory-hq-pacemaker",
-      "shape": "route-absent",
-      "measured": "0 census hits over 1429 chars; declares `receipt_subject: hq-cycle`; no `tools/publish.py`"
-    },
-    {
-      "job": "factory-template-weekly",
-      "shape": "route-absent",
-      "measured": "0 census hits over 2274 chars; declares `receipt_subject: template-weekly`; no `tools/publish.py`"
-    },
-    {
-      "job": "factory-triage-patrol",
-      "shape": "route-absent",
-      "measured": "1 census hit over 2772 chars -- prose only ('lands the log in retired_logs'), no `tools/publish.py`; declares `receipt_subject: patrol-verify`"
-    },
     {
       "job": "factory-binding-sync",
       "shape": "route-stale",
