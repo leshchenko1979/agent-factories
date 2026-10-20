@@ -151,12 +151,12 @@
         "miidas",
         "inferhub-watch"
       ],
-      "evidence": "agent/runtime/lib/miidas_boot/config.py \u2014 gateway overlay finds [providers. at :203-207 and returns text[:start] + snippet + text[end:] at :250; openrouter overlay at :127-185 does the same. This deletion is what cost leshchenko1979/miidas#98 (closed 2026-10-03T19:07:29Z), where the overlay's own snippet carried enabled=false and wiped the template's working fallback. The overlay logs 'applied LLM_PROFILE=\u2026' while the file it read still shows the pre-refresh block, so during a refresh window the file and the log disagree \u2014 read the post-refresh file, not the log alone.",
+      "evidence": "config.py \u2014 gateway overlay finds [providers. at :204-208 and returns text[:start] + snippet + text[end:] at :249; openrouter overlay at :142-185.",
       "since": "2026-10-05T06:06:09Z"
     },
     {
       "id": "agents-old-degraded",
-      "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, miidas.l1979.ru 200. The wedge class is MITIGATED, not fixed \u2014 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe, miidas-ru-proxy unbounded. 6 cgroup OOM kills this boot, all task=git, the last 2026-10-14 10:15:15Z, none since. Read swap as a gauge, not a trend: 2047 MiB total, 221 MiB used at 06:04Z, down from 1031 MiB because both slots were restarted at 00:24:00Z and 00:25:53Z today \u2014 a slot restart releases its swap, so the figure resets. Those restarts arrived over inbound SSH (2.27.120.75), not from the manager (its log shows only scrape cycles) nor from this lane; same container ids, RestartCount still 0. Per-container cgroup counters reset with the container: maple reads oom_kill 0 since 00:24:01Z and says nothing about its 4 earlier kills \u2014 the kernel's 6 are the lifetime figure. THE MONITORING BLIND IS CLOSED: agents-old carries FIVE green Gatus endpoints \u2014 infra agents-old (host-diag, 5m), the miidas group re-pointed from the dead apps IP to ssh://89.125.120.5:52676 (miidas-manager, miidas-cdp, miidas-landing), plus miidas-slots (2m, telegram alerts, failure-threshold 2) \u2014 so a fourth wedge now PAGES.",
+      "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, miidas.l1979.ru 200. The wedge class is MITIGATED, not fixed \u2014 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe, miidas-ru-proxy unbounded. 6 cgroup OOM kills this boot, all task=git, last 2026-10-14 10:15:15Z, none since. Read swap as a gauge, not a trend: a slot restart releases its swap and resets the figure (1031 -> 221 -> 301 MiB used across 10-18..20, no new kills); the 10-19 resets came from inbound SSH (2.27.120.75), not the manager nor this lane. Per-container cgroup counters reset with the container: maple reads oom_kill 0 since restart, silent on its 4 earlier kills \u2014 the kernel's 6 are the lifetime figure. THE MONITORING BLIND IS CLOSED: agents-old carries FIVE green Gatus endpoints \u2014 infra agents-old (host-diag, 5m), the miidas group re-pointed from the dead apps IP to ssh://89.125.120.5:52676 (manager, cdp, landing), plus miidas-slots (2m, telegram alerts) \u2014 so a fourth wedge now PAGES.",
       "severity": "warning",
       "affects": [
         "miidas",
@@ -210,7 +210,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-19T06:08:45Z",
+  "attested_at": "2026-10-20T06:13:21Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

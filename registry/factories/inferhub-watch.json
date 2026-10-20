@@ -72,7 +72,7 @@
   "announcements": [
     {
       "id": "inferhub-autoswitcher-retired",
-      "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). AMENDED 2026-09-27: enforcement moved from a flag to an opt-in gate \u2014 scripts/sync_usage_logs.py now runs the switcher leg only under an explicit --run-switch, so --skip-switch is a DEPRECATED NO-OP that no longer prevents a switch (#152). A bare run therefore cannot reach it; do not re-arm either path.",
+      "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). AMENDED 2026-10-20: the gate is an explicit --run-switch opt-in \u2014 scripts/sync_usage_logs.py:904 runs the switcher leg only under `if args.run_switch:`, so a bare run cannot reach it and --skip-switch is a DEPRECATED NO-OP that prevents nothing (#152). This supersedes the entry's older evidence rationale, which said --skip-switch disarmed the switch at the source; that mechanism no longer exists. Cron row fef19c4f enabled=0, updated_at 2026-09-18T22:51:42Z, re-read 2026-10-20. Do not re-arm either path.",
       "severity": "warning",
       "since": "2026-09-18T22:51:42Z",
       "affects": [
@@ -129,7 +129,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-19T06:05:33Z",
+  "attested_at": "2026-10-20T06:09:18Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
