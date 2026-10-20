@@ -156,6 +156,26 @@
     {
       "row": 3143,
       "reason": "#424 ruling. '`n=3102` §2' three times -- a ROW reference's own numbered part, used to name a prior ruling's clause. A row is not a document. Class 2."
+    },
+    {
+      "row": 3880,
+      "reason": "#522 claim. Class 5 -- ONE instrument's own clauses. Every section number in this row is a clause of `docs/instruments/kit.md`, the instrument the claimed defect is against: 'Doc sentence applied verbatim to §6.1 as HQ authored it' reports applying HQ's authored class-vocabulary sentence to that delivery doc's closure field. The row abbreviates the document to 'Doc' and never spells the token, which is a real prose defect in a PUBLISHED row -- and #317 makes that unrepairable, because `repair --append-detail` inserts before the canonical trailer and therefore after the citation, leaving an empty repair space. The referent is recorded here because the abbreviation cannot be corrected in place; the next row of this unit names the document properly."
+    },
+    {
+      "row": 3881,
+      "reason": "#523 claim. Class 5 -- the same instrument's own clause. '§9.2 F3 row rewritten to the two-predicate reproduce' reports the rewrite of `docs/instruments/kit.md` §9.2's F3 row, which is that document's currency-check clause and the clause the claimed defect is about. The row writes 'Doc §9.2', abbreviating the document it is repairing; the referent is unambiguous from the row's own subject (#523 is a kit defect and kit.md is the kit instrument's delivery doc), but the token is absent and the published row has no repair space."
+    },
+    {
+      "row": 3882,
+      "reason": "#521 close. Class 5 -- the shared close body for the three-item kit cluster, and its done-when table's final row reads '#523: §9.2's row measures the gap rather than a word list'. That §9.2 is `docs/instruments/kit.md` §9.2's F3 row, the clause #523 rewrote; the close reports it as a criterion it satisfied. The table cell abbreviates the document because the row's own head names the kit cluster the whole table is about, and a table cell has no room to repeat a path in every row. Same body published for the sibling subjects at n=3884 and n=3886."
+    },
+    {
+      "row": 3884,
+      "reason": "#522 close. Identical body to n=3882 -- the three kit items shared one close text, so the same '§9.2's row' table cell appears here. The referent is `docs/instruments/kit.md` §9.2's F3 row, the clause #523 rewrote and #522's close reports as satisfied. Class 5, and the duplication is deliberate: each subject carries its own close row rather than one row closing three units."
+    },
+    {
+      "row": 3886,
+      "reason": "#523 close. Identical body to n=3882 and n=3884. '§9.2's row measures the gap rather than a word list' names `docs/instruments/kit.md` §9.2's F3 row, which is this subject's own remedy and the last criterion in the table. Class 5 -- the row is about ONE instrument and every section number in it is that instrument's own."
     }
   ]
 }
