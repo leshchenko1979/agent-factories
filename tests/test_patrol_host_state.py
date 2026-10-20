@@ -851,6 +851,91 @@ def test_the_negative_control_BITES_a_date_only_predicate_would_fire_on_the_exem
     rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
     assert rc == 0, f"the shipped predicate must not fire on the exemplar\n{out}"
 
+def test_an_instant_inside_a_CITATION_is_REPORTED_and_never_judged() -> None:
+    """#478 ARM A — an instant that CITES a source record is a citation, not state.
+
+    The box's own `factory-publish` prompt cites a ruling by its timestamp. The leg judged
+    that instant as an embedded boundary and red the row, so the class fired on a prompt
+    whose only sin is saying WHEN something was decided. The carve-out is the citation
+    itself: a clause naming a source record and asserting no state word is REPORTED.
+
+    Reported, not silently dropped — an exclusion that prints nothing is indistinguishable
+    from a predicate that never looked, which is the defect one bucket over.
+    """
+    rows = [
+        _thin("factory-triage-patrol"),
+        _thin("factory-publish",
+              prompt="The pusher is fetched from origin/main and run with --repo, per "
+                     "ruling n=3263 (issue #469, 2026-10-11T12:59:43Z)."),
+    ]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+    assert rc == 0, (
+        f"an instant inside a citation is not embedded state\n{out}"
+    )
+    assert "instant in a citation: factory-publish" in out, (
+        f"the row must be REPORTED with its instant — a carve-out that prints nothing is "
+        f"a false clean one layer down\n{out}"
+    )
+    judged = [line for line in out.splitlines() if line.startswith("    - ")]
+    assert not any("factory-publish" in line for line in judged), (
+        f"a citation must never reach the problems list\n{judged}\n{out}"
+    )
+
+def test_the_citation_carve_out_CANNOT_swallow_a_real_boundary() -> None:
+    """#478 ARM B — the carve-out is strictly NARROWER than the class it excuses.
+
+    A clause can name a source record AND assert state: "per ruling n=3263 the boundary
+    opens 2026-10-11T12:59:43Z" cites a ruling and states a window. If the carve-out keyed
+    on the citation alone it would swallow that boundary, and the leg would stop seeing the
+    one shape it exists to catch. The state word wins, so the instant stays JUDGED.
+
+    This is the arm that makes ARM A safe: without it, ARM A proves only that the leg can
+    stop looking.
+    """
+    rows = [
+        _thin("factory-triage-patrol"),
+        _thin("factory-boundary-citer",
+              prompt="Per ruling n=3263 the window opens 2026-10-11T12:59:43Z and every "
+                     "row after it must declare its receipt."),
+    ]
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+    assert rc == 1, (
+        f"a citation that ALSO asserts a boundary must stay judged — the carve-out is a "
+        f"citation predicate, not a licence\n{out}"
+    )
+    assert "factory-boundary-citer" in out, out
+    assert "instant in a citation: factory-boundary-citer" not in out, (
+        f"the row asserts state, so it must not be excused as a citation\n{out}"
+    )
+
+def test_the_citation_carve_out_MUTATION_control_reverting_it_reddens_ARM_A() -> None:
+    """The control is not decorative: neuter the carve-out and ARM A's row must go RED.
+
+    A probe that passes whether or not the mechanism exists proves nothing about the
+    mechanism. Neuter `is_citation_instant` to the pre-#478 behaviour (no instant is ever a
+    citation) and the same fixture that was green must fail — that is what makes ARM A
+    evidence rather than decoration.
+    """
+    rows = [
+        _thin("factory-triage-patrol"),
+        _thin("factory-publish",
+              prompt="The pusher is fetched from origin/main and run with --repo, per "
+                     "ruling n=3263 (issue #469, 2026-10-11T12:59:43Z)."),
+    ]
+    saved = RUNNER.is_citation_instant
+    try:
+        RUNNER.is_citation_instant = lambda text, start: False
+        rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+        assert rc == 1, (
+            f"the control must BITE: with the carve-out neutered, the citation is judged "
+            f"as an embedded boundary and the row goes red\n{out}"
+        )
+        assert "factory-publish" in out, out
+    finally:
+        RUNNER.is_citation_instant = saved
+    rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home"], prefixes=["factory-"])
+    assert rc == 0, f"the shipped predicate must excuse the citation again\n{out}"
+
 def test_the_leg_binds_to_the_SHARED_predicate_and_the_shared_registry() -> None:
     """One predicate, one home — imported, never re-derived.
 

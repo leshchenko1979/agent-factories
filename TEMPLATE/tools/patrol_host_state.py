@@ -503,6 +503,40 @@ CRON_THINNESS_PREDICATE = REPO / "tests" / "test_cron_thinness.py"
 EMBEDDED_INSTANT_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}[T ]\d{2}:\d{2}")
 BARE_DATE_RE = re.compile(r"\b20\d{2}-\d{2}-\d{2}\b")
 
+# --- an instant in a CITATION is REPORTED, never judged (#478) -------------------
+#
+# The class above reserves the citation role for BARE DATES and says so in its own words:
+# "A bare date is most often a CITATION of when something was decided — the past, not
+# state — so it is REPORTED and never judged." The measurement that chose the instant
+# predicate assumed instants are always state, and that assumption is falsified by a
+# prompt that CITES a ruling whose timestamp happens to be instant-form: `(issue #469,
+# ruling 2026-10-11T12:59:43Z)` was returned as the row's own embedded boundary and
+# printed as "the prompt is a COPY that drifts", which is a false RED on a ratified row
+# (#478, the q44 decision at ledger n=3354 — "admit a bounded chained pipeline AND stop
+# judging a citation").
+#
+# THE CARVE-OUT IS NARROWER THAN THE CLASS, deliberately, and the asymmetry is the point:
+# the instant is judged UNLESS its clause names a SOURCE RECORD and asserts no state. Any
+# boundary/window/epoch/deadline word in the same clause keeps it judged, so a clause that
+# cites a ruling AND sets a window still fires. An exemption that swallows a near-miss
+# converts a false RED into a false clean, and the false clean is the expensive direction.
+#
+# The reported population is PRINTED like the bare-date population beside it: an instant
+# dropped silently would be the same defect one layer down.
+_CITATION_CLAUSE_BREAKS = ".;:\n—("
+
+CITATION_SOURCE_RE = re.compile(
+    r"\b(?:rulings?|ruled|issue|issues|ledger|cited|citation|decided|filed)\b"
+    r"|#\d+|\bn=\d+",
+    re.IGNORECASE,
+)
+
+STATE_ASSERTION_RE = re.compile(
+    r"\b(?:boundar(?:y|ies)|windows?|epochs?|deadlines?|cut-?offs?|expir(?:y|es|ing)|"
+    r"opens?|closes?|starts?|ends?|since|until)\b",
+    re.IGNORECASE,
+)
+
 # --- the notify-receipt leg (#122) ---------------------------------------------
 #
 # Origin (issue #122, ruled at ledger n=772..774). A thin-trigger cron's notify can FAIL
@@ -2175,22 +2209,51 @@ def attribute_rows(rows: list[dict], prefixes: list[str]) -> tuple[list[dict], l
     return attributed, unattributed
 
 
-def embedded_law_content(prompt: str) -> tuple[str, str]:
-    """(embedded instant, bare date) for one prompt — at most one of them is non-empty.
+def _citation_clause(text: str, start: int) -> str:
+    """The clause the instant at `start` sits in — text back to the nearest break.
 
-    The two are RETURNED APART rather than folded into one verdict, because they are
-    different findings: an instant is drift-prone STATE and is judged, while a bare date is
-    a citation of the past and is only REPORTED. Collapsing them would make the citation
-    indistinguishable from the state, which is the false positive this class measured on
-    the box's own best-shaped row (whose bare date sits in a
-    rationale explaining why its prompt is THIN).
+    The clause, not the sentence, because a citation is commonly parenthesised: cutting at
+    `(` makes `(issue #469, ruling 2026-10-11T12:59:43Z)` its own clause instead of
+    dragging the preceding sentence's words into the verdict.
+    """
+    head = text[:start]
+    cut = max((head.rfind(ch) for ch in _CITATION_CLAUSE_BREAKS), default=-1)
+    return head[cut + 1:]
+
+def is_citation_instant(text: str, start: int) -> bool:
+    """Does the instant at `start` CITE a source record rather than assert state?
+
+    True only when its clause names a source record (a ruling, an issue, a ledger row, a
+    `#N`, an `n=N`) AND carries no boundary/window/epoch/deadline word. Everything else —
+    including a clause that says nothing recognisable — is False, so the instant stays
+    judged: the carve-out can only ever remove a false positive, never create a false clean.
+    """
+    clause = _citation_clause(text, start)
+    if not CITATION_SOURCE_RE.search(clause):
+        return False
+    return not STATE_ASSERTION_RE.search(clause)
+
+def embedded_law_content(prompt: str) -> tuple[str, str, str]:
+    """(judged instant, bare date, cited instant) — at most one is non-empty.
+
+    The three are RETURNED APART rather than folded into one verdict, because they are
+    different findings: an instant is drift-prone STATE and is judged, a bare date is a
+    citation of the past and is only REPORTED, and an instant sitting in a CITATION is the
+    same citation wearing a time component — reported for the same reason (#478). Collapsing
+    them would make the citation indistinguishable from the state, which is the false
+    positive this class measured on the box's own best-shaped row (whose bare date sits in a
+    rationale explaining why its prompt is THIN) and then repeated on a prompt that cited a
+    ruling by its timestamp.
     """
     text = prompt or ""
-    instant = EMBEDDED_INSTANT_RE.search(text)
-    if instant:
-        return instant.group(0), ""
+    for match in EMBEDDED_INSTANT_RE.finditer(text):
+        if not is_citation_instant(text, match.start()):
+            return match.group(0), "", ""
+    cited = EMBEDDED_INSTANT_RE.search(text)
+    if cited:
+        return "", "", cited.group(0)
     date = BARE_DATE_RE.search(text)
-    return "", (date.group(0) if date else "")
+    return "", (date.group(0) if date else ""), ""
 
 def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
                       prefixes: list[str], *, predicate=None, read_at: str = "") -> dict:
@@ -2268,12 +2331,16 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
 
     law_content: list[dict] = []
     dated_only: list[dict] = []
+    cited_only: list[dict] = []
     for row in rows:
         row_name = str(row.get("name") or "")
-        instant, bare = embedded_law_content(str(row.get("prompt") or ""))
+        instant, bare, cited = embedded_law_content(str(row.get("prompt") or ""))
         if instant:
             law_content.append({"name": row_name, "home": str(row.get("home") or ""),
                                 "instant": instant, "owner": _declares(row_name)})
+        elif cited:
+            cited_only.append({"name": row_name, "home": str(row.get("home") or ""),
+                               "instant": cited, "owner": _declares(row_name)})
         elif bare:
             dated_only.append({"name": row_name, "home": str(row.get("home") or ""),
                                "date": bare, "owner": _declares(row_name)})
@@ -2316,6 +2383,10 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
             "rows_scanned": len(rows),
             "law_content_rows": law_content,
             "dated_not_boundary_rows": dated_only,
+            # An instant that CITES a source record is the same citation the bare-date arm
+            # above reports, wearing a time component. Printed for the same reason: a
+            # carve-out that drops the population is a false clean one layer down (#478).
+            "cited_instant_rows": cited_only,
             # #148's scheduled check: the CURRENT delivery path of every attributed row,
             # named per row. Printed every run, so the state is asserted by the run rather
             # than predicted by a plan (ruling n=1169 criterion 3).
@@ -9160,8 +9231,9 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             lines.append(
                 f"  law-content scan: {cov['rows_scanned']} row(s) examined, "
                 f"{len(cov['law_content_rows'])} embed a boundary/window/epoch the law "
-                f"owns, {len(cov['dated_not_boundary_rows'])} carry a bare date (a "
-                f"citation of the past, reported and never judged)"
+                f"owns, {len(cov['dated_not_boundary_rows'])} carry a bare date and "
+                f"{len(cov.get('cited_instant_rows', []))} an instant in a CITATION (both "
+                f"citations of the past, reported and never judged)"
             )
             for row in cov["law_content_rows"]:
                 owner = row["owner"] or row["home"] or "unknown"
@@ -9174,6 +9246,13 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 lines.append(
                     f"    dated, not a boundary: {row['name']} (owner {owner}) carries "
                     f"{row['date']}"
+                )
+            for row in cov.get("cited_instant_rows", []):
+                owner = row["owner"] or row["home"] or "unknown"
+                lines.append(
+                    f"    instant in a citation: {row['name']} (owner {owner}) cites "
+                    f"{row['instant']} — a reference to when something was decided, not a "
+                    f"boundary the prompt asserts"
                 )
             routes = cov.get("attributed_routes", [])
             lines.append(

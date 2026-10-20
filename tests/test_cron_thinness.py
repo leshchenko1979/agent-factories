@@ -83,19 +83,28 @@ three holds — none droppable:
   (i)   `is_wake_only(prompt)` — the row DECLARES itself wake-only. The EXISTING predicate,
         reused and never re-implemented: excusing on the marker ALONE is a question #118
         already refused verbatim, and this does not reopen it.
-  (ii)  exactly ONE command line, and that line is not CHAINED. `cd X && git pull && git
-        push` is three commands wearing one line, and a job whose length is not bounded by
-        its text is not a bounded job.
+  (ii)  exactly ONE command line, and that line is either UNCHAINED or a BOUNDED PIPELINE.
+        `cd X && git pull && git push` is three commands wearing one line, and a job whose
+        length is not bounded by its text is not a bounded job. But a chained line whose
+        every stage is a mechanical read and whose FINAL stage runs a versioned repo file
+        IS bounded (#478): #469's ratified repair is fetch -> extract -> run, and no single
+        unchained command can resolve a tool from `origin/main` at run time, because a
+        bootstrap script would itself need resolving (the regress #469 exists to break).
+        A stage that moves a ref or rewrites the tree is what makes a chain unbounded.
   (iii) that command's logic is a VERSIONED REPO FILE — a path ending `.py` or `.sh` —
-        rather than inline shell. This is the half that makes the job reviewable and
-        fixable where it lives, and it is #118's stated key made checkable.
+        rather than inline shell. For a chained line this reads the FINAL stage, because
+        that is the stage that does the work; a git OBJECT SPEC (`origin/main:x.py`) is a
+        blob, never an executed program, and is skipped. This is the half that makes the
+        job reviewable and fixable where it lives, and it is #118's stated key made
+        checkable.
 
 A no-wake row that fails ANY conjunct still REDS, and its message names WHICH conjunct
 failed: an exemption that swallows a near-miss converts a false RED into a false clean.
 The live population is the proof it is not a blanket waiver — `factory-publish` (ops home)
-is excused, one unchained `python3 .../tools/publish.py --apply`, while `redevest-ai git
-sync` (`cd /root/redevest-ai && git pull --rebase && git push`) stays a problem and is now
-named for the three conjuncts it fails rather than by accident.
+is now EXCUSED on its three-stage chain (`git fetch` && `git show > /tmp/x.py` && `python3
+/tmp/x.py --apply`), which is the row #469's repair created and this class used to report
+as a defect, while `redevest-ai git sync` (`cd /root/redevest-ai && git pull --rebase &&
+git push`) stays a problem on its mutating stages and on a final stage that runs no script.
 
 WHAT CONJUNCT (iii) DOES NOT CLAIM. The predicate reads the FORM of the path, never the
 filesystem: whether the named file is under version control is not decidable from a
@@ -188,6 +197,28 @@ SHELL_COMMANDS = frozenset({
 # command line" however few newlines the prompt has.
 CHAIN_RE = re.compile(r"&&|\|\||;|\|")
 
+# A chained line is still BOUNDED when its stages are mechanical and none of them mutates
+# the working tree or a branch (#478, the q44 decision at ledger n=3354). `git fetch` and
+# `git show` are deliberately ABSENT from this set: #469's ratified repair is
+# fetch -> extract -> run, and it is the row this class was silently reddening.
+# The set is the mutating half of git on purpose — a stage that moves a ref, rewrites the
+# tree or stages work is the difference between "a pipeline of reads ending in a script"
+# and "three commands wearing one line", which is the shape the class exists to reject.
+TREE_MUTATING_GIT = frozenset({
+    "push", "pull", "merge", "rebase", "commit", "add", "rm", "mv", "reset",
+    "checkout", "switch", "restore", "clean", "stash", "cherry-pick", "revert",
+    "am", "apply", "clone", "init", "tag",
+})
+
+# The stages of a chained line, in order, with the separators removed.
+_PIPELINE_SPLIT_RE = re.compile(r"&&|\|\||;|\|")
+
+# git flags that take a VALUE in the next token. The value is skipped when locating the
+# SUBCOMMAND, because `git -C /root/x push` puts a path where the verb is read from.
+GIT_FLAGS_WITH_VALUE = frozenset({
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path",
+})
+
 # A leading list marker ("1. ", "2) ", "- ") is the prompt's NUMBERING, not its command.
 _LIST_MARKER = re.compile(r"^\s*(?:\d+[.)]|[-*])\s+")
 
@@ -215,25 +246,90 @@ def _command_lines(prompt: str) -> list[str]:
             found.append(line)
     return found
 
-def _versioned_script(command: str) -> str | None:
-    """The repo-file path `command` names, or None when its logic is inline.
+def _pipeline_stages(command: str) -> list[str]:
+    """The stages of a chained `command`, in order, separators removed."""
+    return [stage.strip() for stage in _PIPELINE_SPLIT_RE.split(str(command)) if stage.strip()]
 
-    The first token ending in a script suffix, with the punctuation a sentence wraps
-    around a path stripped — the same treatment the shared `head=` reader gives a value.
+def _versioned_script(command: str) -> str | None:
+    """The repo-file path `command` EXECUTES, or None when its logic is inline.
+
+    A token that is a GIT OBJECT SPEC is skipped rather than returned: `git show
+    origin/main:tools/publish.py > /tmp/x.py` names a blob with a script suffix, and the
+    program that RUNS is `/tmp/x.py` (#478's recorded observation — the predicate was
+    answering with the refspec and its stated intent is the executed path). A refspec is
+    recognised by its `ref:path` form, which no executable path carries.
     """
     for token in command.split():
         cleaned = token.strip("'\"`()[]{}")
+        if ":" in cleaned and "/" in cleaned.split(":", 1)[0]:
+            continue
         if cleaned.endswith(SCRIPT_SUFFIXES):
             return cleaned
     return None
+
+def _mutating_stage(stage: str) -> str:
+    """The mutating git invocation in `stage`, or "" when the stage does not mutate.
+
+    Empty when the stage is not git at all: the class admits any mechanical command as a
+    pipeline stage, and only git carries the tree-and-ref mutations this bound names.
+
+    The flag VALUES are skipped, not counted as the subcommand: `git -C /root/x push`
+    carries a PATH in the position a naive read would call the verb, and reading it there
+    would report a mutating stage as clean — a false clean in the one direction that
+    matters (#478).
+    """
+    tokens = stage.split()
+    if not tokens or tokens[0] != "git":
+        return ""
+    index = 1
+    while index < len(tokens):
+        token = tokens[index]
+        if token in GIT_FLAGS_WITH_VALUE:
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        return token if token in TREE_MUTATING_GIT else ""
+    return ""
+
+def _bounded_pipeline(command: str) -> tuple[bool, str]:
+    """(bounded, reason_it_is_not) for a CHAINED command line.
+
+    BOUNDED means every stage is a mechanical command and none of them mutates the working
+    tree or a branch, and the FINAL stage executes a versioned repo file — the logic that
+    runs is then reviewable where it lives, which is conjunct (iii)'s own key applied to
+    the stage that actually does the work. The definition is textual, like the rest of this
+    predicate: it reads the FORM of the command and never the filesystem (#119).
+    """
+    stages = _pipeline_stages(command)
+    if len(stages) < 2:
+        return False, "it does not split into stages"
+    for stage in stages:
+        mutating = _mutating_stage(stage)
+        if mutating:
+            return False, (
+                f"the stage {stage!r} MUTATES the tree or a branch (`git {mutating}`), so "
+                f"the pipeline is not a sequence of reads"
+            )
+    final = stages[-1]
+    script = _versioned_script(final)
+    if script is None:
+        return False, (
+            f"its FINAL stage {final!r} executes no versioned repo file (a path ending .py "
+            f"or .sh), so the stage that does the work is inline and cannot be reviewed "
+            f"where it lives"
+        )
+    return True, ""
 
 def thin_no_wake_class(prompt: str) -> tuple[bool, str, list[str]]:
     """(excused, command, failing_conjuncts) for a row whose wake is `none`.
 
     THE #177 CLASS — a BOUNDED MECHANICAL JOB. A no-wake row is a P7 violation by default,
     because the cron's own session is the only executor. But a row that DECLARES itself
-    wake-only and runs exactly one unchained command whose logic lives in a versioned repo
-    file is the cron doing its bounded job — #118's own key, "in a repo script rather than
+    wake-only and runs exactly one command whose logic lives in a versioned repo file — a
+    single line that is either unchained or a BOUNDED pipeline — is the cron doing its
+    bounded job — #118's own key, "in a repo script rather than
     in the payload", made checkable. Excusing on the wake-only marker ALONE is a question
     #118 already refused verbatim and is NOT reopened here.
 
@@ -262,11 +358,17 @@ def thin_no_wake_class(prompt: str) -> tuple[bool, str, list[str]]:
     else:
         chained = list(dict.fromkeys(CHAIN_RE.findall(command)))
         if chained:
-            failures.append(
-                f"its single command line is CHAINED ({', '.join(chained)}), so one line "
-                f"runs more than one command: {command!r}"
-            )
-        if _versioned_script(command) is None:
+            bounded, why_not = _bounded_pipeline(command)
+            if not bounded:
+                failures.append(
+                    f"its single command line is CHAINED ({', '.join(chained)}) and the "
+                    f"chain is not a BOUNDED pipeline: {why_not}. A chained line is "
+                    f"admitted only when every stage is mechanical, no stage mutates the "
+                    f"tree or a branch, and the FINAL stage runs a versioned repo file "
+                    f"(#478): {command!r}"
+                )
+        final_stage = _pipeline_stages(command)[-1] if chained else command
+        if _versioned_script(final_stage) is None:
             failures.append(
                 f"its command names no versioned repo file (a path ending .py or .sh), so "
                 f"the logic is INLINE shell and cannot be reviewed or fixed where it "
@@ -319,10 +421,11 @@ def pacemaker_problems(rows: list[dict]) -> tuple[list[str], list[str]]:
             if excused_thin:
                 excused.append(
                     f"{name}: no wake, and none is needed — a BOUNDED mechanical job "
-                    f"(#177 class): one unchained command whose logic is the versioned repo "
-                    f"file it names, so the cron does its own bounded work and has no lane "
-                    f"to wake. command: {command!r} (bound: exactly one command, not "
-                    f"chained, logic in a repo file)"
+                    f"(#177 class): one command whose logic is the versioned repo file it "
+                    f"names — unchained, or a bounded pipeline of reads ending in that "
+                    f"file — so the cron does its own bounded work and has no lane to "
+                    f"wake. command: {command!r} (bound: exactly one command line, either "
+                    f"unchained or bounded, logic in a repo file)"
                 )
                 continue
             problems.append(
@@ -634,7 +737,8 @@ def _thin_job(body: str) -> str:
     return _THIN_JOB_HEAD + body + _THIN_JOB_TAIL
 
 def test_the_bounded_job_class_excuses_and_NAMES_the_command() -> None:
-    """#177: wake-only AND one unchained command AND logic in a versioned repo file.
+    """#177: wake-only AND one command (unchained or a bounded pipeline) AND logic in a
+    versioned repo file.
 
     The live shape is `factory-publish` (ops home). The assertion that matters is that the
     excuse NAMES THE COMMAND: a count cannot be dispatched, claimed or closed, and an
@@ -650,7 +754,72 @@ def test_the_bounded_job_class_excuses_and_NAMES_the_command() -> None:
     assert "publish.py" in excused[0], excused
     assert "BOUNDED" in excused[0], excused
 
-def test_the_bounded_job_class_names_WHICH_conjunct_failed() -> None:
+def test_the_bounded_PIPELINE_is_excused_on_the_469_chain() -> None:
+    """#478 half 1: a chained line is admitted when it is a BOUNDED pipeline.
+
+    The command below is VERBATIM the one #469's ratified repair mandates, and it is the
+    row this class used to report as a defect — the class's own documented positive example
+    was replaced by its own defect report. Every stage is a read (fetch, show) and the
+    final stage runs a versioned script, so the job is still bounded: the chain IS the
+    mechanism, because no single unchained command can resolve a tool from `origin/main`
+    at run time (a bootstrap script would itself need resolving — the regress #469 breaks).
+    """
+    command = (
+        "git -C /root/agent-factories fetch origin main -q && "
+        "git -C /root/agent-factories show origin/main:tools/publish.py > "
+        "/tmp/publish-from-origin.py && "
+        "python3 /tmp/publish-from-origin.py --repo /root/agent-factories --apply"
+    )
+    rows = [_row("factory-publish", _thin_job("  " + command), None)]
+    assert row_wake(rows[0]) == "none", row_wake(rows[0])
+    problems, excused = pacemaker_problems(rows)
+    assert problems == [], problems
+    assert len(excused) == 1, excused
+    assert "publish-from-origin.py" in excused[0], excused
+    assert "BOUNDED" in excused[0], excused
+
+def test_the_bounded_PIPELINE_bites_on_a_MUTATING_stage() -> None:
+    """#478 half 1, the other arm: the bound is not "any chain with a script at the end".
+
+    A pipeline whose middle stage moves a ref or rewrites the tree is NOT a sequence of
+    reads, so it stays a defect even though its final stage is a versioned script. Without
+    this arm the admission would be a blanket waiver wearing a script suffix, and the
+    `redevest-ai` negative specimen would be excusable by appending `&& python3 x.py`.
+    """
+    arms = {
+        "pull": "cd /root/x && git pull --rebase && python3 /root/x/tools/publish.py --apply",
+        "push-via-dash-C": "git -C /root/x push && python3 /root/x/tools/publish.py --apply",
+        "commit": "git -C /root/x commit -am wip && python3 /root/x/tools/publish.py --apply",
+    }
+    problems, excused = pacemaker_problems(
+        [_row(k, _thin_job("  " + v), None) for k, v in arms.items()])
+    assert excused == [], excused
+    assert len(problems) == len(arms), problems
+    named = {k: next(p for p in problems if f"{k}:" in p) for k in arms}
+    for key, problem in named.items():
+        assert "MUTATES" in problem, (key, problem)
+    # the subcommand is read PAST the flag value: `git -C /root/x push` names `push`
+    assert "`git push`" in named["push-via-dash-C"], named["push-via-dash-C"]
+    assert len(set(named.values())) == len(arms), "the arms must be distinguishable"
+
+def test_the_versioned_script_reads_the_EXECUTED_path_not_the_refspec() -> None:
+    """#478's recorded observation: conjunct (iii) answered with a git OBJECT SPEC.
+
+    `git show origin/main:tools/publish.py` names a BLOB whose path ends in `.py`, so the
+    old first-suffix read returned the refspec and the check that means "the logic is a
+    reviewable repo file" was measuring the wrong token — the executed program is
+    `/tmp/publish-from-origin.py`.
+    """
+    command = ("git -C /r show origin/main:tools/publish.py > /tmp/x.py && "
+               "python3 /tmp/x.py --apply")
+    stages = _pipeline_stages(command)
+    assert _versioned_script(stages[-1]) == "/tmp/x.py", stages[-1]
+    # the refspec is skipped even when it is the only script-shaped token in its stage
+    assert _versioned_script("git -C /r show origin/main:tools/publish.py") is None
+    # and an unchained invocation still reads its own path
+    assert _versioned_script("python3 /r/tools/publish.py --apply") == "/r/tools/publish.py"
+
+
     """The negative control, and it is LOAD-BEARING (#177).
 
     A no-wake row failing ANY conjunct must still RED, and its message must name which one
@@ -660,7 +829,10 @@ def test_the_bounded_job_class_names_WHICH_conjunct_failed() -> None:
     discriminates.
     """
     arms = {
-        "chained": _thin_job("  cd /root/x && python3 /root/x/tools/publish.py --apply"),
+        # RE-ARMED for #478: a chain ending in a versioned script is now BOUNDED and
+        # legitimately excused, so this arm must be a chain that is genuinely unbounded —
+        # every stage a read, but the final stage runs no repo file.
+        "chained": _thin_job("  cd /root/x && git -C /root/x fetch origin main"),
         "inline": _thin_job("  git -C /root/redevest-ai pull --ff-only"),
         "two-lines": _thin_job(
             "  python3 /root/x/tools/publish.py --apply\n  python3 /root/x/other.py"),
