@@ -28,7 +28,7 @@ ruled at ledger `n=1168`.
 The executable is `tools/publish.py`, shipped as a byte-gated pair with
 `TEMPLATE/tools/publish.py`.
 
-## 2. The twelve statuses
+## 2. The thirteen statuses
 
 A round always ends in exactly one of these. `held` is the **only** status that can become
 publishable by waiting — every other terminal status is a verdict the caller must act on.
@@ -47,6 +47,7 @@ publishable by waiting — every other terminal status is a verdict the caller m
 | `unreadable` | the unpushed-commit log could not be read | no |
 | `push-failed` | the push itself was refused | no |
 | `would-publish` | a report-only round found work it *would* publish; it publishes nothing | no |
+| `already-published` | the push was rejected because another pusher landed the same commit first — the remote **carries** it. No receipt is written: this round pushed nothing | it is the goal |
 
 `behind` and `diverged` are **reports the round was asked to make**, not failures: a mere
 ancestor is the normal steady state for a checkout that is not the one advancing `origin/main`,
@@ -56,14 +57,24 @@ publishes nothing.
 **`would-publish` cannot occur under an applying round** — it is the report-only answer, and
 `--wait` implies `--apply`.
 
+**`already-published` is a SUCCESS, not a failure** (#518, ruling n=3841). Two pushers
+sharing one remote is the declared design (#284: the grace window binds the pusher, nothing
+else), so a `git push` rejected with *"cannot lock ref … is at X but expected Y"* is a **ref
+race**: the loser is not wrong about the remote, it was wrong about what a rejection means.
+The round therefore asks the only question that settles it — *does the remote tip **contain**
+the commit I was publishing?* (`git merge-base --is-ancestor`) — rather than trusting the
+rejection. **Containment, never equality**: a remote that advanced *past* our commit also
+carries our work, and an equality test would call that a failure. The server's message is
+preserved in `reason`, so the race stays visible; it just stops being a verdict.
+
 ## 3. The exit codes
 
 Two contracts, because a report and a wait are different questions.
 
 | invocation | exit 0 | exit 1 |
 |---|---|---|
-| `python3 tools/publish.py [--apply]` | the round RAN — `published`, `held`, `in-sync`, `behind`, `diverged`, `would-publish` | the round could not be completed — `no-remote`, `not-on-branch`, `unreachable`, `unreadable`, `push-failed`, `ff-blocked` |
-| `python3 tools/publish.py --wait` | **only** `published` and `in-sync` | **every** other status |
+| `python3 tools/publish.py [--apply]` | the round RAN — `published`, `already-published`, `held`, `in-sync`, `behind`, `diverged`, `would-publish` | the round could not be completed — `no-remote`, `not-on-branch`, `unreachable`, `unreadable`, `push-failed`, `ff-blocked` |
+| `python3 tools/publish.py --wait` | **only** `published`, `in-sync` and `already-published` | **every** other status |
 
 **`not-on-branch` was the defect (issue #482, order 2).** It exited 0 beside the refusals above
 while being a refusal like them, so an rc-only caller could not distinguish it from a round that

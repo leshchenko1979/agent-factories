@@ -1077,6 +1077,162 @@ def remote_tip_is_read_from_the_remote_arm() -> None:
         )
 
 
+def install_pre_push(repo: Path, body: str) -> None:
+    """Put a `pre-push` hook on the WORK repo — the race window, reproduced for real.
+
+    A ref race lives between the moment a round decides to push and the moment the server
+    applies its update: the round's own fetch/ff-only cannot see it, because at sync time
+    the remote is still where the round left it. `pre-push` runs exactly in that window, so
+    a hook that lands a PEER's commit before our update is sent is not a mock of the race —
+    it is the race, with real refs and a real server rejection.
+
+    (A `pre-receive` hook cannot do this: git quarantines the incoming objects, so a ref
+    update from inside that hook fails with "ref updates forbidden inside quarantine
+    environment". Measured, not assumed.)
+    """
+    hooks = repo / ".git" / "hooks"
+    hooks.mkdir(parents=True, exist_ok=True)
+    path = hooks / "pre-push"
+    path.write_text("#!/bin/sh\n" + body, encoding="utf-8")
+    path.chmod(0o755)
+
+def rejected_push_arm() -> None:
+    """Issue #518, ruling n=3841. A rejection is not a verdict about whether work landed.
+
+    Three arms, because the predicate has three outcomes and a control is only a control if
+    it can differ:
+
+      (A) the remote ends up carrying a commit that ADVANCED PAST ours -> `already-published`,
+          exit 0, and NO receipt. CONTAINMENT, not equality: an equality test calls this a
+          failure, which is the same fabricated verdict wearing the opposite sign.
+      (B) the EQUALITY special case, at the predicate: a remote tip that IS our commit.
+      (C) the remote genuinely does NOT carry our commit -> `push-failed`, non-zero, with
+          the server's own message preserved. Without this arm, "always report success"
+          would pass (A) and (B).
+    """
+    old = dt.datetime.now(dt.timezone.utc) - dt.timedelta(seconds=GRACE * 4)
+
+    # (A) CONTAINMENT: a peer advances the branch past our commit while our push is in flight.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote = init_bare(root / "remote.git")
+        repo = init_work(root / "r", remote)
+        commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        sha = commit(repo, "b.txt", when=old)
+
+        peer = root / "peer"
+        git(root, "clone", "-q", str(remote), str(peer))
+        git(peer, "config", "user.email", "peer@probe.invalid")
+        git(peer, "config", "user.name", "peer")
+        git(peer, "fetch", "-q", str(repo), "main")
+        git(peer, "reset", "-q", "--hard", "FETCH_HEAD")
+        peer_commit = commit(peer, "peer.txt")  # a CHILD of our commit
+        install_pre_push(repo, f'git -C "{peer}" push -q origin main:main\nexit 0\n')
+
+        report = pub.publish(repo, remote="origin", branch="main", grace_secs=GRACE, apply=True)
+        tip = git(remote, "rev-parse", "refs/heads/main")
+        rc_ancestor = subprocess.run(
+            ["git", "-C", str(remote), "merge-base", "--is-ancestor", sha, tip]
+        ).returncode
+        receipt = repo / ".git" / "publish-receipt.json"
+
+        check(
+            rc_ancestor == 0 and tip != sha and tip == peer_commit,
+            "the arm's precondition: the remote ADVANCED PAST our commit during our push",
+            f"tip={tip[:8]} ours={sha[:8]} peer={peer_commit[:8]} is-ancestor rc={rc_ancestor}",
+        )
+        check(
+            report["status"] == "already-published",
+            "a rejected push whose commit the remote CONTAINS reports `already-published` "
+            "(containment, not equality)",
+            f"status={report['status']} reason={report.get('reason','')[:240]}",
+        )
+        check(
+            report["status"] not in pub.PLAIN_NONZERO
+            and report["status"] in pub.TERMINAL_PUBLISHED,
+            "`already-published` is terminal-SUCCESS: exit 0 and nothing left to wait for",
+            f"in PLAIN_NONZERO={report['status'] in pub.PLAIN_NONZERO} "
+            f"in TERMINAL_PUBLISHED={report['status'] in pub.TERMINAL_PUBLISHED}",
+        )
+        check(
+            not receipt.exists(),
+            "`already-published` writes NO receipt — this round pushed nothing",
+            f"{receipt} exists; a receipt here forges provenance for a peer's push",
+        )
+        check(
+            bool(str(report.get("reason", "")).strip()),
+            "the server's rejection message is PRESERVED on the success status",
+            "the reason must still say what the server said, so the race stays visible",
+        )
+
+    # (B) THE EQUALITY SPECIAL CASE, at the predicate: tip == sha.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote = init_bare(root / "remote.git")
+        repo = init_work(root / "r", remote)
+        commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        same = git(repo, "rev-parse", "HEAD")
+        unpushed = commit(repo, "b.txt", when=old)
+
+        carries, tip, why = pub.remote_carries(repo, "origin", "main", same)
+        check(
+            carries is True and tip == same and why == "",
+            "the predicate reads a remote tip that IS our commit as CARRIED (the equality case)",
+            f"carries={carries} tip={str(tip)[:8]} ours={same[:8]} why={why}",
+        )
+        carries, tip, why = pub.remote_carries(repo, "origin", "main", unpushed)
+        check(
+            carries is False and tip == same and why != "",
+            "the predicate reads a commit the remote does NOT carry as NOT carried, and says why",
+            f"carries={carries} tip={str(tip)[:8]} ours={unpushed[:8]} why={why}",
+        )
+
+    # (C) THE CONTROL: the remote genuinely does not carry our commit.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote = init_bare(root / "remote.git")
+        repo = init_work(root / "r", remote)
+        base = commit(repo, "a.txt")
+        git(repo, "push", "-q", "origin", "main:main")
+        sha = commit(repo, "b.txt", when=old)
+
+        peer = root / "peer"
+        git(root, "clone", "-q", str(remote), str(peer))
+        git(peer, "config", "user.email", "peer@probe.invalid")
+        git(peer, "config", "user.name", "peer")
+        peer_commit = commit(peer, "divergent.txt")  # a SIBLING of our commit, off `base`
+        install_pre_push(repo, f'git -C "{peer}" push -q origin main:main\nexit 0\n')
+
+        report = pub.publish(repo, remote="origin", branch="main", grace_secs=GRACE, apply=True)
+        tip = git(remote, "rev-parse", "refs/heads/main")
+        rc_ancestor = subprocess.run(
+            ["git", "-C", str(remote), "merge-base", "--is-ancestor", sha, tip]
+        ).returncode
+
+        check(
+            tip != sha and rc_ancestor != 0 and tip == peer_commit,
+            "the control's precondition: the remote does NOT carry our commit",
+            f"tip={tip[:8]} ours={sha[:8]} is-ancestor rc={rc_ancestor}",
+        )
+        check(
+            report["status"] == "push-failed",
+            "a rejected push whose commit the remote does NOT carry still reports `push-failed`",
+            f"status={report['status']} reason={report.get('reason','')[:240]}",
+        )
+        check(
+            report["status"] in pub.PLAIN_NONZERO,
+            "`push-failed` remains a failure the plain path exits non-zero on",
+            f"status={report['status']}",
+        )
+        check(
+            "non-fast-forward" in str(report.get("reason", "")).lower()
+            or "rejected" in str(report.get("reason", "")).lower(),
+            "the genuine failure quotes the server's own message",
+            f"reason={report.get('reason','')[:240]}",
+        )
+
 class SteppingClock:
     """A clock that ADVANCES on every read, so a grace window costs no real seconds.
 
@@ -1310,8 +1466,8 @@ def documented_statuses_arm() -> None:
         f"waitable={len(pub.WAITABLE)} all={len(pub.ALL_STATUSES)}",
     )
     check(
-        len(pub.ALL_STATUSES) == 12 and len(set(pub.ALL_STATUSES)) == 12,
-        "the status set is TWELVE distinct statuses, as the law states",
+        len(pub.ALL_STATUSES) == 13 and len(set(pub.ALL_STATUSES)) == 13,
+        "the status set is THIRTEEN distinct statuses, as the law states",
         f"count={len(pub.ALL_STATUSES)} distinct={len(set(pub.ALL_STATUSES))}",
     )
     twinned = (ROOT / "TEMPLATE" / "docs" / "instruments" / "publish.md").read_bytes()
@@ -1392,6 +1548,7 @@ def main() -> int:
     sync_then_publish_arm()
     sync_blocked_by_a_dirty_tree_arm()
     remote_tip_is_read_from_the_remote_arm()
+    rejected_push_arm()
     wait_publishes_arm()
     wait_stops_on_a_terminal_status_arm()
     wait_timeout_arm()

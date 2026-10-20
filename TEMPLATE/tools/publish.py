@@ -88,22 +88,31 @@ WAIT_POLL_SECS = 15
 ALL_STATUSES = (
     "published", "in-sync", "held", "behind", "diverged", "ff-blocked",
     "not-on-branch", "no-remote", "unreachable", "unreadable", "push-failed",
-    "would-publish",
+    "would-publish", "already-published",
 )
 # The statuses the PLAIN path reports as a FAILURE (exit 1). `behind` and `diverged` are
 # deliberately absent: they are reports the round was asked to make, not failures.
+# `already-published` is absent for the same reason in a stronger form: the work IS on the
+# remote, so calling it a failure would be the fabricated verdict #518 exists to remove.
 PLAIN_NONZERO = (
     "no-remote", "not-on-branch", "unreachable", "unreadable", "push-failed", "ff-blocked",
 )
 
-# THE TWELVE STATUSES, PARTITIONED BY WHAT A BLOCKING CALLER MAY DO WITH THEM (#482).
-# `published` and `in-sync` are the only two that mean the work is on the remote; every other
-# terminal status is a verdict the caller must act on rather than wait through. `held` is the
-# ONLY status that can become publishable by waiting -- it is the grace window working -- so
-# `--wait` loops on that one alone and exits non-zero on all the rest. The terminal,
-# unpublishable set is: no-remote, not-on-branch, unreachable, ff-blocked, behind, diverged,
-# unreadable, push-failed (and `would-publish`, which cannot occur under an applying round).
-TERMINAL_PUBLISHED = ("published", "in-sync")
+# THE THIRTEEN STATUSES, PARTITIONED BY WHAT A BLOCKING CALLER MAY DO WITH THEM (#482).
+# `published`, `in-sync` and `already-published` are the three that mean the work is on the
+# remote; every other terminal status is a verdict the caller must act on rather than wait
+# through. `held` is the ONLY status that can become publishable by waiting -- it is the
+# grace window working -- so `--wait` loops on that one alone and exits non-zero on all the
+# rest. The terminal, unpublishable set is: no-remote, not-on-branch, unreachable,
+# ff-blocked, behind, diverged, unreadable, push-failed (and `would-publish`, which cannot
+# occur under an applying round).
+#
+# `already-published` (#518, ruling n=3841) is TERMINAL-SUCCESS and NOT WAITABLE: a round
+# whose push was rejected because a peer had already landed its commit has nothing left to
+# do. It is a distinct status rather than `published` because the round pushed NOTHING and
+# therefore writes no receipt -- collapsing the two would let a receipt-forging round hide
+# behind a success.
+TERMINAL_PUBLISHED = ("published", "in-sync", "already-published")
 WAITABLE = ("held",)
 LS_REMOTE_TIMEOUT = 30
 GIT_TIMEOUT = 120
@@ -307,6 +316,56 @@ def remote_tip(repo: Path, remote: str, branch: str, *, timeout: int = LS_REMOTE
         return None, f"{remote} carries no refs/heads/{branch}"
     return lines[0].split()[0], ""
 
+
+def remote_carries(repo: Path, remote: str, branch: str, sha: str):
+    """`(carries, tip, reason)` — does the REMOTE contain `sha`? CONTAINMENT, not equality.
+
+    A rejected push is not a verdict about whether the work landed (#518). Two pushers
+    sharing one remote is the DECLARED design (#284: the 900 s window binds the pusher,
+    nothing else), so the loser's `git push` is routinely rejected with the protocol's
+    "cannot lock ref ... is at X but expected Y" -- a REF RACE. The loser is not wrong
+    about the remote; it is wrong about what a rejection MEANS.
+
+    The question to answer is therefore "does the remote tip contain the commit I was
+    publishing?", asked as `git merge-base --is-ancestor <sha> <remote-tip>`. EQUALITY is
+    too narrow and would replace one fabricated verdict with another: a remote that moved
+    FORWARD PAST our commit also carries our work, and an equality test would call that a
+    failure (ruling n=3841).
+
+    FAIL-CLOSED, and loudly: an unreadable remote tip or an unreadable ancestry answer
+    returns `False` with the reason, so the caller keeps `push-failed` and quotes what git
+    actually said. "I could not measure it" must never read as "it landed" -- the same
+    zero-from-a-broken-instrument trap #493 names one arm over.
+    """
+    if not sha:
+        return False, None, "the round holds no intended sha, so containment cannot be asked"
+    tip, why = remote_tip(repo, remote, branch)
+    if tip is None:
+        return False, None, f"the remote tip could not be read: {why}"
+    if tip == sha:
+        # THE EQUALITY CASE, and the common one: the peer landed OUR commit, so the objects
+        # are already here and no transfer is needed.
+        return True, tip, ""
+    # CONTAINMENT BEYOND EQUALITY NEEDS THE TIP'S OBJECTS, which a round that lost a race may
+    # not have: the peer's commit arrived after this round's last fetch. `merge-base` answers
+    # from the LOCAL object database, so without this fetch it exits 128 ("not a valid
+    # object") and a genuine containment would be reported as a failure -- the very defect
+    # this clause exists to remove, one layer down. Measured: without it, a peer advancing
+    # past our commit produced `push-failed` from a correct `merge-base` question.
+    rc, out, err = _git(repo, "fetch", "--quiet", "--no-tags", remote, f"refs/heads/{branch}")
+    if rc != 0:
+        return False, tip, (
+            f"the remote tip {tip[:12]} could not be fetched, so containment could not be "
+            f"measured: {(err or out).strip() or f'git fetch exited {rc}'}"
+        )
+    rc, out, err = _git(repo, "merge-base", "--is-ancestor", sha, tip)
+    if rc == 0:
+        return True, tip, ""
+    if rc == 1:
+        return False, tip, f"{sha[:12]} is not an ancestor of the remote tip {tip[:12]}"
+    return False, tip, (
+        (err or out).strip() or f"git merge-base --is-ancestor exited {rc}"
+    )
 
 def unpushed_commits(repo: Path, remote_sha: str):
     """`(commits, reason)`, NEWEST FIRST. Each carries its lane trailer when it has one."""
@@ -762,8 +821,29 @@ def publish(
     # publish something other than the work it was asked to publish.
     rc, out, err = _git(repo, "push", remote, f"HEAD:{branch}")
     if rc != 0:
+        # A REJECTION IS NOT A VERDICT (#518, ruling n=3841). Before this read, ANY non-zero
+        # rc became `push-failed` -- a TERMINAL status -- so a round that lost a ref race
+        # reported its work as unlanded while the remote already carried it. The rejection
+        # text alone cannot settle it: only the remote can.
+        rejection = (err or out).strip()
+        intended = report["shas"][0] if report["shas"] else ""
+        carries, tip, why = remote_carries(repo, remote, branch, intended)
+        if carries:
+            report["status"] = "already-published"
+            report["remote_tip"] = tip
+            report["reason"] = (
+                f"{remote}/{branch} already carries {intended[:12]} at tip {tip[:12]} — the "
+                f"push was rejected because another pusher landed it first (a REF RACE, not "
+                f"a failure), and the commit is on the remote. NO RECEIPT is written: this "
+                f"round pushed nothing, and a receipt from it would forge provenance for a "
+                f"peer's push. Server said: {rejection}"
+            )
+            return report
         report["status"] = "push-failed"
-        report["reason"] = (err or out).strip()
+        report["reason"] = (
+            f"{rejection} — and the remote does NOT carry {intended[:12]}: {why}"
+            if why else rejection
+        )
         return report
     report["status"] = "published"
 
