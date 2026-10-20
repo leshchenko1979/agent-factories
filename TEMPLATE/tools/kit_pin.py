@@ -62,6 +62,15 @@ TEMPLATE_PREFIX = "TEMPLATE/"
 # rather than merely lagging -- a consumer must accept it rather than refuse the pin.
 CLASSES = ("standalone", "closure", "seed", "shared-surface")
 
+# THE PIN'S OWN VOCABULARY (#522). A pin declares the classes its WRITER knew, so a reader
+# can tell two facts apart that used to read as one refusal: "this class was added after
+# your reader" (a stale READER, whose remedy is to port this file) and "this class is
+# misspelt or invented" (whose remedy is to fix the pin). Without the field the vocabulary
+# is a function of the READER'S AGE, not of the facts -- measured on miidas, which had to
+# port this very file before it could say `shared-surface` about a file it already held.
+CLASS_VOCABULARY_KEY = "class_vocabulary"
+
+
 
 def member_path(manifest_path: str) -> str:
     """A manifest path -> the path that file occupies in a factory's tree.
@@ -124,7 +133,33 @@ def load_pin(path: Path) -> tuple[dict | None, str | None]:
         )
     bad = sorted({classes[p] for p in files if classes[p] not in CLASSES})
     if bad:
-        return None, f"the pin {path} declares unknown class(es) {bad}; expected {list(CLASSES)}"
+        # THREE CASES, THREE FACTS (#522). A class outside this reader's tuple is not
+        # automatically a misspelling: when the pin's own `class_vocabulary` names it, the
+        # class is REAL and this READER predates it. Folding the two into one message sends
+        # a member to re-check spelling when the remedy is to port this file.
+        vocabulary = pin.get(CLASS_VOCABULARY_KEY)
+        writer_knew = (
+            {c for c in vocabulary if isinstance(c, str)}
+            if isinstance(vocabulary, list) else set()
+        )
+        stale = sorted(c for c in bad if c in writer_knew)
+        unknown = sorted(c for c in bad if c not in writer_knew)
+        if stale:
+            return None, (
+                f"the pin {path} declares class(es) {stale}, which THIS READER does not "
+                f"know: this reader knows {list(CLASSES)}, and your pin declares "
+                f"{sorted(writer_knew)}, so the class was added AFTER this reader — port "
+                f"`TEMPLATE/tools/kit_pin.py` and re-run. This is a READER problem, not a "
+                f"misspelling"
+            )
+        return None, (
+            f"the pin {path} declares unknown class(es) {unknown}; expected {list(CLASSES)}"
+            + (
+                f" — the pin's own {CLASS_VOCABULARY_KEY} names {sorted(writer_knew)}, so "
+                f"this is not a class this kit has ever shipped"
+                if writer_knew else ""
+            )
+        )
     return pin, None
 
 

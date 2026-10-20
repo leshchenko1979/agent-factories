@@ -404,6 +404,76 @@ def main() -> int:
                       f"diverging={left} (residue is this shared tree's dirty shipped "
                       f"file(s): {sorted(shared_tree_dirty())})")
 
+    # ARM 8b — THE CLASS VOCABULARY (#522): three cases, three DIFFERENT facts, and a
+    # refusal that names the READER rather than the class list. Before this split the reader
+    # could say only "unknown class(es) … expected […]", which reads as *you misspelt it* —
+    # when the common case is *your reader is older than the fact*. A message naming the
+    # wrong cause sends a member to re-check a name that was correct.
+    import tempfile as _tf  # noqa: PLC0415
+
+    def _class_pin(cls: str, vocabulary) -> dict:
+        pin = {"files": {"tools/probe.py": "0" * 64}, "classes": {"tools/probe.py": cls}}
+        if vocabulary is not None:
+            pin["class_vocabulary"] = vocabulary
+        return pin
+
+    with _tf.TemporaryDirectory() as _tmp:
+        probe = Path(_tmp) / "kit.json"
+
+        def _load(pin: dict):
+            probe.write_text(json.dumps(pin), encoding="utf-8")
+            return KP.load_pin(probe)
+
+        # (1) THE STALE READER: the class is real, this reader predates it, and the pin's own
+        # vocabulary is what says so. The message must name the PORT, not a spelling.
+        _, problem = _load(_class_pin("brand-new-class", ["closure", "standalone",
+                                                          "seed", "brand-new-class"]))
+        check("#522 a class the PIN declares but this READER does not know names the READER "
+              "and the port",
+              problem is not None and "READER" in problem
+              and "port `TEMPLATE/tools/kit_pin.py`" in problem
+              and "misspelling" in problem, (problem or "")[:120])
+
+        # (2) A MISSPELLING stays a misspelling — even WITH a vocabulary present. This is the
+        # control: case (1) must not be reachable by merely carrying a vocabulary.
+        _, problem = _load(_class_pin("standlone", ["closure", "standalone", "seed"]))
+        check("#522 a class in NEITHER list still reads as unknown, vocabulary present",
+              problem is not None and "unknown class(es) ['standlone']" in problem
+              and "port `TEMPLATE/tools/kit_pin.py`" not in problem, (problem or "")[:120])
+
+        # (3) The same misspelling with NO vocabulary at all — an older pin — keeps the
+        # original wording, so a pin written before the field existed is not misreported.
+        _, problem = _load(_class_pin("standlone", None))
+        check("#522 with no `class_vocabulary` the original wording is unchanged",
+              problem is not None and "unknown class(es) ['standlone']" in problem
+              and "class_vocabulary" not in problem, (problem or "")[:120])
+
+        # (4) A KNOWN class still loads — the split must not refuse a lawful pin.
+        pin, problem = _load(_class_pin("closure", ["closure", "standalone", "seed"]))
+        check("#522 a class this reader KNOWS is accepted (the split did not break the "
+              "lawful path)", problem is None and pin is not None, problem or "loaded")
+
+        # (5) A non-list vocabulary is not a licence: it is ignored, and the class reads as
+        # unknown. A reader that trusted a malformed field would refuse nothing.
+        _, problem = _load(_class_pin("brand-new-class", "closure,standalone"))
+        check("#522 a malformed `class_vocabulary` is IGNORED, never read as a licence",
+              problem is not None and "unknown class(es) ['brand-new-class']" in problem,
+              (problem or "")[:120])
+
+        # MUTATION CONTROL — revert the reader to the single-message form and case (1) must
+        # red while case (2) stays green. An arm that only reds together is one arm wearing
+        # two names.
+        saved = KP.CLASS_VOCABULARY_KEY
+        KP.CLASS_VOCABULARY_KEY = "class_vocabulary_RENAMED_AWAY"
+        try:
+            _, problem = _load(_class_pin("brand-new-class", ["closure", "brand-new-class"]))
+        finally:
+            KP.CLASS_VOCABULARY_KEY = saved
+        check("CONTROL: with the vocabulary key unread, case (1) collapses to the OLD "
+              "single message — the split is what makes it bite",
+              problem is not None and "port `TEMPLATE/tools/kit_pin.py`" not in problem,
+              (problem or "")[:110])
+
     # ARM 9 — HERMETICITY: every arm ran in a TemporaryDirectory, so our own tree is intact.
     live_after = {p: sha(p) for p in hermetic_inputs}
     check("our own tree was never written to", live_before == live_after,

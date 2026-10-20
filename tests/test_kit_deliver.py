@@ -25,7 +25,9 @@ Exit: 0 all arms hold; 1 a check failed; 0 with a stated SKIP when this tree has
 
 from __future__ import annotations
 
+import copy
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
@@ -119,6 +121,53 @@ def own_gate(root: Path) -> dict:
     return KP.undeclared_divergence(pin, root)
 
 
+def load_deliver():
+    """The tool as a MODULE, so the currency predicate can be driven without a CLI round trip."""
+    spec = importlib.util.spec_from_file_location("kit_deliver_gate", TOOL)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+def _resolves_in_history(digest: str) -> bool:
+    if not digest:
+        return False
+    proc = subprocess.run(["git", "log", "-S", digest, "--format=%H", "--", "registry/kit.json"],
+                          cwd=str(REPO), capture_output=True, text=True)
+    return proc.returncode == 0 and bool(proc.stdout.strip())
+
+def pin_arms(pin: dict) -> tuple[bool, bool, str]:
+    """The TWO #521 arms, evaluated on an arbitrary pin so each can be neutered ALONE.
+
+    (i)  `kit_version` is a digest over THIS pin's own (path, sha256, class) triples — what
+         the pin CARRIES. Recomputed here, never read back.
+    (ii) `source_kit_version` is a digest this repo's HISTORY resolves — the provenance
+         handle a self-digest cannot provide.
+
+    Arm (ii) states which digest it resolved, and falls back to the HEAD manifest's digest
+    ONLY in the one legitimate case: the pin was written from an UNCOMMITTED manifest, whose
+    digest cannot be in history yet. Reading that as a failure would red the gate on the very
+    act that will commit it. Any other unresolvable handle still reds.
+    """
+    sys.path.insert(0, str(REPO / "tools"))
+    import kit_manifest as KM  # noqa: PLC0415
+
+    want = KM.kit_version(pin.get("files") or {}, pin.get("classes") or {})
+    self_consistent = pin.get("kit_version") == want
+
+    src = str(pin.get("source_kit_version") or "")
+    ours = str(json.loads(MANIFEST.read_text(encoding="utf-8")).get("kit_version") or "")
+    if src and src == ours and not _resolves_in_history(src):
+        head = subprocess.run(["git", "show", "HEAD:registry/kit.json"],
+                              cwd=str(REPO), capture_output=True, text=True)
+        try:
+            head_version = str(json.loads(head.stdout).get("kit_version") or "")
+        except (json.JSONDecodeError, AttributeError):
+            head_version = ""
+        return (self_consistent, _resolves_in_history(head_version),
+                "the pin's handle is the UNCOMMITTED manifest's digest, so the HEAD "
+                "manifest's digest was resolved instead")
+    return (self_consistent, _resolves_in_history(src), "the pin's own handle")
+
 def main() -> int:
     print("kit deliver — a factory receives an update as one unit (plan 2646d31a step 7)")
 
@@ -159,11 +208,37 @@ def main() -> int:
               == hashlib.sha256((REPO / FORK).read_bytes() + b"\n# this factory's own fork\n").hexdigest(),
               f"{FORK} still holds the factory's own bytes")
 
-        # ARM 4 — THE PIN MOVED WITH THE BYTES, which is what makes the next arm green.
+        # ARM 4 — THE PIN MOVED WITH THE BYTES, and it answers TWO questions (#521).
         pin = json.loads((root / "registry/kit.json").read_text(encoding="utf-8"))
-        check("the pin moved to the delivered kit version",
-              pin.get("kit_version") == facts["source_version"],
-              f"older-kit-state -> {pin.get('kit_version')}")
+        check("the pin records the SOURCE it was ported from (`source_kit_version`)",
+              pin.get("source_kit_version") == facts["source_version"],
+              f"older-kit-state -> {pin.get('source_kit_version')}")
+
+        self_ok, src_ok, src_note = pin_arms(pin)
+        check("#521 (i) the delivered pin's `kit_version` IS a digest over its own triples",
+              self_ok, f"kit_version={pin.get('kit_version')}")
+        check("#521 (ii) the delivered pin's `source_kit_version` RESOLVES in our history",
+              src_ok, f"{pin.get('source_kit_version')} — {src_note}")
+        check("the pin's `_note` is the PIN's, not the manifest's (#521 point 2)",
+              bool(pin.get("_note")) and "source_kit_version" in pin["_note"]
+              and pin["_note"] != json.loads(MANIFEST.read_text(encoding="utf-8")).get("_note"),
+              "it describes both digests")
+        check("#522 the pin declares the class vocabulary its writer knew",
+              pin.get("class_vocabulary") == sorted(
+                  json.loads(MANIFEST.read_text(encoding="utf-8")).get("class_vocabulary") or []),
+              f"{len(pin.get('class_vocabulary') or [])} class(es)")
+
+        # MUTATION CONTROLS — each arm must red ALONE, or it is one arm wearing two names.
+        bad_self = copy.deepcopy(pin)
+        bad_self["kit_version"] = "deadbeefdead"
+        sc, res, _ = pin_arms(bad_self)
+        check("CONTROL: a `kit_version` that is not the pin's own digest reds arm (i) ALONE",
+              sc is False and res is True, "arm (i) red, arm (ii) green")
+        bad_src = copy.deepcopy(pin)
+        bad_src["source_kit_version"] = "0" * 12
+        sc, res, _ = pin_arms(bad_src)
+        check("CONTROL: a `source_kit_version` that resolves nowhere reds arm (ii) ALONE",
+              sc is True and res is False, "arm (i) green, arm (ii) red")
 
         # ARM 5 — THE FACTORY'S OWN GATE IS GREEN, and it JUDGED something.
         verdict = own_gate(root)
@@ -182,7 +257,72 @@ def main() -> int:
         check("NEGATIVE CONTROL: bytes-moved-pin-not REDS that same gate, naming the file",
               STALE[len("TEMPLATE/"):] in named, f"diverging={named}")
 
-    # ARM 7 — HERMETICITY: nothing above touched our own tree.
+        # ARM 8 — THE CURRENCY LEG (#523): two facts, two responses.
+        KD = load_deliver()
+
+        # (a) REFUSES when the declared manifest disagrees with the tree's own bytes.
+        drift_root = Path(tmp) / "drifting-source"
+        (drift_root / "registry").mkdir(parents=True)
+        (drift_root / "registry/kit.json").write_text(
+            MANIFEST.read_text(encoding="utf-8"), encoding="utf-8")
+        cur = KD.currency(drift_root)
+        check("#523 (a) a manifest that does not describe its tree is a REFUSAL",
+              bool(cur["manifest_problem"]), (cur["manifest_problem"] or "")[:90])
+        # ... and the guard is WIRED, not merely computed: drive deliver() itself.
+        real_currency = KD.currency
+        KD.currency = lambda *a, **k: {"manifest_problem": "synthetic disagreement",
+                                       "changed": [], "missing": [], "unlisted": [],
+                                       "behind": None, "behind_note": ""}
+        try:
+            refused = KD.deliver(root, True)
+        finally:
+            KD.currency = real_currency
+        check("#523 (a) `deliver` REFUSES on that manifest and writes nothing",
+              refused == 1, f"rc={refused}")
+
+        # (b) WARNS on a tree behind its remote, and NEVER fails on it.
+        KD.currency = lambda *a, **k: {"manifest_problem": None, "changed": [], "missing": [],
+                                       "unlisted": [], "behind": 5, "behind_note": ""}
+        try:
+            warned = KD.deliver(root, True)
+        finally:
+            KD.currency = real_currency
+        check("#523 (b) a tree BEHIND its remote is a WARNING, never a refusal",
+              warned == 0, f"rc={warned} behind=5")
+
+        # (b) DEGRADES: no readable origin/main reports UNKNOWN rather than zero.
+        plain = Path(tmp) / "no-remote"
+        plain.mkdir()
+        distance, note = KD._behind(plain)
+        check("#523 (b) with no origin/main the distance reads UNKNOWN, never 0",
+              distance is None and note == KD.CURRENCY_UNKNOWN, note)
+
+        # (b) MEASURED on a real git tree: one commit behind its own origin/main.
+        ahead = Path(tmp) / "behind-by-one"
+        ahead.mkdir()
+        git = ["git", "-C", str(ahead), "-c", "user.email=gate@example.invalid",
+               "-c", "user.name=gate"]
+        subprocess.run(git + ["init", "-q"], check=True, capture_output=True)
+        (ahead / "f.txt").write_text("one\n", encoding="utf-8")
+        subprocess.run(git + ["add", "f.txt"], check=True, capture_output=True)
+        subprocess.run(git + ["commit", "-qm", "one"], check=True, capture_output=True)
+        (ahead / "f.txt").write_text("two\n", encoding="utf-8")
+        subprocess.run(git + ["commit", "-qam", "two"], check=True, capture_output=True)
+        subprocess.run(git + ["update-ref", "refs/remotes/origin/main", "HEAD"],
+                       check=True, capture_output=True)
+        subprocess.run(git + ["reset", "-q", "--hard", "HEAD~1"], check=True, capture_output=True)
+        distance, note = KD._behind(ahead)
+        check("#523 (b) a tree one commit behind origin/main measures EXACTLY 1",
+              distance == 1 and note == "", f"distance={distance} note={note!r}")
+
+        # And our own source state is the control the leg can PASS on.
+        cur = KD.currency()
+        check("#523 control: OUR OWN manifest is honest, so the leg is a guard and not a "
+              "standing red (regenerate with tools/kit_manifest.py if this reds)",
+              cur["manifest_problem"] is None,
+              (cur["manifest_problem"] or "in agreement")[:90])
+
+    # ARM 9 — HERMETICITY: nothing above touched our own tree.
     live_after = {p: sha(p) for p in (MANIFEST, TOOL, REPO / STALE)}
     check("our own tree was never written to", live_before == live_after,
           "manifest, tool and specimen digests identical")

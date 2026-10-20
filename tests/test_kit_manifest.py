@@ -257,7 +257,14 @@ def main() -> int:
         # literal by name). `_note` differs for the other reason -- the manifest describes
         # our own kit, the vehicle instructs a reader about to vendor it. Both are named
         # here so a third field cannot join them silently.
-        return [f for f in ("kit_version", "file_count", "files", "classes")
+        # `source_kit_version` and `class_vocabulary` joined this tuple with #521/#522: the
+        # first is the provenance handle the transport now writes into a pin, and the second is
+        # the class vocabulary a reader older than a class needs. Both are SHARED between the
+        # manifest and the vehicle -- unlike `source_head`, which is tree-bound -- so a vehicle
+        # that dropped either would leave a member unable to answer a question the manifest
+        # answers, and this tuple is what makes that visible rather than silent.
+        return [f for f in ("kit_version", "source_kit_version", "file_count", "files",
+                            "classes", "class_vocabulary")
                 if manifest.get(f) != vehicle.get(f)]
 
     head_pair = _pair_problems("HEAD")
