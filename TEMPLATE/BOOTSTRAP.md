@@ -49,6 +49,22 @@ a green CI is not evidence that every gate passed. `registry/gates.example.json`
 carries the mode map's own documentation, and
 `python3 tests/test_gate_invocation_mode.py --emit-modes` prints the map your tree implies.
 
+**If you wire CI, set `fetch-depth: 0` on `actions/checkout`.** This kit ships no
+`.github/` on purpose — a template cannot know your CI — but a factory that adds one and
+leaves the default depth inherits a **one-commit** history, and a commit-keyed gate then
+false-REDs: `git cat-file -e <sha>^{commit}` cannot tell a TRUNCATED history from a MISSING
+commit, so every exemption keyed on an older commit reads as dead debt. Measured on
+inferhub-watch #207 (run 37441675106, commit `4307170`): the gates went green on
+`fetch-depth: 0`, and the cost was nil — the full-history pack was **77.66 KiB**.
+
+**This requirement is PROSE ONLY, and it says so on purpose.** No gate in this kit can read
+it: the file it constrains is your `.github/workflows/*.yml`, which lives in YOUR repository
+and not in the kit, so a gate here could only assert that these sentences still exist — a
+check that re-reads the marker it just wrote and proves nothing about your CI. The reader is
+therefore the adopter at adoption time, and the check is a one-line review of the workflow
+file. A patrol over member repositories' workflow files would be the mechanical form; it is
+proposed, not built, and deliberately not faked here.
+
 ---
 
 ## Step 0 — Decide the shape
