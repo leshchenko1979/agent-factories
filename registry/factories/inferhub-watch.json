@@ -72,13 +72,13 @@
   "announcements": [
     {
       "id": "inferhub-autoswitcher-retired",
-      "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). AMENDED 2026-10-20: the gate is an explicit --run-switch opt-in \u2014 scripts/sync_usage_logs.py:904 runs the switcher leg only under `if args.run_switch:`, so a bare run cannot reach it and --skip-switch is a DEPRECATED NO-OP that prevents nothing (#152). This supersedes the entry's older evidence rationale, which said --skip-switch disarmed the switch at the source; that mechanism no longer exists. Cron row fef19c4f enabled=0, updated_at 2026-09-18T22:51:42Z, re-read 2026-10-20. Do not re-arm either path.",
+      "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). Enforcement is an OPT-IN gate, not a flag: scripts/sync_usage_logs.py runs the switcher leg only under an explicit --run-switch (`if args.run_switch:`, line 904), so --skip-switch is a DEPRECATED NO-OP that suppresses nothing (#152). The one production caller, tools/usage_logs_turn.sh:37, passes --skip-switch --skip-data --skip-scoreboard and no --run-switch, and --run-switch appears nowhere outside tests/test_sync_switch_optin.py. A bare run therefore cannot reach the switch; do not re-arm either path.",
       "severity": "warning",
       "since": "2026-09-18T22:51:42Z",
       "affects": [
         "infra-factory"
       ],
-      "evidence": "Live cron row this turn: inferhub-auto-switcher fef19c4f-ab16-442e-8ee9-e041d3d0919b enabled=0, updated_at 2026-09-18T22:51:42Z (the since value is that row's last change, which is when the retirement landed in the scheduler). scripts/sync_usage_logs.py passes --skip-switch (issue #96), so the in-process switch call is disarmed at the source. scripts/sync_newapi_channels.py writes the tier fields. skills/inferhub/SKILL.md 1.0.30 carries the retirement law."
+      "evidence": "Measured 2026-10-21: cron row fef19c4f enabled=0, updated_at 2026-09-18T22:51:42Z (ops profile). sync_usage_logs.py:904 gates on `if args.run_switch:`; :665 documents --skip-switch as a DEPRECATED NO-OP. tools/usage_logs_turn.sh:37 passes --skip-switch --skip-data --skip-scoreboard with no --run-switch; --run-switch occurs only in tests/test_sync_switch_optin.py:104/126. skills/inferhub/SKILL.md 1.0.186 carries the retirement law."
     },
     {
       "id": "ops-fallback-chain-reordered",
@@ -129,7 +129,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-20T06:09:18Z",
+  "attested_at": "2026-10-21T06:43:25Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

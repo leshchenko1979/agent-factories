@@ -119,8 +119,8 @@
       "affects": [
         "profile"
       ],
-      "text": "miidas vendors the fleet kit pin (registry/kit.json, version 6ab591c618ec, 128 paths declared) and declares 23 divergences from it in registry/kit-exemptions.json (21 disposition b, 2 disposition c). Its gate 23 (tests/test_kit_pin_member.py \u2014 a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 31 carried paths judged, 1 factory-class path excluded by class, 23 forks declared, 0 undeclared. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red \u2014 that refusal is deliberate, not drift.",
-      "evidence": "Measured 2026-10-09 by the miidas lane: python3 tests/test_kit_pin_member.py rc=0, 'judged 31 carried path(s); 1 factory-class path(s) excluded by class; 23 declared exempt'; 0 undeclared divergence. Pin version 6ab591c618ec, 128 paths declared."
+      "text": "miidas vendors the fleet kit pin (registry/kit.json, 128 paths declared) and declares 23 divergences from it in registry/kit-exemptions.json (21 disposition b, 2 disposition c). CORRECTED 2026-10-21: the pin is NO LONGER version 6ab591c618ec. Under the #521 ruling the pin reads kit_version e534ceb05462 \u2014 a digest over the pin's OWN triples \u2014 plus source_kit_version 52ab5349de52, the provenance handle naming which kit version those triples came from. A reader must not treat the two as one field: the kit_version answers 'what bytes does this pin declare', the source_kit_version answers 'against which kit release'. Its gate 23 (tests/test_kit_pin_member.py \u2014 a SCRIPT, run `python3 tests/test_kit_pin_member.py`; it is not a pytest module and pytest collects nothing from it) reds on any UNDECLARED divergence and passes clean today: 31 carried paths judged, 1 factory-class path excluded by class, 23 forks declared, 0 undeclared. NEW IN THIS NOTICE \u2014 TEMPLATE/tools/questions is declared class `shared-surface`, not `standalone`: it is a WRITE-TARGET whose stale copy mutates another factory's state, which is exactly what #92 was. A peer porting a kit instrument into this factory must add the exemption entry in the same change, or the factory audit goes red \u2014 that refusal is deliberate, not drift.",
+      "evidence": "Measured 2026-10-21T06:14Z by the miidas lane at origin/main tip 350a7af1: python3 tests/test_kit_pin_member.py rc=0, 'judged 31 carried path(s); 1 factory-class path(s) excluded by class; 23 declared exempt'; 0 undeclared divergence. registry/kit.json reads kit_version e534ceb05462 (self-digest), source_kit_version 52ab5349de52, file_count 128; registry/kit-exemptions.json carries 23 entries (21 b, 2 c); TEMPLATE/tools/questions class = shared-surface. Prior evidence (2026-10-09): same gate verdict at pin version 6ab591c618ec."
     },
     {
       "id": "miidas-slot-volume-git-config-carries-remote-credential",
@@ -210,20 +210,20 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-20T06:13:21Z",
+  "attested_at": "2026-10-21T06:51:08Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
       "green": true,
       "behind_by": 6,
-      "measured_at": "2026-10-05T12:51:05Z",
-      "reason": "6 of 15 declared paths held (tools/ledger.py, tests/test_ledger.py, tests/test_ledger_schema.py, tests/test_ledger_no_shrink.py, tests/test_ledger_close_preflight.py, tests/test_ledger_commit_cites_no_rows.py); 9 absent (tools/ledger-index.py, tools/ledger_declaration.py, tools/field_predicate.py, tools/reconstruction.py, tests/ledger_boundary.py, tests/gate_fixtures.py, tests/test_ledger_identity.py, tests/test_ledger_index.py, docs/instruments/ledger.md); 0 of the 6 held byte-identical to canonical. behind_by is 6 on the held-but-lagging predicate and 15 on the adoption-lag predicate (absent + differing) - BOTH stated. green true is a run of THIS turn, not a transcription: tools/ledger.py verify rc=0 (267 rows, monotonic, sequences complete; 1 hand-excused line, #30 missing intake granted 2026-09-19); tests/test_ledger_schema.py rc=0 (267 rows audited); tests/test_ledger_no_shrink.py rc=0 (188 commits, 0 deletions, 0 identity removals, 0 content changes); tests/test_ledger.py, tests/test_ledger_close_preflight.py, tests/test_ledger_commit_cites_no_rows.py each rc=0. Predicate: existence + sha256 of each path in this tree against agent-factories TEMPLATE at origin/main; instant: measured_at. RE-ENTRY CONDITION unchanged: a CLOSURE migration, not a file swap - re-entry is when the missing closure (field_predicate, ledger_declaration, reconstruction, behind their boundary and gate fixtures) is ported and the ported gates run green here; the state then moves to partial with a re-measured behind_by."
+      "measured_at": "2026-10-21T06:14:00Z",
+      "reason": "Paths UNCHANGED: 6 of 15 held, 9 absent, 0 of the 6 byte-identical to canonical (all 6 re-checked sha256 vs TEMPLATE at origin/main this turn). behind_by 6 on held-but-lagging, 15 on adoption-lag \u2014 BOTH stated. green true is a run of THIS turn: tools/ledger.py verify rc=0, 349 rows (this block last read 267, 2026-10-05), monotonic, sequences complete, 1 hand-excused line (#30 missing intake, granted 2026-09-19). RE-ENTRY unchanged: a CLOSURE migration, not a file port."
     },
     "open-questions": {
       "state": "partial",
-      "behind_by": 3,
-      "measured_at": "2026-10-01T06:12:25Z",
-      "reason": "Committed HEAD 057b219 holds 3 of the 4 declared paths; docs/instruments/open-questions.md absent. The canonical count MOVED this round, and it moved the wrong way: at the previous measurement (2026-09-29T11:11:04Z) tests/test_questions.py was canonical (md5 40d821e4, 4432 B, both sides); it is now 99671139 (8796 B) here - changed by 0b6f3ab (#89) - against canonical 9480e513, and it is the 18th declared fork in registry/kit-exemptions.json (class standalone, disposition c, since 2026-09-29), so gate 23 reads it as declared rather than as undeclared divergence. tools/questions 89fdee5d (185758 B) vs canonical 17f7d75f; tools/questions-render.mjs 78401d59 (11326 B) vs canonical 20d924c0. behind_by is 3 on the held-but-lagging predicate (3 held, 0 canonical) and 4 on the adoption-lag predicate (1 absent + 3 differing) - BOTH stated. The forked gate runs green here: python3 tests/test_questions.py rc=0, 241 checks examined, cap 1788.25s (manifest 1798.25s - 10.0s overhead). Predicate: md5 of each path in this tree against the canonical file at agent-factories origin/main 78fa86b; instant: measured_at."
+      "behind_by": 1,
+      "measured_at": "2026-10-21T06:14:00Z",
+      "reason": "MOVED MATERIALLY \u2014 #92 re-ported this instrument. 3 of 4 declared paths held, 1 absent (docs/instruments/open-questions.md). tools/questions md5 a2c9c4a6 (355811 B) and tools/questions-render.mjs md5 8f57eff4 (15617 B) are now BYTE-IDENTICAL to canonical; previously 185758 B and 11326 B, differing. tests/test_questions.py md5 99671139 (8796 B) stays the declared fork (disposition c, since 2026-09-29) and is AHEAD of canonical 9480e513 (5596 B): the kit copy lacks resolve_cap, gate_budget, UNKNOWN_EXIT_CODE, FALLBACK_CAP. behind_by 1 on adoption-lag (1 absent + 0 differing), 0 on held-but-lagging \u2014 BOTH stated. Gate green THIS turn: tests/test_questions.py rc=0, 483 checks, 1682 s of a declared 1852.5 s cap at load 9.97 on 4 cores (the 745 s basis was taken at load 2.45-4.70)."
     }
   }
 }
