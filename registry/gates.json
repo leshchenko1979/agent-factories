@@ -211,6 +211,13 @@
       "measured_sec": 23.39,
       "load_at_measure": 3.78
     },
+    "tests/test_declared_event_population.py": {
+      "budget_sec": 3.51,
+      "margin_x": 5.087,
+      "measured_at": "7ff3e459a9fbb1eb8b004f9d967d87cd0bd51957",
+      "measured_sec": 0.69,
+      "load_at_measure": 2.92
+    },
     "tests/test_ledger_commit_cites_no_rows.py": {
       "budget_sec": 12.75,
       "margin_x": 4.25,
@@ -455,6 +462,7 @@
     "tests/test_ledger_citation_declared.py": "pytest",
     "tests/test_ledger_claim_preflight.py": "pytest",
     "tests/test_ledger_close_preflight.py": "pytest",
+    "tests/test_declared_event_population.py": "script",
     "tests/test_ledger_commit_cites_no_rows.py": "script",
     "tests/test_ledger_factory_scope.py": "script",
     "tests/test_ledger_header_closure.py": "script",
@@ -689,6 +697,9 @@
     "tests/test_ledger_close_preflight.py": {
       "class": "write-path-refusal",
       "refuser": "tools/ledger.py"
+    },
+    "tests/test_declared_event_population.py": {
+      "class": "always-satisfiable"
     },
     "tests/test_ledger_commit_cites_no_rows.py": {
       "class": "exemption-table",

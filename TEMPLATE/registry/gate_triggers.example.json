@@ -123,6 +123,16 @@
       "TEMPLATE/tests/**",
       "tests/**"
     ],
+    "tests/test_declared_event_population.py": [
+      "TEMPLATE/tests/test_declared_event_population.py",
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/ledger-authorizations.json",
+      "docs/ledger-refs-kinds.json",
+      "tests/test_declared_event_population.py",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
+    ],
     "tests/test_docs_sync.py": [
       "TEMPLATE/docs/**",
       "docs/**"

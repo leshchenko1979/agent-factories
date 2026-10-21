@@ -1677,6 +1677,32 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_ledger_refs_preflight.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_ledger_refs_preflight.py"])
 
+    # 74. A DECLARED EVENT'S POPULATION COVERS THE CLAIM POPULATION (#526, ruling n=3908).
+    #     A DECLARED event carries no core matrix row, so its `by_event` entry is its ENTIRE
+    #     population. The vacuity pin in `tests/test_ledger_schema.py` asks whether such an
+    #     event authorizes ANYBODY; it cannot ask whether it authorizes EVERYBODY it should,
+    #     and an event naming 8 of 14 lanes passes it while the six it omits are refused BY
+    #     NAME at the append. Measured twice, both found by MEASUREMENT and never by a gate:
+    #     `conversion` (#462) — `surveys`, the lane the ruling names as the declarer, could
+    #     not write the row its own leg reads, and zero conversion rows existed twelve days
+    #     after the event was created; `release` (#461) — 373 claim rows against 0 release
+    #     rows in 3085, because no lane that could TAKE a claim could WITHDRAW one. The
+    #     population is correct today BY HAND, which is a fact about the current file and not
+    #     a property of the tree, so it decays the moment the next event is declared. The
+    #     gate reads both surfaces through the SHARED reader — `load_refs_kinds` and
+    #     `authorized_for_event`, never a second parse — and takes `claim` as the referent
+    #     because it carries a core row and therefore cannot itself be narrow. An empty
+    #     declaration SKIPS with its reason AND its population printed (#116), because the
+    #     shipped example declares no events and a silent green would be indistinguishable
+    #     from a clean one. It carries its own hermetic bite pair so it is not a vacuous
+    #     green on a population that happens to be right. BOUND, stated so it is not
+    #     reopened: a DETECTOR, not a prevention — nothing offline can require the vocabulary
+    #     half and the authorization half to land in ONE unit (two files, two offices, #210's
+    #     own recorded bound). Paired and REQUIRED: the population is the ledger every
+    #     factory has.
+    if (repo_root / "tests/test_declared_event_population.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_declared_event_population.py"])
+
     # 66. THE SHIPPED TREE'S OWN AUDIT (#199). Nothing in the root audit executed any of the
     #     gates `TEMPLATE/` ships, so a shipped gate that reds or crashes IN THE TREE IT SHIPS
     #     FROM was invisible until someone ran it by hand -- measured: five instances in one

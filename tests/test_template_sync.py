@@ -753,6 +753,13 @@ PAIRS = [
     # same question. Without this entry the gate would exist in both trees with nothing
     # enforcing that they stay identical.
     ("tests/test_declared_boundary_census.py", "TEMPLATE/tests/test_declared_boundary_census.py"),
+    # The declared-event population gate (#526). Paired because the gate drives the SHARED
+    # reader (`ledger_declaration.load_refs_kinds`) and the authorization matrix, and both of
+    # those ship: a factory that took the gate without the reader would be judging a
+    # vocabulary it cannot load, while a copy that drifted would ask a different question of
+    # the same declaration. The declarations themselves are FACTORY DATA and ship as the
+    # `.example` skeletons, so the copy carries the mechanism and the factory its own events.
+    ("tests/test_declared_event_population.py", "TEMPLATE/tests/test_declared_event_population.py"),
     # The cron landing-route gate (#485). Paired because the arm it enforces is the CRON
     # SURFACE, which is a harness table in every factory: a factory that took the gate
     # without the reader it drives, or the reverse, would carry half a check whose other

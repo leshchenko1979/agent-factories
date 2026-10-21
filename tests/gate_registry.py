@@ -995,6 +995,20 @@ REQUIRED_GATES: tuple[str, ...] = (
     # behind; the tool that repairs it may move ONLY by `--ff-only`, and this gate proves the
     # refusal fires before it proves the move works.
     "test_binding_sync.py",
+    # Added with its registration (#526, ruled at ledger n=3908). REQUIRED is the correct
+    # grain: the gate drives a HERMETIC fixture pair under a temp directory — a declaration
+    # naming only the eight instrument lanes must exit 1, the same fixture widened by the six
+    # core claim lanes must clear, an empty declaration must skip with its reason printed — so
+    # it reads no live board, no fleet manifest and no box-local fixture, and passes in a
+    # bootstrapped factory exactly as it does here. It reads THIS tree's declared vocabulary
+    # only to print its population; a factory that has declared no event skips, stated. It is
+    # byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory from
+    # dropping the detector and keeping the vocabulary it would have judged. THE MECHANISM IT
+    # GUARDS: a DECLARED event has no core matrix row, so its `by_event` entry is its ENTIRE
+    # population — and the vacuity pin beside it can see an event that authorizes NOBODY,
+    # never one that authorizes 8 of 14. Measured twice (#462 conversion, #461 release), both
+    # by measurement and neither by a gate.
+    "test_declared_event_population.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather
