@@ -1931,6 +1931,10 @@ def probe_the_stream_join_ranks_what_each_stream_DECLARES() -> None:
          "stderr": "oc-cause-count: 1"},
         {"cmd": "prose/count", "passed": False, "unknown": False, "duration_sec": 1.0,
          "stdout": "an advisory line", "stderr": "3 problem(s) in /repo/x"},
+        {"cmd": "counts/disagree", "passed": False, "unknown": False, "duration_sec": 1.0,
+         "stdout": "oc-cause-count: 2\n- a specimen", "stderr": "oc-cause-count: 5\n- b specimen"},
+        {"cmd": "counts/agree", "passed": False, "unknown": False, "duration_sec": 1.0,
+         "stdout": "oc-cause-count: 3\n- a specimen", "stderr": "oc-cause-count: 3\n- b specimen"},
     ]
     audit.attach_gate_causes(roster)
     check(
@@ -1957,6 +1961,22 @@ def probe_the_stream_join_ranks_what_each_stream_DECLARES() -> None:
         "the count line outranks prose but not the marker — the rank order, not just the fix",
         roster[3].get("note", "").startswith("3 problem(s)"),
         repr(roster[3].get("note")),
+    )
+    check(
+        "BOTH streams declaring DISAGREEING counts names BOTH -- never a silent stdout win",
+        "stdout 2" in roster[4].get("note", "") and "stderr 5" in roster[4].get("note", ""),
+        repr(roster[4].get("note")),
+    )
+    check(
+        "and the disagreement is STATED as one, so the reader sees the two halves conflict",
+        "DISAGREE" in roster[4].get("note", ""),
+        repr(roster[4].get("note")),
+    )
+    check(
+        "counts that AGREE are not a disagreement -- the additive arm, stdout as before",
+        roster[5].get("note", "").startswith("oc-cause-count: 3")
+        and "DISAGREE" not in roster[5].get("note", ""),
+        repr(roster[5].get("note")),
     )
     check(
         "reported_cause itself takes ONE text and is unchanged, so the fix lives in the join",

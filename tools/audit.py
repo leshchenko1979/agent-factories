@@ -1027,11 +1027,29 @@ def gate_cause_from_streams(stdout: str | None, stderr: str | None) -> str:
     adopted the marker reads byte-identically to before.
 
     A tie keeps stdout, deliberately: equal rank means neither stream has a better claim, and
-    preserving the historical winner is the additive half of the change.
+    preserving the historical winner is the additive half of the change -- with ONE exception,
+    below.
+
+    WHEN BOTH STREAMS DECLARE AND THE COUNTS DISAGREE, the note names BOTH (HQ ruling
+    2026-10-21T12). Two streams carrying different totals is itself the finding: silently
+    keeping stdout would report one gate's failure count as if it were the other's, and the
+    disagreement -- the only thing that says the two halves of one gate disagree about what
+    happened -- would be the single fact the note omitted. Both counts are named BEFORE the
+    specimen text, so the bound can truncate a specimen but never a count.
     """
     out_text = stdout or ""
     err_text = stderr or ""
-    if gate_cause_stream_rank(err_text) > gate_cause_stream_rank(out_text):
+    out_rank = gate_cause_stream_rank(out_text)
+    err_rank = gate_cause_stream_rank(err_text)
+    if out_rank == GATE_CAUSE_STREAM_DECLARED and err_rank == GATE_CAUSE_STREAM_DECLARED:
+        out_count = declared_cause_count(out_text)
+        err_count = declared_cause_count(err_text)
+        if out_count is not None and err_count is not None and out_count != err_count:
+            return (
+                f"counts DISAGREE -- stdout {out_count}, stderr {err_count}: "
+                f"{reported_cause(out_text)} | {reported_cause(err_text)}"
+            )[:GATE_CAUSE_LIMIT]
+    if err_rank > out_rank:
         return reported_cause(err_text)
     return reported_cause(out_text) or reported_cause(err_text)
 
