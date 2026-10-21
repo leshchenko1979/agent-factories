@@ -1518,6 +1518,13 @@ def unbound_repo_arm() -> None:
             "and it is NOT a `no-remote` verdict -- nothing was asked of any remote",
             data["status"],
         )
+        rendered = mod.render(mod.unbound_repo_report(mod.REPO))
+        check(
+            "read at" not in rendered and "unpushed" not in rendered,
+            "and its RECORD claims no read instant and no commit count -- nothing was read "
+            "and no repository was opened",
+            rendered,
+        )
 
         remote = init_bare(root / "remote.git")
         work = init_work(root / "work", remote)

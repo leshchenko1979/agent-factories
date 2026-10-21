@@ -1007,7 +1007,19 @@ def wait_for_publish(
             sleep_fn(sleep_for)
 
 def render(report: dict) -> str:
-    """The round's record. Count and shas, never a boolean."""
+    """The round's record. Count and shas, never a boolean.
+
+    A STARTUP REFUSAL prints neither a read instant nor a commit count (#525): nothing was
+    asked of any remote and no repository was chosen, so `read at <instant>` would claim a read
+    that did not happen and `unpushed: 0` would report a count for a tree the round never
+    opened. The status line and the reason are the whole record, which is what the shape
+    actually is.
+    """
+    if report["status"] == "unbound-repo":
+        return "\n".join(
+            [f"publish: {report['status']} — stopped before any remote was read",
+             f"  {report['reason']}"]
+        )
     lines = [
         f"publish: {report['status']} — {report['remote']}/{report['branch']} "
         f"read at {report['read_at']}"
