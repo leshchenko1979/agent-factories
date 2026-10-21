@@ -91,6 +91,9 @@ AUTHORIZED_ACTORS_BY_EVENT: dict[str, tuple[str, ...]] = {
 
 AUTHORIZATIONS_REL = "docs/ledger-authorizations.json"
 AUTHORIZATIONS_EXAMPLE_REL = "docs/ledger-authorizations.example.json"
+REFS_KINDS_REL = "docs/ledger-refs-kinds.json"
+REFS_KINDS_EXAMPLE_REL = "docs/ledger-refs-kinds.example.json"
+
 
 def load_authorizations(repo: Path) -> tuple[tuple[str, ...], dict[str, tuple[str, ...]]]:
     """`(declared_actors, declared_by_event)` — the factory's OWN lanes and what they may write.
@@ -148,6 +151,55 @@ def load_authorizations(repo: Path) -> tuple[tuple[str, ...], dict[str, tuple[st
         out[str(event)] = tuple(str(n) for n in names)
     return tuple(str(a) for a in actors), out
 
+
+def load_refs_kinds(repo: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """`(declared_kinds, declared_events)` — the vocabulary this factory carries BEYOND the core.
+
+    WHY THIS IS A FILE AND NOT A CONSTANT, for the same reason as `load_authorizations`: this
+    module is copied into every factory, so a kind or an event that only ONE factory carries
+    cannot sit in a constant that must match everywhere. Without the seam a member's own
+    vocabulary had no lawful home: `tools/ledger.py` would refuse `ack`, and the only way to
+    carry it was to fork the writer.
+
+    A declaration ADDS; it never removes or redefines a core entry. The core tuple stays the
+    floor, so a factory that declares nothing gets exactly the vocabulary it has today.
+
+    ABSENT MEANS NONE, and MALFORMED IS A PROBLEM — the convention every sibling surface states.
+    Absent or empty is the shipped state of a new factory; a file that exists and cannot be read
+    must never pass quietly, because a declaration that fails to load is indistinguishable from
+    no declaration at all.
+
+    THIS IS THE READER THE GATE MUST USE. The schema gate used to parse this file itself, inside
+    a bare `except (OSError, json.JSONDecodeError): return ()` — so a malformed declaration read
+    as an EMPTY vocabulary, and an empty vocabulary is exactly what the vacuity pin cannot see.
+    One reading, one home.
+    """
+    # The override is the isolation seam, the same shape `OC_AUTHORIZATIONS_PATH` uses: a probe
+    # that read the LIVE declaration would pass or fail on this factory's own vocabulary instead
+    # of on the code.
+    path = Path(os.environ.get("OC_REFS_KINDS_PATH", repo / REFS_KINDS_REL))
+    if not path.is_file():
+        return (), ()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise DeclarationUnreadable([f"{REFS_KINDS_REL} exists but cannot be read: {exc}"]) from exc
+    except json.JSONDecodeError as exc:
+        raise DeclarationUnreadable([f"{REFS_KINDS_REL} is not valid JSON: {exc}"]) from exc
+    if not isinstance(payload, dict):
+        raise DeclarationUnreadable([
+            f"{REFS_KINDS_REL} must be a JSON object carrying `kinds` and `events`"
+        ])
+    out: list[tuple[str, ...]] = []
+    for key in ("kinds", "events"):
+        names = payload.get(key, [])
+        if not isinstance(names, list) or not all(isinstance(n, str) and n.strip() for n in names):
+            raise DeclarationUnreadable([
+                f"{REFS_KINDS_REL} `{key}` must be a list of names — "
+                f"see {REFS_KINDS_EXAMPLE_REL}"
+            ])
+        out.append(tuple(str(n) for n in names))
+    return out[0], out[1]
 
 
 def authorized_for_event(repo: Path, event: str) -> tuple[str, ...]:

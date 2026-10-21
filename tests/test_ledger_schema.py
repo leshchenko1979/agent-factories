@@ -69,6 +69,17 @@ class SkipGate(Exception):
 sys.path.insert(0, str(REPO / "tools"))
 from field_predicate import telemetry_problems  # noqa: E402
 import ledger  # noqa: E402  # the WRITE PATH, for the convergence cases (#50/#53)
+# Role-to-Event Authorization Matrix — imported from its ONE home
+# (`tools/ledger_declaration.py`), which the write path reads too. While this gate held the
+# only copy, `append` could not consult it, so an unauthorized row was written silently and
+# reported here a day later: the blind spot was exactly one audit wide by construction.
+# Imported HERE, above `EVENT_TYPES`, because the declared vocabulary below is read through
+# this module — the same reader the write path uses.
+import ledger_declaration  # noqa: E402  # the matrix's ONE home (identity pin)
+from ledger_declaration import (  # noqa: E402
+    authorized_for_event,
+    load_authorizations,
+)
 
 CORE_ACTORS = ("hq", "triage", "worker", "carrier", "owner")
 # The CORE events. A factory's OWN events are declared, and they are read from the SAME
@@ -78,15 +89,15 @@ CORE_ACTORS = ("hq", "triage", "worker", "carrier", "owner")
 # Measured 2026-09-27 on inferhub-watch: `tools/ledger.py verify` accepted its 8
 # `ack` rows once they were declared, while this tuple still red them.
 _CORE_EVENT_TYPES = ("genesis", "intake", "claim", "dispatch", "close", "score", "ruling", "run")
-_REFS_KINDS_FILE = Path(os.environ.get("OC_REFS_KINDS_PATH", REPO / "docs" / "ledger-refs-kinds.json"))
 
 
 def _declared_events() -> tuple[str, ...]:
-    try:
-        _d = json.loads(_REFS_KINDS_FILE.read_text(encoding="utf-8")) or {}
-    except (OSError, json.JSONDecodeError):
-        return ()
-    return tuple(e for e in (_d.get("events") or []) if isinstance(e, str))
+    # Read through the ONE reader the write path also uses
+    # (tools/ledger_declaration.py::load_refs_kinds). ABSENT means none;
+    # MALFORMED RAISES DeclarationUnreadable — a broken declaration must never
+    # read as an empty vocabulary, because an empty vocabulary is exactly what
+    # the vacuity pin below cannot see.
+    return ledger_declaration.load_refs_kinds(REPO)[1]
 
 
 EVENT_TYPES = _CORE_EVENT_TYPES + tuple(
@@ -98,13 +109,6 @@ REQUIRED_FIELDS = {"n", "ts", "event", "actor", "subject", "detail"}
 #   refs    -- typed pointers from this row to another object
 #   session -- the writing lane's session id: attribution beside the actor's capacity
 OPTIONAL_FIELDS = {"refs", "session"}
-
-# Role-to-Event Authorization Matrix — imported from its ONE home
-# (`tools/ledger_declaration.py`), which the write path reads too. While this gate held the
-# only copy, `append` could not consult it, so an unauthorized row was written silently and
-# reported here a day later: the blind spot was exactly one audit wide by construction.
-import ledger_declaration  # noqa: E402  # the matrix's ONE home (identity pin)
-from ledger_declaration import authorized_for_event, load_authorizations  # noqa: E402
 
 ISO_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 

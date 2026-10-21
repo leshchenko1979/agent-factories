@@ -127,6 +127,7 @@ from ledger_declaration import (
     boundary_for,
     load_authorizations,
     load_exemptions,
+    load_refs_kinds,
     parse_ts,
 )
 
@@ -189,16 +190,18 @@ ROW_IDENTITY = ("n", "ts", "event", "actor", "subject")
 # docs/ledger-refs-kinds.json -- the same declaration family as
 # docs/ledger-exemptions.json, so a member's own object needs no fork.
 CORE_REF_KINDS = ("row", "subject", "commit", "session", "rework")
-# Every declared surface in this module is relocatable, and for the same reason: a
-# member tree whose layout differs must be able to point the instrument at its own
-# declaration without editing the instrument. `OC_ACTORS_PATH` and `OC_LEDGER_PATH`
-# already work this way, and the fixture seam that makes a declaration relocatable is
-# the same seam that makes a fixture lawful.
-REFS_KINDS_FILE = Path(
-    os.environ.get(
-        "OC_REFS_KINDS_PATH", REPO / "docs" / "ledger-refs-kinds.json"
-    )
-)
+# BOTH VOCABULARIES ARE READ THROUGH `ledger_declaration.load_refs_kinds`, and this module
+# keeps NO reader of its own. It used to: `_read_extension_declaration()` parsed
+# `docs/ledger-refs-kinds.json` here, inside a bare `except (OSError, json.JSONDecodeError):
+# return {}`, while the schema gate read the same file through the shared reader and RAISED
+# on it. Same file, two answers -- a malformed declaration was a loud failure at the gate and
+# a silent empty vocabulary at the write path, and the empty half is the one the vacuity pin
+# cannot see. One reading, one home.
+#
+# Relocatable for the reason every declared surface here is: a member tree whose layout
+# differs must be able to point the instrument at its own declaration without editing the
+# instrument. `OC_REFS_KINDS_PATH` is that seam, and it is read by the shared reader -- the
+# same seam that makes a fixture lawful.
 
 
 def known_events() -> tuple[str, ...]:
@@ -213,33 +216,23 @@ def known_events() -> tuple[str, ...]:
     own vocabulary lawful without a fork, and keeps ONE reader for it.
 
     Core events are never removable: a declaration ADDS, it does not redefine.
+
+    A declaration that exists and cannot be parsed raises `DeclarationUnreadable` here,
+    exactly as it does at the gate -- absent is none, malformed is a problem.
     """
-    declared = _read_extension_declaration()
-    extra = [e for e in declared.get("events", []) if isinstance(e, str)]
-    return EVENTS + tuple(e for e in extra if e not in EVENTS)
-
-
-def _read_extension_declaration() -> dict:
-    """The factory's declared extension surface -- ref kinds and events.
-
-    Unreadable or absent is NOT an error: the core vocabulary stands alone, which is
-    what lets the field ship before any factory has declared anything.
-    """
-    try:
-        return json.loads(REFS_KINDS_FILE.read_text(encoding="utf-8")) or {}
-    except (OSError, json.JSONDecodeError):
-        return {}
+    _, declared_events = load_refs_kinds(REPO)
+    return EVENTS + tuple(e for e in declared_events if e not in EVENTS)
 
 
 def known_ref_kinds() -> tuple[str, ...]:
     """The core ref kinds, plus any this factory declares.
 
-    Unreadable or absent declaration is NOT an error: the core set stands alone,
-    which is what lets the field ship before any factory has declared a kind.
+    Absent declaration is NOT an error: the core set stands alone, which is what lets
+    the field ship before any factory has declared a kind. A declaration that exists
+    and cannot be parsed raises `DeclarationUnreadable`, as above.
     """
-    declared = _read_extension_declaration()
-    extra = [k for k in (declared.get("kinds") or []) if isinstance(k, str)]
-    return CORE_REF_KINDS + tuple(k for k in extra if k not in CORE_REF_KINDS)
+    declared_kinds, _ = load_refs_kinds(REPO)
+    return CORE_REF_KINDS + tuple(k for k in declared_kinds if k not in CORE_REF_KINDS)
 
 
 def parse_refs(values: list[str]) -> list[dict]:
@@ -258,8 +251,8 @@ def parse_refs(values: list[str]) -> list[dict]:
 
     A kind that is not lawful is refused by naming BOTH the lawful set and the file that
     extends it, because the lawful remedy for a genuinely new kind is to DECLARE it, never
-    to drop the ref. A fixture writer is unaffected: the declaration is read from
-    `REFS_KINDS_FILE`, the same `OC_REFS_KINDS_PATH` seam every other reader uses.
+    to drop the ref. A fixture writer is unaffected: the declaration is read through the
+    shared reader on the `OC_REFS_KINDS_PATH` seam, like every other declared surface.
     """
     refs: list[dict] = []
     for raw in values:

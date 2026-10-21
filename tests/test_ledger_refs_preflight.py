@@ -24,8 +24,8 @@ push a lane toward deleting the pointer it needed.
 
 TWO FIXTURE WRITERS, AND WHY THEY ARE UNAFFECTED
 ------------------------------------------------
-The declaration is read from `REFS_KINDS_FILE`, overridable through `OC_REFS_KINDS_PATH` —
-the same seam every other reader in this module uses. So a probe or a fixture that declares
+The declaration is read through the shared reader on the `OC_REFS_KINDS_PATH` seam — the
+same seam every other declared surface uses. So a probe or a fixture that declares
 its own kinds writes exactly as before; the check inherits that seam rather than inventing a
 second policy. One probe below declares `issue` on a fixture tree and proves the write
 still lands, which is the arm that shows the fix closes the undeclared half and NOT the
