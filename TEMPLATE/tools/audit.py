@@ -985,6 +985,56 @@ def reported_cause(text: str, limit: int = GATE_CAUSE_LIMIT) -> str:
         return last[:limit]
     return f"{counted} \u2014 {last}"[:limit]
 
+GATE_CAUSE_STREAM_EMPTY = -1
+GATE_CAUSE_STREAM_PROSE = 0
+GATE_CAUSE_STREAM_COUNT = 1
+GATE_CAUSE_STREAM_DECLARED = 2
+
+def gate_cause_stream_rank(text: str) -> int:
+    """How STRONGLY one stream DECLARES its cause: empty < prose < count line < marker.
+
+    The rank is a property of what the text CONTAINS, never of its length or its position,
+    so it cannot be moved by an advisory block printed before the real summary (#533).
+    """
+    if not text or not text.strip():
+        return GATE_CAUSE_STREAM_EMPTY
+    rank = GATE_CAUSE_STREAM_PROSE
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        if declared_cause_count(line) is not None:
+            return GATE_CAUSE_STREAM_DECLARED
+        if _COUNT_FIRST_RE.search(line):
+            rank = GATE_CAUSE_STREAM_COUNT
+    return rank
+
+def gate_cause_from_streams(stdout: str | None, stderr: str | None) -> str:
+    """THE STREAM JOIN, ranked by what each stream declares (#533).
+
+    #205 settled WHICH line inside one text is the cause: the tool's own declared marker
+    first, the count-line heuristic next, the last line last. The join ACROSS the two
+    streams then threw that precedence away: `reported_cause(stdout) or reported_cause(stderr)`
+    returns a non-empty string for ANY non-empty text (its last line at minimum), so a
+    non-empty stdout always won and stderr was never read. A gate that prints prose to
+    stdout and declares its count on stderr therefore recorded an INFORMATIONAL line as the
+    cause -- measured on `tools/hygiene.py --audit --require-committed`, which writes its
+    supersession advisories to stdout and `oc-cause-count: 1` to stderr, so the note named a
+    different evidence file and dropped the count.
+
+    So the rank travels ACROSS the boundary, which is #205's rule applied one layer up: take
+    the higher-ranked stream, fall back to the other when one is empty, and when NEITHER
+    declares (both prose, or one empty) keep `stdout or stderr` so a tool that has not
+    adopted the marker reads byte-identically to before.
+
+    A tie keeps stdout, deliberately: equal rank means neither stream has a better claim, and
+    preserving the historical winner is the additive half of the change.
+    """
+    out_text = stdout or ""
+    err_text = stderr or ""
+    if gate_cause_stream_rank(err_text) > gate_cause_stream_rank(out_text):
+        return reported_cause(err_text)
+    return reported_cause(out_text) or reported_cause(err_text)
+
 def attach_gate_causes(gate_results: list[dict]) -> None:
     """Set `note` on every gate that did not pass, from the ONE predicate above.
 
@@ -996,7 +1046,7 @@ def attach_gate_causes(gate_results: list[dict]) -> None:
         if g.get("passed"):
             g.pop("note", None)
             continue
-        g["note"] = reported_cause(g.get("stdout") or "") or reported_cause(g.get("stderr") or "")
+        g["note"] = gate_cause_from_streams(g.get("stdout"), g.get("stderr"))
 
 def attach_gate_staleness(gate_results: list[dict], stale) -> None:
     """Set `stale_basis` on every gate whose declared basis no longer describes it (#231).

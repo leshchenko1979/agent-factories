@@ -78,6 +78,7 @@ Exit: 0 clean, non-zero on any gate that is unregistered, non-canonical, or sile
 
 from __future__ import annotations
 
+import inspect
 import json
 import re
 import subprocess
@@ -1900,6 +1901,69 @@ def probe_a_declared_marker_is_read_first_and_the_heuristic_is_the_fallback() ->
         repr(audit.reported_cause(hout)),
     )
 
+def probe_the_stream_join_ranks_what_each_stream_DECLARES() -> None:
+    """#533 — the join ACROSS the two streams keeps #205's precedence.
+
+    The roster above carries `stdout` on every row and not one `stderr` key, which is
+    precisely why the short-circuit went untested: `reported_cause(text)` returns a non-empty
+    string for ANY non-empty text (its last line at minimum), so the old join
+    `reported_cause(stdout) or reported_cause(stderr)` never reached the second operand once
+    stdout had said anything at all.
+
+    The defect is reader-facing and measured, not hypothetical: `tools/hygiene.py --audit
+    --require-committed` writes supersession advisories to stdout and `oc-cause-count: 1` to
+    stderr, so the recorded note named an advisory about a DIFFERENT evidence file and
+    dropped the gate's own declared count.
+
+    All four arms below are asserted because the change must be purely ADDITIVE: the first is
+    the historical behaviour and must not move, the second already worked (a silent stdout
+    fell through), the third is the defect, and the fourth pins the count line at its rank
+    between the marker and prose.
+    """
+    audit = _audit_module()
+    roster = [
+        {"cmd": "prose/prose", "passed": False, "unknown": False, "duration_sec": 1.0,
+         "stdout": "first advisory\nlast stdout line", "stderr": "stderr tail"},
+        {"cmd": "empty/marker", "passed": False, "unknown": False, "duration_sec": 1.0,
+         "stdout": "", "stderr": "oc-cause-count: 4\n- a specimen"},
+        {"cmd": "prose/marker", "passed": False, "unknown": False, "duration_sec": 1.0,
+         "stdout": "PROSE-ONLY evidence/a.md — superseded by evidence/b.md",
+         "stderr": "oc-cause-count: 1"},
+        {"cmd": "prose/count", "passed": False, "unknown": False, "duration_sec": 1.0,
+         "stdout": "an advisory line", "stderr": "3 problem(s) in /repo/x"},
+    ]
+    audit.attach_gate_causes(roster)
+    check(
+        "prose on BOTH streams still keeps stdout — the additive arm, unchanged",
+        roster[0].get("note") == "last stdout line",
+        repr(roster[0].get("note")),
+    )
+    check(
+        "a SILENT stdout falls through to a declaring stderr — already worked, must not regress",
+        roster[1].get("note", "").startswith("oc-cause-count: 4"),
+        repr(roster[1].get("note")),
+    )
+    check(
+        "a PROSE stdout no longer buries a marker declared on stderr — #533 itself",
+        roster[2].get("note", "").startswith("oc-cause-count: 1"),
+        repr(roster[2].get("note")),
+    )
+    check(
+        "and the advisory that used to win is NOT what the reader is shown",
+        not roster[2].get("note", "").startswith("PROSE-ONLY"),
+        repr(roster[2].get("note")),
+    )
+    check(
+        "the count line outranks prose but not the marker — the rank order, not just the fix",
+        roster[3].get("note", "").startswith("3 problem(s)"),
+        repr(roster[3].get("note")),
+    )
+    check(
+        "reported_cause itself takes ONE text and is unchanged, so the fix lives in the join",
+        list(inspect.signature(audit.reported_cause).parameters) == ["text", "limit"],
+        repr(list(inspect.signature(audit.reported_cause).parameters)),
+    )
+
 def probe_the_note_is_attached_once_for_every_surface() -> None:
     """The cause is computed ONCE and read by all three surfaces (#158).
 
@@ -2885,6 +2949,7 @@ def main() -> int:
     probe_a_script_shaped_failure_records_its_count()
     probe_a_declared_marker_is_read_first_and_the_heuristic_is_the_fallback()
     probe_the_note_is_attached_once_for_every_surface()
+    probe_the_stream_join_ranks_what_each_stream_DECLARES()
 
     print("  live manifest — the declared revisions, swept")
     probe_the_live_sweep_states_its_own_account()
