@@ -1382,6 +1382,16 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_law_structure.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_law_structure.py"])
 
+    # 11b. Law/owning-doc drift gate: a law line naming the `score-conversion` leg must
+    #      also name the `conversion` row that leg reads, and no law line may assert the
+    #      declaration on a score row (law defect reported by Triage 2026-10-21: the skill
+    #      restated a join `docs/measurement-procedure.md` §5.4 point 5 had already
+    #      refuted, and no gate compared the two artifacts). META-ONLY: a member carries
+    #      SKILL.md.tmpl, which never shipped the sentence, so this file is not in
+    #      TEMPLATE/tests and the registration skips on `is_file()`.
+    if (repo_root / "tests/test_law_conversion_join.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_law_conversion_join.py"])
+
     # 12. Documentation sync gate: a doc shipped in both trees must not drift
     if (repo_root / "tests/test_docs_sync.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_docs_sync.py"])

@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.63
+version: 0.1.64
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -44,7 +44,7 @@ go in *your* skill, in *your* repo. See `TEMPLATE/SKILL.md.tmpl` §17.
 
 **The Core Triad of an Autonomously Self-Improving Factory:**
 - **Autonomous (The Momentum):** Outer cron pacemakers (P28) wake persistent session UUIDs without token waste; inner eval loops (Ralph) converge tasks against deterministic gates with zero human prompt dependence.
-- **Self-Improving (The Compound Engine):** Runtime defects are codified into `evidence/rework.md` (`Prevented by`), and score regressions become backlog issues (P1/P27) that upgrade prompt laws and mechanical test gates permanently. **The conversion is a NAMED DUTY, never an automatic one (#67):** the run DECLARES the regression on its own score row, the patrol's `score-conversion` leg READS it, and Triage converts it. The word *automatic* asserted a mechanism no trigger carried, and it is retired.
+- **Self-Improving (The Compound Engine):** Runtime defects are codified into `evidence/rework.md` (`Prevented by`), and score regressions become backlog issues (P1/P27) that upgrade prompt laws and mechanical test gates permanently. **The conversion is a NAMED DUTY, never an automatic one (#67):** the run DECLARES the regression on a `conversion` row naming its artifact (`docs/measurement-procedure.md` §5.4), the patrol's `score-conversion` leg READS it, and Triage converts it. The word *automatic* asserted a mechanism no trigger carried, and it is retired.
 - **Factory (The Industrial Discipline):** Strict single-writer concurrency (`fcntl.flock`), atomic subprocess contracts with measurable lead times, and verifiable product delivery.
 
 **The three legs.**
@@ -305,7 +305,7 @@ This factory is scored against `docs/quality-criteria.md` — 19 criteria across
 | Re-scoring is a scheduled job | `cron_manage`, daily to start, relaxed once variance is known |
 | The procedure is a pointer, never a copy | `docs/measurement-procedure.md`; the job carries the pointer |
 | The score is a diff, not an impression | Committed, so drift shows as a change |
-| Self-improvement conversion (a named duty, #67) | A score regression (score < 3 or negative deltas) is DECLARED by the run on its own score row, READ by the patrol's `score-conversion` leg, and CONVERTED into a board issue by Triage (P1, P27) — the conversion is a duty with an owner and a trigger, never an automatic mechanism |
+| Self-improvement conversion (a named duty, #67) | A score regression (score < 3 or negative deltas) is DECLARED by the run on a `conversion` row naming its artifact, READ by the patrol's `score-conversion` leg, and CONVERTED into a board issue by Triage (P1, P27) — the conversion is a duty with an owner and a trigger, never an automatic mechanism |
 | Autonomous assignment & monitoring | Triage scans open intake issues, checks claims, assigns persistent worker lanes, and runs periodic execution sweeps (P27) |
 | **The Pacemaker Requirement** | Every periodic process owner (Surveys, Triage, HQ) must have an active thin cron pacemaker waking its session UUID |
 | **The Subject Matter Consulting Gate** | Substantive consulting & diagnostic audits strictly require baseline Subject Matter Documentation (`docs/subject/` >= 2/4) |

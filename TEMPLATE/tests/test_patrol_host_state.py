@@ -10169,35 +10169,8 @@ def _goal_store(*rows, unreached=(), without_store=()):
     return {"rows": list(rows), "homes_read": ["probe-home"],
             "homes_without_store": list(without_store), "unreached": list(unreached)}
 
-def _activity_store(*, work=None, readable=True, reason="", unreached=(),
-                    without_store=()):
-    """One injected `box_lane_activity` payload (#532).
-
-    `work` maps a session id to the ISO instant of its newest measured tool execution. The
-    DEFAULT IS A READ SOURCE WITH NO WORK, which is the pre-#532 reading: a probe that does not
-    care about activity gets exactly the behaviour the leg had before the fourth reading, and
-    one that does care must say so. A probe that could get a live-box answer by omission would
-    be decided by whichever lane this box happened to be running.
-    """
-    work = dict(work or {})
-    epochs = {}
-    for session_ref, instant in work.items():
-        epochs[session_ref] = int(
-            dt.datetime.fromisoformat(instant.replace("Z", "+00:00")).timestamp()
-        )
-    return {
-        "readable": readable,
-        "reason": reason,
-        "newest": work,
-        "epochs": epochs,
-        "homes_read": ["probe-home"] if readable else [],
-        "homes_without_store": list(without_store),
-        "unreached": list(unreached),
-        "unparsed": [],
-    }
-
-def test_the_readings_are_DISTINCT_and_counted_separately() -> None:
-    """#133's acceptance: DRIVEN, ARMED-INERT and DRIVERLESS are different findings.
+def test_the_three_readings_are_DISTINCT_and_counted_separately() -> None:
+    """#133's acceptance: DRIVEN, ARMED-INERT and DRIVERLESS are three different findings.
 
     Non-vacuity rides THIS fixture rather than a loud-fail-on-zero: the live population of
     driverless lanes is legitimately empty on a healthy day, so an empty reading is a normal
@@ -10226,9 +10199,7 @@ def test_the_readings_are_DISTINCT_and_counted_separately() -> None:
         _goal_row("sess-stopped", "paused", turns=20, updated="2026-10-17T00:00:00+00:00"),
     )
     leg = RUNNER.driverless_leg(census, goals=goals, read_at="2026-10-18T00:00:00Z",
-                                lane_names_fn=lambda: {},
-                                lane_activity_fn=lambda: _activity_store(),
-                                now=dt.datetime(2026, 10, 18, tzinfo=dt.timezone.utc))
+                                lane_names_fn=lambda: {})
 
     assert leg["status"] == "ASSERTED", leg
     cov = leg["coverage"]
@@ -10277,8 +10248,6 @@ def test_a_TURN_IN_FLIGHT_drives_a_lane_whose_arm_is_INERT() -> None:
         census, goals=goals, read_at="2026-10-18T00:00:00Z",
         lane_names_fn=lambda: {},
         lane_turn_open_fn=lambda: {"sess-busy": True},
-        lane_activity_fn=lambda: _activity_store(),
-        now=dt.datetime(2026, 10, 18, tzinfo=dt.timezone.utc),
     )
 
     cov = leg["coverage"]
@@ -10294,8 +10263,6 @@ def test_a_TURN_IN_FLIGHT_drives_a_lane_whose_arm_is_INERT() -> None:
         census, goals=goals, read_at="2026-10-18T00:00:00Z",
         lane_names_fn=lambda: {},
         lane_turn_open_fn=lambda: {"sess-busy": False},
-        lane_activity_fn=lambda: _activity_store(),
-        now=dt.datetime(2026, 10, 18, tzinfo=dt.timezone.utc),
     )
     assert idle["coverage"]["armed_inert"] == 1, idle["coverage"]
     assert len(idle["problems"]) == 1, idle["problems"]
@@ -10310,8 +10277,7 @@ def test_a_census_with_NO_grouping_renders_NOT_RUN_never_a_clean_lane() -> None:
     leg = RUNNER.driverless_leg({"name": "stall-census", "status": "NOT RUN",
                                  "problems": [], "excused": [],
                                  "coverage": {"reason": "the ledger could not be read"}},
-                                goals=_goal_store(), read_at="2026-10-18T00:00:00Z",
-                                lane_activity_fn=lambda: _activity_store())
+                                goals=_goal_store(), read_at="2026-10-18T00:00:00Z")
     assert leg["status"] == "NOT RUN", leg
     assert leg["problems"] == [], leg
     assert "owed_by_lane" in leg["coverage"]["reason"], leg["coverage"]
@@ -10340,8 +10306,6 @@ def test_an_UNREACHED_goal_store_prints_as_UNREACHED_not_as_a_driverless_lane() 
         goals=_goal_store(unreached=["ops: unable to open database file"]),
         read_at="2026-10-18T00:00:00Z",
         lane_names_fn=lambda: {},
-        lane_activity_fn=lambda: _activity_store(),
-        now=dt.datetime(2026, 10, 18, tzinfo=dt.timezone.utc),
     )
     # The reading itself is honest: no row was found, so nothing was armed AS FAR AS THIS READ.
     assert leg["coverage"]["driverless"] == 1, leg["coverage"]
@@ -10355,214 +10319,11 @@ def test_an_UNREACHED_goal_store_prints_as_UNREACHED_not_as_a_driverless_lane() 
     # DISCRIMINATING CONTROL: the same leg with a store that WAS read carries no UNREACHED
     # line, so the sentence is attributable to the unread home and not to the leg's shape.
     clean = RUNNER.driverless_leg(census, goals=_goal_store(_goal_row("sess-x", "active")),
-                                  read_at="2026-10-18T00:00:00Z", lane_names_fn=lambda: {},
-                                  lane_activity_fn=lambda: _activity_store(),
-                                  now=dt.datetime(2026, 10, 18, tzinfo=dt.timezone.utc))
+                                  read_at="2026-10-18T00:00:00Z", lane_names_fn=lambda: {})
     assert clean["coverage"]["driverless"] == 0, clean["coverage"]
     clean_out = RUNNER.render([clean], [], slug="owner/repo",
                               read_at="2026-10-18T00:00:00Z", issues=[])
     assert "UNREACHED" not in clean_out, clean_out
-
-# ---- #532: the driverless reading was blind to measured work --------------------------
-#
-# The leg read exactly TWO facts -- the newest `goal_state` row's `state` and
-# `session_bindings.turn_open_at` -- and from them claimed what would happen NEXT. The ledger
-# falsified the claim: 33 `close` rows by actor `worker` landed after the goal row the leg was
-# judging had stopped (32 distinct units, to 2026-10-21T02:26:08Z), and the Surveys lane carries
-# no goal row in ANY home while recording 10,336 tool executions. A lane can be woken by a cron,
-# a notify, a peer push or a plan completion, and every one of them writes the same
-# `tool_executions` row -- so that table is the fact the predicate was missing.
-#
-# EVERY PROBE HERE IS HERMETIC. The activity source is injected and the read instant is handed
-# in, so no verdict below is decided by whichever lane this box happened to be running. The
-# POSITIVE CONTROL IS NOT OPTIONAL: a suite where every paused lane reads DRIVERLESS proves
-# nothing about a reading that never fires.
-
-_NOW = dt.datetime(2026, 10, 21, 12, 0, 0, tzinfo=dt.timezone.utc)
-
-def _driverless_probe(activity, *, goal_state="paused", turn_open=False):
-    """One lane, one paused row, one injected activity source -- the (a)/(b) pair's shared half."""
-    census = _census_with(_lane_slot("sess-x", ["#9"], lane="Probe Lane"))
-    return RUNNER.driverless_leg(
-        census,
-        goals=_goal_store(_goal_row("sess-x", goal_state, turns=20,
-                                    updated="2026-10-17T00:00:00+00:00")),
-        read_at="2026-10-21T12:00:00Z",
-        lane_names_fn=lambda: {},
-        lane_turn_open_fn=lambda: {"sess-x": turn_open},
-        lane_activity_fn=lambda: activity,
-        now=_NOW,
-    )
-
-def test_a_PAUSED_row_with_measured_WORK_inside_the_window_is_UNARMED_ACTIVE() -> None:
-    """(a) The filed defect, in one assertion: work inside the window is NOT driverless.
-
-    The lane below is exactly the shape the ledger carried -- a goal row that stopped four days
-    before the read, and work landing inside the census's own window. The pre-#532 leg called
-    that DRIVERLESS and refused a re-arm on the strength of a claim about the future it could
-    not support. It is UNARMED-ACTIVE, and the re-arm is refused for the OPPOSITE reason: the
-    lane is working, so it does not need a driver installed.
-    """
-    leg = _driverless_probe(_activity_store(work={"sess-x": "2026-10-21T06:00:00+00:00"}))
-
-    cov = leg["coverage"]
-    assert cov["unarmed_active"] == 1, cov
-    assert cov["driverless"] == 0, cov
-    assert cov["lanes"][0]["reading"] == "UNARMED-ACTIVE", cov["lanes"]
-    # THE INSTANT IT RESTS ON IS ON THE RECORD AND IN THE RENDER (#532, criterion 3): a reading
-    # that says "working" without saying WHEN is unfalsifiable by the reader.
-    assert cov["lanes"][0]["activity_instant"] == "2026-10-21T06:00:00+00:00", cov["lanes"]
-    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T12:00:00Z",
-                        issues=[])
-    assert "1 UNARMED-ACTIVE" in out, out
-    assert "2026-10-21T06:00:00+00:00" in out, out
-    # ... and it is still a PROBLEM, because a backlog behind a lane this leg cannot see driving
-    # is still owed an owner's look -- the reading changes the REMEDY, not the attention.
-    assert len(leg["problems"]) == 1, leg["problems"]
-    assert "UNARMED-ACTIVE LANE Probe Lane" in leg["problems"][0], leg["problems"][0]
-    # THE BITE, and it is the whole ruling: no re-arm, and the reason cites the measurement.
-    assert "The ACT is NOT a re-arm" in leg["problems"][0], leg["problems"][0]
-    assert "installing a driver on a running lane" in leg["problems"][0], leg["problems"][0]
-
-def test_the_SAME_paused_row_with_NO_work_in_the_window_still_reads_DRIVERLESS() -> None:
-    """(b) The control for (a), same fixture, one fact changed.
-
-    Without this half, (a) could pass on a leg that had stopped distinguishing the two readings
-    at all -- and the census's whole point is that a genuinely stopped lane must still red. The
-    work here is OLD (outside the 1.0 d window), which is the discriminating fact: a reader that
-    keyed on "has ever run" rather than "ran inside the window" would call this UNARMED-ACTIVE.
-    """
-    leg = _driverless_probe(_activity_store(work={"sess-x": "2026-10-15T06:00:00+00:00"}))
-
-    cov = leg["coverage"]
-    assert cov["driverless"] == 1, cov
-    assert cov["unarmed_active"] == 0, cov
-    assert cov["lanes"][0]["reading"] == "DRIVERLESS", cov["lanes"]
-    # The instant still prints, so "no work since T" is distinguishable from "not read".
-    assert cov["lanes"][0]["activity_instant"] == "2026-10-15T06:00:00+00:00", cov["lanes"]
-    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T12:00:00Z",
-                        issues=[])
-    assert "1 DRIVERLESS" in out, out
-    # ... and the DRIVERLESS line must NOT assert the future: the pre-#532 text said "nothing
-    # will evaluate this session's goal", which two facts cannot support.
-    assert "nothing will evaluate" not in out, out
-    assert "no measured work since" in out, out
-
-def test_an_UNREADABLE_activity_source_reads_UNREADABLE_and_never_counts_as_ZERO() -> None:
-    """(c) #271 on the new source: "could not look" is not "nothing happened".
-
-    The pre-#532 shape is one refactor away from every lane on an unopened home reading
-    DRIVERLESS -- a true statement about this reader and a false one about the lane. The
-    discriminator is the third reading, and the render must name the REASON so a reader can
-    tell the two apart.
-    """
-    leg = _driverless_probe(
-        _activity_store(readable=False, reason="no home carried tool_executions")
-    )
-
-    cov = leg["coverage"]
-    assert cov["unreadable"] == 1, cov
-    assert cov["driverless"] == 0, cov
-    assert cov["unarmed_active"] == 0, cov
-    assert cov["lanes"][0]["reading"] == "UNREADABLE", cov["lanes"]
-    assert cov["activity_readable"] is False, cov
-    assert "no home carried tool_executions" in cov["activity_reason"], cov
-    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T12:00:00Z",
-                        issues=[])
-    assert "1 UNREADABLE" in out, out
-    assert "no home carried tool_executions" in out, out
-    # THE DISCRIMINATING HALF: no DRIVERLESS count at all, so the unread source cannot be read
-    # as "these lanes have no work".
-    assert "1 DRIVERLESS" not in out, out
-
-def test_the_activity_WINDOW_and_its_BASIS_print_on_every_run() -> None:
-    """The window is the CENSUS's constant, not this leg's -- so it prints with its basis.
-
-    A reading that says "inside the window" while leaving the window unnamed is a claim the
-    reader cannot check, and the number is not even this leg's own: it is
-    `STALL_CENSUS_THRESHOLD_DAYS`, whose meaning is "the shortest interval in which a lane that
-    intends to take a dispatched item would have claimed it". Asserted through the RENDER, since
-    a coverage key nobody prints is a fact the report does not carry.
-    """
-    leg = _driverless_probe(_activity_store(work={"sess-x": "2026-10-21T06:00:00+00:00"}))
-    cov = leg["coverage"]
-    assert cov["activity_window_days"] == float(RUNNER.STALL_CENSUS_THRESHOLD_DAYS), cov
-    assert cov["activity_window_basis"] == RUNNER.STALL_CENSUS_THRESHOLD_BASIS, cov
-
-    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T12:00:00Z",
-                        issues=[])
-    assert "activity window: 1 day(s)" in out, out
-    assert RUNNER.STALL_CENSUS_THRESHOLD_BASIS in out, out
-    # ... and the store's own outcome prints too, so "READ" is never assumed silently.
-    assert "activity store: READ" in out, out
-
-def test_the_window_BOUNDARY_is_INCLUSIVE_and_the_probe_CAN_cross_it() -> None:
-    """The boundary is asserted from BOTH sides, one second apart.
-
-    A predicate tested only on the comfortable side of its threshold is a predicate whose
-    threshold was never exercised, so the same fixture is read at exactly the window's edge and
-    one second past it -- and the two verdicts must differ. That difference IS the probe: a leg
-    that ignored the window would return the same reading twice.
-    """
-    window_secs = float(RUNNER.STALL_CENSUS_THRESHOLD_DAYS) * 86400.0
-    edge = _NOW - dt.timedelta(seconds=window_secs)
-    just_past = edge - dt.timedelta(seconds=1)
-
-    inside = _driverless_probe(_activity_store(work={"sess-x": edge.isoformat()}))
-    outside = _driverless_probe(_activity_store(work={"sess-x": just_past.isoformat()}))
-
-    assert inside["coverage"]["lanes"][0]["reading"] == "UNARMED-ACTIVE", inside["coverage"]
-    assert outside["coverage"]["lanes"][0]["reading"] == "DRIVERLESS", outside["coverage"]
-
-def test_an_ACTIVE_row_still_outranks_the_activity_fact() -> None:
-    """The fourth reading must not steal a lane that HAS a driver.
-
-    UNARMED-ACTIVE means "no active row". A lane with a live, advancing goal row reads DRIVEN
-    even while it is also measurably working -- the reading is about what is ARMED, and a leg
-    that preferred the activity fact would report every busy lane as unarmed. Asserted as a pair
-    so neither half can pass alone.
-    """
-    driven = _driverless_probe(
-        _activity_store(work={"sess-x": "2026-10-21T06:00:00+00:00"}), goal_state="active"
-    )
-    # the fixture's active row also carries motion (`turns_used > 0`, touched after creation), so
-    # the card's DRIVEN row owns it -- what matters here is that NEITHER active-row reading is
-    # UNARMED-ACTIVE: the activity fact decides only where NO row is armed.
-    assert driven["coverage"]["lanes"][0]["reading"] == "DRIVEN", driven["coverage"]
-    assert driven["coverage"]["unarmed_active"] == 0, driven["coverage"]
-
-def test_an_UNRESOLVABLE_activity_root_is_UNREADABLE_and_never_RAISES() -> None:
-    """Clause 4, at the SHIPPED depth: no locatable home is an UNREAD reason, not a crash.
-
-    The shipped tree carries `registry/fleet.example.json` and no manifest, so
-    `opencrabs_home_dbs` raises `FleetManifestError` -- and an unguarded reader took the whole
-    patrol down from `TEMPLATE/` (35 red arms in `test_template_gate_pairing.py`, every one a
-    traceback out of `main()`). A guard that let the error through would honour "never a zero"
-    and miss the point: the ruling says an unreadable source yields UNREADABLE WITH ITS REASON.
-
-    Driven through the REAL reader rather than an injected one, because the defect was in the
-    reader's own failure path -- an injected fixture would have replaced exactly the code under
-    test.
-    """
-    with mock.patch.object(RUNNER, "load_module") as loader:
-        registry = mock.Mock()
-        registry.FleetManifestError = RuntimeError
-        registry.opencrabs_home_dbs.side_effect = RuntimeError(
-            "the fleet manifest declares no `profile_root`"
-        )
-        loader.return_value = registry
-        store = RUNNER.box_lane_activity()
-
-    assert store["readable"] is False, store
-    assert store["epochs"] == {}, store
-    assert store["newest"] == {}, store
-    assert "could not be located" in store["reason"], store
-    assert "profile_root" in store["reason"], store
-
-    # AND THE READING IT PRODUCES IS UNREADABLE, never DRIVERLESS -- the discriminating half.
-    leg = _driverless_probe(store)
-    assert leg["coverage"]["lanes"][0]["reading"] == "UNREADABLE", leg["coverage"]
-    assert leg["coverage"]["driverless"] == 0, leg["coverage"]
 
 # ---- #392: the section 4.1 own-elapsed-slot predicate, hosted -------------------------
 #

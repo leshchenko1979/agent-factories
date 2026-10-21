@@ -2115,162 +2115,6 @@ def box_goal_rows(root: Path | None = None) -> dict:
     }
 
 
-# THE ACTIVITY FACT (#532, ruling n=3952). The driverless-lane leg read exactly TWO facts --
-# the newest `goal_state` row's `state` and `session_bindings.turn_open_at` -- and from them
-# claimed what would happen NEXT ("nothing will evaluate this session's goal"). The ledger
-# falsified the claim: 33 `close` rows by actor `worker` landed AFTER the goal row the leg was
-# judging had stopped (32 distinct units, to 2026-10-21T02:26:08Z), and the Surveys lane
-# carries no goal row in any home while recording 10,336 tool executions. A lane can be driven
-# by a notify, a cron, a peer push or a plan completion, and every one of those writes the
-# same `tool_executions` row -- so that table is the fact the predicate was missing.
-#
-# IT IS DELIBERATELY NOT NAMED FOR A MECHANISM. The filing proposed `NOTIFY-DRIVEN`; this
-# reader cannot see WHY a lane woke, and a mechanism name would assert a cause from a proxy,
-# which is the very defect being repaired, one layer down.
-LANE_ACTIVITY_READ = "read"              # source read; this session carries measured work
-LANE_ACTIVITY_NONE = "none"              # source read; this session carries NO work at all
-LANE_ACTIVITY_UNREADABLE = "unreadable"  # source could not be read -- never a zero (#271)
-
-def activity_epoch(value) -> tuple[int | None, str]:
-    """One `tool_executions.created_at` as a UTC epoch second, or `(None, why)`.
-
-    INTEGER epoch seconds in the daemon's own schema, but this reader is handed OTHER homes'
-    databases too, so the TEXT forms are read rather than assumed away. A value this reader
-    cannot place is RETURNED AS A REASON, never coerced to zero: a zero here would be the
-    "could not look" reading wearing the shape of "nothing happened" (#271).
-    """
-    if value is None:
-        return None, "the row carries no created_at"
-    if isinstance(value, (int, float)):
-        return int(value), ""
-    text = str(value).strip()
-    if not text:
-        return None, "created_at is empty"
-    try:
-        return int(float(text)), ""
-    except ValueError:
-        pass
-    try:
-        parsed = reader_parse_ts(text)
-    except (ValueError, TypeError) as exc:
-        return None, f"created_at {text!r} does not parse ({exc})"
-    if parsed.tzinfo is None:
-        return None, f"created_at {text!r} carries no zone offset"
-    return int(parsed.timestamp()), ""
-
-def box_lane_activity(root: Path | None = None) -> dict:
-    """{newest, epochs, homes_read, homes_without_store, unreached, unparsed, readable,
-    reason} for every home's `tool_executions`, newest instant PER SESSION (#532).
-
-    THE FOURTH READING'S SOURCE. `box_goal_rows` answers "is a goal loop armed"; this answers
-    "was this session MEASURED DOING anything", which is the fact the driverless-lane leg
-    never read and therefore could not distinguish a stopped loop from a lane draining work
-    through some other trigger.
-
-    FOUR OUTCOMES, FOUR NAMES, mirroring `box_goal_rows` for the same reason: a home that
-    opened and carries `tool_executions` is READ; a home that opened without the table is
-    `homes_without_store` (a member factory's harness may not ship it, and calling that
-    "unreached" would red a leg for a shape the kit never promised); a home whose DB could not
-    be opened is `unreached`; and the per-session instants are the reading.
-
-    `readable` IS THE HONEST ZERO GUARD. It is True only when at least one home was actually
-    read -- otherwise every session would read "no work", which is a statement about this
-    reader and not about the lane. `reason` says which of the three absences produced it.
-
-    Read IN PLACE through the same `mode=ro` URI as `box_goal_rows`, and the COLUMNS are
-    probed, never assumed: `created_at` is the only instant this table carries, and a home
-    that predates it lands in `homes_without_store` rather than being dropped in silence.
-
-    AN UNRESOLVABLE ROOT IS UNREADABLE, NOT A CRASH. `opencrabs_home_dbs` raises
-    `FleetManifestError` when the manifest declares no `profile_root`, and the SHIPPED tree
-    reaches this reader with exactly that shape -- `registry/fleet.example.json` is the only
-    manifest the kit carries, and `tests/test_shipped_audit_runs.py` runs this file from
-    `TEMPLATE/`. Letting the exception escape took the whole patrol down at the shipped depth
-    (measured: 35 red arms in `test_template_gate_pairing.py`, every one a traceback out of
-    `main()`), which is the same class `declared_slug` already guards -- and the ruling's
-    clause 4 says an unreadable source yields UNREADABLE WITH ITS REASON. A guard that let the
-    error through would satisfy the letter of "never a zero" and fail its point.
-    """
-    registry = load_module("oc_registry", REGISTRY)
-    try:
-        dbs, unreached = registry.opencrabs_home_dbs(root)
-    except Exception as exc:
-        return {
-            "newest": {},
-            "epochs": {},
-            "homes_read": [],
-            "homes_without_store": [],
-            "unreached": [f"no OpenCrabs home could be located: {exc}"],
-            "unparsed": [],
-            "readable": False,
-            "reason": f"the activity source could not be located ({exc})",
-        }
-    newest: dict[str, str] = {}
-    epochs: dict[str, int] = {}
-    homes_read: list[str] = []
-    homes_without_store: list[str] = []
-    unparsed: list[str] = []
-    for db in dbs:
-        try:
-            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
-        except sqlite3.Error as exc:
-            unreached.append(f"{db.parent.name}: {exc}")
-            continue
-        try:
-            present = conn.execute(
-                "select 1 from sqlite_master where type='table' and name='tool_executions'"
-            ).fetchone()
-            if not present:
-                homes_without_store.append(db.parent.name)
-                continue
-            columns = {r[1] for r in conn.execute("PRAGMA table_info(tool_executions)")}
-            if "session_id" not in columns or "created_at" not in columns:
-                homes_without_store.append(db.parent.name)
-                continue
-            fetched = list(conn.execute(
-                "select session_id, max(created_at) from tool_executions "
-                "where session_id is not null and session_id != '' group by session_id"
-            ))
-        except sqlite3.Error as exc:
-            unreached.append(f"{db.parent.name}: {exc}")
-            continue
-        finally:
-            conn.close()
-        for session_id, created_at in fetched:
-            epoch, why = activity_epoch(created_at)
-            if epoch is None:
-                unparsed.append(f"{db.parent.name}:{session_id}: {why}")
-                continue
-            prior = epochs.get(str(session_id))
-            if prior is None or epoch > prior:
-                epochs[str(session_id)] = epoch
-                newest[str(session_id)] = dt.datetime.fromtimestamp(
-                    epoch, dt.timezone.utc
-                ).isoformat()
-        homes_read.append(db.parent.name)
-    readable = bool(homes_read)
-    if readable:
-        reason = ""
-    elif unreached:
-        reason = "no home's tool_executions could be read: " + "; ".join(unreached)
-    elif homes_without_store:
-        reason = (
-            "no home carries a tool_executions table: " + ", ".join(homes_without_store)
-        )
-    else:
-        reason = "no OpenCrabs home database was found to read"
-    return {
-        "newest": newest,
-        "epochs": epochs,
-        "homes_read": homes_read,
-        "homes_without_store": homes_without_store,
-        "unreached": unreached,
-        "unparsed": unparsed,
-        "readable": readable,
-        "reason": reason,
-    }
-
-
 # THE DAEMON'S OWN WORDING for a round its trigger gate skipped (#477). Read from the run
 # record's `content` prose, which is the ONLY field that separates a suppressed fire from a
 # round that ran and produced nothing -- both are stored `status=success`.
@@ -6985,18 +6829,7 @@ def stall_census_leg(
         },
     }
 
-# THE FOURTH READING AND THE HONEST FIFTH (#532, ruling n=3952). `UNARMED-ACTIVE` is a lane
-# with NO active goal row that was nonetheless MEASURED WORKING inside the declared window --
-# the reading the leg could not produce while it read goal rows alone, and the one that made a
-# draining lane read DRIVERLESS. `UNREADABLE` is not a reading of a lane but of the SOURCE: it
-# exists so an unread activity store can never render as "no work" (#271).
-DRIVERLESS_READINGS = (
-    "DRIVEN",
-    "ARMED-INERT",
-    "DRIVERLESS",
-    "UNARMED-ACTIVE",
-    "UNREADABLE",
-)
+DRIVERLESS_READINGS = ("DRIVEN", "ARMED-INERT", "DRIVERLESS")
 
 def _newest_goal_row(goal_rows: list[dict]) -> dict | None:
     """The row that decides a session's current state, or None for no rows.
@@ -7034,53 +6867,29 @@ def _goal_advanced(row: dict) -> bool:
     updated = str(row.get("updated_at") or "")
     return bool(created) and bool(updated) and updated > created
 
-def driver_reading(
-    goal_rows: list[dict],
-    *,
-    turn_open: bool = False,
-    activity: dict,
-) -> tuple[str, dict | None]:
+def driver_reading(goal_rows: list[dict], *, turn_open: bool = False) -> tuple[str, dict | None]:
     """(reading, newest goal row) for ONE session's goal rows -- the CARD's predicates.
 
     THE PREDICATES ARE THE CARD'S, not this reader's invention: `TEMPLATE/roles/triage.md`
-    carries the four-reading table, and #460's second criterion requires the runner and the
+    carries the three-reading table, and #460's second criterion requires the runner and the
     card to AGREE, so a change here owes the card a change in the same commit.
 
-    * DRIVEN        -- the evaluation is ADVANCING: `turns_used > 0` and `updated_at >
-                       created_at`, or a turn is in flight. MOTION, never declared state -- a
-                       goal is evaluated only at a turn's END, so an armed goal cannot summon a
-                       turn, and `state='active'` is a declaration that a driver exists rather
-                       than a measurement that one is in the room.
-    * ARMED-INERT   -- an active row that is not advancing: `turns_used = 0` and `updated_at =
-                       created_at` is the card's named case, and it covers every other
-                       active-but-motionless row too. The loop exists and steers a turn that is
-                       not coming.
-    * UNARMED-ACTIVE-- no active row, and MEASURED WORK inside the declared window: the lane is
-                       draining through something other than a goal loop. Re-arm is REFUSED --
-                       a working lane does not need a driver installed (#532).
-    * DRIVERLESS    -- no active row and no measured work inside that window: no goal-loop
-                       driver and no measured work since the instant the reading prints.
-    * UNREADABLE    -- the ACTIVITY source could not be read, so the lane's driving state is
-                       not known. Never a zero (#271).
-
-    NO BRANCH ASSERTS THE FUTURE (#532). The pre-#532 text said DRIVERLESS meant "nothing will
-    evaluate this session's goal"; two facts cannot support a claim about what happens next,
-    and the ledger falsified it -- 33 `close` rows by actor `worker` landed after the goal row
-    this leg was judging had stopped, and the Surveys lane carries no goal row in any home
-    while recording 10,336 tool executions. Every reading now states what was MEASURED, and
-    the activity instant is carried on the record so "no work since T" can never be confused
-    with "not read".
-
-    `activity` IS REQUIRED and has no default: a caller that does not state the fact would get
-    the pre-#532 reading back silently, which is exactly the defect. Its `state` is one of
-    LANE_ACTIVITY_READ / LANE_ACTIVITY_NONE / LANE_ACTIVITY_UNREADABLE, and only the READ arm
-    carries `in_window` and `instant`.
+    * DRIVEN      -- the evaluation is ADVANCING: `turns_used > 0` and `updated_at >
+                     created_at`, or a turn is in flight. MOTION, never declared state -- a goal
+                     is evaluated only at a turn's END, so an armed goal cannot summon a turn,
+                     and `state='active'` is a declaration that a driver exists rather than a
+                     measurement that one is in the room.
+    * ARMED-INERT -- an active row that is not advancing: `turns_used = 0` and `updated_at =
+                     created_at` is the card's named case, and it covers every other active-but-
+                     motionless row too. The loop exists and steers a turn that is not coming.
+    * DRIVERLESS  -- no active row and no turn in flight: nothing will evaluate this session's
+                     goal, so the backlog behind it has no driver at all.
 
     THE MOTION CLAUSE IS SCOPED TO A LIVE ROW, and that scoping is the ONE place the card's
-    rows did not already agree. Read literally, a `paused` row that advanced before it stopped
-    satisfies DRIVEN (`turns_used > 0`, `updated_at > created_at`) AND DRIVERLESS (no active
-    row, no turn in flight) at the same time, so the two rows overlapped and the table never
-    said which won. The card states the scope and this reader matches it, because the
+    three rows did not already agree. Read literally, a `paused` row that advanced before it
+    stopped satisfies DRIVEN (`turns_used > 0`, `updated_at > created_at`) AND DRIVERLESS (no
+    active row, no turn in flight) at the same time, so the two rows overlapped and the table
+    never said which won. The card now states the scope and this reader matches it, because the
     alternative is a reading that calls a stopped loop "driven" and therefore REFUSES the one
     act that would restart it: a paused lane holding a fortnight-old backlog would print DRIVEN
     and go unmentioned for ever, which is the exact failure #133 was filed to end.
@@ -7091,20 +6900,16 @@ def driver_reading(
     if turn_open:
         return "DRIVEN", _newest_goal_row(goal_rows)
     newest = _newest_goal_row(goal_rows)
-    state = str((newest or {}).get("state") or "").strip().lower()
-    if newest is not None and state == GOAL_DRIVEN_STATE:
-        if _goal_turns_used(newest) > 0 and _goal_advanced(newest):
-            return "DRIVEN", newest
-        return "ARMED-INERT", newest
-    # NO ACTIVE ROW from here on, so the ACTIVITY fact decides -- and it decides in THIS order.
-    # An unreadable source is UNREADABLE before it can be a zero (#271): the leg must never
-    # report "no work" when what it means is "could not look".
-    kind = str((activity or {}).get("state") or "")
-    if kind == LANE_ACTIVITY_UNREADABLE:
-        return "UNREADABLE", newest
-    if kind == LANE_ACTIVITY_READ and bool((activity or {}).get("in_window")):
-        return "UNARMED-ACTIVE", newest
-    return "DRIVERLESS", newest
+    if newest is None:
+        return "DRIVERLESS", None
+    state = str(newest.get("state") or "").strip().lower()
+    if state != GOAL_DRIVEN_STATE:
+        # No active row and no turn in flight: the card's DRIVERLESS row, whose re-arm is
+        # PERMITTED. A terminal or paused row is not a driver whatever its history.
+        return "DRIVERLESS", newest
+    if _goal_turns_used(newest) > 0 and _goal_advanced(newest):
+        return "DRIVEN", newest
+    return "ARMED-INERT", newest
 
 def stall_lane_turn_open() -> dict[str, bool]:
     """Live session id -> whether a turn is IN FLIGHT, from the box's own bindings (#133).
@@ -7139,9 +6944,6 @@ def driverless_leg(
     read_at: str,
     lane_names_fn=None,
     lane_turn_open_fn=None,
-    lane_activity_fn,
-    threshold_days: float = STALL_CENSUS_THRESHOLD_DAYS,
-    now: dt.datetime | None = None,
 ) -> dict:
     """Does a lane carrying an UNCLAIMED BACKLOG have a driver at all? (#133)
 
@@ -7162,17 +6964,7 @@ def driverless_leg(
     DETECT ONLY. This leg NOTIFIES NOTHING and RE-ARMS NOTHING (#133): arming another lane's
     goal is that lane's act or its owner's, and a patrol that armed lanes would be inventing
     work rather than reporting it. The remedy sentence says exactly that, so a reader is never
-    left thinking this leg did something about what it found. The FOURTH reading refuses the
-    re-arm for a second reason (#532): a lane measured working inside the window is draining,
-    and installing a driver on a running lane is this leg's own false positive.
-
-    THE ACTIVITY FACT IS INJECTED, never a module global (#532): `lane_activity_fn` defaults to
-    `box_lane_activity` for the live run and is patched in every probe, so a reading here can
-    never be decided by this box's own `tool_executions`. The WINDOW is
-    `STALL_CENSUS_THRESHOLD_DAYS` and not a constant of this leg's own: that one already means
-    "the shortest interval in which a lane that intends to take a dispatched item would have
-    claimed it", which is exactly the question the fourth reading asks, and it is PRINTED with
-    its basis on every run.
+    left thinking this leg did something about what it found.
     """
     coverage = census.get("coverage") or {}
     grouped = coverage.get("owed_by_lane")
@@ -7183,33 +6975,6 @@ def driverless_leg(
     # it even when the arm is inert), so it rides its own injected read. A read that fails
     # returns {} -- see `stall_lane_turn_open`, and note the direction it fails in.
     open_turns = (lane_turn_open_fn or stall_lane_turn_open)()
-    # "was this session MEASURED doing anything" is the fact the leg was missing (#532), and
-    # it rides the same injection discipline: a source that could not be read yields
-    # UNREADABLE for every lane, never a zero.
-    activity_store = lane_activity_fn()
-    activity_readable = bool(activity_store.get("readable"))
-    activity_epochs = activity_store.get("epochs") or {}
-    activity_newest = activity_store.get("newest") or {}
-    window_secs = float(threshold_days) * 86400.0
-    now_epoch = (now or dt.datetime.now(dt.timezone.utc)).timestamp()
-
-    def activity_for(session_ref: str) -> dict:
-        """ONE session's activity fact, in the shape `driver_reading` decides on."""
-        if not activity_readable:
-            return {
-                "state": LANE_ACTIVITY_UNREADABLE,
-                "reason": str(activity_store.get("reason") or "the source gave no reason"),
-            }
-        epoch = activity_epochs.get(session_ref)
-        if epoch is None:
-            return {"state": LANE_ACTIVITY_NONE}
-        age_secs = now_epoch - float(epoch)
-        return {
-            "state": LANE_ACTIVITY_READ,
-            "instant": activity_newest.get(session_ref),
-            "age_days": age_secs / 86400.0,
-            "in_window": age_secs <= window_secs,
-        }
     rows = goals.get("rows") or []
     by_session: dict[str, list[dict]] = {}
     for row in rows:
@@ -7246,11 +7011,9 @@ def driverless_leg(
             unresolved_lanes += 1
             continue
         lane = slot.get("lane") or names.get(session_ref) or session_ref
-        activity = activity_for(session_ref)
         reading, newest = driver_reading(
             by_session.get(session_ref, []),
             turn_open=bool(open_turns.get(session_ref)),
-            activity=activity,
         )
         counts[reading] += 1
         state = str((newest or {}).get("state") or "")
@@ -7263,48 +7026,16 @@ def driverless_leg(
             "state": state,
             "turns_used": turns_used,
             "updated_at": (newest or {}).get("updated_at"),
-            # THE INSTANT THE FOURTH READING RESTS ON (#532), carried on the record so a
-            # reader can tell "no work since T" from "not read" -- and PRINTED on every
-            # UNARMED-ACTIVE and every DRIVERLESS line.
-            "activity_state": activity.get("state"),
-            "activity_instant": activity.get("instant"),
-            "activity_age_days": activity.get("age_days"),
             "units": units,
             "oldest_age_days": slot.get("oldest_age_days"),
         })
         if reading == "DRIVEN":
             continue
         held = ", ".join(units[:6]) + (", ..." if len(units) > 6 else "")
-        # THE ACTIVITY FACT IN WORDS, on every line that is not DRIVEN (#532): "no work since
-        # T" and "not read" are different findings, and a line that omits the instant merges
-        # them into one sentence a reader cannot act on.
-        if activity.get("state") == LANE_ACTIVITY_READ:
-            measured = (
-                f"its newest measured tool execution is {activity.get('instant')} "
-                f"({float(activity.get('age_days') or 0.0):.2f} d before this read)"
-            )
-        elif activity.get("state") == LANE_ACTIVITY_UNREADABLE:
-            measured = "its activity could not be read at all"
-        else:
-            measured = "no tool execution for that session in any home this read reached"
-        if reading == "UNREADABLE":
+        if newest is None:
             detail = (
-                f"the ACTIVITY source could not be read ({activity.get('reason')}), so this "
-                f"line reports an UNREAD source and NOT an absent driver"
-            )
-        elif reading == "UNARMED-ACTIVE":
-            detail = (
-                f"it has NO active goal row, but it was MEASURED WORKING at "
-                f"{activity.get('instant')} ({float(activity.get('age_days') or 0.0):.2f} d "
-                f"before this read, inside the {float(threshold_days):.2f} d window), so it is "
-                f"draining through a trigger this leg cannot see -- and a driver is not what "
-                f"it lacks"
-            )
-        elif newest is None:
-            detail = (
-                "NO goal row for that session in any home this read reached, and "
-                f"{measured}, so nothing was armed to drive it AND nothing was measured "
-                "running"
+                "NO goal row for that session in any home this read reached, so nothing was "
+                "ever armed to drive it"
             )
         elif reading == "ARMED-INERT":
             detail = (
@@ -7318,27 +7049,15 @@ def driverless_leg(
             # that is sitting right there is the misreport this split exists to prevent.
             detail = (
                 f"its newest goal row is `{state}` (turns used {turns_used}, last touched "
-                f"{newest.get('updated_at')}), no turn is in flight, and {measured}, so it has "
-                f"no goal-loop driver and no measured work since that instant -- a stopped "
-                f"loop is not a driver, whatever it did before it stopped"
+                f"{newest.get('updated_at')}) and no turn is in flight, so nothing will "
+                f"evaluate it again -- a stopped loop is not a driver, whatever it did before "
+                f"it stopped"
             )
-        # THE REMEDY IS PER-READING (#532): the fourth reading refuses the re-arm for a reason
-        # of its own, and printing #133's sentence on it would invite exactly the act the
-        # ruling forbids.
-        remedy = (
-            "The ACT is NOT a re-arm: a lane measured working inside the window is draining, "
-            "and installing a driver on a running lane is this leg's own false positive "
-            "(board #532)"
-            if reading == "UNARMED-ACTIVE"
-            else (
-                "The ACT is the lane's own or the sweep owner's: this leg detects and prints, "
-                "and MUST NOT re-arm another lane's goal (board #133)"
-            )
-        )
         problems.append(
-            f"{reading} LANE {lane}: {len(units)} unit(s) dispatched and NEVER CLAIMED "
+            f"DRIVERLESS LANE {lane}: {len(units)} unit(s) dispatched and NEVER CLAIMED "
             f"({held}; oldest {float(slot.get('oldest_age_days') or 0.0):.2f} d) while "
-            f"{detail}. {remedy}"
+            f"{detail}. The ACT is the lane's own or the sweep owner's: this leg detects "
+            f"and prints, and MUST NOT re-arm another lane's goal (board #133)"
         )
     return {
         "name": "driverless-lane",
@@ -7355,26 +7074,11 @@ def driverless_leg(
             "driven": counts["DRIVEN"],
             "armed_inert": counts["ARMED-INERT"],
             "driverless": counts["DRIVERLESS"],
-            "unarmed_active": counts["UNARMED-ACTIVE"],
-            "unreadable": counts["UNREADABLE"],
             "readings": DRIVERLESS_READINGS,
             "lanes": lanes,
             "lanes_with_a_turn_in_flight": sum(
                 1 for lane in lanes if lane["turn_open"]
             ),
-            # THE WINDOW AND ITS BASIS PRINT ON EVERY RUN (#532, criterion 3): a reading that
-            # says "inside the window" without naming the window is a claim a reader cannot
-            # check, and this one is not this leg's own constant -- it is the census's.
-            "activity_window_days": float(threshold_days),
-            "activity_window_basis": STALL_CENSUS_THRESHOLD_BASIS,
-            "activity_readable": activity_readable,
-            "activity_reason": str(activity_store.get("reason") or ""),
-            "activity_homes_read": list(activity_store.get("homes_read") or []),
-            "activity_homes_without_store": list(
-                activity_store.get("homes_without_store") or []
-            ),
-            "activity_homes_unreached": list(activity_store.get("unreached") or []),
-            "activity_instants_unparsed": list(activity_store.get("unparsed") or []),
             "goal_rows_read": len(rows),
             "goal_homes_read": list(goals.get("homes_read") or []),
             "goal_homes_without_store": list(goals.get("homes_without_store") or []),
@@ -10719,31 +10423,17 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{cov['lanes_routing_unresolved']} skipped because the census could "
                     f"not resolve a routing to a lane"
                 )
-                # THE FOUR READINGS PRINT WITH THEIR ZEROS, so a round that found no
+                # THE THREE READINGS PRINT WITH THEIR ZEROS, so a round that found no
                 # driverless lane is distinguishable from one that never looked.
                 # EACH LABEL NAMES ITS OWN PREDICATE, and DRIVERLESS deliberately does not
                 # claim "no goal row": the card reads a lane with a STOPPED loop as
                 # DRIVERLESS too (a paused row is not a driver), so a label asserting an
                 # absent row would sit beside a row the very next line prints. The reading
                 # is about whether anything will EVALUATE the lane, not whether a row exists.
-                # (#532) NO LABEL ASSERTS THE FUTURE: DRIVERLESS says "no measured work
-                # since T", never "nothing will evaluate it again" -- the ledger carried 33
-                # `close` rows from a lane whose goal row had stopped five days earlier.
                 lines.append(
                     f"  readings: {cov['driven']} DRIVEN (advancing, or a turn in flight), "
                     f"{cov['armed_inert']} ARMED-INERT (active arm never evaluated), "
-                    f"{cov['driverless']} DRIVERLESS (no active row, no turn in flight, and "
-                    f"no measured work inside the window), "
-                    f"{cov['unarmed_active']} UNARMED-ACTIVE (no active row, but measured "
-                    f"work inside the window), "
-                    f"{cov['unreadable']} UNREADABLE (the activity source could not be read)"
-                )
-                # THE WINDOW AND ITS BASIS, printed on every run: the reading that says
-                # "inside the window" is worthless if the window is unnamed, and this one is
-                # the census's constant, not this leg's own (#532, criterion 3).
-                lines.append(
-                    f"  activity window: {cov['activity_window_days']:g} day(s) — "
-                    f"{cov['activity_window_basis']}"
+                    f"{cov['driverless']} DRIVERLESS (no active row and no turn in flight)"
                 )
                 lines.append(
                     f"  turns in flight: {cov.get('lanes_with_a_turn_in_flight', 0)} of "
@@ -10751,16 +10441,11 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
                 for entry in cov.get("lanes") or []:
                     state = entry.get("state") or "no goal row"
-                    # (#532) THE ACTIVITY INSTANT IS ON EVERY LINE, not only on the new
-                    # reading: "no work since T" is the claim DRIVERLESS now makes, and a
-                    # line that omits T leaves a reader unable to tell it from "not read".
                     lines.append(
                         f"    {entry['reading']}: {entry['lane']} — state `{state}`, "
                         f"turns used {entry.get('turns_used')}, last touched "
                         f"{entry.get('updated_at')}, turn in flight "
                         f"{'yes' if entry.get('turn_open') else 'no'}, "
-                        f"work measured at {entry.get('activity_instant')} "
-                        f"({entry.get('activity_state')}), "
                         f"{len(entry.get('units') or [])} "
                         f"unclaimed unit(s) ({', '.join(entry.get('units') or [])})"
                     )
@@ -10785,41 +10470,9 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                         else ""
                     )
                 )
-                # THE ACTIVITY STORE IS PRINTED for the same reason the goal store is: an
-                # unreadable activity source must read as "could not look", never as zero
-                # work (#271) -- otherwise every lane on an unopened home reads DRIVERLESS.
-                lines.append(
-                    f"  activity store: {'READ' if cov.get('activity_readable') else 'UNREADABLE'}"
-                    f" — {len(cov.get('activity_homes_read') or [])} home(s) read"
-                    + (
-                        f"; {len(cov['activity_homes_without_store'])} home(s) carry no "
-                        f"tool_executions table "
-                        f"({', '.join(cov['activity_homes_without_store'])})"
-                        if cov.get("activity_homes_without_store")
-                        else ""
-                    )
-                    + (
-                        f"; {len(cov['activity_homes_unreached'])} UNREACHED "
-                        f"({', '.join(cov['activity_homes_unreached'])})"
-                        if cov.get("activity_homes_unreached")
-                        else ""
-                    )
-                    + (
-                        f"; {len(cov['activity_instants_unparsed'])} instant(s) unparsed"
-                        if cov.get("activity_instants_unparsed")
-                        else ""
-                    )
-                    + (
-                        f" — REASON: {cov['activity_reason']}"
-                        if cov.get("activity_reason")
-                        else ""
-                    )
-                )
                 lines.append(
                     "  remedy: the ACT is the lane's own or the sweep owner's — this leg "
-                    "DETECTS and prints, and MUST NOT re-arm another lane's goal (#133). "
-                    "A re-arm is REFUSED for UNARMED-ACTIVE: a lane with measured work "
-                    "inside the window does not need a driver installed (#532)"
+                    "DETECTS and prints, and MUST NOT re-arm another lane's goal (#133)"
                 )
             lines.append(f"  read at {cov.get('read_at')}")
         elif leg["name"] == "board-unruled":
@@ -11270,11 +10923,6 @@ def main(
     # store -- a probe must be able to put a turn in flight without inventing a goal row, since
     # the card's DRIVEN row admits that case precisely when the arm is inert.
     driverless_turn_open_fn=None,
-    # #532: "was this session MEASURED doing anything" -- the fact the driverless reading was
-    # missing. Injected for the ninth time and the same reason, and REQUIRED at the leg, so a
-    # probe cannot silently read this box's live `tool_executions` and have its verdict decided
-    # by whichever lanes happened to be busy.
-    driverless_activity_fn=None,
     lane_names_fn=None,
     shared_tree_fn=None,
     out=print,
@@ -11497,7 +11145,6 @@ def main(
             read_at=read_at,
             lane_names_fn=lane_names_fn or stall_lane_names,
             lane_turn_open_fn=driverless_turn_open_fn,
-            lane_activity_fn=driverless_activity_fn or box_lane_activity,
         ), read_at),
         leg_guard("board-unruled", lambda: board_unruled_leg(issues, rows, read_at=read_at, predicate=predicate), read_at),
         leg_guard("criterion-paths", lambda: criterion_path_leg(

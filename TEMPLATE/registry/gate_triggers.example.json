@@ -374,6 +374,11 @@
       "tools/kit_*.py",
       "tools/registry*.py"
     ],
+    "tests/test_law_conversion_join.py": [
+      "docs/measurement-procedure.md",
+      "skills/meta-factory/SKILL.md",
+      "tests/test_law_conversion_join.py"
+    ],
     "tests/test_law_coverage.py": [
       "*.md",
       "ONTOLOGY.md",
