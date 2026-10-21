@@ -2943,7 +2943,25 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
     # matched to this log" are different facts and only the first is a finding about the
     # box; the second is a statement about the read, and it must be visible as one.
     unattributed: list[dict] = []
+    # #537 (ruling n=4009): a candidate log whose own stamp NO run of its job contains is
+    # EXCUSED and PRINTED with the stamp and the job the filename nominates — never judged,
+    # and never silently dropped. The live pair that produced this ruling were two 954/948 B
+    # files written by another lane's background task into the shared /tmp namespace: they
+    # carried a cron stem, no run of that job covered their instants, and the filename proxy
+    # alone called them failed dispatches. The excuse is loud by construction because an
+    # excuse-heavy round must be visible as one.
+    uncorroborated: list[dict] = []
+    # A job with NO run rows at all is a DECLARED DEGRADATION, not an excuse: the
+    # corroboration cannot be performed for it, so the filename proxy stands and the leg
+    # SAYS SO with its reason (#524's rule, applied here one surface over). This arm is
+    # what stops `cron_run_fires`' silent per-home skip — it contributes NOTHING for a home
+    # it cannot read — from turning an unread run table into a blanket excuse that reads as
+    # a clean round (#271: a zero must never stand in for "could not look").
+    degraded: list[dict] = []
     fires = list(fires or [])
+    # The jobs this run table can corroborate AT ALL. Membership is per JOB, never global:
+    # a table holding one job's runs must not be read as corroborating another's.
+    corroborable = {run_key(fire) for fire in fires}
     for name, path in matched:
         if not prefixes or not any(name.startswith(prefix) for prefix in prefixes):
             foreign.append({"job": name, "path": str(path)})
@@ -2978,13 +2996,44 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
                        else "the notify was ACCEPTED; delivery is pending")
             excused.append(f"{name}: {path.name} carries a receipt ({kind}{detail}) — {meaning}")
             continue
+        # ---- #537 (ruling n=4009): corroborate EVERY candidate BEFORE judging it --------
+        # The leg's own asymmetry WAS the defect: a 0-byte log was reconciled against the
+        # scheduler's run record while a non-empty log was judged on the filename proxy
+        # alone, so any file carrying a cron stem — written by any lane, for any reason —
+        # was scored as a failed dispatch. One predicate now, both sizes: a log is
+        # attributed to a job only when that job has a run row whose window CONTAINS the
+        # log's own stamp. The filename nominates a CANDIDATE and never settles one.
+        found = NOTIFY_LOG_RE.match(path.name)
+        stamp = log_stamp(found.group("stamp")) if found else None
+        run = None
+        if run_key(row) not in corroborable:
+            # DECLARED DEGRADATION: this job has no run rows, so corroboration cannot be
+            # performed. The filename proxy stands, and the leg prints that it did and why.
+            degraded.append({
+                "job": name,
+                "id": str(row.get("id") or ""),
+                "path": str(path),
+                "stamp": stamp.isoformat() if stamp else "",
+            })
+        else:
+            run = run_containing(fires, row, reader_parse_ts, stamp) if stamp else None
+            if run is None:
+                # UNATTRIBUTED: the filename nominates this job, no run of it covers the
+                # stamp, so nothing in the record says this file came from that job at all.
+                # EXCUSED and PRINTED with both facts — never a problem, never silence.
+                uncorroborated.append({
+                    "job": name,
+                    "id": str(row.get("id") or ""),
+                    "path": str(path),
+                    "stamp": stamp.isoformat() if stamp else "",
+                    "runs_of_job": sum(1 for fire in fires
+                                       if run_key(fire) == run_key(row)),
+                })
+                continue
         if not text.strip():
             # A 0-byte log is a notify that produced NOTHING — which is what a run that
             # never reached its notify leaves AND what a completed run whose notify died
             # leaves. Only the run's own verdict separates them (#306, ruling n=2191).
-            found = NOTIFY_LOG_RE.match(path.name)
-            stamp = log_stamp(found.group("stamp")) if found else None
-            run = run_containing(fires, row, reader_parse_ts, stamp) if stamp else None
             status = str(run.get("status") or "") if run else ""
             entry = {
                 "job": name,
@@ -3097,6 +3146,25 @@ def notify_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[
                 "and a status outside the closed vocabulary is reported, never excused"
             ),
             "logs_retired": len(retired),
+            # #537 (ruling n=4009): the corroboration surface, its population and its
+            # predicate, all printed beside each other. A round that excuses many logs
+            # because nothing covers their stamps must be VISIBLE as one, and a round where
+            # the run table could not corroborate a job at all must say so rather than
+            # render as a clean read (#271, #163 half 2 (b)).
+            "logs_uncorroborated": len(uncorroborated),
+            "uncorroborated_logs": uncorroborated,
+            "logs_corroboration_degraded": len(degraded),
+            "corroboration_degraded_logs": degraded,
+            "jobs_corroborable": len(corroborable),
+            "run_rows_read": len(fires),
+            "corroboration_predicate": (
+                "a log is attributed to a job only when a run row for the same "
+                "(job_id, job_name) has a window CONTAINING the log's own stamp; the "
+                "filename nominates a candidate and never settles one. A candidate no run "
+                "covers is EXCUSED and printed with its stamp; a job carrying NO run rows "
+                "at all falls back to the filename proxy AS A DECLARED DEGRADATION, and a "
+                "corroborated log with no receipt stays a PROBLEM"
+            ),
             "logs_attributed_by_redirect": len(redeclared),
             "logs_unattributed": len(foreign),
             "retired_logs": retired,
@@ -10291,6 +10359,38 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  logs matched: {cov['logs_matched']} of {cov['logs_on_surface']} log(s) "
                 f"on {cov['log_dir']} naming OR DECLARING a live row this factory "
                 f"declares — {cov['logs_without_receipt']} produced no receipt"
+            )
+            # #537 (ruling n=4009): the corroboration line. It prints on the leg's OWN
+            # surface, beside the population it qualifies, so an excuse-heavy round is
+            # visible as one and a round whose run table could not corroborate is never
+            # mistaken for a round that found nothing (#271).
+            lines.append(
+                f"  corroboration: {cov.get('run_rows_read', 0)} run row(s) covering "
+                f"{cov.get('jobs_corroborable', 0)} job(s) — "
+                f"{cov.get('logs_uncorroborated', 0)} log(s) EXCUSED as uncorroborated, "
+                f"{cov.get('logs_corroboration_degraded', 0)} judged on the FILENAME PROXY "
+                f"alone (declared degradation)"
+            )
+            for row in cov.get("uncorroborated_logs", []):
+                lines.append(
+                    f"    uncorroborated: {row['job']} (cron id {row['id'] or 'unstated'}) "
+                    f"— {row['path']} carries the stamp "
+                    f"{row.get('stamp') or 'no parseable stamp'}, and none of this job's "
+                    f"{row.get('runs_of_job', 0)} run(s) covers it; the filename nominates "
+                    f"the job, the record does not attribute the file — EXCUSED, never a "
+                    f"failed dispatch"
+                )
+            for row in cov.get("corroboration_degraded_logs", []):
+                lines.append(
+                    f"    degradation: {row['job']} (cron id {row['id'] or 'unstated'}) "
+                    f"— {row['path']} (stamp {row.get('stamp') or 'unparseable'}) is judged "
+                    f"on the FILENAME PROXY because this job carries NO run rows to "
+                    f"corroborate it against; the excuse this leg grants is a statement "
+                    f"about the READ, and it is printed here so it can never be read as a "
+                    f"clean box"
+                )
+            lines.append(
+                f"  corroboration predicate: {cov.get('corroboration_predicate', 'predicate unstated')}"
             )
             for row in cov.get("not_attempted_logs", []):
                 verdict = (

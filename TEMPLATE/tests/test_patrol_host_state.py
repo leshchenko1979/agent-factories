@@ -1909,6 +1909,121 @@ def test_the_runner_PRINTS_the_no_attempt_verdict_and_its_predicate() -> None:
     assert "its run did NOT complete (status interrupted" in out, out
     assert "no-attempt logs matched to NO run: 0 of 1" in out, out
 
+def test_a_NON_EMPTY_log_whose_stamp_NO_run_covers_is_EXCUSED_with_its_stamp() -> None:
+    """#537 (ruling n=4009) ARM A — the filename nominates, the RECORD attributes.
+
+    Measured origin, at the bytes: the 06:01:59Z patrol blamed `factory-triage-patrol` for
+    `/tmp/factory-triage-patrol-20261020T124930.log` (954 B) and `…T124942.log` (948 B).
+    Those are another lane's probe litter, and the job's own slots that day wrote four
+    73-byte receipts at 00:01, 06:01, 12:02 and 18:00 — none at 12:49. The leg's asymmetry
+    was the defect: a ZERO-byte log was reconciled against the run record while a NON-EMPTY
+    one was judged on its filename alone, so any file carrying a cron stem was scored as a
+    failed dispatch.
+
+    Both files are reproduced here at their real size and their real stamps, against that
+    day's four real slots. Nothing covers 12:49:30, so the leg must EXCUSE and PRINT — and
+    the stamp it rests on must be in the report, or "no work since T" is indistinguishable
+    from "not read".
+    """
+    log_dir = _log_dir(**{
+        "factory-triage-patrol-20261020T124930.log": "x" * 954,
+        "factory-triage-patrol-20261020T124942.log": "y" * 948,
+    })
+    rows = [_notify_row("factory-triage-patrol", row_id="triage-probe")]
+    fires = [
+        _run_row("factory-triage-patrol", row_id="triage-probe",
+                 started=f"2026-10-20T{slot}:00Z", completed=f"2026-10-20T{slot}:40Z",
+                 status="success")
+        for slot in ("00:01", "06:01", "12:02", "18:00")
+    ]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-10-21T06:02:00Z",
+                                    fires=fires)
+    assert leg["problems"] == [], (
+        f"a file the run record does not attribute is not a failed dispatch: {leg['problems']}"
+    )
+    cov = leg["coverage"]
+    assert cov["logs_uncorroborated"] == 2, cov
+    stamps = sorted(row["stamp"] for row in cov["uncorroborated_logs"])
+    assert stamps == ["2026-10-20T12:49:30+00:00", "2026-10-20T12:49:42+00:00"], stamps
+    assert all(row["runs_of_job"] == 4 for row in cov["uncorroborated_logs"]), (
+        f"the count of the job's OWN runs is what makes the excuse auditable\n{cov}"
+    )
+    assert cov["logs_without_receipt"] == 0, (
+        f"an uncorroborated log is outside the judged population\n{cov}"
+    )
+    # The BITE, on the render: the excuse is loud, and it carries the stamp it rests on.
+    rc, out, _ = _run([], [], cron_rows=rows, prefixes=["factory-"], log_dir=log_dir,
+                      cron_fires=fires)
+    assert rc == 0, out
+    assert "2 log(s) EXCUSED as uncorroborated" in out, out
+    assert "2026-10-20T12:49:30+00:00" in out, out
+    assert "the filename nominates the job, the record does not attribute the file" in out, out
+
+
+def test_the_SAME_bytes_INSIDE_a_runs_window_are_a_PROBLEM() -> None:
+    """#537 ARM B — corroboration must not become a blanket excuse.
+
+    The bytes, the job and the log surface are IDENTICAL to ARM A's; only the stamp moves,
+    from 12:49:30 to a slot the record actually covers. So the two arms differ in exactly
+    one fact and the verdict flips on it — which is the only shape that proves the
+    corroboration is doing work rather than excusing everything it is shown (#112).
+
+    A corroborated log with no receipt stays a PROBLEM: that is the duty that failed.
+    """
+    log_dir = _log_dir(**{"factory-triage-patrol-20261020T120215.log": "x" * 954})
+    rows = [_notify_row("factory-triage-patrol", row_id="triage-probe")]
+    fires = [_run_row("factory-triage-patrol", row_id="triage-probe",
+                      started="2026-10-20T12:02:00Z", completed="2026-10-20T12:02:40Z",
+                      status="success")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-10-21T06:02:00Z",
+                                    fires=fires)
+    assert len(leg["problems"]) == 1, (
+        f"a log INSIDE a run's window is that run's own failed notify: {leg['problems']}"
+    )
+    assert "the notify produced NO receipt" in leg["problems"][0], leg["problems"][0]
+    assert leg["coverage"]["logs_uncorroborated"] == 0, (
+        f"corroboration succeeded, so nothing may be excused\n{leg['coverage']}"
+    )
+    assert leg["coverage"]["logs_without_receipt"] == 1, leg["coverage"]
+
+
+def test_a_job_with_NO_run_rows_at_all_is_a_DECLARED_DEGRADATION_never_a_silent_excuse() -> None:
+    """#537 — an unread run table must never render as a clean box (#271).
+
+    `cron_run_fires` contributes NOTHING for a home it cannot read, so a naive
+    "corroborate every candidate" would excuse EVERY log on a box whose runs table was
+    unreadable — a leg that goes greener as its blind spot grows. The fallback is the
+    filename proxy, and the leg DECLARES that it fell back and why, so the read is
+    auditable.
+
+    The control is ARM B's fixture with its run rows removed: same log, same job, and the
+    only difference is that the record cannot corroborate anything at all.
+    """
+    log_dir = _log_dir(**{"factory-triage-patrol-20261020T120215.log": _FAILURE})
+    rows = [_notify_row("factory-triage-patrol", row_id="triage-probe")]
+    leg = RUNNER.notify_receipt_leg(rows, ["probe-home"], [], ["factory-"],
+                                    log_dir=log_dir, read_at="2026-10-21T06:02:00Z",
+                                    fires=[])
+    cov = leg["coverage"]
+    assert cov["logs_corroboration_degraded"] == 1, cov
+    assert cov["corroboration_degraded_logs"][0]["job"] == "factory-triage-patrol", cov
+    assert cov["jobs_corroborable"] == 0, cov
+    assert cov["logs_uncorroborated"] == 0, (
+        f"no run rows exist, so nothing can be 'uncorroborated' — it is DEGRADED\n{cov}"
+    )
+    assert len(leg["problems"]) == 1, (
+        f"the filename proxy still stands under degradation, so the failed notify is "
+        f"still a problem: {leg['problems']}"
+    )
+    rc, out, _ = _run([], [], cron_rows=rows, prefixes=["factory-"], log_dir=log_dir,
+                      cron_fires=[])
+    assert rc == 1, out
+    assert "1 judged on the FILENAME PROXY alone (declared degradation)" in out, out
+    assert "carries NO run rows to corroborate it against" in out, out
+    assert "corroboration predicate:" in out, out
+
 def test_a_log_with_no_live_ROW_is_reported_as_history_and_never_judged() -> None:
     """A name this factory declares but that no enabled row carries is HISTORY.
 
