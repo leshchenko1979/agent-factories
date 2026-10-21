@@ -28,7 +28,7 @@ ruled at ledger `n=1168`.
 The executable is `tools/publish.py`, shipped as a byte-gated pair with
 `TEMPLATE/tools/publish.py`.
 
-## 2. The thirteen statuses
+## 2. The fourteen statuses
 
 A round always ends in exactly one of these. `held` is the **only** status that can become
 publishable by waiting — every other terminal status is a verdict the caller must act on.
@@ -42,6 +42,7 @@ publishable by waiting — every other terminal status is a verdict the caller m
 | `diverged` | the branch is not an ancestor of HEAD; reported, never resolved | no |
 | `ff-blocked` | the sync could fast-forward, but local edits sit on paths it would overwrite | no |
 | `not-on-branch` | HEAD is detached and on **neither end** of the configured branch's line | no |
+| `unbound-repo` | **STARTUP refusal** (#525): no `--repo` was passed and the tree this copy of the tool sits in is not a git work tree — the shape of a copy fetched to `/tmp`, whose derived root is `/`. The round stops before it asks the remote anything, so this is **not** a verdict about any repository | no |
 | `no-remote` | the configured remote is not configured in this repository | no |
 | `unreachable` | the remote could not be asked (fetch or `ls-remote` failed) | no |
 | `unreadable` | the unpushed-commit log could not be read | no |
@@ -73,7 +74,7 @@ Two contracts, because a report and a wait are different questions.
 
 | invocation | exit 0 | exit 1 |
 |---|---|---|
-| `python3 tools/publish.py [--apply]` | the round RAN — `published`, `already-published`, `held`, `in-sync`, `behind`, `diverged`, `would-publish` | the round could not be completed — `no-remote`, `not-on-branch`, `unreachable`, `unreadable`, `push-failed`, `ff-blocked` |
+| `python3 tools/publish.py [--apply]` | the round RAN — `published`, `already-published`, `held`, `in-sync`, `behind`, `diverged`, `would-publish` | the round could not be completed — `unbound-repo`, `no-remote`, `not-on-branch`, `unreachable`, `unreadable`, `push-failed`, `ff-blocked` |
 | `python3 tools/publish.py --wait` | **only** `published`, `in-sync` and `already-published` | **every** other status |
 
 **`not-on-branch` was the defect (issue #482, order 2).** It exited 0 beside the refusals above
@@ -81,6 +82,15 @@ while being a refusal like them, so an rc-only caller could not distinguish it f
 ran — and a caller that waits loops forever on a state that will never change. It now exits 1.
 `behind` and `diverged` deliberately **stay at 0** on the plain path, because they are reports;
 a waiting caller refuses them through the waitable set instead.
+
+**`unbound-repo` is the STARTUP refusal (#525, ruling n=3895 item 1), and it is not
+`no-remote`.** The tool derives its repo root from its own `__file__`, which is correct for the
+copy that lives in the tree and wrong for every copy that does not: a copy fetched to `/tmp`
+derives `/`, and the old default sent it on to ask whether `origin` was configured *in `/`* and
+answer `no-remote` — a verdict about a repository, emitted about a tree the invocation never
+chose. So where `--repo` is absent **and** the derived tree is not a git work tree, the round
+stops at startup with a status that names the flag it needs. `--repo` supplied is never
+second-guessed: the caller chose a tree, so that tree's answer is a verdict about it.
 
 ## 4. The waiting primitive
 

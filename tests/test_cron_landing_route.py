@@ -21,6 +21,12 @@ is the one that bites:
       NOT a violation: `factory-publish` fetches the pusher from `origin/main` at run time
       (`git -C /root/agent-factories show origin/main:tools/publish.py`), which is the
       correct shape and is asserted GREEN here.
+  (c) BOUND    -- and a RUN of a FETCHED copy must pass `--repo` (#525). Leg (a) cannot see
+      this: `git show origin/main:tools/publish.py > /tmp/p.py && python3 /tmp/p.py --apply`
+      NAMES the pusher inside the fetch and executes nothing, while the run it does perform is
+      unrunnable -- the copy derives its repo root from its own `__file__`, resolves `/`, and
+      stops at startup with `unbound-repo`. The asymmetry that let it through: the fetch is
+      MASKED for leg (b) and was not accounted for in leg (a) at all.
 
 POPULATION. Rows whose prompt declares `receipt_subject:` with a value other than `none`.
 A row that declares no receipt produces nothing to land, so it is EXCUSED and PRINTED rather
@@ -84,6 +90,17 @@ CD_SHARED_RE = re.compile(rf"\bcd\s+[\"']?{re.escape(SHARED_TREE)}\b")
 # A repo-relative script token, the shape that becomes an execution once the working
 # directory is the shared tree.
 SCRIPT_TOKEN_RE = re.compile(r"[\w./-]+\.(?:py|sh)\b")
+
+# --- the FETCH/RUN split (#525) ------------------------------------------------------
+# Leg (a) answers "does the envelope NAME the pusher", and `git show origin/main:tools/publish.py`
+# answers YES while RUNNING NOTHING. That is not a corner case: the mandated landing route FETCHES
+# the pusher to a copy outside the tree and runs the COPY, and the copy derives its repo from its
+# own `__file__`, so a copy at `/tmp/p.py` resolves `/` and dies unless the invocation passes
+# `--repo`. Measured on the live envelopes: `git -C /root/agent-factories show
+# origin/main:tools/publish.py > /tmp/p.py && python3 /tmp/p.py --apply` names the pusher, is
+# unrunnable, and read CLEAN.
+PUSHER_FETCH_RE = re.compile(r"origin/main:tools/publish\.py\s*>\s*([^\s;&|]+\.py)")
+PY_INVOKE_RE = re.compile(r"\bpython3?\s+([^\s;&|]+\.py)\b")
 
 
 def text(value: object) -> str:
@@ -157,6 +174,59 @@ def census_hits(prompt: str) -> int:
     """The #481 census predicate's own count, carried for fixture reproducibility."""
     return len(CENSUS_RE.findall(prompt))
 
+def fetched_pusher_copies(prompt: str) -> set[str]:
+    """Every path the envelope FETCHES the pusher TO -- `origin/main:tools/publish.py > X`.
+
+    Read from the RAW logical line, never the masked one: masking exists to hide the READ from
+    the shared-tree sweep, and the destination is exactly what this leg needs to see.
+    """
+    out: set[str] = set()
+    for line in logical_lines(prompt):
+        for match in PUSHER_FETCH_RE.finditer(line):
+            out.add(match.group(1))
+    return out
+
+def _invocation_segment(line: str, start: int) -> str:
+    """The COMMAND part of a logical line, from `start` to the first shell separator or sentence end.
+
+    Needed because these envelopes carry prose on the SAME logical line as the command -- the live
+    `factory-triage-patrol` row reads `... --timeout 1400. --repo is REQUIRED: the fetched copy
+    lives in /tmp ...`. A tail scan that ran to the end of the line would find the WORD `--repo`
+    in that explanation and vouch for a run that never passed it, which is the same class of
+    proxy this gate exists to refuse. So the search stops at `;`, `&&`, `||`, `|` or `. `.
+    """
+    tail = line[start:]
+    return re.split(r"(?:;|&&|\|\||\. )", tail)[0]
+
+def _carries_repo_flag(segment: str) -> bool:
+    """True when `--repo` is passed WITH A VALUE in this command segment."""
+    return bool(re.search(r"--repo\s+(?!-)\S+", segment))
+
+def unbound_pusher_runs(prompt: str) -> list[str]:
+    """Runs of a FETCHED copy of the pusher that pass no `--repo`.
+
+    A fetched copy lives outside the tree, so its `__file__`-derived repo root is the directory
+    it was written to -- `/tmp` -- and `#525` made that a startup refusal naming `--repo`. An
+    envelope that runs the copy WITHOUT the flag is therefore unrunnable, and it used to read
+    clean because leg (a) only asked whether the pusher was mentioned anywhere.
+
+    `--repo` is looked for in the INVOCATION SEGMENT -- the script token to the next shell
+    separator or sentence end -- and it must carry a value, so neither a neighbouring sentence
+    nor a bare `--repo` can vouch for the run.
+    """
+    copies = fetched_pusher_copies(prompt)
+    if not copies:
+        return []
+    sites: list[str] = []
+    for line in logical_lines(prompt):
+        for match in PY_INVOKE_RE.finditer(line):
+            target = match.group(1)
+            if target in copies and not _carries_repo_flag(
+                _invocation_segment(line, match.end())
+            ):
+                sites.append(target)
+    return sites
+
 
 def row_finding(row: dict) -> dict:
     """Judge ONE row. Pure: no disk, no clock, no environment."""
@@ -166,12 +236,19 @@ def row_finding(row: dict) -> dict:
     judged = in_population(prompt)
     stale = stale_sites(prompt)
     pusher = names_pusher(prompt)
+    unbound = unbound_pusher_runs(prompt)
     problems: list[str] = []
     if stale:
         problems.append(
             f"{name}: route TARGET is the shared tree ({SHARED_TREE}), which is the READ "
             f"surface and whose pusher writes the legacy receipt -- the push lands and the "
             f"patrol still reads it UNGOVERNED PUSH. Sites: {'; '.join(stale)}"
+        )
+    if unbound:
+        problems.append(
+            f"{name}: route UNBOUND -- the envelope fetches the pusher to a copy OUTSIDE the "
+            f"tree and runs it without `--repo`, so the copy derives its repo root from its own "
+            f"location and refuses at startup (#525). Sites: {'; '.join(unbound)}"
         )
     if judged and not pusher:
         problems.append(
@@ -187,8 +264,13 @@ def row_finding(row: dict) -> dict:
         "chars": len(prompt),
         "pusher": pusher,
         "stale": stale,
+        "unbound": unbound,
         "problems": problems,
-        "shape": "route-stale" if stale else ("route-absent" if judged and not pusher else None),
+        "shape": (
+            "route-stale" if stale
+            else "route-unbound" if unbound
+            else ("route-absent" if judged and not pusher else None)
+        ),
     }
 
 
@@ -223,10 +305,10 @@ def landing_route_problems(rows: list[dict], declared: list[dict] | None = None)
         for entry in declared:
             job = text(entry.get("job"))
             shape = text(entry.get("shape"))
-            if not job or shape not in {"route-absent", "route-stale"}:
+            if not job or shape not in {"route-absent", "route-stale", "route-unbound"}:
                 problems.append(
-                    f"debt entry {job or '<unnamed>'!r}: shape must be route-absent or "
-                    f"route-stale, read {shape!r}"
+                    f"debt entry {job or '<unnamed>'!r}: shape must be route-absent, "
+                    f"route-stale or route-unbound, read {shape!r}"
                 )
                 continue
             declared_shapes[job] = shape
@@ -256,6 +338,7 @@ def landing_route_problems(rows: list[dict], declared: list[dict] | None = None)
         "judged": [f["name"] for f in population],
         "absent": [f["name"] for f in findings if f["shape"] == "route-absent"],
         "stale": [f["name"] for f in findings if f["shape"] == "route-stale"],
+        "unbound": [f["name"] for f in findings if f["shape"] == "route-unbound"],
         "excused": excused,
         "declared": sorted(text(e.get("job")) for e in (declared or [])),
     }
@@ -388,6 +471,22 @@ def _judged_fetch_row() -> dict:
     prompt = _publish_row()["prompt"].replace("receipt_subject: none", "receipt_subject: patrol-verify")
     return _row("factory-triage-patrol", prompt)
 
+def _fetch_then_run(repo_flag: bool) -> dict:
+    """The MANDATED landing route, with and without `--repo` (#525).
+
+    Both halves name the pusher -- the first inside the `git show` FETCH -- so leg (a) passes
+    BOTH. The difference is whether the RUN of the fetched copy can find a repository at all,
+    and before #525 the gate could not see it. Measured on the live envelopes 2026-10-20/21.
+    """
+    tail = " --repo /root/agent-factories --apply" if repo_flag else " --apply"
+    prompt = (
+        "Duty: do the round's work, then LAND the receipt.\n"
+        "  git -C /root/agent-factories show origin/main:tools/publish.py > /tmp/p.py && \\\n"
+        f"  python3 /tmp/p.py{tail}\n"
+        "receipt_subject: patrol-verify\n"
+    )
+    return _row("factory-triage-patrol", prompt)
+
 
 def test_the_474_shape_is_RED_route_ABSENT() -> None:
     """THE FIRST INSTANCE. A populated envelope that names everything but the landing route."""
@@ -472,6 +571,57 @@ def test_an_origin_main_FETCH_is_a_LAWFUL_route_on_a_JUDGED_row() -> None:
     assert finding["pusher"], "the fetch names the pusher"
     assert finding["problems"] == [], finding["problems"]
 
+
+# --- the FETCH/RUN split (#525) -------------------------------------------------------
+
+def test_a_fetched_copy_run_WITHOUT_repo_is_RED() -> None:
+    """THE BLIND SPOT (#525, ruling n=3895). The envelope FETCHES the pusher and runs the copy
+    with no `--repo`. Leg (a) passes it -- the pusher IS named, inside the `git show` -- while
+    the invocation is unrunnable: the copy derives `/` from its own `__file__` and the round
+    stops at startup. Measured on the live envelopes 2026-10-20/21."""
+    row = _fetch_then_run(repo_flag=False)
+    finding = row_finding(row)
+    assert names_pusher(row["prompt"]), "leg (a) MUST pass this -- that is the defect"
+    assert finding["judged"], finding
+    assert finding["stale"] == [], finding["stale"]
+    assert finding["shape"] == "route-unbound", finding
+    assert finding["unbound"] == ["/tmp/p.py"], finding["unbound"]
+    assert "route UNBOUND" in finding["problems"][0], finding["problems"]
+
+def test_the_SAME_envelope_WITH_repo_is_GREEN() -> None:
+    """The discriminating half: one flag apart, so the RED above is the flag and not the shape."""
+    row = _fetch_then_run(repo_flag=True)
+    finding = row_finding(row)
+    assert finding["unbound"] == [], finding["unbound"]
+    assert finding["problems"] == [], finding["problems"]
+    assert finding["shape"] is None, finding
+
+def test_a_no_pusher_envelope_STILL_finds_the_absent_route() -> None:
+    """THE POSITIVE CONTROL for the arm above: a fix that reds everything cannot pass this.
+    The population must still catch the class it was built for -- an envelope that names no
+    landing route at all."""
+    finding = row_finding(_route_absent_474())
+    assert finding["shape"] == "route-absent", finding
+    assert finding["unbound"] == [], finding["unbound"]
+    assert "route ABSENT" in finding["problems"][0], finding["problems"]
+
+def test_the_UNBOUND_leg_bites_by_MUTATION() -> None:
+    """The mutation control: neuter the new leg and the BAD envelope must go GREEN.
+
+    A leg asserted only against a fixture that it happens to red proves the fixture, not the
+    leg. Here the predicate itself is replaced with an always-empty answer and the same BAD
+    envelope is re-judged -- if it still reads `route-unbound`, something other than this leg
+    is producing the finding.
+    """
+    original = globals()["unbound_pusher_runs"]
+    try:
+        globals()["unbound_pusher_runs"] = lambda prompt: []
+        neutered = row_finding(_fetch_then_run(repo_flag=False))
+    finally:
+        globals()["unbound_pusher_runs"] = original
+    assert neutered["shape"] is None, neutered
+    assert neutered["problems"] == [], neutered["problems"]
+    assert row_finding(_fetch_then_run(repo_flag=False))["shape"] == "route-unbound"
 
 # --- the debt reconciliation ----------------------------------------------------------
 

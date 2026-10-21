@@ -88,14 +88,23 @@ WAIT_POLL_SECS = 15
 ALL_STATUSES = (
     "published", "in-sync", "held", "behind", "diverged", "ff-blocked",
     "not-on-branch", "no-remote", "unreachable", "unreadable", "push-failed",
-    "would-publish", "already-published",
+    "would-publish", "already-published", "unbound-repo",
 )
+# `unbound-repo` JOINED THE SET AT #525 (ruling n=3895, item 1). It is the STARTUP refusal, not
+# a round verdict: the caller named no `--repo` and the tree this FILE sits in is not a git work
+# tree -- the shape a copy fetched to `/tmp` has -- so the round has no repository to be about.
+# It is distinct from `no-remote` on purpose. `no-remote` is a verdict ABOUT a repository; in
+# this shape there is no repository, only an assumption, and the old default reported the
+# assumption as a fact ("`origin` is not configured in this repository" about `repo: "/"`).
 # The statuses the PLAIN path reports as a FAILURE (exit 1). `behind` and `diverged` are
 # deliberately absent: they are reports the round was asked to make, not failures.
 # `already-published` is absent for the same reason in a stronger form: the work IS on the
 # remote, so calling it a failure would be the fabricated verdict #518 exists to remove.
 PLAIN_NONZERO = (
     "no-remote", "not-on-branch", "unreachable", "unreadable", "push-failed", "ff-blocked",
+    # #525: the startup refusal. Nothing was read, nothing was asked, nothing was published --
+    # the round could not be completed, which is exactly what this tuple declares.
+    "unbound-repo",
 )
 
 # THE THIRTEEN STATUSES, PARTITIONED BY WHAT A BLOCKING CALLER MAY DO WITH THEM (#482).
@@ -140,6 +149,48 @@ def _git(repo: Path, *args: str, timeout: int = GIT_TIMEOUT):
         return 124, "", f"git {' '.join(args)} timed out after {timeout}s"
     except OSError as exc:
         return 127, "", f"git could not be run: {exc}"
+
+
+def repo_is_work_tree(repo: Path) -> bool:
+    """True when `repo` is inside a git work tree. The STARTUP question at #525, never a verdict.
+
+    The pusher derives its repo root from its own `__file__` (`REPO`), which is right for the
+    copy that lives in the tree and wrong for every copy that does not: a copy fetched to
+    `/tmp` derives `/`. Before this read existed, that copy went on to ask whether `origin` was
+    configured IN `/` and answered `no-remote` -- a statement about a repository emitted about
+    a tree the invocation never chose.
+
+    Asked of the tree itself, never of the caller's intent: `git rev-parse
+    --is-inside-work-tree` is the one question whose answer cannot be assumed, and a directory
+    that is not in a work tree makes git say so on stderr with a non-zero rc.
+    """
+    rc, out, _ = _git(repo, "rev-parse", "--is-inside-work-tree")
+    return rc == 0 and out.strip() == "true"
+
+
+def unbound_repo_report(repo: Path, now: dt.datetime | None = None) -> dict:
+    """The startup refusal's own report -- shaped like a round's, so one reader parses both."""
+    instant = (now or dt.datetime.now(dt.timezone.utc)).isoformat().replace("+00:00", "Z")
+    return {
+        "repo": str(repo),
+        "remote": DEFAULT_REMOTE,
+        "branch": DEFAULT_BRANCH,
+        "grace_secs": DEFAULT_GRACE_SECS,
+        "read_at": instant,
+        "status": "unbound-repo",
+        "reason": (
+            f"--repo is REQUIRED: this copy derives its repository from its own location "
+            f"({repo}), which is not a git work tree, so the round has no repository to be "
+            f"about. Pass --repo <path to the checkout to publish>. No remote was asked, so "
+            f"this is NOT a `no-remote` verdict about any repository."
+        ),
+        "count": 0,
+        "shas": [],
+        "held": [],
+        "diverged": None,
+        "behind": None,
+        "sync": None,
+    }
 
 
 def parse_ts(value: str):
@@ -1011,7 +1062,19 @@ def render(report: dict) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--repo", default=str(REPO))
+    # THE DEFAULT IS `None`, NOT `str(REPO)` (#525, ruling n=3895 item 1). The two are different
+    # questions and the old default conflated them: `str(REPO)` says "the tree this file sits in
+    # is the repository", which is TRUE for the copy in the tree and FALSE for a copy fetched to
+    # `/tmp`. Only the caller can answer which tree to publish, so the absence of the flag is
+    # READ as an absence and refused at startup when the derived tree is not a work tree.
+    parser.add_argument(
+        "--repo",
+        default=None,
+        help=(
+            "the checkout to publish (REQUIRED when this copy does not live in a git work "
+            "tree, e.g. a copy fetched to /tmp); defaults to the tree this file sits in"
+        ),
+    )
     parser.add_argument("--remote", default=DEFAULT_REMOTE)
     parser.add_argument("--branch", default=DEFAULT_BRANCH)
     parser.add_argument("--grace-secs", type=int, default=DEFAULT_GRACE_SECS)
@@ -1041,6 +1104,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
+    # THE STARTUP BOUND (#525, ruling n=3895 item 1). Where the caller named no `--repo` and
+    # the tree this FILE sits in is not a git work tree, the round stops HERE, before it asks
+    # the remote anything. The old shape went on to probe `/` for an `origin` and answered
+    # `no-remote`, which reads as a fact about a repository the caller never mentioned; the
+    # honest answer is that no repository was chosen. A caller that DID pass `--repo` is never
+    # second-guessed: it chose a tree, so whatever that tree says is a verdict about it.
+    if args.repo is None and not repo_is_work_tree(REPO):
+        report = unbound_repo_report(REPO)
+        print(json.dumps(report, indent=2, sort_keys=True) if args.json else render(report))
+        return 1
+    repo = Path(args.repo) if args.repo else REPO
+
     # `--wait` IMPLIES `--apply`: a caller that asked to block until publication cannot be
     # asking for a report-only round, and a report-only round never publishes at all.
     if args.wait:
@@ -1052,7 +1127,7 @@ def main(argv: list[str] | None = None) -> int:
         # WITH --json THE POLL LINES GO TO STDERR, so stdout stays ONE JSON document and a
         # machine reader is not handed a stream it cannot parse.
         report = wait_for_publish(
-            Path(args.repo),
+            repo,
             remote=args.remote,
             branch=args.branch,
             grace_secs=args.grace_secs,
@@ -1063,7 +1138,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if report["status"] in TERMINAL_PUBLISHED else 1
 
     report = publish(
-        Path(args.repo),
+        repo,
         remote=args.remote,
         branch=args.branch,
         grace_secs=args.grace_secs,

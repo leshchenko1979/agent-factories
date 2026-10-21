@@ -1433,6 +1433,136 @@ def wait_cli_refuses_arm() -> None:
             f"rc={rc} first={out.splitlines()[0] if out else ''}",
         )
 
+def load_module(path: Path, name: str):
+    """Import a tool by PATH -- never by name, so a temp COPY (or a mutated one) is loaded."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader, f"cannot load {path}"
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+def _isolated_copy(root: Path, mutate: bool = False) -> Path:
+    """A copy of the pusher OUTSIDE any git work tree -- the shape a `/tmp` fetch has.
+
+    `REPO` is derived from `__file__`, so a copy at `<root>/isolated/publish_copy.py` derives
+    `<root>`: a real directory, and not a work tree. That is exactly the defect's shape, and it
+    is built rather than described.
+
+    `mutate=True` restores the PRE-#525 shape in the copy: the derived tree as the default and
+    no startup guard. The control arm below asserts the refusal disappears there, so the arm
+    above is proven to be reading the guard rather than the copy's mere existence.
+    """
+    src = TOOL.read_text(encoding="utf-8")
+    if mutate:
+        # THE ANCHOR CARRIES `"--repo",` ON ITS OWN LINE. A bare `default=None,` matches EVERY
+        # flag in `main()` -- `--timeout`'s among them -- and argparse applies `type=int` to a
+        # string default, so the mutant died in the PARSER (`invalid int value`) rather than in
+        # the guard under test. A mutation that breaks a different flag is not a control.
+        src = src.replace(
+            '        "--repo",\n        default=None,\n',
+            '        "--repo",\n        default=str(REPO),\n',
+        )
+        start = src.index("    if args.repo is None and not repo_is_work_tree(REPO):")
+        end = src.index("    repo = Path(args.repo) if args.repo else REPO\n", start)
+        src = src[:start] + src[end:]
+        assert '        "--repo",\n        default=str(REPO),\n' in src, (
+            "the mutation did not restore the old --repo default"
+        )
+        assert "if args.repo is None and not repo_is_work_tree(REPO)" not in src, (
+            "the mutation did not remove the startup guard -- the control would test nothing"
+        )
+    path = root / "isolated" / "publish_copy.py"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(src, encoding="utf-8")
+    return path
+
+def unbound_repo_arm() -> None:
+    """#525 item 1 (ruling n=3895): the tool REFUSES to guess its repository.
+
+    The measured instance: a fetched copy at `/tmp/<name>.py` run with no `--repo` reported
+    `status=no-remote`, `repo: "/"`, rc=1 -- a terminal verdict about a repository nobody chose,
+    on a clean tree with one unpushed commit. The ruled shape stops AT STARTUP with a status that
+    names the flag, and never emits `no-remote` about the assumption.
+
+    The control inside the arm: the SAME copy, handed `--repo`, runs an ordinary round. Without
+    it a refusal could be the copy being unusable rather than the flag being absent.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        copy = _isolated_copy(root)
+        mod = load_module(copy, "_pub_unbound")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mod.main(["--json"])
+        out = buf.getvalue()
+        data = json.loads(out)
+        check(
+            data["status"] == "unbound-repo",
+            "no --repo outside a work tree STOPS at startup with the distinct status "
+            "`unbound-repo`",
+            f"status={data['status']!r} reason={data.get('reason','')[:160]}",
+        )
+        check(
+            rc == 1,
+            "and the refusal exits NON-ZERO -- a round that read nothing is not a round",
+            f"rc={rc}",
+        )
+        check(
+            "--repo" in data.get("reason", "") and "REQUIRED" in data.get("reason", ""),
+            "and the reason NAMES the flag the caller must pass",
+            data.get("reason", "")[:200],
+        )
+        check(
+            data["status"] != "no-remote",
+            "and it is NOT a `no-remote` verdict -- nothing was asked of any remote",
+            data["status"],
+        )
+
+        remote = init_bare(root / "remote.git")
+        work = init_work(root / "work", remote)
+        commit(work, "seed.txt")
+        # The remote must CARRY a `main` before a round can compare against it: an empty bare
+        # repo answers `unreachable`, which would make this control read as a refusal for a
+        # reason of its own. Seed, then leave ONE unpushed commit -- the report-only answer.
+        git(work, "push", "-q", "origin", "main:main")
+        commit(work, "mine.txt")
+        buf = io.StringIO()
+        # `--grace-secs 0` because a fresh commit is inside the window: without it the round
+        # answers `held` -- the window working -- and the control would read a refusal where an
+        # ordinary round ran.
+        with contextlib.redirect_stdout(buf):
+            rc = mod.main(["--repo", str(work), "--grace-secs", "0", "--json"])
+        data = json.loads(buf.getvalue())
+        check(
+            rc == 0 and data["status"] == "would-publish",
+            "CONTROL: the SAME copy handed `--repo` runs an ordinary round -- so the refusal "
+            "above is the ABSENT FLAG, not a copy that cannot run at all",
+            f"rc={rc} status={data['status']!r}",
+        )
+
+def unbound_repo_control_bites() -> None:
+    """The mutation control for the arm above: restore the old default and it must FAIL.
+
+    Pre-#525 the flag defaulted to `str(REPO)` and no startup guard existed, so the copy at
+    `/tmp` went on to probe the derived tree for an `origin` and answered `no-remote`. If that
+    shape still produced `unbound-repo`, the arm above would be reading something other than
+    the guard.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = _isolated_copy(Path(tmp), mutate=True)
+        mod = load_module(copy, "_pub_unbound_mut")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            mod.main(["--json"])
+        data = json.loads(buf.getvalue())
+        check(
+            data["status"] == "no-remote",
+            "CONTROL: with the pre-#525 default restored the refusal DISAPPEARS and the round "
+            "reports `no-remote` about the derived tree -- so the arm is testing the guard",
+            f"status={data['status']!r} reason={data.get('reason','')[:160]}",
+        )
+
 def documented_statuses_arm() -> None:
     """#482 (order 4): the status table has a HOME, and that home is GATED.
 
@@ -1465,9 +1595,12 @@ def documented_statuses_arm() -> None:
         f"nonzero={len(pub.PLAIN_NONZERO)} published={len(pub.TERMINAL_PUBLISHED)} "
         f"waitable={len(pub.WAITABLE)} all={len(pub.ALL_STATUSES)}",
     )
+    # FOURTEEN since #525 (ruling n=3895) added the STARTUP refusal `unbound-repo`. The count is
+    # stated here rather than derived so that ADDING a status is a deliberate act with a doc row
+    # and a law line, never a side effect of a branch somebody added.
     check(
-        len(pub.ALL_STATUSES) == 13 and len(set(pub.ALL_STATUSES)) == 13,
-        "the status set is THIRTEEN distinct statuses, as the law states",
+        len(pub.ALL_STATUSES) == 14 and len(set(pub.ALL_STATUSES)) == 14,
+        "the status set is FOURTEEN distinct statuses, as the law states",
         f"count={len(pub.ALL_STATUSES)} distinct={len(set(pub.ALL_STATUSES))}",
     )
     twinned = (ROOT / "TEMPLATE" / "docs" / "instruments" / "publish.md").read_bytes()
@@ -1557,6 +1690,8 @@ def main() -> int:
     wait_cli_refuses_arm()
     not_on_branch_exits_nonzero_arm()
     repo_root_is_copy_independent_arm()
+    unbound_repo_arm()
+    unbound_repo_control_bites()
     documented_statuses_arm()
     report_arms()
 
