@@ -4514,12 +4514,37 @@ def declared_dispatch_instant(row: dict) -> tuple[dt.datetime | None, str]:
             return None, ""
     return None, ""
 
+def subject_issue_number(subject: str) -> int | None:
+    """The board number a dispatch row's subject NAMES, or None (#538).
+
+    A NUMERIC SUBJECT IS THE WHOLE POPULATION THIS CAN RESOLVE, and the narrowness is
+    deliberate: `#538` is a board item, `wave0-reply-sweep` is a campaign slug, and reading
+    a slug as if it were an item would scope rows on a guess. A subject this cannot resolve
+    is JUDGED exactly as before, so the narrowing can only ever move rows OUT of the
+    problem population on an explicit board read -- never on an inference about the name.
+    """
+    match = re.fullmatch(r"#(\d+)", str(subject or "").strip())
+    return int(match.group(1)) if match else None
+
+def closed_board_numbers(issues: list[dict] | None) -> set[int]:
+    """The board items a dispatch row for which is HISTORY, not a debt (#538)."""
+    numbers: set[int] = set()
+    for issue in issues or []:
+        if str(issue.get("state", "")).strip().lower() != "closed":
+            continue
+        try:
+            numbers.add(int(issue.get("number")))
+        except (TypeError, ValueError):
+            continue
+    return numbers
+
 def dispatch_delivery_leg(
     rows: list[dict],
     *,
     read_at: str = "",
     bound: tuple | None = None,
     deliveries_fn=None,
+    issues: list[dict] | None = None,
 ) -> dict:
     """The dispatch-delivery leg: did each dispatch row's routing actually go OUT?
 
@@ -4546,10 +4571,27 @@ def dispatch_delivery_leg(
     reader off to re-dispatch an item the target already holds. So a match is taken WITHOUT
     the window first: a target holding the brief somewhere is a WINDOW MISMATCH naming the
     delivery's own instant, and only a store holding no match at all reads as the absence.
+
+    AND NEITHER OF THOSE IS A PROBLEM (#538, ruled at ledger n=4029). Two of this leg's own
+    verdicts contradicted its own reading in the same line: a WINDOW MISMATCH is a delivery
+    that EXISTS -- the line says "do not re-dispatch" -- and a dispatch row whose subject is
+    a CLOSED board item is a record of history, not a debt anyone owes. Both were counted
+    under `problems`, and they were 74 of the leg's 96 on the 2026-10-21 read, so the count
+    could only rise as the factory closed more work: a verdict whose number grows with the
+    factory's own success is not measuring debt. The window mismatch now reads as an EXCUSAL
+    carrying its instant and its window, and closed-subject rows are scoped OUT of the
+    population into `judged_closed_subject`, printed once as a figure. The campaign-slug
+    rows stay reported -- those are #443's, not this one's -- and the absence verdict is
+    untouched. This is a DETECTOR's repair: no write-path change, no new gate.
     """
     window_before = dt.timedelta(seconds=DELIVERY_WINDOW_BEFORE_SECS)
     window_after = dt.timedelta(seconds=DELIVERY_WINDOW_AFTER_SECS)
     match_horizon = dt.timedelta(seconds=DELIVERY_MATCH_HORIZON_SECS)
+    # THE BOARD READ IS WHAT MAKES THE SCOPING POSSIBLE, AND ITS ABSENCE IS STATED (#538).
+    # A probe that injects no board gets no scoping, so its rows are judged exactly as
+    # before: the narrowing can only come from a board that actually said CLOSED, and a
+    # leg that scoped on a guess would be inventing the very debt it is meant to measure.
+    closed_numbers = closed_board_numbers(issues)
     coverage = {
         "bound_key": DELIVERY_BOUNDARY_KEY,
         "bound": (bound[1] if bound else "") or "",
@@ -4558,6 +4600,9 @@ def dispatch_delivery_leg(
         "window_after_secs": DELIVERY_WINDOW_AFTER_SECS,
         "match_horizon_secs": DELIVERY_MATCH_HORIZON_SECS,
         "dispatch_rows_read": sum(1 for r in rows if r.get("event") == "dispatch"),
+        "board_read": issues is not None,
+        "board_items_read": len(issues or []),
+        "board_closed_items": len(closed_numbers),
         "read_at": read_at,
     }
     if bound is None or bound[0] is None:
@@ -4595,6 +4640,8 @@ def dispatch_delivery_leg(
     mentions_anywhere = 0
     mentions_near = 0
     corroborated = 0
+    closed_subjects: list[str] = []
+    outside_window: list[str] = []
     to_judge: list[tuple[dict, dt.datetime, dt.datetime, dt.datetime, str, str]] = []
     for row in rows:
         if row.get("event") != "dispatch":
@@ -4654,6 +4701,17 @@ def dispatch_delivery_leg(
             if uses_declaration else
             f"anchored on the row's write stamp {ts.strftime('%Y-%m-%dT%H:%M:%SZ')}"
         )
+        # A DISPATCH ROW FOR A FINISHED UNIT IS HISTORY, NOT A DEBT (#538, ruling n=4029).
+        # The subject is resolved against the BOARD, never inferred from its shape: only a
+        # numeric subject naming an item the board reports CLOSED is scoped out, and the
+        # count is printed as a figure rather than as N excused lines -- 57 of the leg's 96
+        # on the 2026-10-21 read, which is exactly the volume that made the verdict
+        # unreadable. Rows whose subject is a campaign slug resolve to no item and are
+        # JUDGED as before, so #443's population stays visible here.
+        subject_text = str(row.get("subject") or "").strip()
+        if closed_numbers and subject_issue_number(subject_text) in closed_numbers:
+            closed_subjects.append(subject_text)
+            continue
         examined += 1
         to_judge.append(
             (row, anchor, anchor - window_before, anchor + window_after, session_ref, basis)
@@ -4664,6 +4722,8 @@ def dispatch_delivery_leg(
         "dispatch_rows_undated": undated,
         "dispatch_rows_not_judged": not_judged,
         "dispatch_rows_declared_anchor": declared_anchor,
+        "dispatch_rows_closed_subject": len(closed_subjects),
+        "judged_closed_subject": list(closed_subjects),
     })
     if not to_judge:
         # THE STORE IS NOT READ, AND THAT IS SAID. There is no post-boundary dispatch row to
@@ -4682,6 +4742,16 @@ def dispatch_delivery_leg(
                 f"`{DELIVERY_BOUNDARY_KEY}` ({coverage['bound']}) carry no typed "
                 f"`session` ref, so none names a routed target to corroborate against "
                 f"(#425) -- NOT JUDGED, never a clean zero"
+            )
+        elif closed_subjects:
+            # THE SCOPING IS NOT SILENT (#538). A population emptied by the board read is a
+            # MEASURED zero -- every row it held was history -- and it must not read as the
+            # "nothing to corroborate" shape, which is what an unread board produces.
+            reason = (
+                f"{len(closed_subjects)} dispatch row(s) at or after the bound "
+                f"`{DELIVERY_BOUNDARY_KEY}` ({coverage['bound']}) name board items the "
+                f"board reports CLOSED, so all of them are history and none is a debt "
+                f"(#538) -- NOTHING OWED, never a clean sweep of rows this leg never read"
             )
         else:
             reason = (
@@ -4779,23 +4849,33 @@ def dispatch_delivery_leg(
         if hits:
             continue
         if plausible:
-            # TWO CONDITIONS, TWO VERDICTS (#432). The specimen that produced this clause is
-            # row `n=2787` (`#428`): its window opened `12:23:04Z`, its notify landed
-            # `12:11:28Z`, and the leg read "records no delivery" for a delivery that woke the
-            # very lane that ruled the item -- sending a reader off to re-dispatch an item the
-            # target already held. The reader is told WHICH instant the delivery carries and
-            # which window judged it, so the mismatch is a fact they can act on rather than a
-            # false absence they must disprove.
+            # TWO CONDITIONS, TWO VERDICTS (#432), AND ONLY ONE OF THEM IS A PROBLEM (#538).
+            # The specimen that produced this clause is row `n=2787` (`#428`): its window
+            # opened `12:23:04Z`, its notify landed `12:11:28Z`, and the leg read "records no
+            # delivery" for a delivery that woke the very lane that ruled the item -- sending
+            # a reader off to re-dispatch an item the target already held. The reader is told
+            # WHICH instant the delivery carries and which window judged it, so the mismatch
+            # is a fact they can act on rather than a false absence they must disprove.
+            #
+            # BUT A DELIVERY THAT EXISTS IS NOT A DEBT, and this leg said both in one line:
+            # the text ended "a DELIVERY EXISTS, so this is a WINDOW MISMATCH, never an
+            # absence: do not re-dispatch on this line" while being counted under `problems`.
+            # 57 of the leg's 96 on the 2026-10-21 read were this shape, and every one of
+            # them is a unit that was delivered and then finished -- so the count grew with
+            # the factory's own success. It is an EXCUSAL carrying the same instant and the
+            # same window; the reader loses no fact and the verdict stops contradicting
+            # itself.
             outside = min(plausible, key=lambda d: d["epoch"])
             at = dt.datetime.fromtimestamp(outside["epoch"], dt.timezone.utc)
-            problems.append(
+            outside_window.append(
                 f"n={row.get('n')} ({subject}) dispatched at {row.get('ts')} to session "
                 f"{session_ref} carries a delivery OUTSIDE the window this leg judged: a "
                 f"notify carrying `{subject}` addressed to that target landed "
                 f"{at.strftime('%Y-%m-%dT%H:%M:%SZ')} ({outside['state']}), and the window "
                 f"[{lo.strftime('%Y-%m-%dT%H:%M:%SZ')}, {hi.strftime('%Y-%m-%dT%H:%M:%SZ')}] "
                 f"({basis}) does not contain it — a DELIVERY EXISTS, so this is a WINDOW "
-                f"MISMATCH, never an absence: do not re-dispatch on this line"
+                f"MISMATCH, never an absence: do not re-dispatch on this line — and not a "
+                f"problem either (#538)"
             )
             continue
         if near_mentions:
@@ -4840,9 +4920,10 @@ def dispatch_delivery_leg(
         "dispatch_rows_corroborated": corroborated,
         "subject_mentions_body_only": mentions_anywhere,
         "subject_mentions_body_only_within_horizon": mentions_near,
+        "delivered_outside_window": len(outside_window),
     })
     return {"name": "dispatch-delivery", "status": "ASSERTED", "reason": None,
-            "problems": problems, "excused": [], "coverage": coverage}
+            "problems": problems, "excused": outside_window, "coverage": coverage}
 
 def duty_fallback_note(problems: list[str], fallback_from: str | None,
                        schedule_text: str = "") -> list[str]:
@@ -11238,6 +11319,33 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['dispatch_rows_examined']} examined row(s) anchored on an instant the "
                 f"row itself DECLARES, the rest on the row's write stamp (#432)"
             )
+            # THE SCOPING IS PRINTED ONCE AS A FIGURE, never as N lines (#538): on the
+            # 2026-10-21 read 57 of the 96 problem rows were dispatches for items the board
+            # had already closed, so naming each one buried the six that were still live.
+            # The board read that produced the figure travels with it, because a zero here
+            # means "nothing closed" only when a board was actually read.
+            lines.append(
+                f"  scoped OUT as history: {cov.get('dispatch_rows_closed_subject', 0)} "
+                f"dispatch row(s) name board items the board reports CLOSED "
+                f"(judged_closed_subject), against a board read of "
+                f"{cov.get('board_items_read', 0)} item(s) carrying "
+                f"{cov.get('board_closed_items', 0)} closed"
+                + ("" if cov.get("board_read") else " -- NO BOARD WAS INJECTED, so nothing "
+                   "was scoped out and every row was judged (#538)")
+            )
+            if cov.get("delivered_outside_window"):
+                # A DELIVERY THAT EXISTS IS NOT A DEBT (#538). The count is printed beside
+                # the verdict and each instance prints as an EXCUSAL carrying its own
+                # instant and window, so a reader can still see exactly what landed when --
+                # and the branch must print them itself: the generic `excused` dump below
+                # belongs to the legs with no branch of their own, and this leg has one.
+                lines.append(
+                    f"  delivered OUTSIDE the window (excused, never a problem): "
+                    f"{cov['delivered_outside_window']} row(s) — a delivery EXISTS for each, "
+                    f"so none is an absence (#538)"
+                )
+                for excuse in leg["excused"]:
+                    lines.append(f"    excused: {excuse}")
             # THE MATCH COUNTS ARE PRINTED TOO, because the horizon SILENTLY decides whether a
             # subject mention is a delivery: `3 of 47` tells a reader that 44 messages carried
             # the subject and were not counted, which is the difference between a narrow
@@ -11897,6 +12005,11 @@ def main(
         leg_guard("dispatch-delivery", lambda: dispatch_delivery_leg(
             rows, read_at=read_at, bound=(delivery_scope_fn or dispatch_delivery_scope)(),
             deliveries_fn=deliveries_fn,
+            # THE BOARD IS INJECTED FOR THE SCOPING (#538): a dispatch row naming a CLOSED
+            # item is history, and only a real board read can say which items are closed.
+            # `main` has already exited 2 on an unreadable board, so this is the SAME read
+            # the other board legs use -- one call, no second fetch.
+            issues=issues,
         ), read_at),
         leg_guard("kit-drift", lambda: kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
                       read_at=read_at), read_at),

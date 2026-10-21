@@ -8307,8 +8307,11 @@ def test_the_dispatch_delivery_leg_reads_a_LATE_STAMP_by_the_instant_the_row_DEC
         [stripped], read_at=read_at, bound=bound, deliveries_fn=deliveries,
     )
     assert mismatch["coverage"]["dispatch_rows_declared_anchor"] == 0, mismatch["coverage"]
-    assert mismatch["problems"], "without the declaration the delivery falls outside the window"
-    assert "WINDOW MISMATCH" in mismatch["problems"][0], mismatch["problems"]
+    assert mismatch["problems"] == [], (
+        "without the declaration the delivery falls outside the window — which is an "
+        f"EXCUSAL, not a problem (#538)\n{mismatch['problems']}"
+    )
+    assert "WINDOW MISMATCH" in mismatch["excused"][0], mismatch["excused"]
 
 def _row_with_lag(n: int, *, ts: dt.datetime, lag_secs: float, subject: str = "#90") -> dict:
     """A dispatch row whose detail QUOTES `resolved_at` an exact LAG behind its write stamp.
@@ -8393,15 +8396,21 @@ def test_the_declared_instant_is_BOUNDED_so_a_QUOTED_token_declares_NOTHING() ->
             f"{leg['coverage']}"
         )
 
-def test_the_dispatch_delivery_leg_reports_a_WINDOW_MISMATCH_never_an_ABSENCE() -> None:
-    """#432, the class. The leg carried ONE verdict for TWO conditions, so a delivery that
-    exists but falls outside the window the leg chose read as "records no delivery" -- a FALSE
-    ABSENCE that sends a reader off to re-dispatch an item the target already holds.
+def test_the_dispatch_delivery_leg_reports_a_WINDOW_MISMATCH_as_an_EXCUSAL() -> None:
+    """#432's class, re-homed by #538. The leg carried ONE verdict for TWO conditions, so a
+    delivery that exists but falls outside the window the leg chose read as "records no
+    delivery" -- a FALSE ABSENCE that sends a reader off to re-dispatch an item the target
+    already holds.
 
     A match is taken WITHOUT the window first, so the two conditions are distinguishable. The
-    mismatch verdict must NAME the delivery's own instant and the window that judged it, and
-    must NOT carry the absence's words -- a reader who greps for the absence text must not find
-    it on a row whose delivery is sitting in the store.
+    mismatch must NAME the delivery's own instant and the window that judged it, and must NOT
+    carry the absence's words -- a reader who greps for the absence text must not find it on a
+    row whose delivery is sitting in the store.
+
+    AND IT IS AN EXCUSAL, NOT A PROBLEM (#538, ruled at ledger n=4029): the leg's own line
+    said "a DELIVERY EXISTS ... do not re-dispatch" while counting it as a debt, and 57 of its
+    96 problems on the 2026-10-21 read were this shape -- units delivered and finished. The
+    verdict keeps every instant and every window; what it loses is the problem count.
     """
     now = dt.datetime.now(dt.timezone.utc)
     read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -8421,8 +8430,11 @@ def test_the_dispatch_delivery_leg_reports_a_WINDOW_MISMATCH_never_an_ABSENCE() 
         ),
     )
     assert leg["status"] == "ASSERTED", leg
-    assert leg["problems"], "a delivery outside the window is still a finding"
-    problem = leg["problems"][0]
+    assert leg["problems"] == [], (
+        f"a delivery outside the window is an EXCUSAL, not a finding (#538)\n{leg['problems']}"
+    )
+    assert leg["coverage"]["delivered_outside_window"] == 1, leg["coverage"]
+    problem = leg["excused"][0]
     assert "WINDOW MISMATCH" in problem, problem
     assert "records no delivery" not in problem, (
         f"a delivery that EXISTS must never read as an absence\n{problem}"
@@ -8576,7 +8588,13 @@ def test_the_match_HORIZON_keeps_an_OLD_mention_from_reading_as_a_DELIVERY() -> 
     )
     assert near["coverage"]["subject_matches_anywhere"] == 1, near["coverage"]
     assert near["coverage"]["subject_matches_within_horizon"] == 1, near["coverage"]
-    assert "WINDOW MISMATCH" in near["problems"][0], near["problems"]
+    # A WINDOW MISMATCH IS AN EXCUSAL, NOT A PROBLEM (#538, ruled at ledger n=4029): the
+    # delivery EXISTS, and the leg's own text said "do not re-dispatch on this line" while
+    # counting it as a debt. The instance still names its instant and its window.
+    assert near["problems"] == [], near["problems"]
+    assert near["coverage"]["delivered_outside_window"] == 1, near["coverage"]
+    assert "WINDOW MISMATCH" in near["excused"][0], near["excused"]
+    assert "does not contain it" in near["excused"][0], near["excused"]
 
     # ... AND THE HORIZON IS BOUNDED, not merely present: a mention 1 s inside it is a
     # delivery and one 1 s outside it is not, so a leg that ignored the bound entirely would
@@ -8601,7 +8619,9 @@ def test_the_match_HORIZON_keeps_an_OLD_mention_from_reading_as_a_DELIVERY() -> 
         ),
     )
     assert inside["coverage"]["subject_matches_within_horizon"] == 1, inside["coverage"]
-    assert "WINDOW MISMATCH" in inside["problems"][0], inside["problems"]
+    # ... and the WINDOW MISMATCH it produces is an EXCUSAL, not a problem (#538).
+    assert inside["problems"] == [], inside["problems"]
+    assert "WINDOW MISMATCH" in inside["excused"][0], inside["excused"]
     assert outside["coverage"]["subject_matches_within_horizon"] == 0, outside["coverage"]
     assert "records no delivery" in outside["problems"][0], outside["problems"]
 
@@ -10117,6 +10137,125 @@ def main() -> int:
     return 0
 
 
+def test_538_a_delivery_that_EXISTS_is_never_a_problem_and_a_closed_subject_is_history() -> None:
+    """#538, ruled at ledger n=4029: the leg counted its OWN cleared verdicts as problems.
+
+    Measured on the 2026-10-21 read: 96 problems, of which 57 were WINDOW MISMATCHES for
+    units that were delivered and then CLOSED, 17 were absences for CLOSED units, and 6 were
+    WINDOW MISMATCHES for units still OPEN whose own line says "a DELIVERY EXISTS ... do not
+    re-dispatch". So 74 of 96 were history and 6 more were self-cleared -- a count that could
+    only RISE as the factory closed more work, which is not a measure of debt.
+
+    THREE ARMS, ALL REQUIRED (the ruling's own positive control). Arm 2 is the one that pins
+    it: without it, a leg that simply stopped reading stores would pass arms 1 and 3 and look
+    like a fix.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    # 2 h after the write stamp: inside the horizon, past the 5400 s forward window bound.
+    landed_at = dispatched + dt.timedelta(hours=2)
+    open_board = [{"number": 83, "state": "open"}]
+    closed_board = [{"number": 83, "state": "closed"}]
+
+    def _row():
+        return _stall_row(171, "dispatch", "#83", 0, now=dispatched, actor="triage",
+                          refs=[{"session": _PROBE_TARGET}])
+
+    def _leg(issues, deliveries):
+        return RUNNER.dispatch_delivery_leg(
+            [_row()], read_at=read_at, bound=bound, issues=issues,
+            deliveries_fn=lambda: (deliveries, ["probe-home"], []),
+        )
+
+    near = [_delivery(landed_at, "[session-notify from=abc]\nDISPATCH #83 to the lane",
+                      session=_PROBE_TARGET)]
+
+    # ARM 1 -- subject OPEN, delivery OUTSIDE the window: EXCUSED, in the window-mismatch
+    # key, ABSENT from problems. Every instant and the window survive in the text.
+    arm1 = _leg(open_board, near)
+    assert arm1["problems"] == [], arm1["problems"]
+    assert arm1["coverage"]["delivered_outside_window"] == 1, arm1["coverage"]
+    assert "WINDOW MISMATCH" in arm1["excused"][0], arm1["excused"]
+    assert landed_at.strftime("%Y-%m-%dT%H:%M:%SZ") in arm1["excused"][0], arm1["excused"]
+
+    # ARM 2 -- subject OPEN, NO delivery in any store: still a PROBLEM, unchanged. This is
+    # the arm that makes arms 1 and 3 mean something.
+    arm2 = _leg(open_board, [])
+    assert len(arm2["problems"]) == 1, arm2["problems"]
+    assert "records no delivery" in arm2["problems"][0], arm2["problems"]
+    assert arm2["coverage"]["delivered_outside_window"] == 0, arm2["coverage"]
+
+    # ARM 3 -- subject CLOSED, ANY delivery state: excused, counted under
+    # judged_closed_subject, ABSENT from problems -- and this holds for BOTH a delivery that
+    # exists and one that does not, because a finished unit owes nothing either way.
+    for deliveries, label in ((near, "a delivery"), ([], "no delivery")):
+        arm3 = _leg(closed_board, deliveries)
+        assert arm3["problems"] == [], (
+            f"a CLOSED subject owes nothing, with {label}\n{arm3['problems']}"
+        )
+        assert arm3["coverage"]["dispatch_rows_closed_subject"] == 1, arm3["coverage"]
+        assert arm3["coverage"]["judged_closed_subject"] == ["#83"], arm3["coverage"]
+        assert arm3["coverage"]["dispatch_rows_examined"] == 0, (
+            f"a closed-subject row is scoped OUT of the judged population\n{arm3['coverage']}"
+        )
+
+    # THE BOARD READ IS WHAT DECIDES IT, and its absence is stated rather than assumed: with
+    # no board injected nothing is scoped out, so arm 3's row is judged exactly as before.
+    no_board = _leg(None, [])
+    assert no_board["coverage"]["board_read"] is False, no_board["coverage"]
+    assert no_board["coverage"]["dispatch_rows_closed_subject"] == 0, no_board["coverage"]
+    assert len(no_board["problems"]) == 1, (
+        f"with no board read, the row must still be judged\n{no_board['problems']}"
+    )
+
+    # THE MUTATION BITE: neuter the board scoping and arm 3 must go RED, so the clean verdict
+    # above is attributable to the scoping rather than to the fixture.
+    real = RUNNER.closed_board_numbers
+    try:
+        RUNNER.closed_board_numbers = lambda issues: set()
+        neutered = _leg(closed_board, [])
+    finally:
+        RUNNER.closed_board_numbers = real
+    assert neutered["problems"], (
+        "the scoping must BITE: with it neutered, a closed-subject row reads as a problem"
+    )
+
+def test_538_the_render_PRINTS_the_scoping_and_the_board_it_read() -> None:
+    """#538: the scoped-out population is a FIGURE, never N problem lines -- and the board
+    read that produced it travels with the figure, so `0 scoped out` cannot stand for both
+    "nothing was closed" and "no board was read" (#116)."""
+    now = dt.datetime.now(dt.timezone.utc)
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    row = _stall_row(181, "dispatch", "#84", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+    near = _delivery(dispatched + dt.timedelta(hours=2),
+                     "[session-notify from=abc]\nDISPATCH #84 to the lane",
+                     session=_PROBE_TARGET)
+
+    # AN INTAKE ROW KEEPS AN UNRELATED LEG OUT OF THE rc: the assertion below is about
+    # whether an EXCUSED mismatch moves the exit code, so no other leg may move it either.
+    intake = _stall_row(180, "intake", "#84", 0, now=dispatched, actor="triage")
+    rc, out, _ = _run([{"number": 84, "state": "open"}], [intake, row], delivery_scope=bound,
+                      deliveries=[near])
+    assert "LEG dispatch-delivery — ASSERTED" in out, out
+    assert "delivered OUTSIDE the window (excused, never a problem): 1 row(s)" in out, out
+    assert "scoped OUT as history: 0 dispatch row(s)" in out, out
+    assert "carrying 0 closed" in out, out
+    assert "    excused: n=181 (#84)" in out, (
+        f"each excused instance keeps its own instant and window\n{out}"
+    )
+    # The run is CLEAN: a delivery that exists moves no exit code (#538).
+    assert rc == 0, f"an excused mismatch must not red the run\n{out}"
+
+    rc2, out2, _ = _run([{"number": 84, "state": "closed"}], [intake, row],
+                        delivery_scope=bound, deliveries=[near])
+    assert "scoped OUT as history: 1 dispatch row(s)" in out2, out2
+    assert "carrying 1 closed" in out2, out2
+    assert "judged_closed_subject" in out2, out2
+    assert rc2 == 0, out2
 if __name__ == "__main__":
     raise SystemExit(main())
 
@@ -11129,3 +11268,4 @@ def test_the_undispatched_ruling_leg_is_INJECTABLE_and_wired_by_default() -> Non
     assert hasattr(reader, "load_dispatch_batches"), (
         "the batch record must be read through tools/ledger_declaration.py, not re-parsed"
     )
+
