@@ -197,6 +197,38 @@ def _rows(*pairs) -> list[dict]:
     return out
 
 
+def _swept(*pairs) -> list[dict]:
+    """`_rows(...)` for a board the round has SWEPT **and DISPATCHED**.
+
+    Since #519 a `ruling` row whose unit carries no `dispatch` row naming it is a DEFECT:
+    the ruling decided, and nothing handed the decision to an implementer. So a fixture that
+    models a CLEAN board must carry both acts -- the ruling decides, the dispatch routes.
+    A fixture that carried only the ruling was clean under the old law and is a TRUE
+    POSITIVE now, which is exactly what the leg exists to say; it is the fixture that is
+    stale, not the leg.
+
+    Every `ruling` subject without a matching `dispatch` subject gets one, numbered from
+    9000 so it cannot collide with the fixture's own rows. A probe that wants the OWED arm
+    uses `_rows(...)` -- the un-dispatched shape is now a statement, not the default.
+    """
+    out = _rows(*pairs)
+    next_n = 9000
+    for row in list(out):
+        if row["event"] != "ruling":
+            continue
+        subject = row["subject"]
+        if any(r["event"] == "dispatch" and r["subject"] == subject for r in out):
+            continue
+        out.append({"n": next_n, "ts": _CLOSE_TS, "event": "dispatch",
+                    "actor": "hq", "subject": subject, "detail": "probe"})
+        # ...and a CLAIM, because a dispatch nobody took is its own defect (a
+        # "never-claimed dispatch" standing past the declared threshold). The three
+        # acts are one story: the ruling decides, the dispatch routes, the claim takes.
+        out.append({"n": next_n + 1, "ts": _CLOSE_TS, "event": "claim",
+                    "actor": "worker", "subject": subject, "detail": "probe"})
+        next_n += 2
+    return out
+
 def _comment_url(number: int, index: int = 1) -> str:
     """A comment URL carrying the NUMERIC id the pairing surface compares (#511).
 
@@ -250,7 +282,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          shared_tree_fn=None, duty_scope=None, publish_fn=None, worktree_fn=None,
          duty_exemptions=None, ref_role_exemptions_path=None,
          criterion_exemptions_path=None, driverless_goals=None,
-         driverless_turn_open=None):
+         driverless_turn_open=None, dispatch_batches=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -417,6 +449,19 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # WITHHOLDS the driven claim rather than granting it, so a probe that forgets to
         # inject cannot accidentally read a live turn as a driver it never asserted.
         driverless_turn_open_fn=lambda: dict(driverless_turn_open or {}),
+        # The undispatched-ruling leg's batch declaration (#519) is injected for the same
+        # reason every other declaration here is: the leg's verdict is "is this ruled item
+        # corroborated by a dispatch row or a DECLARED batch act", and a probe that read the
+        # live declaration would be asserting whichever batches THIS factory happens to have
+        # recorded rather than the leg's behaviour. The default is the ABSENT declaration
+        # with its own reason, which is the state a factory that has run no batch act is in
+        # — so a probe written without a batch keeps its meaning, and a probe that asserts
+        # the resolution passes its own map.
+        dispatch_batches_fn=(
+            (lambda: {"batches": {}, "batch_refusal": "ABSENT: probe: no batch declared"})
+            if dispatch_batches is None
+            else (lambda: {"batches": dispatch_batches, "batch_refusal": ""})
+        ),
         # The shared-tree rider (#241) shells out three times against the tree the patrol
         # is running in, so it is stubbed by default for the same reason the publish and
         # worktree legs are: a probe must not pay for live state it never asserts. The
@@ -573,7 +618,7 @@ def test_a_clean_board_reads_clean_and_STATES_ITS_COVERAGE() -> None:
     # The `ruling` rows are not decoration: since #332 the patrol also asserts the ROUND's
     # own predicate (an OPEN item with an intake row and no ruling row is a miss), so a
     # fixture that models a clean board must be a board the round has SWEPT.
-    rows = _rows(
+    rows = _swept(
         ("intake", "#1", 1), ("ruling", "#1", 5),
         ("intake", "#2", 2), ("ruling", "#2", 6),
         ("intake", "#3", 3), ("close", "#3", 4),
@@ -1081,7 +1126,7 @@ def test_a_tree_with_NO_declared_bound_does_not_judge_the_bound_dependent_legs()
     # The `claim` for #7 is the OFFLINE arm's population — a subject acted on with no
     # intake row of its own — so the arm that needs the bound is actually exercised.
     issues = [_issue(1, "OPEN")]
-    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 2), ("claim", "#7", 3))
+    rows = _swept(("intake", "#1", 1), ("ruling", "#1", 2), ("claim", "#7", 3))
 
     def _undeclared(_repo, key):
         return "", "", f"`{key}` is UNDECLARED in this tree — NOT JUDGED: probe"
@@ -1383,7 +1428,7 @@ def test_the_pairing_is_PER_ACT_not_PER_ISSUE() -> None:
     issues = [_issue_with_comments(42, "OPEN", "## RULED — a ruling.\n")]
     numeric = _comment_numeric(42)
 
-    paired_rows = _rows(("intake", "#42", 1), ("ruling", "#42", 2, f"probe comment={numeric}"))
+    paired_rows = _swept(("intake", "#42", 1), ("ruling", "#42", 2, f"probe comment={numeric}"))
     rc, out, _ = _run(issues, paired_rows)
     section = out.split("LEG board-ruling")[1].split("LEG ")[0]
     assert rc == 0, f"a row NAMING the comment must clear it: {out[-3000:]}"
@@ -1392,7 +1437,7 @@ def test_the_pairing_is_PER_ACT_not_PER_ISSUE() -> None:
 
     # The SAME row, the SAME issue, the SAME comment — only the trailer is gone. This is the
     # arm the short-circuit made unreachable: the row exists, so `number in ruled` was true.
-    bare_rows = _rows(("intake", "#42", 1), ("ruling", "#42", 2))
+    bare_rows = _swept(("intake", "#42", 1), ("ruling", "#42", 2))
     rc, out, _ = _run(issues, bare_rows)
     section = out.split("LEG board-ruling")[1].split("LEG ")[0]
     assert rc == 1, f"a ruling row that does not NAME the comment must NOT clear it: {out[-3000:]}"
@@ -1466,7 +1511,7 @@ def test_the_leg_states_its_population_and_the_board_read_instant() -> None:
     # Both rows NAME their comment: since #511 a `ruling` row clears a comment only when its
     # detail carries `comment=<numeric id>`, so a bare row would make this a probe about the
     # pairing instead of about the printed population.
-    rows = _rows(("intake", "#51", 1), ("ruling", "#51", 2, f"probe comment={_comment_numeric(51)}"),
+    rows = _swept(("intake", "#51", 1), ("ruling", "#51", 2, f"probe comment={_comment_numeric(51)}"),
                  ("intake", "#52", 3), ("ruling", "#52", 4, f"probe comment={_comment_numeric(52)}"))
     rc, out, _ = _run(issues, rows)
     assert rc == 0, f"both rulings are stamped, so the run is clean: {out}"
@@ -5114,7 +5159,7 @@ def test_the_zero_max_guard_STATES_the_reading_in_the_render() -> None:
 def _501_clean():
     """A board the round can sweep clean, so the ONLY variable is the raising leg."""
     issues = [_issue(1, "OPEN")]
-    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 5))
+    rows = _swept(("intake", "#1", 1), ("ruling", "#1", 5))
     return issues, rows
 
 def _raising_publish_leg(*, read_at: str) -> dict:
@@ -5773,7 +5818,7 @@ def test_the_leg_PRINTS_a_head_it_did_NOT_match() -> None:
     # `ruling` #7 is added for #332: #7 carries no ACCEPTED head, so it is the probe's own
     # point that it reads unruled — but the ROUND's population is read from the LEDGER, and
     # a row exists for it, so the patrol's board-unruled leg stays quiet here.
-    rows = _rows(("intake", "#7", 1), ("ruling", "#7", 4), ("intake", "#8", 2),
+    rows = _swept(("intake", "#7", 1), ("ruling", "#7", 4), ("intake", "#8", 2),
                  ("ruling", "#8", 3, f"probe comment={_comment_numeric(8)}"))
     leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe",
                                   predicate=RUNNER.load_predicate(),
@@ -5815,7 +5860,7 @@ def test_the_counter_counts_ISSUES_not_COMMENTS() -> None:
     # board-unruled leg quiet over a fixture that is about the ruling leg.
     # #75 carries TWO ruling comments and the leg judges the LATEST act (#511), so the row
     # must name the SECOND one; #76 carries no accepted head at all, so no pairing is owed.
-    rows = _rows(("intake", "#75", 1),
+    rows = _swept(("intake", "#75", 1),
                  ("ruling", "#75", 2, f"probe comment={_comment_numeric(75, 2)}"),
                  ("intake", "#76", 3), ("ruling", "#76", 4))
     leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=RUNNER.load_predicate(),
@@ -6263,7 +6308,7 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
     issues = [_issue(1, "OPEN")]
     # The `ruling` row keeps this fixture inside the round's own population (#332), so the
     # only NOT RUN under test is the worktree leg's.
-    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 2))
+    rows = _swept(("intake", "#1", 1), ("ruling", "#1", 2))
     out, err = io.StringIO(), io.StringIO()
     rc = RUNNER.main(
         [], board_fn=lambda slug: issues, slug_fn=lambda: "owner/repo",
@@ -7707,6 +7752,10 @@ def test_the_board_unruled_leg_PRINTS_an_EMPTY_population_rather_than_silence() 
     rows = [
         _stall_row(31, "intake", "#931", 5, now=now),
         _stall_row(32, "ruling", "#931", 4.9, now=now),
+        # The ruling is DISPATCHED and CLAIMED (#519): a ruled item with no dispatch row
+        # naming it is a defect in its own right, so the clean fixture must carry the act.
+        _stall_row(33, "dispatch", "#931", 4.8, now=now),
+        _stall_row(34, "claim", "#931", 4.7, actor="worker", now=now),
     ]
 
     leg = RUNNER.board_unruled_leg(issues, rows, read_at=read_at)
@@ -8888,7 +8937,7 @@ def test_the_criterion_path_leg_is_WIRED_into_the_run_and_PRINTS_its_population(
     # The `ruling` row is not decoration: an OPEN item with an intake row and no ruling row is
     # a `board-unruled` miss, so a fixture that isolates THIS leg's verdict must be a board the
     # round has otherwise swept clean.
-    rows = _rows(("intake", "#172", 1), ("ruling", "#172", 2))
+    rows = _swept(("intake", "#172", 1), ("ruling", "#172", 2))
     rc, out, _ = _run(
         issues, rows, criterion_repo=_criterion_tree("tools/probe.py")
     )
@@ -8903,7 +8952,7 @@ def test_the_criterion_path_leg_reads_a_CLEAN_board_clean_and_says_what_it_read(
     """The complement: the leg is discriminating, not a blanket red — and its clean render
     still carries the population it examined."""
     issues = [_issue_with_body(11, "OPEN", "Done when `tools/probe.py` exists.")]
-    rows = _rows(("intake", "#11", 1), ("ruling", "#11", 2))
+    rows = _swept(("intake", "#11", 1), ("ruling", "#11", 2))
     rc, out, _ = _run(
         issues, rows, criterion_repo=_criterion_tree("tools/probe.py")
     )
@@ -8967,7 +9016,7 @@ def test_the_criterion_path_leg_PRINTS_the_revision_it_read() -> None:
     """The revision is part of the verdict: "0 unresolved" is a claim about a COMMIT, and a
     reader who cannot see WHICH commit cannot reproduce it (#450's honesty half, template-instruments.md §7.5)."""
     issues = [_issue_with_body(11, "OPEN", "Done when `tools/probe.py` exists.")]
-    rows = _rows(("intake", "#11", 1), ("ruling", "#11", 2))
+    rows = _swept(("intake", "#11", 1), ("ruling", "#11", 2))
     tree = _criterion_tree("tools/probe.py")
     rc, out, _ = _run(issues, rows, criterion_repo=tree)
     assert rc == 0, out
@@ -9907,7 +9956,7 @@ def test_the_whole_run_PRINTS_the_rider_and_it_moves_NO_verdict() -> None:
     # board-unruled leg (added after this probe's fixture was first written) REDs on an
     # intaken OPEN item with no ruling row, and a probe whose exit code is moved by an
     # unrelated leg would be asserting that leg rather than the rider's non-gating.
-    rows = _rows(("intake", "#1", 1), ("ruling", "#1", 2))
+    rows = _swept(("intake", "#1", 1), ("ruling", "#1", 2))
 
     def _dirty_rider(*, read_at: str, **_kw) -> dict:
         return _rider(
@@ -10828,3 +10877,140 @@ def test_the_READ_PATH_carries_the_rows_own_ZONE() -> None:
     assert record["verdict"] == RUNNER.CADENCE_SLOT_NOT_JUDGED, record
     assert record["timezone"] == "Europe/Moscow", record
     assert record["next_run_at"] == "2026-10-22T06:15:00+00:00", record
+
+
+# ---- #519: a ruling that no dispatch corroborates -----------------------------------
+#
+# THE POPULATION IS "RULED AND NOT STARTED", not "unruled" (that is `board_unruled_leg`,
+# one leg over) and not "stalled" (that is the census). The ruling asserts a ROUTING; the
+# debt is that no `dispatch` row corroborates it. The four buckets below are disjoint by
+# construction, and each probe asserts the OTHER three stay out of the reported debt —
+# because a leg that reported every one of them would pass a probe that supplied only the
+# true positive.
+
+def test_the_undispatched_ruling_leg_BITES_and_discriminates_on_every_bucket() -> None:
+    """#519 acceptance (1): a ruled, unstarted, un-dispatched item is NAMED, and every
+    neighbour that looks like it stays quiet.
+
+    The neighbours are the live false positives: an item with a dispatch row naming it in
+    its SUBJECT is dispatched (the ruling's own #433 arm); an item named only in a dispatch
+    row's BODY is a MENTION, not a dispatch (#467); an item resolved by a DECLARED batch act
+    was dispatched by a batch and owes no per-item row (NO BACKFILL, n=1596); a CLAIMED item
+    is started; a CLOSED item is done; an item with no `ruling` row belongs to
+    `board_unruled_leg`.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [
+        _issue(931, "OPEN"),    # ruled, unclaimed, unclosed, un-dispatched -> OWED
+        _issue(932, "OPEN"),    # ruled, and a dispatch row NAMES it in its subject
+        _issue(933, "OPEN"),    # ruled, named only in a dispatch row's BODY -> mention
+        _issue(934, "OPEN"),    # ruled, resolved by a DECLARED batch act
+        _issue(935, "OPEN"),    # ruled, but CLAIMED -> started
+        _issue(936, "CLOSED"),  # ruled, but CLOSED -> done
+        _issue(937, "OPEN"),    # OPEN and un-dispatched, but carries NO ruling row
+    ]
+    rows = [
+        _stall_row(31, "ruling", "#931", 2, now=now),
+        _stall_row(32, "ruling", "#932", 2, now=now),
+        _stall_row(33, "dispatch", "#932", 1.9, now=now),
+        _stall_row(34, "ruling", "#933", 2, now=now),
+        _stall_row(35, "dispatch", "consolidated-brief", 1.9, now=now,
+                   detail="covering #933 and two other units"),
+        _stall_row(36, "ruling", "#934", 2, now=now),
+        _stall_row(37, "ruling", "#935", 2, now=now),
+        _stall_row(38, "claim", "#935", 1.9, now=now),
+        _stall_row(39, "ruling", "#936", 2, now=now),
+        _stall_row(40, "close", "#936", 1.9, now=now),
+    ]
+    batches = {"probe-batch-2026-10-21": {
+        "row": 36, "units": [934],
+        "recorded_at": "2026-10-21T00:00:00Z",
+        "basis": "probe: one run receipt fanned the round out, so no per-item row is owed",
+    }}
+
+    leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches=batches)
+    named = "\n".join(leg["problems"])
+    assert "#931" in named, f"the ruled-but-undispatched item must be NAMED\n{named}"
+    for quiet in ("#932", "#933", "#934", "#935", "#936", "#937"):
+        assert quiet not in named, (
+            f"{quiet} must NOT be reported: a subject match IS a dispatch, a body mention "
+            f"is not one and is not this leg's debt, a declared batch resolves, a claimed "
+            f"item is started, a closed item is done, and an item with no ruling row "
+            f"belongs to board-unruled\n{named}"
+        )
+    cov = leg["coverage"]
+    assert cov["items_owed_dispatch"] == 1, cov
+    # THREE, not five: a subject-dispatched item (#932) is out of the population BY
+    # CONSTRUCTION rather than by a later bucket, and a claimed (#935) or closed (#936) one
+    # is out the same way. The population is "ruled and not started", so the buckets that
+    # follow can only ever partition what this count already excluded those from.
+    assert cov["population_undispatched"] == 3, cov
+    assert cov["items_resolved_by_batch"] == 1, cov
+    assert cov["items_named_in_body_only"] == 1, cov
+
+def test_an_ABSENT_batch_declaration_RESOLVES_NOTHING_and_SAYS_SO() -> None:
+    """#519 acceptance (2) and #271: a tree that has declared no batch act must report its
+    population as OWED, and the absence must be VISIBLE — an absent declaration and a
+    population with nothing owed must never render the same.
+
+    This is the arm that makes the declaration safe to be absent: absence SKIPS the excuse,
+    it never grants one. A leg that read an absent declaration as "no batches exist, so
+    everything is resolved" would clear the whole population on no evidence at all.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(941, "OPEN")]
+    rows = [_stall_row(41, "ruling", "#941", 2, now=now)]
+
+    absent = RUNNER.undispatched_ruling_leg(
+        issues, rows, read_at=read_at, batches={},
+        batch_refusal="ABSENT: no docs/ledger-invariants.json in this tree",
+    )
+    assert absent["coverage"]["items_owed_dispatch"] == 1, absent["coverage"]
+    assert absent["coverage"]["batch_refusal"].startswith("ABSENT:"), absent["coverage"]
+
+    # ... and the discriminating control: the SAME population, resolved by a declaration.
+    # If both arms read the same, the assertion above proves nothing about the declaration.
+    resolved = RUNNER.undispatched_ruling_leg(
+        issues, rows, read_at=read_at,
+        batches={"probe-batch": {"row": 41, "units": [941],
+                                 "recorded_at": "2026-10-21T00:00:00Z", "basis": "probe"}},
+    )
+    assert resolved["coverage"]["items_owed_dispatch"] == 0, resolved["coverage"]
+    assert resolved["coverage"]["items_resolved_by_batch"] == 1, resolved["coverage"]
+
+def test_the_undispatched_ruling_leg_is_WIRED_and_PRINTS_every_bucket() -> None:
+    """#519 acceptance (3) and #163 half 2 (b): the leg reaches the report through the REAL
+    `main()`, REDs on an owed unit, and prints each bucket WITH its predicate — so `0 owed`
+    and "a bucket that cannot see one" never render the same line.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    issues = [_issue(951, "OPEN")]
+    rows = [_stall_row(51, "ruling", "#951", 2, now=now)]
+
+    rc, out, _ = _run(issues, rows)
+    assert rc == 1, f"an OWED dispatch must fail the run\n{out}"
+    assert "LEG undispatched-ruling — ASSERTED" in out, out
+    assert "OWED #951" in out, out
+    assert "a mention is not a dispatch" in out, out
+    assert "resolved by a DECLARED batch act" in out, out
+    assert "batch declaration: ABSENT:" in out, (
+        f"an absent declaration must be PRINTED with its reason, not implied by silence\n{out}"
+    )
+    assert "board read at " in out, out
+
+def test_the_undispatched_ruling_leg_is_INJECTABLE_and_wired_by_default() -> None:
+    """`dispatch_batches_fn` is a real parameter of `main()`, and the LIVE default reads the
+    declaration through the ONE shared reader — never a second parse of the file."""
+    import inspect
+    params = inspect.signature(RUNNER.main).parameters
+    assert "dispatch_batches_fn" in params, sorted(params)
+    assert hasattr(RUNNER, "undispatched_batches_fn"), (
+        "the live declaration read must exist as the default"
+    )
+    # The one reader, reached through the same accessor every other cross-tool read uses.
+    reader = RUNNER.declaration_reader()
+    assert hasattr(reader, "load_dispatch_batches"), (
+        "the batch record must be read through tools/ledger_declaration.py, not re-parsed"
+    )

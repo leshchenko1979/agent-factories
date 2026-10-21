@@ -400,6 +400,12 @@ BOARD_UNRULED_THRESHOLD_BASIS = (
 # one predicate (SKILL.md section 11).
 LEDGER_TOOL = REPO / "tools" / "ledger.py"
 
+# The DECLARED extension surface's one reader (#519). `docs/ledger-invariants.json` carries
+# `dispatch_batches` beside the ledger's own invariants, and BOTH the ledger tool and this
+# runner read it through `ledger_declaration` — never a second parse, because two readers of
+# one declaration are two answers to one question, and the silent one is invisible.
+LEDGER_DECLARATION = REPO / "tools" / "ledger_declaration.py"
+
 # ---- the kit-drift leg (plan 2646d31a step 10) --------------------------------------
 #
 # A member factory's drift was previously unmeasurable: the only thing that could say
@@ -7526,6 +7532,236 @@ def board_unruled_leg(
         },
     }
 
+# --- the undispatched-ruling leg (#519) ---------------------------------------
+#
+# WHY THE CENSUS IS BLIND HERE, and it is the reason this leg exists at all.
+# `stall_census_leg`'s admission ticket is a DISPATCH row: a unit enters that population
+# only once a row of event `dispatch` names it. So a unit whose routing happened as a BATCH
+# ACT — one `run` receipt, a partition of per-lane route files, and a hundred-odd findings
+# fanned out by notify — is invisible to the leg that exists to find stalled work, and it
+# stays invisible however long it sits. A leg whose admission ticket is the very artifact
+# it is looking for can only ever report the units that already have one (#519, ruling
+# n=3864). This leg therefore takes its population from the OTHER end: ruled, open, and
+# unclaimed, whatever the dispatch rows say.
+#
+# THE BATCH RESOLUTION IS DECLARED, NEVER INFERRED. A batch act's finding->issue linkage is
+# prose-only (the cycle's `codification_plan` carries no issue field; its route files name
+# findings by lens and F-number), so a leg that resolved units by matching a finding string
+# against an issue title would be guessing with a join's clothes on — and a wrong resolution
+# here silently excuses a real debt. The units are read from
+# `docs/ledger-invariants.json`'s `dispatch_batches`, through the one shared reader, and a
+# tree that has declared nothing gets the honest answer: nothing in it says these units were
+# dispatched, so the red is TRUE.
+#
+# IT REPORTS AND IT REPAIRS NOTHING (clause 3). A leg that resolved its own population
+# cannot report it. The disposition of an owed unit — re-dispatch, close as superseded, or
+# park — belongs to the lane that owns the round, and this runner holds no tool with which
+# to reach it.
+#
+# EVERY BUCKET PRINTS ITS OWN PREDICATE, so "no owed units" and "a bucket that cannot see
+# one" never render the same (#163 half 2 (b)). A MENTION IS NOT A DISPATCH (#467): a unit
+# named only inside a dispatch row's body is COUNTED AND PRINTED in its own bucket, never
+# folded into the dispatched population and never re-filed as debt — the ruling separates
+# that class from the owed one, and a leg that reds on a mention re-reds on the same units
+# forever.
+
+_DECLARATION_READER = None
+
+def declaration_reader():
+    """`tools/ledger_declaration.py`, loaded ONCE and cached.
+
+    Loaded by PATH through the same accessor every other cross-tool read here uses, so
+    there is exactly one way to reach it. Cached because `load_module` RE-EXECUTES on
+    every call and this runner reaches it once per patrol.
+    """
+    global _DECLARATION_READER
+    if _DECLARATION_READER is None:
+        _DECLARATION_READER = load_module("ledger_declaration", LEDGER_DECLARATION)
+    return _DECLARATION_READER
+
+def undispatched_batches_fn(repo: Path | None = None) -> dict:
+    """`{"batches": ..., "batch_refusal": ...}` — the declared batch record, or its refusal.
+
+    The leg takes these as KEYWORD ARGUMENTS rather than reading the declaration itself, so
+    a probe never has its verdict decided by whichever batches the live factory happens to
+    have declared. This function is the LIVE default for that injection.
+
+    The two failure modes are mapped apart, and the split is the point. ABSENT is a
+    legitimate state — a factory that has never run a batch act has declared none — so it
+    resolves NOTHING and says so in `batch_refusal`, which the leg prints. MALFORMED is a
+    DEFECT in a declaration that exists, and it also resolves nothing, but it must never
+    read as "no batches exist": an empty map is the absent declaration wearing a key, and
+    excusing a population on it is the act the declaration's own reader refuses.
+
+    A zero must never stand in for "could not look" (#271): both arms return an empty
+    `batches` map WITH the reason attached, never a bare `{}`.
+    """
+    reader = declaration_reader()
+    try:
+        batches = reader.load_dispatch_batches(repo if repo is not None else REPO)
+    except reader.DeclarationUnavailable as exc:
+        return {"batches": {}, "batch_refusal": f"ABSENT: {exc}"}
+    except reader.DeclarationUnreadable as exc:
+        return {"batches": {}, "batch_refusal": f"UNREADABLE: {exc}"}
+    return {"batches": batches, "batch_refusal": ""}
+
+def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
+                            predicate=None, batches: dict | None = None,
+                            batch_refusal: str = "") -> dict:
+    """OPEN board items carrying a `ruling` row and NO `dispatch` row naming them (#519).
+
+    Population: every item the board calls OPEN, that carries a `ruling` row resolving to
+    it, and that carries no `claim` and no `close` row — the work is ruled, not started, and
+    not done. That is the state a dispatch is owed in. Each member is then placed in exactly
+    one bucket, and the three predicates are disjoint by construction:
+
+      * `named_in_subject` — a dispatch row's SUBJECT resolves to it: dispatched, and
+        outside the reported population entirely.
+      * `named_in_body_only` — a dispatch row's BODY carries the token while no subject
+        does. Printed as the #467 mention class with its own predicate; a mention is not a
+        dispatch, and it is not this leg's debt either.
+      * `resolved_by_batch` — a declared batch record names it: EXCUSED, with the batch row
+        and the declaration instant printed, because a batch act is a dispatch that happened.
+      * `owed_dispatch` — named by nothing and declared by no batch: the PROBLEM.
+
+    `batches` is injected so a probe never reads the live declaration, and `batch_refusal`
+    carries an unreadable-or-absent declaration's own reason so a population resolved on no
+    declaration is VISIBLE as such rather than silently treated as "no batches exist".
+    """
+    predicate = predicate or load_predicate()
+    open_numbers = predicate.open_issue_numbers(issues)
+
+    ruled: set[int] = set()
+    ruling_rows_read = 0
+    for row in rows:
+        if str(row.get("event") or "") != "ruling":
+            continue
+        ruling_rows_read += 1
+        number, _arm = resolve_ruling_issue(row, rows, predicate)
+        if number is not None:
+            ruled.add(number)
+
+    # The two rows that take a unit OUT of the owed state: work started, or work done.
+    started: set[int] = set()
+    done: set[int] = set()
+    for row in rows:
+        event = str(row.get("event") or "")
+        if event not in ("claim", "close"):
+            continue
+        number = issue_from_row(row, predicate)
+        if number is None:
+            continue
+        (started if event == "claim" else done).add(number)
+
+    # The dispatch rows, split by WHERE the token sits: a header NAMES its subject (#433),
+    # a body merely discusses it.
+    in_subject: set[int] = set()
+    in_body_only: dict[int, dict] = {}
+    dispatch_rows_read = 0
+    for row in rows:
+        if str(row.get("event") or "") != "dispatch":
+            continue
+        dispatch_rows_read += 1
+        own = issue_from_row(row, predicate)
+        if own is not None:
+            in_subject.add(own)
+        detail = str(row.get("detail") or "")
+        for number in sorted(open_numbers):
+            if number in in_subject:
+                continue
+            if delivery_subject_matches(detail, f"#{number}"):
+                in_body_only.setdefault(number, {
+                    "issue": number,
+                    "dispatch_n": row.get("n"),
+                    "dispatch_subject": str(row.get("subject") or ""),
+                })
+
+    declared: dict[int, dict] = {}
+    for slug, entry in (batches or {}).items():
+        for number in entry.get("units") or []:
+            declared.setdefault(int(number), {
+                "issue": int(number),
+                "batch": slug,
+                "batch_row": entry.get("row"),
+                "declared_at": str(entry.get("recorded_at") or ""),
+            })
+
+    population: list[int] = sorted(
+        n for n in open_numbers
+        if n in ruled and n not in started and n not in done and n not in in_subject
+    )
+    owed: list[dict] = []
+    excused_batch: list[dict] = []
+    mentioned: list[dict] = []
+    for number in population:
+        if number in declared:
+            excused_batch.append(declared[number])
+        elif number in in_body_only:
+            mentioned.append(in_body_only[number])
+        else:
+            owed.append({"issue": number})
+
+    problems: list[str] = []
+    for entry in owed:
+        problems.append(
+            f"#{entry['issue']} is OPEN on the board and carries a `ruling` row, and no "
+            f"`dispatch` row names it in its subject, and no declared batch resolves it "
+            f"(board read at {read_at}) — the ruling asserts a routing that no row "
+            f"corroborates. Dispatch it, or close it as superseded WITH the evidence"
+        )
+
+    excused: list[str] = []
+    for entry in excused_batch:
+        excused.append(
+            f"#{entry['issue']}: resolved by declared batch `{entry['batch']}` "
+            f"(ledger n={entry['batch_row']}, declared {entry['declared_at'] or 'undated'}) "
+            f"— a batch act is a dispatch that happened, and NO BACKFILL bars the per-item "
+            f"row"
+        )
+    for entry in mentioned:
+        excused.append(
+            f"#{entry['issue']}: named only inside dispatch n={entry['dispatch_n']}'s BODY "
+            f"({entry['dispatch_subject']!r}) — a MENTION is not a dispatch (#467), and it "
+            f"is not this leg's debt either"
+        )
+
+    return {
+        "name": "undispatched-ruling",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": excused,
+        "coverage": {
+            "board_items_read": len(issues),
+            "open_items_examined": len(open_numbers),
+            "ruling_rows_read": ruling_rows_read,
+            "rulings_resolved": len(ruled),
+            "dispatch_rows_read": dispatch_rows_read,
+            "claims_read": len(started),
+            "closes_read": len(done),
+            "population_undispatched": len(population),
+            "items_owed_dispatch": len(owed),
+            "owed": [entry["issue"] for entry in owed],
+            "items_named_in_body_only": len(mentioned),
+            "named_in_body_only": mentioned,
+            "items_resolved_by_batch": len(excused_batch),
+            "resolved_by_batch": excused_batch,
+            "batch_refusal": batch_refusal,
+            "population_predicate": (
+                "OPEN on the board, carries a `ruling` row resolving to it, carries no "
+                "`claim` and no `close` row, and no `dispatch` row resolves to it by subject"
+            ),
+            "mention_predicate": (
+                "the unit's token appears in a dispatch row's DETAIL while no dispatch row's "
+                "SUBJECT resolves to it — printed, never counted as a dispatch (#467)"
+            ),
+            "batch_predicate": (
+                "the unit is named in `dispatch_batches` in docs/ledger-invariants.json, the "
+                "declared record of a batch act whose per-item rows NO BACKFILL bars"
+            ),
+            "board_read_at": read_at,
+        },
+    }
+
 # A PATH a criterion NAMES, in backticks: the shape `docs/measurement-procedure.md`,
 # `tests/test_x.py`, `tools/y.py`, `tools/questions`. A criterion names its artefact this
 # way, and the class (#48) is a name that resolves to nothing.
@@ -10850,6 +11086,38 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
             lines.append(f"  threshold basis: {cov['threshold_basis']}")
             lines.append(f"  board read at {cov['board_read_at']}")
+        elif leg["name"] == "undispatched-ruling":
+            # EVERY BUCKET PRINTS ITS OWN PREDICATE (#163 half 2 (b)): `0 owed` and "a bucket
+            # that cannot see one" must never render the same line, so the population is
+            # printed beside the verdict and each exclusion carries the predicate that made it.
+            lines.append(
+                f"  board: {cov['board_items_read']} item(s) read, "
+                f"{cov['open_items_examined']} OPEN; ruling rows read: "
+                f"{cov['ruling_rows_read']} ({cov['rulings_resolved']} resolved to an issue)"
+            )
+            lines.append(
+                f"  population ({cov['population_predicate']}): "
+                f"{cov['population_undispatched']} item(s) -- "
+                f"{cov['items_owed_dispatch']} owed a dispatch"
+            )
+            for entry in cov.get("owed", []):
+                lines.append(f"    OWED #{entry}")
+            lines.append(
+                f"  named only in a dispatch row's BODY (#467): "
+                f"{cov['items_named_in_body_only']} item(s) -- a mention is not a dispatch, "
+                f"and not this leg's debt either"
+            )
+            lines.append(
+                f"  resolved by a DECLARED batch act: "
+                f"{cov['items_resolved_by_batch']} item(s) -- {cov['batch_predicate']}"
+            )
+            # THE DECLARATION'S OWN STATE IS PRINTED, because an absent record and an
+            # unreadable one both resolve nothing and are NOT the same fact: absent is a
+            # factory that has declared no batch, unreadable is a defect in one that exists.
+            lines.append(
+                f"  batch declaration: {cov['batch_refusal'] or 'READ'}"
+            )
+            lines.append(f"  board read at {cov['board_read_at']}")
         elif leg["name"] == "dispatch-delivery":
             # THE EXAMINED POPULATION IS PRINTED BESIDE THE VERDICT (acceptance criterion 3),
             # so `examined 33, 0 problems` is never the same output as `examined 0` -- the
@@ -11250,6 +11518,11 @@ def main(
     # exemption cannot prove the store is reconciled at all.
     criterion_exemptions_fn=None,
     scores_dir_fn=None,
+    # #519: the batch-dispatch declaration, injected for the same reason every other
+    # declaration here is -- a probe must never have its verdict decided by whichever
+    # batches the live factory happens to have declared, and a probe that CANNOT drive a
+    # declaration cannot prove the leg resolves anything at all.
+    dispatch_batches_fn=None,
     board_scope_fn=None,
     duty_scope_fn=None,
     # #506: the declared-exemption store is injected for the sixth time and the same reason
@@ -11392,6 +11665,7 @@ def main(
             "cron-thinness, pacemaker-presence, notify-receipt, duty-receipt, "
             "canonicality-tier, workspace-blocked, stall-census, "
             "board-unruled, "
+            "undispatched-ruling, "
             "dispatch-delivery, "
             "criterion-paths, "
             "score-conversion, "
@@ -11500,6 +11774,10 @@ def main(
             lane_activity_fn=driverless_activity_fn or box_lane_activity,
         ), read_at),
         leg_guard("board-unruled", lambda: board_unruled_leg(issues, rows, read_at=read_at, predicate=predicate), read_at),
+        leg_guard("undispatched-ruling", lambda: undispatched_ruling_leg(
+            issues, rows, read_at=read_at, predicate=predicate,
+            **(dispatch_batches_fn or undispatched_batches_fn)(),
+        ), read_at),
         leg_guard("criterion-paths", lambda: criterion_path_leg(
             issues, read_at=read_at,
             repo=(criterion_repo_fn or (lambda: REPO))(),

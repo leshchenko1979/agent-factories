@@ -446,3 +446,97 @@ def boundary_for(repo: Path, key: str) -> tuple[dt.datetime, str]:
             f"{value!r} ({exc})"
         ]) from exc
     return when, value
+
+def load_dispatch_batches(repo: Path) -> dict:
+    """The declared `dispatch_batches` map, or `DeclarationUnavailable`/`DeclarationUnreadable`.
+
+    THE FOURTH DECLARATION in the same file, on the same ground as the three above: it is
+    FACTORY DATA, so it does not ship and the skeleton does. It exists because a dispatch
+    can be a BATCH ACT rather than a per-item row (#519, ruling n=3864): a review cycle's
+    findings are fanned out by one `run` receipt and a partition of per-lane route files,
+    and the per-item `dispatch` rows are then owed to Triage and may never be written. NO
+    BACKFILL (`n=1596`) bars writing them after the fact, so the only lawful record of that
+    routing is a DECLARATION that the batch act happened — which is true, and dated.
+
+    It is NOT an inference surface, and the difference is the whole reason it is a file of
+    its own rather than a lookup. The finding→issue linkage in such a batch is prose-only:
+    `reviews/20260927-c1/state.json`'s `codification_plan` carries no issue field, and the
+    route files name findings by lens and F-number. A leg that resolved units by matching a
+    finding string against an issue title would be guessing with a join's clothes on, and a
+    wrong resolution there silently excuses a real debt. So the units are DECLARED, by the
+    lane that can see the batch, and a reader only ever reads them.
+
+    Shape: `{"<batch-slug>": {"row": <ledger n of the batch act>, "units": [<issue>, ...],
+    "recorded_at": "<ISO-8601 UTC instant the declaration was made>", "basis": "<prose>"}}`.
+    A `units` entry that is not a positive integer is a FAILURE, not a skip: an empty or
+    malformed declaration is the absent one wearing a key, and excusing a population is
+    exactly the act this declaration must not be able to do by accident.
+    """
+    path = repo / DECLARATION_REL
+    if not path.is_file():
+        raise DeclarationUnavailable(
+            f"no {DECLARATION_REL} — a batch dispatch is DECLARED factory data, and this "
+            f"tree has declared none; the skeleton is {DECLARATION_EXAMPLE_REL}"
+        )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise DeclarationUnreadable([f"{DECLARATION_REL} exists but cannot be read: {exc}"]) from exc
+    except json.JSONDecodeError as exc:
+        raise DeclarationUnreadable([f"{DECLARATION_REL} is not valid JSON: {exc}"]) from exc
+
+    if not isinstance(payload, dict):
+        raise DeclarationUnreadable([f"{DECLARATION_REL} must be a JSON object"])
+    declared = payload.get("dispatch_batches")
+    if declared is None:
+        raise DeclarationUnavailable(
+            f"{DECLARATION_REL} declares no `dispatch_batches` map — no batch dispatch has "
+            f"been recorded in this factory, so there is nothing to resolve against; the "
+            f"skeleton is {DECLARATION_EXAMPLE_REL}"
+        )
+    if not isinstance(declared, dict):
+        raise DeclarationUnreadable([
+            f"{DECLARATION_REL}: `dispatch_batches` must be an object keyed by batch slug"
+        ])
+    if not declared:
+        raise DeclarationUnreadable([
+            f"{DECLARATION_REL}: `dispatch_batches` is an EMPTY map — an empty declaration "
+            f"is the absent one wearing a key, and it would excuse a population on no evidence"
+        ])
+
+    problems: list[str] = []
+    batches: dict[str, dict] = {}
+    for slug, entry in declared.items():
+        if not isinstance(entry, dict):
+            problems.append(f"{DECLARATION_REL}: `dispatch_batches.{slug}` must be an object")
+            continue
+        row = entry.get("row")
+        if not isinstance(row, int) or isinstance(row, bool) or row < 1:
+            problems.append(
+                f"{DECLARATION_REL}: `dispatch_batches.{slug}.row` must be the positive "
+                f"ledger row number of the batch act, found {row!r}"
+            )
+            continue
+        units = entry.get("units")
+        if not isinstance(units, list) or not units:
+            problems.append(
+                f"{DECLARATION_REL}: `dispatch_batches.{slug}.units` must be a NON-EMPTY "
+                f"list of issue numbers — a batch that dispatched nothing is not a batch"
+            )
+            continue
+        bad = [u for u in units if not isinstance(u, int) or isinstance(u, bool) or u < 1]
+        if bad:
+            problems.append(
+                f"{DECLARATION_REL}: `dispatch_batches.{slug}.units` carries non-positive "
+                f"or non-integer entries: {bad[:5]}"
+            )
+            continue
+        batches[slug] = {
+            "row": row,
+            "units": [int(u) for u in units],
+            "recorded_at": str(entry.get("recorded_at") or ""),
+            "basis": str(entry.get("basis") or ""),
+        }
+    if problems:
+        raise DeclarationUnreadable(problems)
+    return batches
