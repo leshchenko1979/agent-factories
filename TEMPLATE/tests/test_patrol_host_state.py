@@ -9362,6 +9362,203 @@ def test_the_score_conversion_leg_reports_NO_BASELINE_rather_than_EVERY_artifact
     assert "lapsed_population" not in cov, cov
     assert leg["problems"] == [], leg["problems"]
 
+# ------------------------------------------------------------------ #531: a short parse is not a clean round
+
+def _per_family_score_artifact(*, name: str = "Probe factory", total: int = 67) -> str:
+    """A card in the shape 2026-10-17 carries: cells grouped PER FAMILY, no flat row.
+
+    The heading is the one `_SCORECARD_HEADING_RE` matches, so the block IS found -- and its
+    body carries no `| D1 | ... |` criterion header, so ZERO cells parse. That is the filed
+    shape exactly: the leg knew the round existed and read nothing out of it, then printed
+    `0 cell(s) examined ... 0 regression(s): none` as though it had examined the round.
+    """
+    return (
+        "## Detailed Factory Scorecards\n\n"
+        f"### 1. {name} — {total} / 76\n\n"
+        "| Family | Cells | Sum | Max |\n"
+        "|---|---:|---:|---:|\n"
+        "| Documentation | 3 4 4 3 | 14 | 16 |\n"
+        "| Output | 4 3 **0** | 7 | 12 |\n"
+    )
+
+def _cell_score_artifact(*, cells: list[str], declared: int = 19, total: int = 67,
+                         name: str = "Probe factory") -> str:
+    """A card whose HEADER declares `declared` columns and whose BODY carries `cells`.
+
+    Separate from `_score_artifact` on purpose: that helper derives the header FROM the
+    body, so the two counts can never disagree and a short parse cannot be expressed at
+    all. The incompleteness arm exists precisely in the gap between them.
+    """
+    header = " | ".join(f"D{i + 1}" for i in range(declared))
+    body = " | ".join(cells)
+    return (
+        "## Detailed Factory Scorecards\n\n"
+        f"### 1. {name} — {total} / 76\n\n"
+        f"| {header} |\n"
+        "|" + "---:|" * declared + "\n"
+        f"| {body} |\n"
+    )
+
+def test_a_block_records_the_CELL_POPULATION_its_own_header_declares() -> None:
+    """#531 clause 1: `declared` and `parsed` travel ON the block, so no caller re-derives.
+
+    The two numbers are the instrument. A consumer that counted cells itself would be a
+    second reader of one fact -- which is how both consumers came to report a clean round
+    over a block that had lost a cell.
+    """
+    blocks = RUNNER.scorecard_blocks(_cell_score_artifact(cells=["4"] * 18 + ["—"]))
+    assert len(blocks) == 1, blocks
+    assert blocks[0]["declared"] == 19, blocks[0]
+    assert blocks[0]["parsed"] == 18, blocks[0]
+    assert len(blocks[0]["cells"]) == 18, blocks[0]
+
+    # A well-formed card declares and delivers the SAME count -- the record must not read
+    # "short" for a block that is whole.
+    whole = RUNNER.scorecard_blocks(_cell_score_artifact(cells=["4"] * 19))
+    assert (whole[0]["declared"], whole[0]["parsed"]) == (19, 19), whole[0]
+    assert RUNNER.scorecard_shortfalls(whole) == [], whole
+
+    # ... and a body NARROWER than its own header is SHORT, never absent: the block was
+    # found and read zero cells out of it, which is the 10-17 shape wearing another face.
+    ragged = RUNNER.scorecard_blocks(
+        _cell_score_artifact(cells=["4"] * 18, declared=19)
+    )
+    assert (ragged[0]["declared"], ragged[0]["parsed"]) == (19, 0), ragged[0]
+    assert len(RUNNER.scorecard_shortfalls(ragged)) == 1, ragged
+
+def test_the_newest_round_REFUSES_a_ZERO_CELL_block_instead_of_calling_it_clean() -> None:
+    """#531 acceptance 1, and the FILED symptom: 2026-10-17's six cards, 0 cells each.
+
+    Before the repair the leg returned ASSERTED with `criteria_cells: 0` and `regressions:
+    []` -- a clean verdict over a population it never read, indistinguishable from a round
+    that examined 114 cells and found them clean. The refusal must name the BLOCK and BOTH
+    counts: "the parse was short" without the numbers is the same unverifiable claim in a
+    different voice.
+    """
+    directory = _scores_dir(_per_family_score_artifact())
+    leg = RUNNER.score_conversion_leg(
+        [_non_conversion_row()], read_at="probe", scores_dir=directory
+    )
+    assert leg["status"] == "NOT RUN", leg
+    assert leg["problems"] == [], leg["problems"]
+    cov = leg["coverage"]
+    assert cov["criteria_cells"] == 0, cov
+    assert cov["incomplete_blocks"] == [
+        {"factory": "Probe factory", "parsed": 0, "declared": 0}
+    ], cov["incomplete_blocks"]
+    reason = cov["reason"]
+    assert "INCOMPLETE" in reason, reason
+    assert "Probe factory" in reason, reason
+    assert "0 cell(s) parsed" in reason and "0 declared" in reason, reason
+
+    # ... and the RENDER carries the refusal: no zero-cell "clean" line may be assembled.
+    rc, out, _ = _run([], [_non_conversion_row()], scores_dir=directory)
+    assert "LEG score-conversion — NOT RUN" in out, out
+    assert "INCOMPLETE" in out, out
+    assert "0 cell(s) examined" not in out, out
+    assert rc == 0, f"a NOT RUN leg is not a failure of the run\n{out}"
+
+def test_the_newest_round_REFUSES_a_block_SHORT_of_its_own_header() -> None:
+    """#531 acceptance 2: 18 of 19 -- the arm that printed NOTHING anomalous.
+
+    2026-10-09's Miidas card is this shape (A2 written `**3**`), and it was never filed
+    because the leg said nothing about it. The regex repair makes THAT cell parse; this arm
+    keeps the refusal alive for a cell no reading recovers, because the class is "a cell the
+    parser could not read", never "a cell written in bold".
+    """
+    directory = _scores_dir(_cell_score_artifact(cells=["4"] * 18 + ["—"]))
+    leg = RUNNER.score_conversion_leg(
+        [_non_conversion_row()], read_at="probe", scores_dir=directory
+    )
+    assert leg["status"] == "NOT RUN", leg
+    cov = leg["coverage"]
+    assert cov["criteria_cells"] == 18, cov
+    assert cov["incomplete_blocks"] == [
+        {"factory": "Probe factory", "parsed": 18, "declared": 19}
+    ], cov["incomplete_blocks"]
+    reason = cov["reason"]
+    assert "18 of 19 declared cell(s) parsed" in reason, reason
+    assert "1 unread" in reason, reason
+
+def test_a_WELL_FORMED_card_is_still_ASSERTED_with_ALL_its_cells() -> None:
+    """#531 acceptance 3: the POSITIVE CONTROL -- the predicate must not pass by refusing.
+
+    Every refusal arm above is satisfied by a leg that refuses everything and reports
+    nothing, which would be a worse instrument than the one it replaced. A whole card must
+    read exactly as it read before the repair.
+    """
+    directory = _scores_dir(_cell_score_artifact(cells=["4"] * 18 + ["0 (UNM)"]))
+    leg = RUNNER.score_conversion_leg(
+        [_non_conversion_row()], read_at="probe", scores_dir=directory
+    )
+    assert leg["status"] == "ASSERTED", leg
+    cov = leg["coverage"]
+    assert cov["criteria_cells"] == 19, cov
+    assert cov["unmeasurable_cells"] == 1, cov
+    assert "incomplete_blocks" not in cov, cov
+    assert leg["problems"] == [], leg["problems"]
+
+def test_a_BOLD_wrapped_cell_reads_as_its_VALUE_and_the_UNM_marker_stays_DATA() -> None:
+    """#531 acceptance 4: `**3**` is a three; `0 (UNM)` is still an EXCLUDED cell.
+
+    Two different kinds of markup, and the repair must not confuse them: bold is
+    presentation wrapped around a value, while `(UNM)` is the ruling's own marker (n=2747)
+    that keeps a zero OUT of the floor predicate. A leg that treated them alike would either
+    lose the value or score the exclusion.
+    """
+    blocks = RUNNER.scorecard_blocks(
+        _cell_score_artifact(cells=["4"] * 17 + ["**3**", "0 (UNM)"])
+    )
+    assert blocks[0]["parsed"] == 19, blocks[0]
+    by_criterion = {c[0]: (c[1], c[2]) for c in blocks[0]["cells"]}
+    assert by_criterion["D18"] == (3, False), by_criterion
+    assert by_criterion["D19"] == (0, True), by_criterion
+
+    # The floor predicate sees the bold cell as a measurable 3 and the UNM zero as excluded.
+    regressions, examined, unmeasurable = RUNNER.score_regressions(blocks, {})
+    assert regressions == [], regressions
+    assert (examined, unmeasurable) == (19, 1), (examined, unmeasurable)
+
+def test_the_LAPSED_read_REFUSES_an_incomplete_round_instead_of_CLEARING_it() -> None:
+    """#531 acceptance 1, LAPSED arm -- the filed line, verbatim.
+
+    The artifact is 2026-10-17's shape and it is UNANSWERED, so it is a lapse. Before the
+    repair the line read `2026-10-17.md (0 regression(s): none, no conversion owed)` -- a
+    round clearing itself of an obligation nobody had checked. `owed` must not be False when
+    nothing was examined, and the render must carry the reason IN PLACE OF counts the leg
+    does not have. The newest round here is COMPLETE, so the newest-arm refusal cannot be
+    what produces this line: the lapsed arm has to stand on its own.
+    """
+    directory = _scores_tree({
+        "2026-10-09": _cell_score_artifact(cells=["4"] * 19, total=70),
+        "2026-10-10": _per_family_score_artifact(total=70),
+        "2026-10-11": _cell_score_artifact(cells=["4"] * 19, total=70),
+    })
+    rows = [
+        _conversion_row("evidence/scores/2026-10-09.md"),
+        _conversion_row("evidence/scores/2026-10-11.md", subject="#68"),
+    ]
+    leg = RUNNER.score_conversion_leg(rows, read_at="probe", scores_dir=directory)
+    assert leg["status"] == "ASSERTED", leg
+    cov = leg["coverage"]
+    assert cov["lapsed_population"] == 3, cov
+    assert [e["artifact"] for e in cov["lapsed"]] == ["evidence/scores/2026-10-10.md"], cov
+    entry = cov["lapsed"][0]
+    assert entry["owed"] is not False, entry
+    assert entry["unread"] is True, entry
+    assert "INCOMPLETE" in entry["reason"], entry
+    assert "0 cell(s) parsed" in entry["reason"], entry
+    # An unread round is not a PROBLEM: it is a refusal to measure, and the run must say so
+    # without inventing a regression the leg never read.
+    assert leg["problems"] == [], leg["problems"]
+
+    rc, out, _ = _run([], rows, scores_dir=directory)
+    assert "evidence/scores/2026-10-10.md (UNREAD" in out, out
+    assert "nothing measured, nothing cleared" in out, out
+    assert "no conversion owed" not in out, (
+        f"an unread round must never clear itself of a conversion\n{out}"
+    )
+
 def test_the_stall_census_leg_PRINTS_the_lane_drain_beside_the_OWED_total() -> None:
     """#465 criterion 1: the OWED total travels with the addressee LANE's own drain
     evidence -- its claims on a SIBLING of the same standing set inside the window.

@@ -8671,8 +8671,15 @@ _SCORECARD_HEADING_RE = re.compile(
     r"^###\s+\d+\.\s+(?P<name>.+?)\s+—\s+(?P<total>\d+)\s*/\s*(?P<den>\d+)\s*$"
 )
 _SCORECARD_CRITERIA_RE = re.compile(r"^\|\s*D1\s*\|")
+# BOLD IS PRESENTATION, `(UNM)` IS DATA (#531). A cell written `**3**` is a three; the
+# earlier form admitted up to two LEADING asterisks and NONE trailing, so `**3**` read as
+# no value at all and the block silently lost a cell -- measured: 2026-10-09's Miidas card
+# parsed 18 of 19, and that arm prints nothing anomalous, which is why it was never filed.
+# The trailing pair is accepted for the same reason the leading pair was: emphasis wrapped
+# around a number must not change what the number is. Measured across every artifact in the
+# series (35 artifacts, 66 blocks, 1139 cells): exactly ONE cell changes reading.
 _SCORECARD_CELL_RE = re.compile(
-    r"^\*{0,2}\s*(?P<value>\d+)\s*(?P<unm>\(UNM\))?\s*$"
+    r"^\*{0,2}\s*(?P<value>\d+)\s*(?P<unm>\(UNM\))?\s*\*{0,2}$"
 )
 
 # THE FLOOR IS THE RULING'S OWN, not this leg's choice (#67): "any criterion score < 3".
@@ -8717,6 +8724,13 @@ def scorecard_blocks(text: str) -> list[dict]:
                 "total": int(heading.group("total")),
                 "den": int(heading.group("den")),
                 "cells": [],
+                # THE BLOCK'S OWN POPULATION DECLARATION (#531). `declared` is how many
+                # criterion columns the block's header row names; `parsed` is how many of
+                # those cells actually read as a value. Both travel on the block so a
+                # caller can see incompleteness WITHOUT re-deriving it -- the filed symptom
+                # was a consumer that read `cells: []` and reported a clean round.
+                "declared": 0,
+                "parsed": 0,
             }
             blocks.append(current)
             continue
@@ -8728,6 +8742,10 @@ def scorecard_blocks(text: str) -> list[dict]:
         if current["cells"] or not _SCORECARD_CRITERIA_RE.match(line):
             continue
         header = [c.strip() for c in line.strip().strip("|").split("|")]
+        # The header IS the declaration: whatever columns it names, that many cells the
+        # block owes. Recorded before the values are read, so a row whose width disagrees
+        # with its own header reads as SHORT rather than as absent.
+        current["declared"] = len(header)
         values = None
         for nxt in lines[idx + 1: idx + 4]:
             if set(nxt.strip()) <= set("|-: "):
@@ -8743,8 +8761,67 @@ def scorecard_blocks(text: str) -> list[dict]:
             current["cells"].append((
                 criterion, int(match.group("value")), bool(match.group("unm")),
             ))
+    for block in blocks:
+        block["parsed"] = len(block["cells"])
     return blocks
 
+def scorecard_shortfalls(blocks: list[dict]) -> list[dict]:
+    """Every block whose cell population is SHORT of what its own header declares (#531).
+
+    A block is COMPLETE only when it declared at least one criterion column AND every
+    declared column read as a value. `declared == 0` is NOT "0 of 0, therefore fine" -- it
+    is the shape a card takes when its cells are grouped per family instead of laid out as
+    a flat criterion row, so the leg parsed the heading and nothing else. Measured
+    2026-10-17: all six cards, 0 cells each, and the leg printed `0 cell(s) examined ... 0
+    regression(s): none, no conversion owed` -- a clean verdict over a population it never
+    read, which is indistinguishable from a round that read 114 cells and found them clean.
+
+    The comparison is against the block's OWN header, never a hard-coded 19: the leg reads
+    whatever rubric the artifact declares, and a fixture that declares two columns and
+    delivers two is complete. Returns `{factory, parsed, declared}` per short block, so the
+    caller names both counts rather than re-deriving either.
+    """
+    short: list[dict] = []
+    for block in blocks:
+        parsed = int(block.get("parsed", 0))
+        declared = int(block.get("declared", 0))
+        if declared < 1 or parsed < declared:
+            short.append({
+                "factory": block["name"], "parsed": parsed, "declared": declared,
+            })
+    return short
+
+def shortfall_phrase(entry: dict) -> str:
+    """One short block, NAMED with both counts (#531): block, parsed, declared."""
+    if entry["declared"] < 1:
+        return (
+            f"{entry['factory']} (0 cell(s) parsed, 0 declared -- the card carries no "
+            f"`| D1 | ... |` criterion header row this leg reads)"
+        )
+    return (
+        f"{entry['factory']} ({entry['parsed']} of {entry['declared']} declared cell(s) "
+        f"parsed, {entry['declared'] - entry['parsed']} unread)"
+    )
+
+
+def lapsed_unread_entry(artifact_rel: str, reason: str) -> dict:
+    """A lapsed round the leg could NOT measure (#531).
+
+    `owed` is deliberately NOT False here, and that distinction is the whole clause: `owed`
+    answers "does this round carry a regression nothing answers", and a round whose cells
+    never read cannot answer it in EITHER direction. False is the verdict "measured, clean,
+    owes nothing" -- precisely the reading that let 2026-10-17 print as a clean round. The
+    `unread` marker makes the render print the reason IN PLACE OF counts the leg does not
+    have, so no `0 regression(s): none, no conversion owed` line can be assembled from an
+    artifact that was never read.
+    """
+    return {
+        "artifact": artifact_rel,
+        "regressions": [],
+        "owed": True,
+        "unread": True,
+        "reason": reason,
+    }
 
 def score_regressions(blocks: list[dict], previous: dict[str, int]) -> tuple[list[dict], int, int]:
     """Every regression a round carries, by the ONE predicate (#517).
@@ -8890,6 +8967,36 @@ def score_conversion_leg(
                 f"can parse, so no regression can be read from it -- the artifact predates "
                 f"the section, or its shape has moved"
             )},
+        }
+
+    # AN INCOMPLETE BLOCK IS NOT A CLEAN BLOCK (#531). This leg's whole job is to read cells
+    # and weigh them against the floor, so a block that LOST cells can only under-report
+    # regressions: a verdict taken off it is a clean round invented from a population the
+    # leg did not read. Measured 2026-10-17 -- six cards, zero cells each, printed as
+    # `0 cell(s) examined, 0 regression(s): none, no conversion owed`. The refusal names the
+    # block and BOTH counts, because "the parse was short" without the numbers is the same
+    # unverifiable claim in a different voice.
+    short = scorecard_shortfalls(blocks)
+    if short:
+        return {
+            "name": "score-conversion",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                **coverage,
+                "factories": len(blocks),
+                "criteria_cells": sum(int(b.get("parsed", 0)) for b in blocks),
+                "incomplete_blocks": short,
+                "reason": (
+                    f"{path.name} parses into {len(blocks)} factory scorecard(s) and "
+                    f"{len(short)} of them are INCOMPLETE against their own header, so no "
+                    f"regression can be read from the round: "
+                    + "; ".join(shortfall_phrase(entry) for entry in short)
+                    + " -- a verdict off an unread block would report a clean round over a "
+                    f"population this leg never read (#531)"
+                ),
+            },
         }
 
     previous: dict[str, int] = {}
@@ -9038,24 +9145,31 @@ def score_conversion_leg(
             try:
                 artifact_text = artifact_path.read_text(encoding="utf-8")
             except OSError as exc:
-                lapsed.append({
-                    "artifact": f"{SCORES_DIR_REL}/{artifact_path.name}",
-                    "regressions": [],
-                    "owed": False,
-                    "reason": f"could not be read: {exc}",
-                })
+                lapsed.append(lapsed_unread_entry(
+                    f"{SCORES_DIR_REL}/{artifact_path.name}",
+                    f"could not be read: {exc}",
+                ))
                 continue
             lapsed_blocks = scorecard_blocks(artifact_text)
             if not lapsed_blocks:
-                lapsed.append({
-                    "artifact": f"{SCORES_DIR_REL}/{artifact_path.name}",
-                    "regressions": [],
-                    "owed": False,
-                    "reason": (
-                        "carries no `## Detailed Factory Scorecards` section this leg can "
-                        "parse, so no regression can be read from it"
-                    ),
-                })
+                lapsed.append(lapsed_unread_entry(
+                    f"{SCORES_DIR_REL}/{artifact_path.name}",
+                    "carries no `## Detailed Factory Scorecards` section this leg can "
+                    "parse, so no regression can be read from it",
+                ))
+                continue
+            # A LAPSED ROUND WITH A SHORT PARSE IS THE FILED SYMPTOM (#531): 2026-10-17's six
+            # cards parsed to zero cells each, and the lapsed line read
+            # `2026-10-17.md (0 regression(s): none, no conversion owed)` -- an unread round
+            # clearing itself of an obligation nobody had checked.
+            lapsed_short = scorecard_shortfalls(lapsed_blocks)
+            if lapsed_short:
+                lapsed.append(lapsed_unread_entry(
+                    f"{SCORES_DIR_REL}/{artifact_path.name}",
+                    f"{len(lapsed_short)} of {len(lapsed_blocks)} scorecard(s) INCOMPLETE "
+                    f"against their own header: "
+                    + "; ".join(shortfall_phrase(entry) for entry in lapsed_short),
+                ))
                 continue
             if index > 0:
                 prev_date, prev_path = artifacts[index - 1]
@@ -9124,6 +9238,26 @@ def deferred_legs() -> list[dict]:
     """
     return []
 
+
+def render_lapsed_entry(entry: dict) -> str:
+    """One lapsed round: its COUNTS when it was read, its REASON when it was not (#531).
+
+    A single home for the entry's rendered shape, because the two arms must never share a
+    phrasing: `0 regression(s): none, no conversion owed` is a measurement, and printing it
+    over an artifact whose cells never parsed is how a clean round gets invented. An unread
+    round says so and names what the parse saw.
+    """
+    if entry.get("unread"):
+        return (
+            f"{entry['artifact']} (UNREAD -- nothing measured, nothing cleared: "
+            f"{entry.get('reason') or 'reason not stated'})"
+        )
+    return (
+        f"{entry['artifact']} ({len(entry['regressions'])} regression(s): "
+        f"{', '.join(entry['regressions']) or 'none'}"
+        f"{'' if entry.get('owed') else ', no conversion owed'}"
+        f"{'; ' + entry['reason'] if entry.get('reason') else ''})"
+    )
 
 def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
            issues: list[dict], deferred_problems: list[str] | None = None,
@@ -10192,12 +10326,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                         f"{len(lapsed_entries)} lapsed — "
                         + (
                             "; ".join(
-                                f"{entry['artifact']} "
-                                f"({len(entry['regressions'])} regression(s): "
-                                f"{', '.join(entry['regressions']) or 'none'}"
-                                f"{'' if entry.get('owed') else ', no conversion owed'}"
-                                f"{'; ' + entry['reason'] if entry.get('reason') else ''})"
-                                for entry in lapsed_entries
+                                render_lapsed_entry(entry) for entry in lapsed_entries
                             )
                             or "none"
                         )
