@@ -1989,7 +1989,7 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
             columns = {r[1] for r in conn.execute("PRAGMA table_info(cron_jobs)")}
             sched = [
                 col if col in columns else f"NULL as {col}"
-                for col in ("cron_expr", "next_run_at")
+                for col in ("cron_expr", "next_run_at", "timezone")
             ]
             fetched = list(conn.execute(
                 "select id, name, coalesce(deliver_to,''), coalesce(prompt,''), "
@@ -2001,7 +2001,8 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
             continue
         finally:
             conn.close()
-        for row_id, name, deliver_to, prompt, last_run_at, cron_expr, next_run_at in fetched:
+        for (row_id, name, deliver_to, prompt, last_run_at, cron_expr, next_run_at,
+             timezone) in fetched:
             rows.append({
                 # The id is read because a report must RESOLVE the row it names: two jobs
                 # may share a name across homes, and a name alone is not an address. The
@@ -2024,6 +2025,11 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
                 # `next_run_at` would be an instant no record dates.
                 "cron_expr": cron_expr,
                 "next_run_at": next_run_at,
+                # THE ROW'S OWN ZONE (#392), carried and PRINTED, never applied: `next_run_at`
+                # is stored already resolved against it, so the cadence-slot host needs the
+                # zone only to make a verdict READABLE ("09:15 Moscow" is an address; 06:15Z
+                # alone is not) and must never apply it a second time.
+                "timezone": timezone,
                 "home": db.parent.name,
             })
         homes_read.append(db.parent.name)
@@ -3634,6 +3640,321 @@ def job_schedule_text(row: dict) -> str:
     if not expr and not nxt:
         return "the row records no schedule (cron_expr and next_run_at are both empty)"
     return f"`{expr or 'no cron_expr'}` (next_run_at {nxt or 'unstated'})"
+
+# ---- the cadence predicate host (#392, ruled at n=3949) ------------------------------
+#
+# `docs/measurement-procedure.md` section 4.1 states the own-elapsed-slot predicate as LAW:
+# cadence freshness is judged against each job's OWN last elapsed slot, read WITH its
+# timezone. No code hosted it, and the two neighbours are DIFFERENT predicates -- neither
+# is widened here, and naming them is the point:
+#
+#   * `tools/audit.py::check_cadence_integrity` judges ONE GLOBAL `<= 30.0` hour window
+#     against the newest `run`/`score` row. It reads no job, no schedule, no timezone.
+#   * `duty_residual_for`'s `cadence_secs` (below) is the median gap between the job's own
+#     FIRES -- an OBSERVED cadence. It measures how often a job has been firing; it cannot
+#     say a slot ARRIVED and went unexecuted, because a job that never fired has no gap.
+#
+# THE READING IS THE SCHEDULER'S OWN, not a second parse of the schedule. `cron_jobs`
+# stores `next_run_at` ALREADY RESOLVED against the row's own `timezone` (column
+# `timezone TEXT NOT NULL DEFAULT 'UTC'`), so the stored instant CARRIES the zone and the
+# predicate needs no cron parser, no tz parser and no new dependency. Measured live
+# 2026-10-21: `factory-hq-pacemaker` UTC `50 * * * *`-family -> `2026-10-21T06:50:00+00:00`;
+# `ai-antispam-bot-service-health` Europe/Moscow `15 9 * * *` -> `2026-10-21T06:15:00+00:00`;
+# `factory-growth-map-biweekly` Europe/Moscow `0 9 1,15 * *` -> `2026-11-01T06:00:00+00:00`.
+# The Moscow rows are the proof: 09:15 local stored as 06:15Z, 09:00 local as 06:00Z. The
+# scheduler applied BOTH the cron parse and the zone, so re-deriving either here would be a
+# second predicate for a field the first already resolved (SKILL.md section 11).
+#
+# FOUR VERDICTS, FOUR NAMES, because three of them are absences that would otherwise render
+# identically. The ORDER of the tests is the law, not a convenience: `now < N` is answered
+# FIRST, because a slot that has not arrived cannot have been missed -- that is section
+# 4.1's own sentence and the exact case that produced the retracted Miidas section 8
+# remedy, where a future slot was read as a miss.
+CADENCE_SLOT_HELD = "HELD"
+CADENCE_SLOT_MISSED = "MISSED"
+CADENCE_SLOT_NOT_JUDGED = "NOT JUDGED"
+CADENCE_SLOT_UNREADABLE = "UNREADABLE"
+
+CADENCE_SLOT_VERDICTS = (
+    CADENCE_SLOT_HELD,
+    CADENCE_SLOT_MISSED,
+    CADENCE_SLOT_NOT_JUDGED,
+    CADENCE_SLOT_UNREADABLE,
+)
+
+def cadence_slot_verdict_for(row: dict, *, now, parse=None) -> dict:
+    """ONE enabled cron row against its OWN next slot, as a record naming why.
+
+    `(instant, reason)` pairs throughout, never a bare `None`: a row this host cannot read
+    must say WHY, because "could not be placed" and "placed and clean" are the two readings
+    a zero silently merges (#271).
+
+    A NAIVE INSTANT IS UNREADABLE, never assumed UTC. `reader_parse_ts` returns exactly what
+    the text says, so `2026-10-21 06:15:00` parses to a zone-less datetime; comparing that
+    to an aware `now` would raise, and ASSUMING UTC would shift a Moscow row by three hours
+    and manufacture a false MISSED -- the permanent-false-positive class #507 names, where a
+    leg with no exit teaches the next reader to ignore it. Every live row carries an offset
+    (measured 2026-10-21: 42 of 42), so the strict reading costs nothing today and refuses
+    to invent one tomorrow.
+    """
+    parse = parse or reader_parse_ts
+    name = str(row.get("name") or "(unnamed row)")
+    record = {
+        "name": name,
+        "id": str(row.get("id") or "unstated"),
+        "home": str(row.get("home") or "unstated"),
+        "schedule": job_schedule_text(row),
+        # PRINTED, never used to derive an instant: `next_run_at` already carries the zone,
+        # and a second application of the same zone is how two readers of one field drift.
+        "timezone": str(row.get("timezone") or "unstated"),
+        "next_run_at": str(row.get("next_run_at") or ""),
+        "last_run_at": str(row.get("last_run_at") or ""),
+    }
+
+    def _unreadable(reason: str) -> dict:
+        return {**record, "verdict": CADENCE_SLOT_UNREADABLE, "reason": reason}
+
+    raw_next = record["next_run_at"].strip()
+    if not raw_next:
+        return _unreadable(
+            "the row records no next_run_at, so the host has no slot to judge and does NOT "
+            "count it as held"
+        )
+    try:
+        slot = parse(raw_next)
+    except (ValueError, TypeError) as exc:
+        return _unreadable(f"next_run_at {raw_next!r} does not parse ({exc})")
+    if slot.tzinfo is None:
+        return _unreadable(
+            f"next_run_at {raw_next!r} carries no zone offset, so it cannot be placed "
+            f"against the read instant without assuming a zone"
+        )
+
+    # THE LAW'S OWN ORDER. A slot that has not arrived cannot have been missed, so this is
+    # answered before `last_run_at` is even read.
+    if now < slot:
+        return {
+            **record,
+            "verdict": CADENCE_SLOT_NOT_JUDGED,
+            "reason": f"slot {raw_next} has not arrived (read at {now.isoformat()})",
+        }
+
+    raw_last = record["last_run_at"].strip()
+    if not raw_last:
+        return {
+            **record,
+            "verdict": CADENCE_SLOT_MISSED,
+            "reason": (
+                f"slot {raw_next} arrived and the row records no last_run_at at all, so "
+                f"nothing shows it was dispatched"
+            ),
+        }
+    try:
+        last = parse(raw_last)
+    except (ValueError, TypeError) as exc:
+        return _unreadable(f"last_run_at {raw_last!r} does not parse ({exc})")
+    if last.tzinfo is None:
+        return _unreadable(
+            f"last_run_at {raw_last!r} carries no zone offset, so it cannot be compared "
+            f"to the slot without assuming a zone"
+        )
+
+    if last < slot:
+        return {
+            **record,
+            "verdict": CADENCE_SLOT_MISSED,
+            "reason": (
+                f"slot {raw_next} arrived and the newest run is {raw_last}, which is BEFORE "
+                f"it -- the scheduler let the slot pass without dispatch"
+            ),
+        }
+    return {
+        **record,
+        "verdict": CADENCE_SLOT_HELD,
+        "reason": f"slot {raw_next} arrived and the run at {raw_last} is at or after it",
+    }
+
+def cadence_slot_leg(
+    cron_rows: list[dict],
+    homes_read: list[str],
+    unreached: list[str],
+    *,
+    read_at: str = "",
+    now=None,
+    parse=None,
+) -> dict:
+    """The cadence-slot leg: did each enabled job's OWN last elapsed slot get dispatched?
+
+    ONE READING, ONE LEG. The rows are the same `box_cron_rows` fetch the cron-thinness,
+    notify-receipt and duty-receipt legs are handed, so this leg opens no database of its
+    own and cannot disagree with them about what the box holds.
+
+    BOUND, stated on the leg itself so a green line cannot be read as more than it is: this
+    is a DETECTOR, not a prevention. It catches a slot the scheduler let pass without
+    dispatch. It does NOT catch a slot that dispatched and DIED (#528's class -- the
+    scheduler did its job and the run failed after), and it cannot catch a scheduler that
+    advanced `next_run_at` without a run, because the advanced instant is the only record
+    this leg reads.
+    """
+    parse = parse or reader_parse_ts
+    if now is None:
+        now = None
+        if read_at:
+            try:
+                now = parse(read_at)
+            except (ValueError, TypeError):
+                now = None
+        if now is None:
+            now = dt.datetime.now(dt.timezone.utc)
+
+    examined = len(cron_rows)
+    counts = {verdict: 0 for verdict in CADENCE_SLOT_VERDICTS}
+    findings: list[dict] = []
+    for row in cron_rows:
+        record = cadence_slot_verdict_for(row, now=now, parse=parse)
+        counts[record["verdict"]] = counts.get(record["verdict"], 0) + 1
+        findings.append(record)
+
+    # ONLY A MISSED SLOT IS A PROBLEM, and the severity split is a reading of the read path
+    # rather than a convenience. `box_cron_rows` STATES that a home whose `cron_jobs`
+    # predates `next_run_at` "reads NULL for them and is still READ, because those two are
+    # CARRIED for the report and no instant is derived from them" -- so an absent
+    # `next_run_at` is a LEGITIMATE row shape, not a defect of the row. Reding it would put
+    # a permanent red on every member factory whose schema predates the column, which is the
+    # permanent-false-positive class #507 names: a leg with no exit teaches the next reader
+    # to ignore it, and then the one row that DID miss is ignored with it.
+    #
+    # What #271 forbids is counting such a row as ZERO -- as held, or as clean. That is
+    # honoured by the COUNT, not by the exit code: it lands in `UNREADABLE` (never `HELD`),
+    # its own reason is printed, and the totals line carries the count. The vacuous case is
+    # caught separately, below: a population where NOTHING could be judged is NOT RUN, so
+    # `UNREADABLE 42` can never render as a clean round either.
+    problems: list[str] = []
+    for record in findings:
+        if record["verdict"] == CADENCE_SLOT_MISSED:
+            problems.append(f"cadence slot MISSED for `{record['name']}` ({record['home']}): {record['reason']}")
+
+    coverage = {
+        # THE POPULATION IS ALWAYS PRINTED. `examined 0, 0 problems` and `examined 42, 0
+        # problems` are different readings, and only the count tells them apart (skill
+        # section 8: a verdict over an examined-nothing read is not a verdict).
+        "examined": examined,
+        "unit": "enabled cron row(s)",
+        "counts": counts,
+        "homes_read": list(homes_read),
+        "unreached": list(unreached),
+        "read_at": read_at,
+        "read_instant": now.isoformat(),
+        "findings": findings,
+        "bound": (
+            "detector, not prevention: it catches a slot the scheduler let pass without "
+            "dispatch; it does NOT catch a slot that dispatched and died (#528), and it "
+            "cannot catch a scheduler that advanced next_run_at without a run"
+        ),
+    }
+
+    if examined == 0:
+        return {
+            "name": "cadence-slot",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                **coverage,
+                "reason": (
+                    "no enabled cron row was read, so no slot was judged -- an empty "
+                    "population is NOT a clean round"
+                    + (f"; unreached: {'; '.join(unreached)}" if unreached else "")
+                ),
+            },
+        }
+
+    judged = counts.get(CADENCE_SLOT_HELD, 0) + counts.get(CADENCE_SLOT_MISSED, 0)
+    # NOT JUDGED IS NOT A READING LIMIT, AND CONFLATING THE TWO SILENCES THE LEG.
+    # `next_run_at` is the slot the scheduler is WAITING for, and it ADVANCES on every
+    # dispatch -- so a healthy row is permanently `now < next_run_at`, i.e. permanently
+    # NOT JUDGED, and `HELD` exists only in the transient between a slot arriving and the
+    # scheduler placing the next one. Measured on this box 2026-10-21T03:48Z: 42 enabled
+    # rows, 42 NOT JUDGED, 0 HELD, 0 MISSED. So an all-NOT-JUDGED population is the NORMAL
+    # state of a healthy box, and reporting it as NOT RUN would mean the leg can never say
+    # "I read 42 jobs and none is stuck" -- it would speak only once something had already
+    # gone wrong, and a detector that is silent exactly when healthy is a detector nobody
+    # reads. The line that separates the two is PLACED, not judged: a row whose instant was
+    # READ and placed (in the future, or at a slot that was dispatched) was measured; a row
+    # whose instant could not be placed was not.
+    placed = examined - counts.get(CADENCE_SLOT_UNREADABLE, 0)
+    if placed == 0:
+        # NOTHING WAS PLACED. Every row was UNREADABLE, so the leg examined a population
+        # and could place none of it -- a verdict over that is not a verdict (skill
+        # section 8). NOT RUN, never clean, and the counts travel so the reason is specific.
+        return {
+            "name": "cadence-slot",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                **coverage,
+                "judged": judged,
+                "reason": (
+                    f"none of the {examined} enabled row(s) could be PLACED: "
+                    f"{counts.get(CADENCE_SLOT_UNREADABLE, 0)} carried no readable "
+                    f"next_run_at -- nothing was held and nothing was missed, which is NOT "
+                    f"the same as clean"
+                ),
+            },
+        }
+
+    return {
+        "name": "cadence-slot",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": [],
+        # `judged` may be 0 here, and that zero is a MEASUREMENT rather than a silence: it
+        # says no enabled row was past its own scheduled slot at `read_instant`. The counts
+        # travel beside it so a reader can see the population was read and where it landed.
+        "coverage": {**coverage, "judged": judged},
+    }
+
+def render_cadence_slot(coverage: dict) -> list[str]:
+    """The leg's own lines: the population, then one line per finding.
+
+    ONLY THE TWO ACTING VERDICTS ARE NAMED PER ROW -- MISSED and UNREADABLE. The other two
+    are COUNTED and not printed one by one, and the reason is measured rather than
+    aesthetic: on the live box 2026-10-21, 41 of 42 enabled rows were NOT JUDGED (their
+    next slot has not arrived), so naming them would bury the one row that missed under
+    forty-one lines of healthy state. The count stays on the totals line, so a reader still
+    sees the rest of the population was READ rather than skipped -- which is the whole
+    distinction an absent line cannot make.
+    """
+    counts = coverage.get("counts") or {}
+    lines = [
+        f"  examined {coverage.get('examined', 0)} {coverage.get('unit', 'row(s)')} "
+        f"(read at {coverage.get('read_instant') or 'unstated'}): "
+        + ", ".join(f"{verdict} {counts.get(verdict, 0)}" for verdict in CADENCE_SLOT_VERDICTS)
+    ]
+    judged = coverage.get("judged")
+    if judged is not None:
+        lines.append(f"  judged (slot arrived and placed): {judged}")
+    if not judged and coverage.get("examined"):
+        # A MEASURED ZERO, in words. `judged 0` beside `NOT JUDGED 42` says nothing was
+        # overdue -- it does NOT say 42 jobs were observed to have run, and the line has to
+        # carry that distinction because the counts alone invite the wrong reading.
+        lines.append(
+            "  nothing overdue: no enabled row is past its own scheduled slot at this "
+            "instant, so no slot has ARRIVED to be missed"
+        )
+    for record in coverage.get("findings") or []:
+        if record.get("verdict") not in (CADENCE_SLOT_MISSED, CADENCE_SLOT_UNREADABLE):
+            continue
+        lines.append(
+            f"  {record['verdict']}: `{record['name']}` [{record['id']}] ({record['home']}, "
+            f"zone {record['timezone']}) {record['schedule']} -- {record['reason']}"
+        )
+    unreached = coverage.get("unreached") or []
+    if unreached:
+        lines.append(f"  homes NOT read: {'; '.join(unreached)}")
+    lines.append(f"  bound: {coverage.get('bound', 'unstated')}")
+    return lines
 
 def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: list[dict],
                       predicate=None, margin_for=None, parse=None) -> dict:
@@ -9297,6 +9618,18 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
             lines.append("")
             continue
+        if leg["status"] == "NOT RUN" and leg["name"] == "cadence-slot":
+            # #392 + #271: this arm fires EXACTLY when rows could not be judged, so a raw
+            # counter dump here would print `UNREADABLE: 1` and never the reason -- the
+            # zero-that-stands-for-could-not-look shape one coat over. render_cadence_slot
+            # is this leg's ONE render home and it names every UNREADABLE row with its
+            # reason, so both arms read the same way and neither can drift from the other.
+            lines.extend(render_cadence_slot(cov))
+            lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
+            lines.append(f"  excused: {len(leg['excused'])}")
+            lines.append(f"  problems: {len(leg['problems'])}")
+            lines.append("")
+            continue
         if leg["status"] == "NOT RUN" and leg["name"] in (
             "cron-thinness", "pacemaker-presence", "notify-receipt", "duty-receipt",
             "score-conversion",
@@ -9318,7 +9651,13 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             lines.append(f"  problems: {len(leg['problems'])}")
             lines.append("")
             continue
-        if leg["name"] == "board-close":
+        if leg["name"] == "cadence-slot":
+            # #392: the population line and every non-HELD verdict. A HELD row is COUNTED
+            # and not printed one by one, so a box of 42 healthy jobs cannot bury the one
+            # that missed -- while the count still shows the healthy half was READ rather
+            # than skipped, which is the distinction an absent line cannot make.
+            lines.extend(render_cadence_slot(cov))
+        elif leg["name"] == "board-close":
             if leg["status"] != "ASSERTED":
                 # A NOT RUN / REFUSED bound is neither a pass nor a silence: the leg says
                 # which it is and why, so a reader can act on it. The population line is
@@ -10762,6 +11101,11 @@ def main(
         ), read_at),
         leg_guard("cron-thinness", lambda: cron_thinness_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), read_at=read_at
+        ), read_at),
+        # #392: the section 4.1 own-elapsed-slot predicate, hosted. It is handed the SAME
+        # cron rows the three legs around it are, so it opens no database of its own.
+        leg_guard("cadence-slot", lambda: cadence_slot_leg(
+            cron_rows, homes_read, unreached, read_at=read_at,
         ), read_at),
         leg_guard("notify-receipt", lambda: notify_receipt_leg(
             cron_rows, homes_read, unreached, prefixes_fn(), log_dir=log_dir,

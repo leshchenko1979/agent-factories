@@ -131,6 +131,36 @@ external surveyor reads absence. **#70** is the **law's name** being wrong — t
 artifact the runner never writes. This rule is the **surveyor's predicate** being wrong —
 measuring generation and calling it execution. They are fixed together.
 
+**The host (#392).** This predicate had no code: `tools/audit.py check_cadence_integrity`
+tests a different thing (one global `<= 30.0` h against the newest `run`/`score` row — no
+job, no schedule, no zone), and `tools/patrol_host_state.py` derived an *observed* cadence
+from the median gap between fires, which cannot say a slot **arrived** and went unexecuted.
+It is now hosted by the `cadence-slot` leg in `tools/patrol_host_state.py`, which reads the
+same `box_cron_rows` fetch the other cron legs are handed and needs no cron parser and no
+tz parser: `cron_jobs.next_run_at` is stored **already resolved against the row's own
+`timezone`**, so the instant carries the zone and applying it again would double-shift a
+Moscow row. Four verdicts per enabled row — `HELD` (slot arrived and was dispatched),
+`MISSED` (slot arrived, no run at or after it), `NOT JUDGED` (slot has not arrived), and
+`UNREADABLE` (no readable `next_run_at`, printed **with its reason** and never counted as
+held, #271).
+
+`NOT JUDGED` is not a reading limit and must not be reported as one. `next_run_at` is the
+slot the scheduler is *waiting* for and it **advances on dispatch**, so a healthy row is
+permanently `now < next_run_at` and `HELD` exists only in the transient between a slot
+arriving and the next one being placed. Measured 2026-10-21T03:54Z: **42 enabled rows across
+7 homes, 42 `NOT JUDGED`, 0 `HELD`, 0 `MISSED`, 0 `UNREADABLE`**. Reporting that population
+as "not run" would leave the leg silent exactly while the box is healthy, so the split is
+**placed, not judged**: a population whose instants were all read and placed is `ASSERTED`
+even with zero judged — and it says *nothing overdue* in words, because `judged 0` beside
+`NOT JUDGED 42` must not be read as 42 jobs observed to have run. `NOT RUN` is reserved for
+the population that could not be placed at all.
+
+**Bounds — detector, not prevention.** It catches a slot the scheduler let pass without
+dispatch. It does **not** catch a slot that dispatched and died (#528's class — the
+scheduler did its job and the run failed after), and it cannot catch a scheduler that
+advanced `next_run_at` without a run, because the advanced instant is the only record the
+leg reads.
+
 ---
 
 ## 5. What One Run Does: The Two-Tier Audit Architecture
