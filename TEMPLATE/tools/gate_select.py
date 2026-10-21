@@ -17,6 +17,15 @@ exists to remove.
 
 One predicate, several call sites: the pre-commit leg, the manual run, and
 `tests/test_gate_triggers.py` all import `select()` rather than re-deriving the set.
+
+**The set and the TREE are two questions, and #539 is the second one.** `--staged` runs the
+selected gates in the working tree, because before a commit the working tree IS the change
+under test. `--range` runs them in a CLEAN CHECKOUT of the range tip, because a range's
+verdict must be a property of its commits: on a shared checkout a peer lane's in-flight edit
+made the same command over the same ledger-only range return rc=0 and rc=1 eighteen minutes
+apart, RED on a path the commit never touched. The verdict therefore NAMES the tree it judged
+(`tree=worktree` or `tree=clean checkout <sha>`), so a receipt can never be ambiguous about
+which tree produced it.
 """
 from __future__ import annotations
 
@@ -24,8 +33,11 @@ import argparse
 import fnmatch
 import importlib.util
 import json
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 MAP_RELATIVE = "registry/gate_triggers.json"
@@ -179,7 +191,66 @@ def registered_commands(root: Path) -> dict[str, list[str]]:
     return commands
 
 
-def run_gates(root: Path, gates: list[str]) -> list[str]:
+def resolve_range_tip(root: Path, rev_range: str) -> str | None:
+    """The commit at the END of the range — the tree `--range` must judge (#539).
+
+    A range's verdict is a property of its TIP, and `A..B` means B. The expression is
+    split on two-or-three dots rather than on `..` alone, because `"A...B".split("..")`
+    yields `["A", ".B"]` — the leftover dot would be handed to git as a revision named
+    `.B` and resolve to nothing. A range with an empty tail (`A..`) means HEAD, which is
+    git's own reading of it.
+    """
+    tail = re.split(r"\.{2,3}", rev_range)[-1].strip() or "HEAD"
+    proc = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--verify", f"{tail}^{{commit}}"],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return None
+    sha = proc.stdout.strip()
+    return sha or None
+
+def materialise_clean_checkout(root: Path, sha: str) -> tuple[Path | None, str]:
+    """A detached worktree at `sha` — the tree a range's gates read (#539).
+
+    THE DEFECT THIS EXISTS FOR. `--range` selected its gates from the range and then ran
+    them with `cwd=root`, i.e. the WORKING TREE. On this factory's shared checkout a peer
+    lane holds in-flight edits for hours, so the same command over the same ledger-only
+    range returned rc=0 at 19:19Z and rc=1 at 19:31Z with `FAILED tests/test_template_sync.py`
+    — on a path the commit never touched, while the template pair was byte-identical AT
+    the commit. A verdict that depends on who else is editing is not a verdict about the
+    commits, and it cannot be repaired by refusing: refusal fires whenever any lane is
+    mid-edit, which is the normal operating mode, so it leaves the author no lawful way to
+    obtain a verdict at all and gets bypassed by hand-picked subsets — the exact failure
+    #197/#294 built this module to remove.
+
+    The checkout is OUTSIDE the tree, in a fresh temp directory, so it cannot be confused
+    with a worktree a lane is using. The caller MUST remove it; `remove_clean_checkout`
+    does that in a `finally`.
+    """
+    holder = Path(tempfile.mkdtemp(prefix="gate-select-"))
+    target = holder / "tree"
+    proc = subprocess.run(
+        ["git", "-C", str(root), "worktree", "add", "--detach", str(target), sha],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        shutil.rmtree(holder, ignore_errors=True)
+        return None, (proc.stderr.strip() or f"git worktree add exited {proc.returncode}")
+    return target, ""
+
+def remove_clean_checkout(root: Path, target: Path) -> None:
+    """Drop the temporary worktree and its holder directory. Never raises."""
+    subprocess.run(
+        ["git", "-C", str(root), "worktree", "remove", "--force", str(target)],
+        capture_output=True,
+        text=True,
+    )
+    shutil.rmtree(target.parent, ignore_errors=True)
+
+def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> list[str]:
     """Run each gate's registered argv; return the failures, each naming the gate.
 
     The argv is the audit's own, interpreter included (#436), so it is executed VERBATIM —
@@ -194,10 +265,21 @@ def run_gates(root: Path, gates: list[str]) -> list[str]:
     gate the selector names but cannot run is an instrument that lies, and skipping it
     silently is the very class this module removes. An argv that cannot be EXECUTED is
     the same class, so it is reported rather than raised.
+
+    A gate the clean checkout CANNOT MATERIALISE is a failure of the same class (#539
+    clause 4), and it is checked BEFORE the argv lookup because the lookup cannot say
+    why: `gate_key_for_cmd` resolves a key by requiring the file to exist, so a gate
+    deleted at the range tip is simply absent from `registered_commands` and would be
+    reported as "no registered argv" — a message that sends the reader to the audit when
+    the missing thing is the tree. The check is scoped to the clean checkout: under
+    `--staged` the worktree IS the change under test and its shape is not in question.
     """
     commands = registered_commands(root)
     failures: list[str] = []
     for gate in gates:
+        if tree_label != "worktree" and not (root / gate).is_file():
+            failures.append(f"{gate} — selected, but not present in the {tree_label}")
+            continue
         argv = commands.get(gate)
         if argv is None:
             failures.append(f"{gate} — no registered argv in {AUDIT_RELATIVE}")
@@ -253,11 +335,40 @@ def main(argv: list[str] | None = None) -> int:
 
     result = select(mapping, paths)
 
+    # The tree the gates will read. `--range` judges the RANGE (#539): the selected gates
+    # run in a clean checkout of its tip, so the verdict is a property of the COMMITS and
+    # not of whoever else is mid-edit on the shared tree. `--staged` keeps reading the
+    # worktree, because before a commit the worktree IS the change under test — the two
+    # modes are deliberately not unified.
+    judged_root = root
+    tree_label = "worktree"
+    checkout: Path | None = None
+    if args.run and args.rev_range:
+        sha = resolve_range_tip(root, args.rev_range)
+        if sha is None:
+            print(
+                f"gate-select: the range tip of {args.rev_range!r} could not be resolved; "
+                "no gate ran.",
+                file=sys.stderr,
+            )
+            return 1
+        checkout, why = materialise_clean_checkout(root, sha)
+        if checkout is None:
+            print(
+                f"gate-select: the clean checkout of {sha[:8]} could not be materialised; "
+                f"no gate ran: {why}",
+                file=sys.stderr,
+            )
+            return 1
+        judged_root = checkout
+        tree_label = f"clean checkout {sha[:8]}"
+
     if args.json:
-        print(json.dumps(result))
+        print(json.dumps({**result, "tree": tree_label} if args.run else result))
     else:
         header = (
             f"gate-select: {len(result['gates'])} gate(s), mode={result['mode']}"
+            + (f", tree={tree_label}" if args.run else "")
             + (f", default-deny on {len(result['uncovered'])} uncovered path(s)"
                if result["default_deny"] else "")
         )
@@ -272,7 +383,11 @@ def main(argv: list[str] | None = None) -> int:
             print(gate)
 
     if args.run:
-        failures = run_gates(root, result["gates"])
+        try:
+            failures = run_gates(judged_root, result["gates"], tree_label)
+        finally:
+            if checkout is not None:
+                remove_clean_checkout(root, checkout)
         for failure in failures:
             print(f"gate-select: FAILED {failure}", file=sys.stderr)
         return 1 if failures else 0

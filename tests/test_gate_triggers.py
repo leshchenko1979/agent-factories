@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -446,6 +447,255 @@ def probe_the_run_mode_executes_gates_with_the_interpreter() -> None:
         )
 
 
+# --- #539: the TREE a range's gates read --------------------------------------------
+#
+# No stated skip: these probes build their OWN git repository, so they need no live map
+# and no live ledger, and they run at the shipped depth as well as at the root.
+
+FIXTURE_RANGE_AUDIT = (
+    "from __future__ import annotations\n"
+    "import sys\n"
+    "from pathlib import Path\n"
+    "\n"
+    "sys.path.insert(0, str(Path(__file__).resolve().parent))\n"
+    "from gate_budget import gate_key_for_cmd  # noqa: E402\n"
+    "\n"
+    "gates_to_run = []\n"
+    'gates_to_run.append([sys.executable, "tests/fixture_pair_gate.py"])\n'
+    "\n"
+    "def registered_gates(repo_root):\n"
+    "    return [cmd for cmd in gates_to_run if gate_key_for_cmd(cmd, repo_root)]\n"
+)
+
+# TEMPLATE-SYNC SHAPED on purpose: the gate resolves its tree from its own `__file__` and
+# compares two files inside it -- exactly the shape whose verdict flipped on the shared
+# checkout (#539). It writes the ROOT IT ACTUALLY READ into the file named by
+# PAIR_GATE_MARKER, because a gate that merely exits 0 cannot distinguish a clean checkout
+# from a lucky worktree, and "which tree produced this 0" is the whole question.
+FIXTURE_PAIR_GATE = (
+    "#!/usr/bin/env python3\n"
+    "import os, pathlib, sys\n"
+    "root = pathlib.Path(__file__).resolve().parent.parent\n"
+    "a = (root / 'tools' / 'pair' / 'a.txt').read_text(encoding='utf-8')\n"
+    "b = (root / 'tools' / 'pair' / 'b.txt').read_text(encoding='utf-8')\n"
+    "marker = os.environ.get('PAIR_GATE_MARKER')\n"
+    "if marker:\n"
+    "    pathlib.Path(marker).write_text(str(root) + chr(10) + b, encoding='utf-8')\n"
+    "if a != b:\n"
+    "    print('FAIL -- the pair drifted: %r != %r' % (a, b))\n"
+    "    sys.exit(1)\n"
+    "print('PASS -- the pair is byte-identical')\n"
+)
+
+def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+
+def _fixture_range_repo(tmp: Path, map_gates: dict | None = None) -> tuple[Path, str, str]:
+    """A real two-commit repo whose TIP is clean and whose pair gate is on the map.
+
+    Commit 1: a = b = "one". Commit 2 (the TIP): a = b = "two", and `ledger.txt` moves --
+    so the RANGE selects the pair gate while the gate is GREEN at the tip. That is the
+    #539 fixture precisely: the tip is clean and only the WORKTREE is allowed to drift, so
+    a RED here can only come from the worktree.
+    """
+    root = tmp / "repo"
+    for relative in ("tools/pair", "tests", "registry"):
+        (root / relative).mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(GATE_BUDGET, root / "tools" / "gate_budget.py")
+    shutil.copyfile(GATE_SELECT, root / "tools" / "gate_select.py")
+    (root / "tools" / "audit.py").write_text(FIXTURE_RANGE_AUDIT, encoding="utf-8")
+    (root / "tests" / "fixture_pair_gate.py").write_text(FIXTURE_PAIR_GATE, encoding="utf-8")
+    gates = map_gates if map_gates is not None else {
+        "tests/fixture_pair_gate.py": ["tools/pair/*", "ledger.txt"]
+    }
+    (root / "registry" / "gate_triggers.json").write_text(
+        json.dumps({"floor": [], "gates": gates}), encoding="utf-8"
+    )
+    (root / "ledger.txt").write_text("0\n", encoding="utf-8")
+    for name in ("a", "b"):
+        (root / "tools" / "pair" / f"{name}.txt").write_text("one\n", encoding="utf-8")
+
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "fixture",
+        "GIT_AUTHOR_EMAIL": "fixture@example.invalid",
+        "GIT_COMMITTER_NAME": "fixture",
+        "GIT_COMMITTER_EMAIL": "fixture@example.invalid",
+    }
+    if _git(root, "init", "-q", "-b", "main").returncode != 0:
+        _git(root, "init", "-q")
+    _git(root, "add", "-A")
+    subprocess.run(
+        ["git", "-C", str(root), "commit", "-q", "-m", "fixture: base"],
+        capture_output=True, text=True, env=env,
+    )
+    first = _git(root, "rev-parse", "HEAD").stdout.strip()
+
+    for name in ("a", "b"):
+        (root / "tools" / "pair" / f"{name}.txt").write_text("two\n", encoding="utf-8")
+    (root / "ledger.txt").write_text("1\n", encoding="utf-8")
+    _git(root, "add", "-A")
+    subprocess.run(
+        ["git", "-C", str(root), "commit", "-q", "-m", "fixture: tip"],
+        capture_output=True, text=True, env=env,
+    )
+    tip = _git(root, "rev-parse", "HEAD").stdout.strip()
+    return root, first, tip
+
+def _marker_parts(marker: Path) -> tuple[str, str]:
+    """The gate's own record: the tree it READ, and the b.txt bytes it found there.
+
+    The checkout is removed before the assertions run, so the bytes have to be recorded by
+    the gate rather than re-read from a directory that no longer exists.
+    """
+    if not marker.is_file():
+        return "", ""
+    lines = marker.read_text(encoding="utf-8").split("\n")
+    return (lines[0].strip(), lines[1].strip() if len(lines) > 1 else "")
+
+def _run_selector(root: Path, args: list[str], marker: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, "tools/gate_select.py", *args],
+        cwd=str(root),
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PAIR_GATE_MARKER": str(marker)},
+    )
+
+def probe_the_range_judges_the_range_not_the_worktree() -> None:
+    """#539: `--range` judges the RANGE, on the three arms the ruling names.
+
+    THE DEFECT. `--range` selected its gates from the range and then ran them with
+    `cwd=root` -- the WORKING TREE. On this factory's shared checkout a peer lane's
+    in-flight edit made the same command over the same ledger-only range return rc=0 at
+    19:19Z and rc=1 at 19:31Z, RED on `tests/test_template_sync.py` for a path the commit
+    never touched, while the template pair was byte-identical AT the commit.
+
+    THE ARMS. Arm 1 dirties a path no gate reads and asserts the run still happens and
+    reflects the range. **Arm 2 is the DISCRIMINATOR** -- it dirties a SELECTED path the
+    gate READS, which is the arm that fails today -- and it asserts not just rc=0 but that
+    the gate ran in a DIFFERENT tree from the worktree, because a gate that exits 0 proves
+    nothing about which tree produced the 0. Arm 3 asserts `--staged` is UNCHANGED: the same
+    dirty file, staged, must still be judged in the worktree and must still FAIL.
+
+    Arm 3 is why arm 2 cannot be satisfied by making both modes read the tip: that would
+    make `--staged` green on a change that breaks the tree, which is the defect the
+    pre-commit leg exists to catch.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root, first, tip = _fixture_range_repo(Path(tmp))
+        marker = Path(tmp) / "pair-gate-root.txt"
+        rev_range = f"{first}..{tip}"
+        short = tip[:8]
+
+        # --- arm 1: a NON-selected path is dirty; the gates still run, on the range.
+        (root / "scratch.txt").write_text("unrelated drift\n", encoding="utf-8")
+        arm1 = _run_selector(root, ["--range", rev_range, "--run"], marker)
+        check(
+            "arm 1 -- an unrelated dirty file does not derail the run",
+            arm1.returncode == 0,
+            f"rc={arm1.returncode} stderr={arm1.stderr[:200]}",
+        )
+        check(
+            "arm 1 -- the verdict names the clean checkout it judged",
+            f"tree=clean checkout {short}" in arm1.stdout,
+            f"stdout={arm1.stdout.splitlines()[:1]}",
+        )
+
+        # --- arm 2: THE DISCRIMINATOR. A SELECTED path the gate READS is dirty.
+        (root / "tools" / "pair" / "b.txt").write_text("three\n", encoding="utf-8")
+        marker.unlink(missing_ok=True)
+        arm2 = _run_selector(root, ["--range", rev_range, "--run"], marker)
+        check(
+            "arm 2 (discriminator) -- a dirty SELECTED path does not turn the range RED",
+            arm2.returncode == 0,
+            f"rc={arm2.returncode} stderr={arm2.stderr[:200]}",
+        )
+        check(
+            "arm 2 -- the verdict names the clean checkout it judged",
+            f"tree=clean checkout {short}" in arm2.stdout,
+            f"stdout={arm2.stdout.splitlines()[:1]}",
+        )
+        ran_in, ran_b = _marker_parts(marker)
+        check(
+            "arm 2 -- the gate RAN (it wrote its marker)",
+            bool(ran_in),
+            "no marker: the gate never executed, so nothing was judged",
+        )
+        check(
+            "arm 2 -- and it ran in a DIFFERENT tree than the worktree",
+            bool(ran_in) and Path(ran_in).resolve() != root.resolve(),
+            f"the gate read {ran_in!r}; the worktree is {str(root)!r}",
+        )
+        check(
+            "arm 2 -- the tree it read carries the TIP's bytes, not the drift",
+            ran_b == "two",
+            f"b.txt in the judged tree read {ran_b!r}, not 'two'",
+        )
+        check(
+            "arm 2 -- the clean checkout was REMOVED afterwards",
+            len([line for line in _git(root, "worktree", "list").stdout.splitlines() if line.strip()]) == 1,
+            f"worktree list={_git(root, 'worktree', 'list').stdout!r}",
+        )
+
+        # --- arm 3: `--staged` is UNCHANGED -- the same drift, staged, must still FAIL.
+        _git(root, "add", "tools/pair/b.txt")
+        marker.unlink(missing_ok=True)
+        arm3 = _run_selector(root, ["--staged", "--run"], marker)
+        check(
+            "arm 3 -- `--staged` still FAILS on a change that breaks the tree",
+            arm3.returncode == 1,
+            f"rc={arm3.returncode} (a green here means --staged was made to lie)",
+        )
+        check(
+            "arm 3 -- and its verdict names the WORKTREE, not a checkout",
+            "tree=worktree" in arm3.stdout,
+            f"stdout={arm3.stdout.splitlines()[:1]}",
+        )
+        staged_root, _ = _marker_parts(marker)
+        check(
+            "arm 3 -- the gate read the worktree, where the drift is",
+            bool(staged_root) and Path(staged_root).resolve() == root.resolve(),
+            f"the gate read {staged_root!r}; the worktree is {str(root)!r}",
+        )
+
+def probe_the_range_fails_a_gate_the_clean_checkout_cannot_materialise() -> None:
+    """#539 clause 4: a selected gate the checkout cannot carry is a FAILURE, not a skip.
+
+    The map is read from the WORKTREE (selection is unchanged, clause 5), so a key can name
+    a gate that the RANGE TIP does not contain. `gate_key_for_cmd` resolves a key by
+    requiring the file to exist, so such a gate is simply absent from `registered_commands`
+    and would surface as "no registered argv in tools/audit.py" -- a message that sends the
+    reader to the AUDIT when the missing thing is the TREE. The probe asserts the failure
+    names the tree.
+
+    The fixture's ghost gate is UNTRACKED in the worktree and absent from the tip, so it is
+    exactly a key that cannot be materialised. Its control is the arms probe above: the same
+    repository without the ghost key exits 0, so a red here is the ghost and not the fixture.
+    """
+    ghost_key = "tests/fixture_ghost_gate.py"
+    with tempfile.TemporaryDirectory() as tmp:
+        root, first, tip = _fixture_range_repo(
+            Path(tmp),
+            map_gates={
+                "tests/fixture_pair_gate.py": ["tools/pair/*"],
+                ghost_key: ["ledger.txt"],
+            },
+        )
+        (root / ghost_key).write_text("raise SystemExit(0)\n", encoding="utf-8")
+        marker = Path(tmp) / "pair-gate-root.txt"
+        proc = _run_selector(root, ["--range", f"{first}..{tip}", "--run"], marker)
+        check(
+            "clause 4 -- a gate the clean checkout cannot materialise is rc=1",
+            proc.returncode == 1,
+            f"rc={proc.returncode}: a skip here would hide a gate that never ran",
+        )
+        check(
+            "clause 4 -- the failure NAMES the tree, not just the audit",
+            ghost_key in proc.stderr and "clean checkout" in proc.stderr,
+            f"stderr={proc.stderr[:300]}",
+        )
+
 PROBES = (
     probe_every_registered_gate_is_covered,
     probe_every_map_key_is_registered,
@@ -457,6 +707,8 @@ PROBES = (
     probe_an_unreadable_map_is_none_not_empty,
     probe_the_cli_reports_the_mode,
     probe_the_run_mode_executes_gates_with_the_interpreter,
+    probe_the_range_judges_the_range_not_the_worktree,
+    probe_the_range_fails_a_gate_the_clean_checkout_cannot_materialise,
 )
 
 
