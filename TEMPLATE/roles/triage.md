@@ -33,7 +33,7 @@
   still have no driver in the room, and no item-level predicate can see it. The sweep asks,
   over this factory's OWN declared lanes, whether each lane carrying a dispatched-unclaimed
   backlog has a driver; the patrol **MUST notice** a driverless lane and **MAY NOT re-arm**
-  it. The Rail 3 sweep below carries the three readings and the bar.
+  it. The Rail 3 sweep below carries the four readings and the bar.
 - **Enforcement.** Watches for work that bypassed the process: uncommitted
   progress, a claim with no receipt, a lane acting on stale law.
 - **Rework recording.** Every closure that resolved a *defect* — something that
@@ -162,13 +162,28 @@ item set. An arm over the whole backlog reproduces the 2026-09-18 churn: an elev
 whose all-or-nothing judge rejected it on turn 1 for covering one item's work.
 
 **Never re-arm a lane that is being DRIVEN — and "driven" is measured as MOTION, never as
-declared state.** Three readings, and a bare "has an active goal" test conflates them:
+declared state.** Four readings, and a bare "has an active goal" test conflates them:
 
 | Reading | Predicate | Re-arm |
 |---|---|---|
 | **DRIVEN** | `state='active'` **and** the evaluation is advancing (`turns_used > 0` **and** `updated_at > created_at`), **or** a turn is in flight | refused |
 | **ARMED-INERT** | `state='active'` **and** `turns_used = 0` **and** `updated_at = created_at` | permitted — an arm that has never been evaluated is not a driver |
-| **DRIVERLESS** | no active row **and** no turn in flight | permitted |
+| **UNARMED-ACTIVE** | no active row, no turn in flight, **and** measured work inside the activity window | **refused** — a lane with measured work does not need a driver installed |
+| **DRIVERLESS** | no active row, no turn in flight, **and** no measured work inside the activity window | permitted |
+| **UNREADABLE** | the activity source could not be read | refused — an unread source is not an absent driver |
+
+**No reading asserts the future (#532).** DRIVERLESS says *"no goal-loop driver and no measured
+work since T"*, never *"nothing will evaluate it again"*: the ledger carried 33 `close` rows from
+a lane whose goal row had stopped five days earlier, and a leg that read a stopped row as "no
+driver at all" reported a working lane as dead. The activity instant **T** prints on every
+DRIVERLESS and every UNARMED-ACTIVE line, so *"no work since T"* is distinguishable from *"not
+read"*.
+
+**UNARMED-ACTIVE names no mechanism, deliberately.** The instrument sees a `tool_executions` row
+and cannot see WHY the lane woke — cron, notify, a completed plan and a peer push all write the
+same row — so a mechanism name (*NOTIFY-DRIVEN*) would assert a cause from a proxy. The window
+is the census's own `STALL_CENSUS_THRESHOLD_DAYS`, printed with its basis on every run: the
+shortest interval in which a lane that intends to take a dispatched item would have claimed it.
 
 **The motion half is scoped to a LIVE row, and the scope is load-bearing.** Read without it, a
 `paused` row that advanced before it stopped satisfies **DRIVEN** (`turns_used > 0`,
