@@ -6924,6 +6924,76 @@ def stall_lane_names() -> dict[str, str]:
             names[session_id] = name
     return names
 
+def _lane_claim_latency(
+    units: list[str],
+    dispatch_instants: dict[str, "dt.datetime"],
+    claims_by_unit: dict[str, list[dict]],
+    parse,
+) -> dict:
+    """A lane's OWN dispatch->claim intervals, over the units it was dispatched (#546).
+
+    THE QUANTITY. For every unit this lane was handed AND that carries a `claim` row, the
+    interval is (the unit's FIRST claim instant - its FIRST dispatch instant). Both halves
+    are deliberately the FIRST of their kind. The first dispatch is the instant the unit
+    entered the lane's queue, and it is the figure the ruling measured: `#543` was dispatched
+    2026-10-22T08:07:31Z (n=4088) and claimed 14:15:17Z (n=4110) -- 6.13 h -- while pairing on
+    a RE-hand would reset the clock every time the remedy was applied, flattering the lane
+    exactly when it was stalled. The first claim is the TAKE; a later claim row on the same
+    unit is a second state transition, not a second wait.
+
+    THE POPULATION IS RETURNED (`n`), because a percentile over three intervals and one over
+    a hundred render identically once printed. `p50`/`p75` are NEAREST-RANK over the sorted
+    intervals, so both are durations a real take exhibited rather than an interpolation.
+
+    A unit whose dispatch or claim instant this read cannot date is DROPPED and counted in
+    `unpaired`, never imputed -- the same refusal the leg applies to an undatable dispatch,
+    one level down. A NEGATIVE interval is dropped too: a claim that precedes its dispatch is
+    not a wait, it is two rows about different hand-offs (a re-dispatch after a close, a
+    cross-namespace collision), and letting it through would put a negative duration into the
+    distribution. `n == 0` is therefore a real answer, and the caller prints it as NO
+    distribution rather than inventing a tolerance (#546 bound).
+    """
+    intervals: list[float] = []
+    unpaired = 0
+    for unit in units:
+        fired = dispatch_instants.get(unit)
+        if fired is None:
+            unpaired += 1
+            continue
+        claim_rows = claims_by_unit.get(unit) or []
+        if not claim_rows:
+            unpaired += 1
+            continue
+        claimed_at = None
+        for claim_row in claim_rows:
+            try:
+                claimed_at = parse(str(claim_row.get("ts") or ""))
+            except (ValueError, TypeError):
+                continue
+            break
+        if claimed_at is None:
+            unpaired += 1
+            continue
+        interval = (claimed_at - fired).total_seconds()
+        if interval < 0:
+            unpaired += 1
+            continue
+        intervals.append(interval)
+    intervals.sort()
+    record: dict = {
+        "n": len(intervals),
+        "unpaired": unpaired,
+        "intervals_secs": intervals,
+        "p50_secs": None,
+        "p75_secs": None,
+        "max_secs": None,
+    }
+    if intervals:
+        record["p50_secs"] = _percentile(intervals, 0.50)
+        record["p75_secs"] = _percentile(intervals, 0.75)
+        record["max_secs"] = intervals[-1]
+    return record
+
 def stall_census_leg(
     issues: list[dict],
     rows: list[dict],
@@ -7038,17 +7108,44 @@ def stall_census_leg(
     row declares a target, or the declaration resolves to no lane name this read knows, the
     line SAYS SO in words; it never falls back to the author.
 
-    THE REMEDY IS THE LANE'S WHERE THE LANE IS DRAINING (#465, ruling n=3097). The OWED
-    line's closing sentence used to prescribe a per-item re-dispatch unconditionally, and
-    for a unit whose addressee lane is DEMONSTRABLY DRAINING that prescription names an exit
-    that does not exist: the re-dispatch is a duplicate (the sibling `dispatch-delivery` leg
-    proves a delivery EXISTS on the unit and says in its own words "do not re-dispatch on
-    this line"), and closing a live, wanted defect on the board would be a falsification.
-    So where -- and ONLY where -- the unit's addressee lane claimed a SIBLING of the same
-    standing set inside the window, the line says so and names the LANE as the remedy: one
-    consolidated backlog-first brief, never N per-item re-dispatches. A lane with no claim
-    inside the window keeps the original sentence VERBATIM, because there the stall is real
-    and the re-dispatch advice is the only exit there is.
+    THE REMEDY KEYS ON THE CLAIM, NEVER ON THE DRAIN (#546, ruling n=4117). #465 (ruling
+    n=3097) had installed the clause one way round: wherever the addressee lane looked
+    DRAINING, the OWED line said "do not re-dispatch, the lane already holds it". Its warrant
+    is a DUPLICATE, and the OWED class is by definition NEVER CLAIMED -- so for 100% of the
+    rows that clause governed, the warrant was false. Measured on the Worker lane: `#543`'s
+    first dispatch (n=4088) was ACKNOWLEDGED by the lane in its own words at 08:45
+    ("Ordering is clear: #543 first"), the session was then compacted 117 times in one day,
+    111 of them in hours 08-09, and the unit produced no work for 4 h 53 m. DELIVERY, READING
+    and RETENTION are three different things.
+
+    So the branch is on the CLAIM:
+    * a CLAIMED unit -> a re-hand IS a duplicate, and the line says so. Unreachable in the
+      OWED class by construction (`owed` skips every claimed unit), which is the point: the
+      CLAIMED class keeps its remedy explicitly rather than losing it, and
+      `owed_units_carrying_a_claim` in the coverage asserts it stays unreachable.
+    * a NEVER-CLAIMED unit whose lane is ALIVE -> the drain evidence still PRINTS (it tells
+      the reader the lane is worth handing to) but it never FORBIDS the re-hand. The line
+      says the lane is ALIVE but does NOT hold this unit, that a delivery it never re-read is
+      SPENT, and that the act is a re-hand OLDEST FIRST, ONE AT A TIME.
+    * a NEVER-CLAIMED unit whose lane claimed nothing inside the window -> the original
+      sentence, VERBATIM. There the stall is real and the re-dispatch advice is the only exit
+      there is (#465 criterion 3).
+
+    THE AGE IS PLACED AGAINST THE LANE'S OWN DISTRIBUTION, not against a constant. Every OWED
+    line prints the unit's own age, the addressee lane's paired dispatch->claim p50/p75 and
+    `n`, and which side of that p75 the unit sits on. The pairing is FIRST dispatch to FIRST
+    claim (see `_lane_claim_latency`), so a re-hand does not reset the clock. The declared
+    threshold stops being the PERMISSION gate and stays only the OBSERVATION window: the
+    ruling's measured basis for the Worker lane is n=108, p50 2.94 h, p75 17.63 h, and a fixed
+    1.0 d threshold flags the normal case 21.3% of the time while saying nothing about the tail
+    it exists to name.
+
+    A LANE'S CLAIMS CAN BE OUT OF DISPATCH ORDER, AND THAT IS A FINDING (#546 change 3). A
+    lane that claimed a YOUNGER unit while an OLDER one stayed unclaimed is not draining a
+    queue: it takes what is HANDED to it when it is free, so a dispatch arriving while it is
+    busy is SPENT, not queued. Such a lane prints `NOT-A-QUEUE` instead of `DRAINING`, with
+    the pair that proves it, because that is exactly the shape in which the #465 warrant is
+    void -- and before this test it passed as DRAINING.
 
     THE DRAIN EVIDENCE IS PRINTED BESIDE THE OWED TOTAL, never left to be inferred from a
     total that is smaller than the reader expected. The standing set is the LANE'S OWN
@@ -7539,8 +7636,40 @@ def stall_census_leg(
         if ref and lane_names.get(ref[0]):
             owed_lanes.add(lane_names[ref[0]])
 
+    # THE LANE'S DISPATCHED POPULATION, grouped on the SAME declared routing the addressee is
+    # read from, built ONCE and shared by the drain evidence and the latency profile (#546).
+    # `carriers` keeps the EARLIEST routed dispatch row for a unit (`setdefault`), so its `ts`
+    # is the instant the unit entered its lane's queue -- the base of the pairing below.
+    lane_units: dict[str, list[str]] = {}
+    dispatch_instants: dict[str, "dt.datetime"] = {}
+    for unit, carrier_row in carriers.items():
+        try:
+            dispatch_instants[unit] = reader_parse_ts(str(carrier_row.get("ts") or ""))
+        except (ValueError, TypeError):
+            pass
+        ref = declared_refs.get(unit)
+        if not ref:
+            continue
+        name = lane_names.get(ref[0])
+        if name:
+            lane_units.setdefault(name, []).append(unit)
+
+    # THE LANE'S OWN LATENCY DISTRIBUTION (#546 change 2), derived for EVERY lane carrying an
+    # OWED unit -- never only for a lane with an in-window claim. The figure is what a reader
+    # places each unit's AGE against, so it is a property of the LANE and not of the verdict,
+    # and withholding it on a lane whose claims fell outside the observation window would hide
+    # the distribution exactly where the stall is longest.
+    lane_profiles: dict[str, dict] = {
+        lane: _lane_claim_latency(
+            lane_units.get(lane, []), dispatch_instants, claims_by_unit, reader_parse_ts
+        )
+        for lane in sorted(owed_lanes)
+    }
+
     lane_drain: list[str] = []
     draining_lanes: set[str] = set()
+    not_a_queue_lanes: set[str] = set()
+    lane_drain_verdicts: list[dict] = []
     if owed_lanes:
         try:
             now = reader_parse_ts(read_at)
@@ -7548,14 +7677,6 @@ def stall_census_leg(
             now = None
         if now is not None:
             window_start = now - dt.timedelta(days=threshold_days)
-            lane_units: dict[str, list[str]] = {}
-            for unit in carriers:
-                ref = declared_refs.get(unit)
-                if not ref:
-                    continue
-                name = lane_names.get(ref[0])
-                if name:
-                    lane_units.setdefault(name, []).append(unit)
             for lane in sorted(owed_lanes):
                 drained: list[tuple[str, dict]] = []
                 for unit in lane_units.get(lane, []):
@@ -7570,17 +7691,71 @@ def stall_census_leg(
                     continue
                 drained.sort(key=lambda item: str(item[1].get("ts") or ""))
                 draining_lanes.add(lane)
-                lane_drain.append(
-                    f"DRAINING {lane}: claimed {len(drained)} sibling(s) of the same "
-                    f"standing set inside the last {threshold_days} d -- "
+                # THE ORDER TEST (#546 change 3, ruling n=4117). A lane whose claims are out
+                # of DISPATCH order is not draining a queue. The measured mechanism: the
+                # Worker lane claimed and closed `#545`, dispatched 75.3 min YOUNGER than
+                # `#543`, then produced zero claim rows for 4 h 10 m 30 s with `#543` still
+                # unclaimed. A lane draining a queue in dispatch order would have taken the
+                # OLDER unit next. It did not: it takes what is HANDED to it when it is free,
+                # so a dispatch arriving while it is busy is SPENT, not queued -- which is
+                # exactly why the #465 warrant ("a re-hand is a duplicate") is VOID here.
+                # Before this test the same fixture passed as DRAINING, so the one lane shape
+                # that makes the warrant false was the shape the evidence called healthy.
+                out_of_order: list[tuple[str, str]] = []
+                for claimed_unit, _claim_row in drained:
+                    claimed_fired = dispatch_instants.get(claimed_unit)
+                    if claimed_fired is None:
+                        continue
+                    for other in lane_units.get(lane, []):
+                        if other in claimed or other in closed:
+                            continue
+                        other_fired = dispatch_instants.get(other)
+                        if other_fired is None:
+                            continue
+                        if other_fired < claimed_fired:
+                            out_of_order.append((other, claimed_unit))
+                evidence = (
+                    f"claimed {len(drained)} sibling(s) of the same standing set inside the "
+                    f"last {threshold_days} d -- "
                     + ", ".join(
                         f"{unit} at row n={claim_row.get('n')} "
                         f"({claim_row.get('ts')})"
                         for unit, claim_row in drained
                     )
-                    + ". A multi-item backlog on a draining lane is a LANE reading, not N "
-                    "owed items: the remedy is ONE consolidated backlog-first brief to "
-                    "the lane, never a per-item re-dispatch (#465)"
+                )
+                if out_of_order:
+                    oldest_unclaimed, younger_claimed = out_of_order[0]
+                    not_a_queue_lanes.add(lane)
+                    lane_drain_verdicts.append({
+                        "lane": lane,
+                        "verdict": "NOT-A-QUEUE",
+                        "claims_in_window": len(drained),
+                        "out_of_order_pairs": len(out_of_order),
+                    })
+                    lane_drain.append(
+                        f"NOT-A-QUEUE {lane}: {evidence}, BUT OUT OF DISPATCH ORDER -- "
+                        f"{younger_claimed} (dispatched "
+                        f"{dispatch_instants.get(younger_claimed)}) was claimed while "
+                        f"{oldest_unclaimed} (dispatched "
+                        f"{dispatch_instants.get(oldest_unclaimed)}, OLDER) is still "
+                        f"unclaimed. This lane does NOT drain a queue: it takes what is "
+                        f"handed to it when it is free, so a dispatch arriving while it is "
+                        f"busy is SPENT, not queued -- the #465 warrant ('a re-hand is a "
+                        f"duplicate') is VOID for this lane, and re-handing the OLDEST "
+                        f"unclaimed unit ONE AT A TIME is the lawful act (#546)"
+                    )
+                    continue
+                lane_drain_verdicts.append({
+                    "lane": lane,
+                    "verdict": "DRAINING",
+                    "claims_in_window": len(drained),
+                    "out_of_order_pairs": 0,
+                })
+                lane_drain.append(
+                    f"DRAINING {lane}: {evidence}. A multi-item backlog on a queue-draining "
+                    f"lane is a LANE reading, not N owed items: the remedy is ONE "
+                    f"consolidated backlog-first brief that names the ORDER, OLDEST FIRST, "
+                    f"one unit at a time (#465, #546)"
                 )
 
     owed.sort(key=lambda entry: -entry["age_days"])
@@ -7643,19 +7818,70 @@ def stall_census_leg(
                 f"dispatch-bearing row(s) declares a typed `session` target, so the lane "
                 f"the work was handed to is UNSTATED (#331)"
             )
-        # THE REMEDY IS THE LANE'S, NOT THE ITEM'S, WHERE THE LANE IS DRAINING (#465
-        # criterion 2). Where it is NOT, the original sentence is printed VERBATIM: the
-        # re-dispatch advice is the only exit there is for a genuine stall, and a census
-        # that softened it everywhere would stop naming the class it exists to name
-        # (criterion 3). The two forms are mutually exclusive on ONE predicate -- whether
-        # this unit's addressee lane claimed a sibling inside the window.
-        if name in draining_lanes:
-            units_owed_on_draining_lanes += 1
+        # THE UNIT'S AGE AGAINST ITS OWN LANE'S DISTRIBUTION (#546 change 2, ruling n=4117).
+        # The age prints BESIDE the lane's own paired dispatch->claim p50/p75 and n, so a
+        # reader places it instead of weighing a bare "5.00 d" against a constant. The
+        # ruling's measured basis for the Worker lane: n=108, p50 2.94 h, p75 17.63 h -- and
+        # the fixed 1.0 d threshold sits on the WRONG side of that data, flagging the normal
+        # case 21.3% of the time and saying nothing about the tail it exists to name. The
+        # threshold stays the OBSERVATION window; the LANE's own p75 is the READING, and it
+        # orders the re-hand rather than forbidding it.
+        age_hours = entry["age_days"] * 24.0
+        profile = lane_profiles.get(name) if name else None
+        if profile and profile.get("n"):
+            p50_h = profile["p50_secs"] / 3600.0
+            p75_h = profile["p75_secs"] / 3600.0
+            max_h = profile["max_secs"] / 3600.0
+            side = "ABOVE" if age_hours > p75_h else "AT OR BELOW"
+            age_note = (
+                f" Its age {age_hours:.2f} h is {side} its addressee lane's own p75 of "
+                f"{p75_h:.2f} h (n={profile['n']} paired dispatch->claim interval(s): "
+                f"p50 {p50_h:.2f} h, p75 {p75_h:.2f} h, max {max_h:.2f} h, derived from the "
+                f"lane's own rows; {profile['unpaired']} unit(s) UNPAIRED and excluded, never "
+                f"imputed)."
+            )
+        else:
+            age_note = (
+                f" Its age {age_hours:.2f} h is placed against NO measured distribution: the "
+                f"addressee lane's own dispatch->claim history yields n=0 paired interval(s) "
+                f"this read can derive, so its p75 is UNKNOWN and the age is not evidence "
+                f"about it (#546)"
+            )
+        # THE REMEDY KEYS ON THE CLAIM, NEVER ON THE DRAIN (#546 change 1, ruling n=4117).
+        # #465 installed this clause in the OWED branch and keyed it on the addressee lane's
+        # DRAIN. Its warrant is a DUPLICATE -- "a delivery EXISTS, so a re-dispatch carries no
+        # state change" -- and the OWED class is by definition NEVER CLAIMED, so for 100% of
+        # the rows it governs the warrant is false. Measured on the Worker lane: #543's first
+        # dispatch (n=4088) was ACKNOWLEDGED by the lane in its own words at 08:45 ("Ordering
+        # is clear: #543 first"), and the session was then compacted 117 times in one day, 111
+        # of them in hours 08-09, dying mid-task. Delivery, reading and RETENTION are three
+        # different things: the delivery existed and the working state did not.
+        unit_claimed = unit in claimed
+        if unit_claimed:
+            # UNREACHABLE IN THE OWED CLASS (#546), and that is the point: `owed` is built by
+            # skipping every unit in `claimed`, so this branch keeps the CLAIMED class's remedy
+            # explicit rather than deleting it. `owed_units_carrying_a_claim` in the coverage
+            # is the standing assertion that it stays unreachable.
             remedy_note = (
-                f"Do NOT re-dispatch this item: its addressee lane ({name}) is DRAINING "
-                f"-- it claimed a sibling of the same standing set inside the last "
-                f"{threshold_days} d -- so the remedy is ONE consolidated backlog-first "
-                f"brief to that lane, never a per-item re-dispatch (#465)"
+                f"Do NOT re-dispatch this item: its addressee lane ({name}) has CLAIMED it, "
+                f"so a second hand-off would duplicate work already in hand (#546)"
+            )
+        elif name in draining_lanes:
+            units_owed_on_draining_lanes += 1
+            if name in not_a_queue_lanes:
+                held = (
+                    f"ALIVE, and its claims are OUT OF DISPATCH ORDER, so it does not drain a "
+                    f"queue either -- it takes what is HANDED to it when it is free"
+                )
+            else:
+                held = (
+                    f"ALIVE -- it claimed a sibling of the same standing set inside the last "
+                    f"{threshold_days} d -- but it does NOT hold this unit"
+                )
+            remedy_note = (
+                f"Re-hand it OLDEST FIRST, ONE AT A TIME: its addressee lane ({name}) is "
+                f"{held}. A delivery the lane never re-read is SPENT, so a re-hand is NOT a "
+                f"duplicate and is the lawful act (#546)"
             )
         else:
             remedy_note = (
@@ -7665,8 +7891,8 @@ def stall_census_leg(
             )
         problems.append(
             f"OWED {unit}: dispatched {entry['age_days']:.2f} d ago and NEVER CLAIMED, "
-            f"and the board still carries it OPEN -- {addressee_note}.{assignee_note} "
-            f"{remedy_note}"
+            f"and the board still carries it OPEN -- {addressee_note}.{assignee_note}"
+            f"{age_note} {remedy_note}"
         )
 
     return {
@@ -7731,12 +7957,40 @@ def stall_census_leg(
             "lanes_with_backlog": len(owed_by_lane),
             # THE DRAIN EVIDENCE TRAVELS WITH THE VERDICT (#465 criterion 1). A reader who
             # sees `units_owed: 9` must be able to read WHY that is a LANE reading and not
-            # nine independent findings, and the count of OWED units sitting on a draining
-            # lane is that answer. It prints even at zero, so a leg that found no drain is
-            # distinguishable from one that never looked.
+            # nine independent findings, and the count of OWED units sitting on a lane with
+            # in-window claims is that answer. It prints even at zero, so a leg that found no
+            # drain is distinguishable from one that never looked.
+            #
+            # THE VERDICT SPLIT IS NEW (#546 change 3, ruling n=4117): a lane with in-window
+            # claims is ALIVE, and whether it is DRAINING A QUEUE is a SECOND question --
+            # `lanes_not_a_queue` counts the lanes whose claims are OUT OF DISPATCH ORDER, so
+            # the shape that makes the #465 warrant false is named rather than averaged into
+            # the healthy count. Before this split that shape read as DRAINING.
             "lanes_draining": len(draining_lanes),
+            "lanes_draining_a_queue": len(draining_lanes - not_a_queue_lanes),
+            "lanes_not_a_queue": len(not_a_queue_lanes),
             "units_owed_on_draining_lanes": units_owed_on_draining_lanes,
             "lane_drain": lane_drain,
+            "lane_drain_verdicts": lane_drain_verdicts,
+            # THE STANDING ASSERTION OF CHANGE 1 (#546): the claim-keyed remedy's CLAIMED
+            # branch is unreachable in this class BY CONSTRUCTION, because `owed` is built by
+            # skipping every claimed unit. Printing the count is what turns "unreachable" from
+            # a comment into a measured fact -- a non-zero here means the owed predicate and
+            # the remedy have drifted apart.
+            "owed_units_carrying_a_claim": sum(1 for entry in owed if entry["unit"] in claimed),
+            # THE LANE'S OWN LATENCY DISTRIBUTION (#546 change 2), per lane, with its
+            # population and its EXCLUDED count. A percentile without its `n` is not a
+            # measurement, and `unpaired` is what the derivation refused rather than imputed.
+            "lane_latency_profiles": {
+                lane: {
+                    "n": record["n"],
+                    "unpaired": record["unpaired"],
+                    "p50_secs": record["p50_secs"],
+                    "p75_secs": record["p75_secs"],
+                    "max_secs": record["max_secs"],
+                }
+                for lane, record in lane_profiles.items()
+            },
             "threshold_days": threshold_days,
             "threshold_basis": STALL_CENSUS_THRESHOLD_BASIS,
             "read_at": read_at,
@@ -11797,16 +12051,23 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             )
             # THE DRAIN EVIDENCE IS PRINTED BESIDE THE OWED TOTAL (#465 criterion 1): a bare
             # "9 OWED" reads as nine independent findings, and where the addressee lane is
-            # draining that reading is wrong. The line prints even at zero, so a leg that
-            # found no drain is distinguishable from one that never looked.
+            # ALIVE that reading is wrong. The line prints even at zero, so a leg that found
+            # no drain is distinguishable from one that never looked.
+            #
+            # THE SPLIT IS PRINTED, NOT AVERAGED (#546 change 3): a lane with in-window claims
+            # is ALIVE, and whether it DRAINS A QUEUE is a second question -- a lane whose
+            # claims are out of dispatch order is named `NOT-A-QUEUE` on its own line, because
+            # that is the shape that makes the #465 warrant false and it used to read healthy.
             lines.append(
                 f"  drain evidence (the addressee lane's own claims on a SIBLING of the "
                 f"same standing set, inside the last {cov['threshold_days']} d): "
                 + (
-                    f"{cov['lanes_draining']} lane(s) DRAINING, "
-                    f"{cov['units_owed_on_draining_lanes']} of {cov['units_owed']} OWED "
-                    f"unit(s) sit on a draining lane -- the remedy there is the LANE's, "
-                    f"not the item's"
+                    f"{cov['lanes_draining']} lane(s) ALIVE with claims inside the window -- "
+                    f"{cov['lanes_draining_a_queue']} draining a QUEUE, "
+                    f"{cov['lanes_not_a_queue']} NOT-A-QUEUE (claims out of dispatch order) "
+                    f"-- {cov['units_owed_on_draining_lanes']} of {cov['units_owed']} OWED "
+                    f"unit(s) sit on one. The remedy keys on the CLAIM, never on the drain "
+                    f"(#546)"
                     if cov["lanes_draining"]
                     else "no lane carrying an OWED unit claimed a sibling inside the window"
                 )

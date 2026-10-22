@@ -9833,18 +9833,18 @@ def test_the_LAPSED_read_REFUSES_an_incomplete_round_instead_of_CLEARING_it() ->
     )
 
 def test_the_stall_census_leg_PRINTS_the_lane_drain_beside_the_OWED_total() -> None:
-    """#465 criterion 1: the OWED total travels with the addressee LANE's own drain
-    evidence -- its claims on a SIBLING of the same standing set inside the window.
+    """#465 criterion 1, re-based at #546: the OWED total travels with the addressee LANE's
+    own drain evidence -- its claims on a SIBLING of the same standing set inside the window.
 
-    The defect this answers: a bare "9 OWED" reads as nine independent findings, and for
-    an addressee lane that is demonstrably working through the same batch that reading is
-    wrong. The evidence is the lane's OWN claims on units it was dispatched, which is why
-    it is grouped on the SAME declared routing the addressee is read from -- so the
-    evidence and the line it corrects cannot disagree about whose lane it is.
+    The defect #465 answered: a bare "9 OWED" reads as nine independent findings, and for an
+    addressee lane that is demonstrably working through the same batch that reading is wrong.
+    The evidence is the lane's OWN claims on units it was dispatched, grouped on the SAME
+    declared routing the addressee is read from, so the evidence and the line it corrects
+    cannot disagree about whose lane it is.
 
-    The sibling here is `#1002`, dispatched in the same standing set and claimed 0.5 d
-    ago. `#1004` is claimed too, but 3 d ago -- OUTSIDE the 1.0 d window -- so a leg that
-    read "any claim ever" instead of "a claim inside the window" fails this arm.
+    #546 SPLIT THE VERDICT IN TWO, and this arm asserts the split rather than the total: a
+    lane with in-window claims is ALIVE, and whether it DRAINS A QUEUE is a second question.
+    Two lanes here, one of each shape, so a leg that printed a single "DRAINING" count fails.
     """
     now = dt.datetime.now(dt.timezone.utc)
     read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -9853,12 +9853,14 @@ def test_the_stall_census_leg_PRINTS_the_lane_drain_beside_the_OWED_total() -> N
     issues = [_issue(1001, "OPEN"), _issue(1002, "OPEN"),
               _issue(1003, "OPEN"), _issue(1004, "OPEN")]
     rows = [
-        _stall_row(1, "dispatch", "#1001", 5, now=now, refs=[{"session": worker}]),
+        # Worker: the OLDER unit is unclaimed while the YOUNGER is claimed -> NOT-A-QUEUE.
+        _stall_row(1, "dispatch", "#1001", 6, now=now, refs=[{"session": worker}]),
         _stall_row(2, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
         _stall_row(3, "claim", "#1002", 0.5, now=now),
-        _stall_row(4, "dispatch", "#1003", 5, now=now, refs=[{"session": pacemakers}]),
-        _stall_row(5, "dispatch", "#1004", 5, now=now, refs=[{"session": pacemakers}]),
-        _stall_row(6, "claim", "#1004", 3, now=now),
+        # Pacemakers: the OLDER unit is claimed and the YOUNGER is not -> a real QUEUE.
+        _stall_row(4, "dispatch", "#1003", 6, now=now, refs=[{"session": pacemakers}]),
+        _stall_row(5, "claim", "#1003", 0.5, now=now),
+        _stall_row(6, "dispatch", "#1004", 5, now=now, refs=[{"session": pacemakers}]),
     ]
     names = {worker: "Worker", pacemakers: "Pacemakers / Crons"}
 
@@ -9866,61 +9868,345 @@ def test_the_stall_census_leg_PRINTS_the_lane_drain_beside_the_OWED_total() -> N
                                   lane_names_fn=lambda: names)
     cov = leg["coverage"]
     assert cov["units_owed"] == 2, cov
-    assert cov["lanes_draining"] == 1, cov
-    assert cov["units_owed_on_draining_lanes"] == 1, cov
-    assert len(cov["lane_drain"]) == 1, cov["lane_drain"]
-    drain = cov["lane_drain"][0]
-    assert "DRAINING Worker" in drain, drain
-    assert "#1002" in drain and "n=3" in drain, (
-        f"the evidence must name the SIBLING and the row it was claimed at\n{drain}"
+    assert cov["lanes_draining"] == 2, cov
+    assert cov["lanes_draining_a_queue"] == 1, cov
+    assert cov["lanes_not_a_queue"] == 1, cov
+    assert cov["units_owed_on_draining_lanes"] == 2, cov
+    assert len(cov["lane_drain"]) == 2, cov["lane_drain"]
+    joined = "\n".join(cov["lane_drain"])
+    assert "NOT-A-QUEUE Worker" in joined, joined
+    assert "DRAINING Pacemakers / Crons" in joined, joined
+    assert "DRAINING Worker" not in joined, (
+        f"a lane whose claims are OUT OF DISPATCH ORDER must never read DRAINING\n{joined}"
     )
-    assert "#1004" not in drain, (
-        f"a claim 3 d ago is OUTSIDE the 1.0 d window and is not drain evidence\n{drain}"
+    # The evidence names the SIBLING and the row it was claimed at, and it never counts a
+    # claim outside the observation window as drain evidence.
+    assert "#1002" in joined and "n=3" in joined, (
+        f"the evidence must name the SIBLING and the row it was claimed at\n{joined}"
     )
+    assert "#1003" in joined and "n=5" in joined, joined
 
-    # ... and through the REAL `main()`: the drain evidence must reach the REPORT, beside
-    # the OWED population it corrects. A leg returning a correct dict while the render
-    # drops it is the half-fix this half exists to catch.
+    # ... and through the REAL `main()`: the split must reach the REPORT, beside the OWED
+    # population it corrects. A leg returning a correct dict while the render drops it is
+    # the half-fix this half exists to catch.
     rc, out, _ = _run(issues, rows, lane_names_fn=lambda: names)
     assert rc == 1, f"OWED lines must fail the run, got rc={rc}\n{out}"
     assert "population: 4 dispatched unit(s) -- 2 never claimed" in out, out
     assert "drain evidence" in out, out
-    assert "1 lane(s) DRAINING, 1 of 2 OWED unit(s) sit on a draining lane" in out, out
-    assert "DRAINING Worker" in out, out
+    assert "2 lane(s) ALIVE with claims inside the window" in out, out
+    assert "1 draining a QUEUE" in out, out
+    assert "1 NOT-A-QUEUE (claims out of dispatch order)" in out, out
+    assert "2 of 2 OWED unit(s) sit on one" in out, out
+    assert "The remedy keys on the CLAIM, never on the drain (#546)" in out, out
+    assert "NOT-A-QUEUE Worker" in out, out
 
 
 def test_the_stall_census_leg_STOPS_prescribing_a_PER_ITEM_re_dispatch_on_a_DRAINING_lane() -> None:
-    """#465 criterion 2: where the addressee lane is DRAINING, the OWED line stops naming
-    a remedy that does not exist.
+    """#465 criterion 2, RE-BASED at #546 change 1 (ruling n=4117): the remedy keys on the
+    CLAIM, never on the drain.
 
-    "Re-dispatch it" is a duplicate (the lane already holds the batch), and "close it on
-    the board" would be a falsification (these units are live, OPEN, wanted defects). A
-    finding with no working exit is the class this factory refuses (#295, #139), so the
-    remedy becomes the LANE's: ONE consolidated backlog-first brief.
+    #465 installed this clause in the OWED branch and keyed it on the addressee lane's DRAIN.
+    Its warrant is a DUPLICATE -- "a delivery EXISTS, so a re-dispatch carries no state
+    change" -- and the OWED class is by definition NEVER CLAIMED, so for 100% of the rows it
+    governs the warrant is false. The measured case: `#543`'s first dispatch (n=4088) was
+    ACKNOWLEDGED by the Worker lane in its own words at 08:45 ("Ordering is clear: #543
+    first"), the session was then compacted 117 times in one day, and the work did not exist.
+    Delivery, reading and RETENTION are three different things.
+
+    So BOTH drain shapes now get the re-hand: a lane draining a queue in order (the OLDER
+    unit claimed, the YOUNGER owed) AND a lane whose claims are out of dispatch order. What
+    #465 got right is kept -- neither lane is told to close the unit, and the ordering is
+    named -- and what it got wrong is gone: no shape in the OWED class reads "Do NOT
+    re-dispatch this item".
     """
     now = dt.datetime.now(dt.timezone.utc)
     read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     worker = "aaaaaaaa-0000-0000-0000-000000000001"
     issues = [_issue(1001, "OPEN"), _issue(1002, "OPEN")]
-    rows = [
-        _stall_row(1, "dispatch", "#1001", 5, now=now, refs=[{"session": worker}]),
+
+    # ARM (a): a REAL queue -- the OLDER unit claimed, the YOUNGER owed.
+    queue_rows = [
+        _stall_row(1, "dispatch", "#1001", 6, now=now, refs=[{"session": worker}]),
+        _stall_row(2, "claim", "#1001", 0.5, now=now),
+        _stall_row(3, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
+    ]
+    # ARM (b): NOT a queue -- the YOUNGER unit claimed, the OLDER owed.
+    not_a_queue_rows = [
+        _stall_row(1, "dispatch", "#1001", 6, now=now, refs=[{"session": worker}]),
         _stall_row(2, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
         _stall_row(3, "claim", "#1002", 0.5, now=now),
     ]
 
+    for label, rows, owed_unit, held_fragment in (
+        ("a real QUEUE", queue_rows, "#1002",
+         "ALIVE -- it claimed a sibling of the same standing set inside the last 1.0 d -- "
+         "but it does NOT hold this unit"),
+        ("NOT-A-QUEUE", not_a_queue_rows, "#1001",
+         "ALIVE, and its claims are OUT OF DISPATCH ORDER, so it does not drain a queue "
+         "either -- it takes what is HANDED to it when it is free"),
+    ):
+        leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                      lane_names_fn=lambda: {worker: "Worker"})
+        line = [ln for ln in leg["problems"] if owed_unit in ln][0]
+        assert "Re-hand it OLDEST FIRST, ONE AT A TIME" in line, (
+            f"on {label} the OWED unit's remedy is the RE-HAND (#546)\n{line}"
+        )
+        assert held_fragment in line, f"on {label} the held-verdict must be named\n{line}"
+        assert "A delivery the lane never re-read is SPENT, so a re-hand is NOT a duplicate " \
+               "and is the lawful act (#546)" in line, line
+        assert "Do NOT re-dispatch this item" not in line, (
+            f"the CLAIMED-class sentence must be unreachable in the OWED class (#546)\n{line}"
+        )
+        assert "ONE consolidated backlog-first brief" not in line, (
+            f"#465's lane-level brief is RETIRED for the OWED class: it presupposed a "
+            f"delivery that was retained\n{line}"
+        )
+        assert "close it on the board" not in line, (
+            f"a live OPEN defect must never be advised closed\n{line}"
+        )
+
+        rc, out, _ = _run(issues, rows, lane_names_fn=lambda: {worker: "Worker"})
+        assert rc == 1, out
+        assert "Re-hand it OLDEST FIRST, ONE AT A TIME" in out, out
+        assert "Do NOT re-dispatch this item" not in out, out
+
+
+def test_546_a_YOUNGER_unit_claimed_while_an_OLDER_stays_UNCLAIMED_REDS_the_drain_evidence() -> None:
+    """#546 change 3, THE DISCRIMINATOR: the positive control the ruling asked for.
+
+    A lane whose claims are out of DISPATCH order is not draining a queue. The measured
+    mechanism: the Worker lane claimed and closed `#545`, dispatched 75.3 min YOUNGER than
+    `#543`, then produced zero claim rows for 4 h 10 m 30 s with `#543` still unclaimed. A
+    lane draining a queue in dispatch order would have taken the OLDER unit next.
+
+    THE CONTROL IS TWO-SIDED, and that is the whole point: the SAME pair of units, with only
+    WHICH ONE was claimed reversed, must read NOT-A-QUEUE in one direction and DRAINING in
+    the other. A leg that always fired the order test would pass the first arm alone; a leg
+    that never fired it would pass the second alone.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    worker = "aaaaaaaa-0000-0000-0000-000000000001"
+    issues = [_issue(1001, "OPEN"), _issue(1002, "OPEN")]
+    names = {worker: "Worker"}
+
+    # The YOUNGER unit is claimed while the OLDER stays unclaimed -> the drain evidence REDS.
+    younger_claimed = [
+        _stall_row(1, "dispatch", "#1001", 6, now=now, refs=[{"session": worker}]),
+        _stall_row(2, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(3, "claim", "#1002", 0.5, now=now),
+    ]
+    leg = RUNNER.stall_census_leg(issues, younger_claimed, read_at=read_at,
+                                  lane_names_fn=lambda: names)
+    cov = leg["coverage"]
+    assert cov["lanes_not_a_queue"] == 1, cov
+    assert cov["lanes_draining_a_queue"] == 0, cov
+    verdicts = {v["lane"]: v for v in cov["lane_drain_verdicts"]}
+    assert verdicts["Worker"]["verdict"] == "NOT-A-QUEUE", verdicts
+    assert verdicts["Worker"]["out_of_order_pairs"] == 1, verdicts
+    assert verdicts["Worker"]["claims_in_window"] == 1, verdicts
+    note = cov["lane_drain"][0]
+    assert note.startswith("NOT-A-QUEUE Worker:"), note
+    assert "#1002" in note and "#1001" in note, note
+    assert ", OLDER) is still unclaimed" in note, (
+        f"the evidence must say WHICH unit is older and still unclaimed\n{note}"
+    )
+    assert "does NOT drain a queue" in note, note
+    assert "the #465 warrant ('a re-hand is a duplicate') is VOID for this lane" in note, note
+    assert "re-handing the OLDEST unclaimed unit ONE AT A TIME is the lawful act (#546)" in note, note
+
+    # The SAME pair, the claim moved to the OLDER unit -> a real queue, and the control must
+    # NOT fire. Without this arm the assertion above is satisfied by a constant.
+    older_claimed = [
+        _stall_row(1, "dispatch", "#1001", 6, now=now, refs=[{"session": worker}]),
+        _stall_row(2, "claim", "#1001", 0.5, now=now),
+        _stall_row(3, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
+    ]
+    leg2 = RUNNER.stall_census_leg(issues, older_claimed, read_at=read_at,
+                                   lane_names_fn=lambda: names)
+    cov2 = leg2["coverage"]
+    assert cov2["lanes_not_a_queue"] == 0, (
+        f"the order test fired on a lane whose claims ARE in dispatch order -- it is a "
+        f"constant, not a measurement\n{cov2}"
+    )
+    assert cov2["lanes_draining_a_queue"] == 1, cov2
+    assert cov2["lane_drain_verdicts"][0]["verdict"] == "DRAINING", cov2["lane_drain_verdicts"]
+    assert cov2["lane_drain"][0].startswith("DRAINING Worker:"), cov2["lane_drain"]
+
+
+def test_546_the_VERDICT_SPLIT_is_PRINTED_beside_the_OWED_total() -> None:
+    """#546 change 3, the RENDER half: the split reaches the report, in words a reader can
+    act on, and it is machine-readable in the coverage beside it.
+
+    The failure this catches is the one #465's own half-fix nearly shipped: a leg that
+    computes the right verdict and a render that prints the old single count. The two must
+    be asserted together, and the render must carry the LAW and not only the numbers -- a
+    reader who sees "1 NOT-A-QUEUE" without the sentence explaining what it means has been
+    given a word, not a finding.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    worker, pacemakers = "aaaaaaaa-0000-0000-0000-000000000001", \
+        "bbbbbbbb-0000-0000-0000-000000000002"
+    issues = [_issue(1001, "OPEN"), _issue(1002, "OPEN"),
+              _issue(1003, "OPEN"), _issue(1004, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#1001", 6, now=now, refs=[{"session": worker}]),
+        _stall_row(2, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(3, "claim", "#1002", 0.5, now=now),
+        _stall_row(4, "dispatch", "#1003", 6, now=now, refs=[{"session": pacemakers}]),
+        _stall_row(5, "claim", "#1003", 0.5, now=now),
+        _stall_row(6, "dispatch", "#1004", 5, now=now, refs=[{"session": pacemakers}]),
+    ]
+    names = {worker: "Worker", pacemakers: "Pacemakers / Crons"}
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                  lane_names_fn=lambda: names)
+    verdicts = {v["lane"]: v["verdict"] for v in leg["coverage"]["lane_drain_verdicts"]}
+    assert verdicts == {"Worker": "NOT-A-QUEUE",
+                        "Pacemakers / Crons": "DRAINING"}, verdicts
+
+    rc, out, _ = _run(issues, rows, lane_names_fn=lambda: names)
+    assert rc == 1, out
+    assert "1 draining a QUEUE" in out, out
+    assert "1 NOT-A-QUEUE (claims out of dispatch order)" in out, out
+    assert "The remedy keys on the CLAIM, never on the drain (#546)" in out, out
+    assert "    NOT-A-QUEUE Worker:" in out, out
+    assert "    DRAINING Pacemakers / Crons:" in out, out
+
+
+def test_546_EVERY_OWED_line_places_its_AGE_against_the_LANES_OWN_p50_p75_and_n() -> None:
+    """#546 change 2, ruling n=4117: the unit's age prints BESIDE its lane's own paired
+    dispatch->claim p50/p75 and n, and says WHICH SIDE of p75 it falls on.
+
+    The ruling's measured basis for the Worker lane: n=108, p50 2.94 h, p75 17.63 h. The
+    fixed 1.0 d observation window sits on the WRONG side of that data -- it flags the normal
+    case and says nothing about the tail -- so a bare "5.00 d" is not a reading, it is a
+    duration a reader has to guess about. The threshold stays the OBSERVATION window; the
+    LANE's own p75 is the READING.
+
+    BOTH SIDES ARE ASSERTED, because a leg that printed "ABOVE" for every row would pass the
+    loud half. `#1001` is 144 h against the Worker lane's p75 of 108 h (ABOVE); `#1004` is
+    120 h against the Pacemakers lane's p75 of 132 h (AT OR BELOW).
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    worker, pacemakers = "aaaaaaaa-0000-0000-0000-000000000001", \
+        "bbbbbbbb-0000-0000-0000-000000000002"
+    issues = [_issue(1001, "OPEN"), _issue(1002, "OPEN"),
+              _issue(1003, "OPEN"), _issue(1004, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#1001", 6, now=now, refs=[{"session": worker}]),
+        _stall_row(2, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(3, "claim", "#1002", 0.5, now=now),
+        _stall_row(4, "dispatch", "#1003", 6, now=now, refs=[{"session": pacemakers}]),
+        _stall_row(5, "claim", "#1003", 0.5, now=now),
+        _stall_row(6, "dispatch", "#1004", 5, now=now, refs=[{"session": pacemakers}]),
+    ]
+    names = {worker: "Worker", pacemakers: "Pacemakers / Crons"}
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                  lane_names_fn=lambda: names)
+    profiles = leg["coverage"]["lane_latency_profiles"]
+    assert profiles["Worker"]["n"] == 1, profiles
+    assert profiles["Worker"]["unpaired"] == 1, profiles
+    assert round(profiles["Worker"]["p75_secs"] / 3600.0, 2) == 108.00, profiles
+    assert round(profiles["Pacemakers / Crons"]["p75_secs"] / 3600.0, 2) == 132.00, profiles
+
+    above = [ln for ln in leg["problems"] if "#1001" in ln][0]
+    assert "Its age 144.00 h is ABOVE its addressee lane's own p75 of 108.00 h" in above, above
+    assert "(n=1 paired dispatch->claim interval(s): p50 108.00 h, p75 108.00 h, " \
+           "max 108.00 h, derived from the lane's own rows; 1 unit(s) UNPAIRED and " \
+           "excluded, never imputed)" in above, above
+
+    below = [ln for ln in leg["problems"] if "#1004" in ln][0]
+    assert "Its age 120.00 h is AT OR BELOW its addressee lane's own p75 of 132.00 h" in below, below
+
+    # ... and through the render: the placement is the READING, so it must reach the report.
+    rc, out, _ = _run(issues, rows, lane_names_fn=lambda: names)
+    assert rc == 1, out
+    assert "is ABOVE its addressee lane's own p75 of 108.00 h" in out, out
+    assert "is AT OR BELOW its addressee lane's own p75 of 132.00 h" in out, out
+
+
+def test_546_a_lane_with_NO_paired_history_prints_p75_UNKNOWN_never_an_INVENTED_tolerance() -> None:
+    """#546 change 2, the ZERO arm: `n == 0` is a real answer and it is PRINTED as one.
+
+    A lane that has never had a paired dispatch->claim interval yields no distribution, so
+    the age is placed against NOTHING -- and the line must say so in words rather than going
+    quiet or, worse, substituting a tolerance the read did not derive. The `unpaired` count
+    is printed beside it for the same reason: it is what the derivation REFUSED, and a
+    percentile whose excluded population is invisible is not a measurement.
+
+    This is also the arm that keeps the fixture honest: the only unit on this lane is the OWED
+    one itself, which is NEVER CLAIMED by construction, so `unpaired == 1` and `n == 0` are
+    the same fact read twice.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    worker = "aaaaaaaa-0000-0000-0000-000000000001"
+    issues = [_issue(1001, "OPEN")]
+    rows = [_stall_row(1, "dispatch", "#1001", 5, now=now, refs=[{"session": worker}])]
+
     leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
                                   lane_names_fn=lambda: {worker: "Worker"})
-    line = [ln for ln in leg["problems"] if "#1001" in ln][0]
-    assert "Do NOT re-dispatch this item: its addressee lane (Worker) is DRAINING" in line, line
-    assert "ONE consolidated backlog-first brief" in line, line
-    assert "Re-dispatch it to the lane that owns it through `session_notify`" not in line, (
-        f"a draining lane must never be told to re-dispatch the item it already holds\n{line}"
-    )
+    profile = leg["coverage"]["lane_latency_profiles"]["Worker"]
+    assert profile["n"] == 0, profile
+    assert profile["unpaired"] == 1, profile
+    assert profile["p50_secs"] is None and profile["p75_secs"] is None, profile
+    assert profile["max_secs"] is None, profile
 
-    # ... and the render half.
-    rc, out, _ = _run(issues, rows, lane_names_fn=lambda: {worker: "Worker"})
-    assert rc == 1, out
-    assert "Do NOT re-dispatch this item: its addressee lane (Worker) is DRAINING" in out, out
+    line = [ln for ln in leg["problems"] if "#1001" in ln][0]
+    assert "is placed against NO measured distribution" in line, line
+    assert "yields n=0 paired interval(s) this read can derive, so its p75 is UNKNOWN" in line, line
+    assert "the age is not evidence about it (#546)" in line, line
+    # No invented tolerance: nothing in this line may claim a distribution it did not derive.
+    assert "ABOVE" not in line, line
+    assert "AT OR BELOW" not in line, line
+    # The remedy still holds -- an unknown p75 orders the re-hand, it does not forbid it.
+    assert "Re-dispatch it to the lane that owns it through `session_notify`" in line, line
+
+
+def test_546_a_CLAIMED_unit_is_never_OWED_so_the_CLAIMED_branch_is_UNREACHABLE_and_COUNTED() -> None:
+    """#546 change 1, THE STANDING ASSERTION: `owed` is built by skipping every CLAIMED unit,
+    so the remedy's CLAIMED branch cannot be reached from this class -- and the coverage
+    prints the count that would prove otherwise.
+
+    "Unreachable" is a comment until something measures it. `owed_units_carrying_a_claim`
+    turns it into a fact: a non-zero value means the owed predicate and the remedy have
+    drifted apart, which is exactly the drift that put a "do not re-dispatch" sentence on
+    units that had never been claimed.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    worker = "aaaaaaaa-0000-0000-0000-000000000001"
+    issues = [_issue(1001, "OPEN"), _issue(1002, "OPEN"), _issue(1003, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#1001", 6, now=now, refs=[{"session": worker}]),
+        _stall_row(2, "dispatch", "#1002", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(3, "claim", "#1002", 0.5, now=now),
+        _stall_row(4, "dispatch", "#1003", 5, now=now, refs=[{"session": worker}]),
+        _stall_row(5, "claim", "#1003", 0.25, now=now),
+    ]
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                  lane_names_fn=lambda: {worker: "Worker"})
+    cov = leg["coverage"]
+    assert cov["owed_units_carrying_a_claim"] == 0, (
+        f"a CLAIMED unit reached the OWED class -- the predicate and the remedy have "
+        f"drifted apart (#546)\n{cov}"
+    )
+    assert cov["units_owed"] == 1, cov
+    owed_lines = [ln for ln in leg["problems"] if ln.startswith("OWED ")]
+    assert len(owed_lines) == 1, owed_lines
+    assert "#1001" in owed_lines[0], owed_lines
+    assert "#1002" not in owed_lines[0] and "#1003" not in owed_lines[0], (
+        f"a CLAIMED unit was reported OWED\n{owed_lines}"
+    )
+    assert "has CLAIMED it" not in "\n".join(leg["problems"]), (
+        f"the CLAIMED-class sentence must be unreachable in the OWED class (#546)\n"
+        f"{leg['problems']}"
+    )
 
 
 def test_a_lane_with_NO_in_window_claim_keeps_its_OWED_line_VERBATIM() -> None:
