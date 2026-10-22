@@ -101,6 +101,18 @@ DECLARED: dict[str, str] = {
         "file as a SIBLING by absolute path, so a copy without it publishes nothing and "
         "reports a render failure rather than a clean page"
     ),
+    "tools/questions-render.package.json": (
+        "the renderer's DEPENDENCY MANIFEST (#520, ruling n=3863), the third member of the "
+        "same closure and TEMPLATE-only for the same reason as its two siblings: the "
+        "instrument is adopted into the template, so there is no factory-side copy to pair "
+        "with. It is not a `.tmpl` skeleton and pairs with nothing. Node resolves a bare ESM "
+        "import by walking UP from the importing module, so the renderer's five packages must "
+        "be installed in the directory it runs from -- and until this file existed the kit "
+        "declared `node` on PATH and nothing else, so a member had no tracked artifact "
+        "telling it which packages to install. `render_page()` copies it into the build dir "
+        "as `package.json`; the install itself stays MANUAL because it is a network "
+        "operation and no gate may depend on network access"
+    ),
 }
 
 SKELETON_SUFFIX = ".tmpl"
