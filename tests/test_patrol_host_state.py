@@ -5836,7 +5836,19 @@ def test_probe_the_leg_PRINTS_an_unbridgeable_row_instead_of_dropping_it() -> No
     cov = leg["coverage"]
     assert cov["rulings_unbridgeable"] == 1, cov
     assert cov["unbridgeable_rows"] == [{"n": 901, "subject": "no-issue-anywhere"}], cov
-    assert cov["rulings_read"] == cov["rulings_resolved"] + cov["rulings_unbridgeable"], cov
+    # The closure is over a GENUINE row counter (#545, ruling n=4096 clause 3). The line
+    # that stood here compared `rulings_read` with the two numbers it was computed FROM —
+    # `len(ruled) + len(unbridgeable)` — so it held on every possible input, including the
+    # bug it was meant to catch: the field reported 550 against 658 rows read and the
+    # assertion could not see it. The row count is stated outright now, and the partition
+    # is checked against the counters that actually count rows.
+    assert cov["rulings_read"] == 1, cov          # ONE `ruling` row, so ONE row read
+    assert cov["rulings_resolved_rows"] == 0, cov
+    assert cov["rulings_repeated"] == 0, cov
+    assert cov["rulings_read"] == cov["rulings_resolved_rows"] + cov["rulings_unbridgeable"], cov
+    # ...and the repeated bucket is only provable on a RE-RULED fixture: with one ruling
+    # row per issue the derived sum and the true counter agree, which is exactly why the
+    # arm below exists. See test_the_ruling_partition_BITES_on_a_RE_RULED_issue.
 
 def test_probe_the_BRIDGE_is_the_thing_that_moves_the_population() -> None:
     """The NON-VACUITY control for clause 3 — re-armed by #511, on the surface it still owns.
@@ -5883,6 +5895,83 @@ def test_probe_the_BRIDGE_is_the_thing_that_moves_the_population() -> None:
     # The ACT is still recorded, so the comment is still paired: two questions, two surfaces.
     assert without["coverage"]["rulings_paired"] == 1, without["coverage"]
     assert without["problems"] == [], without["problems"]
+
+# --- #545: the ruling partition, and the arm that makes its closure able to FAIL -----
+
+def test_the_ruling_partition_BITES_on_a_RE_RULED_issue() -> None:
+    """#545, ruling n=4096 clause 3 — the arm without which the closure proves nothing.
+
+    A re-ruling is the append-only ledger WORKING, not a duplicate to drop: on the live
+    ledger 646 successful row-resolves collapse to 538 distinct issue numbers, because 69
+    issues carry more than one `ruling` row (`#50` six times — `n=287,289,293,299,305,311,312`
+    — `#453` and `#47` four each). The defect was telemetry: `board_ruling_leg` emitted
+    `rulings_read` as `len(ruled) + len(unbridgeable)`, a sum of the sets it had just built,
+    so the field named for the ROWS READ reported 550 against 658 rows and under-reported by
+    exactly the 108 repeats; `board_unruled_leg` printed `ruling_rows_read=658` beside
+    `538 + 12`, reading 108 short of itself.
+
+    THIS FIXTURE RE-RULES ONE ISSUE ON PURPOSE. With one ruling row per issue the derived
+    sum and the true counter agree, so an arm built on single-ruling fixtures cannot tell
+    them apart — it would be exactly as vacuous as the tautology it replaces. Reverting
+    `rulings_read` to `len(ruled) + len(unbridgeable)` reds this arm (3 rows read, 2
+    reported), and folding `rulings_repeated` to a constant zero reds it as well.
+    """
+    pred = RUNNER.load_predicate()
+    issues = [_issue_with_comments(7, "OPEN", "## RULED — settled on the board.\n")]
+    comment = _comment_numeric(7)
+    rows = [
+        {"n": 1, "event": "ruling", "subject": "#7",
+         "detail": f"the first ruling, comment={comment}"},
+        # The SAME issue, ruled AGAIN: legitimate supersession the ledger keeps.
+        {"n": 2, "event": "ruling", "subject": "#7",
+         "detail": f"the second ruling supersedes the first, comment={comment}"},
+        {"n": 3, "event": "ruling", "subject": "no-issue-anywhere",
+         "detail": "governs nothing identifiable"},
+        {"n": 4, "event": "intake", "subject": "#7", "detail": "intake"},
+    ]
+
+    leg = RUNNER.board_ruling_leg(issues, rows, read_at="probe", predicate=pred,
+                                  scope=RUNNER.UNBOUNDED_SCOPE,
+                                  exemptions_path=_NO_RULING_EXEMPTIONS)
+    cov = leg["coverage"]
+    assert cov["rulings_read"] == 3, cov
+    assert cov["rulings_resolved_rows"] == 2, cov
+    assert cov["rulings_resolved"] == 1, cov   # DISTINCT — it feeds the population predicate
+    assert cov["rulings_repeated"] == 1, cov
+    assert cov["rulings_unbridgeable"] == 1, cov
+    # BOTH closures the ruling names, each read off a counter that counts ROWS.
+    assert cov["rulings_read"] == (
+        cov["rulings_resolved_rows"] + cov["rulings_unbridgeable"]
+    ), cov
+    assert cov["rulings_resolved_rows"] == (
+        cov["rulings_resolved"] + cov["rulings_repeated"]
+    ), cov
+    # The VERDICT is untouched by the partition: a repeated resolve adds nothing to a set,
+    # so no unit changes side. That is the bound the ruling states — telemetry only.
+    assert leg["problems"] == [], leg["problems"]
+
+    # The SAME partition in the other ruling leg, so the two cannot drift (#545 clause 2).
+    unruled = RUNNER.board_unruled_leg(issues, rows, read_at="probe", predicate=pred)
+    ucov = unruled["coverage"]
+    assert ucov["ruling_rows_read"] == 3, ucov
+    assert ucov["rulings_resolved_rows"] == 2, ucov
+    assert ucov["rulings_resolved"] == 1, ucov
+    assert ucov["rulings_repeated"] == 1, ucov
+    assert ucov["rulings_unbridgeable"] == 1, ucov
+    assert ucov["ruling_rows_read"] == (
+        ucov["rulings_resolved_rows"] + ucov["rulings_unbridgeable"]
+    ), ucov
+    assert ucov["rulings_resolved_rows"] == (
+        ucov["rulings_resolved"] + ucov["rulings_repeated"]
+    ), ucov
+
+    # AND IT PRINTS: a reader must be able to check the closure on the run, without opening
+    # the source. Both legs print the partition beside the verdict.
+    rc, out, _ = _run(issues, rows, ruling_scope=RUNNER.UNBOUNDED_SCOPE,
+                      ruling_exemptions_path=_NO_RULING_EXEMPTIONS)
+    assert "3 ruling row(s) read" in out, out
+    assert "REPEATED re-rulings" in out, out
+    assert "1 unbridgeable" in out, out
 
 # --- #245: the ruling predicate's head alternation, and the clause that keeps it honest ---
 

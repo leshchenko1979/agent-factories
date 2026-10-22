@@ -1535,9 +1535,11 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
     of the #248 class, and the write path makes it a defect rather than a population choice:
     `tools/rule.py` pairs ONE comment with ONE row per invocation, and `tools/ledger.py`
     refuses `event=ruling` without `comment=<digits>`, so the obligation the mechanism
-    implements is per act. `ruled` KEEPS its membership role — `rulings_read` and
-    `rulings_resolved` are read off it, and narrowing it to fix the short-circuit would
-    silently shrink the printed population (ruling n=3768, constraint on the remedy).
+    implements is per act. `ruled` KEEPS its membership role — `rulings_resolved` is read
+    off it, and narrowing it to fix the short-circuit would silently shrink the printed
+    population (ruling n=3768, constraint on the remedy). `rulings_read` is NOT read off it:
+    it is a genuine per-row counter, because a field with that name must be the rows read
+    (#545, ruling n=4096).
     """
     predicate = predicate or load_predicate()
     bound, bound_text, bound_refusal = scope if scope is not None else ruling_board_scope()
@@ -1546,12 +1548,25 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
     ruled: set[int] = set()
     arms = {"strict": 0, "declared": 0, "bridged": 0}
     unbridgeable: list[dict] = []
+    # TWO COUNTERS, because `len(ruled)` answers neither question (#545, ruling n=4096).
+    # `ruling_rows` is the ROWS READ — a field named `rulings_read` must be the rows the
+    # ledger handed this leg, never a sum derived from the sets it built. `resolved_rows`
+    # counts successful ROW-RESOLVES; the ledger is append-only and a later ruling
+    # supersedes an earlier one, so one issue number can be resolved many times (#50 six
+    # times, #453 and #47 four each). Both are printed beside the distinct count so the
+    # partition closes on its own face: rows == resolved_rows + unbridgeable, and
+    # resolved_rows == distinct + repeated. The repeated resolves are NOT de-duplicated:
+    # dropping them would falsify the history to tidy an arithmetic line.
+    ruling_rows = 0
+    resolved_rows = 0
     for row in rows:
         if row.get("event") != "ruling":
             continue
+        ruling_rows += 1
         number, arm = resolve_ruling_issue(row, rows, predicate)
         if number is not None:
             ruled.add(number)
+            resolved_rows += 1
             arms[arm] = arms.get(arm, 0) + 1
         else:
             # PRINTED, never dropped: a resolver that cannot place a row must say so, or
@@ -1706,7 +1721,9 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             "canonical_heading": RULING_CANONICAL_HEADING,
             "unmatched_heads_examined": len(unmatched),
             "unmatched_heads": unmatched,
-            "rulings_read": len(ruled) + len(unbridgeable),
+            "rulings_read": ruling_rows,
+            "rulings_resolved_rows": resolved_rows,
+            "rulings_repeated": resolved_rows - len(ruled),
             "rulings_resolved": len(ruled),
             "rulings_unbridgeable": len(unbridgeable),
             "resolution_arms": arms,
@@ -7593,6 +7610,7 @@ def board_unruled_leg(
     by_n = {row.get("n"): row for row in rows if row.get("n") is not None}
 
     ruling_rows = 0
+    resolved_rows = 0
     ruled: set[int] = set()
     arms = {"strict": 0, "declared": 0, "bridged": 0}
     unbridgeable: list[dict] = []
@@ -7607,6 +7625,12 @@ def board_unruled_leg(
             )
         else:
             ruled.add(number)
+            # A ROW-RESOLVE, counted per row and never folded into `len(ruled)` (#545,
+            # ruling n=4096): a re-ruling is the append-only ledger working, so one issue
+            # number can be resolved many times. `rulings_resolved` stays DISTINCT because
+            # it feeds the population predicate below; `rulings_resolved_rows` and
+            # `rulings_repeated` name the bucket that the two numbers alone hide.
+            resolved_rows += 1
             arms[arm] = arms.get(arm, 0) + 1
 
     intake_rows_read = sum(
@@ -7667,6 +7691,8 @@ def board_unruled_leg(
             "intake_rows_read": intake_rows_read,
             "intake_rows_resolved": len(intaken),
             "ruling_rows_read": ruling_rows,
+            "rulings_resolved_rows": resolved_rows,
+            "rulings_repeated": resolved_rows - len(ruled),
             "rulings_resolved": len(ruled),
             "rulings_unbridgeable": len(unbridgeable),
             "unbridgeable_rows": unbridgeable,
@@ -7782,6 +7808,8 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
 
     ruled: set[int] = set()
     ruling_rows_read = 0
+    resolved_rows = 0
+    unbridgeable_rows = 0
     for row in rows:
         if str(row.get("event") or "") != "ruling":
             continue
@@ -7789,6 +7817,9 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
         number, _arm = resolve_ruling_issue(row, rows, predicate)
         if number is not None:
             ruled.add(number)
+            resolved_rows += 1
+        else:
+            unbridgeable_rows += 1
 
     # The two rows that take a unit OUT of the owed state: work started, or work done.
     started: set[int] = set()
@@ -7883,6 +7914,9 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
             "board_items_read": len(issues),
             "open_items_examined": len(open_numbers),
             "ruling_rows_read": ruling_rows_read,
+            "rulings_resolved_rows": resolved_rows,
+            "rulings_repeated": resolved_rows - len(ruled),
+            "rulings_unbridgeable": unbridgeable_rows,
             "rulings_resolved": len(ruled),
             "dispatch_rows_read": dispatch_rows_read,
             "claims_read": len(started),
@@ -11057,6 +11091,18 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{cov['exemptions_declared']} declared, "
                     f"{len(cov['exemptions_matched'])} matched this population"
                 )
+            # THE LEDGER SIDE, PRINTED WITH ITS PARTITION (#545, ruling n=4096). The rows
+            # read are a row counter, never a sum of the sets built from them: `#50` alone
+            # carries six `ruling` rows, so the distinct count alone cannot be reconciled
+            # against the ledger by a reader. Both closures are visible here, on the run.
+            lines.append(
+                f"  ledger side: {cov['rulings_read']} ruling row(s) read — "
+                f"{cov['rulings_resolved_rows']} resolved to an issue, over "
+                f"{cov['rulings_resolved']} DISTINCT issue(s); {cov['rulings_repeated']} "
+                f"are REPEATED re-rulings the append-only ledger keeps (a later ruling "
+                f"supersedes an earlier one — NOT de-duplicated, and never a defect); "
+                f"{cov['rulings_unbridgeable']} unbridgeable"
+            )
             # The clause that keeps the alternation honest (#245). The count is printed
             # BESIDE the verdict and the lines follow, so a spelling the predicate could not
             # place is visible on the run that first meets it. The canonical head is named
@@ -11366,10 +11412,13 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['open_items_examined']} OPEN; intake rows read: "
                 f"{cov['intake_rows_read']} ({cov['intake_rows_resolved']} naming an "
                 f"issue); ruling rows read: {cov['ruling_rows_read']} "
-                f"({cov['rulings_resolved']} resolved to an issue "
+                f"({cov['rulings_resolved_rows']} resolved to an issue, over "
+                f"{cov['rulings_resolved']} DISTINCT issue(s) "
                 f"[strict {cov['resolution_arms']['strict']}, declared "
                 f"{cov['resolution_arms']['declared']}, bridged "
-                f"{cov['resolution_arms']['bridged']}], "
+                f"{cov['resolution_arms']['bridged']}]; {cov['rulings_repeated']} are "
+                f"REPEATED re-rulings of an issue already ruled, which the append-only "
+                f"ledger keeps and this leg does NOT de-duplicate; "
                 f"{cov['rulings_unbridgeable']} unbridgeable)"
             )
             lines.append(
@@ -11392,7 +11441,10 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             lines.append(
                 f"  board: {cov['board_items_read']} item(s) read, "
                 f"{cov['open_items_examined']} OPEN; ruling rows read: "
-                f"{cov['ruling_rows_read']} ({cov['rulings_resolved']} resolved to an issue)"
+                f"{cov['ruling_rows_read']} ({cov['rulings_resolved_rows']} resolved to an "
+                f"issue, over {cov['rulings_resolved']} DISTINCT issue(s) — "
+                f"{cov['rulings_repeated']} REPEATED re-rulings, kept by the append-only "
+                f"ledger and never de-duplicated; {cov['rulings_unbridgeable']} unbridgeable)"
             )
             lines.append(
                 f"  population ({cov['population_predicate']}): "
