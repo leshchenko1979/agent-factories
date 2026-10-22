@@ -203,3 +203,10 @@ def test_declared_leg_agrees_with_the_ledgers_own_actor_derivation(monkeypatch):
     assert author == actor == "insights", (
         f"the register and the ledger must name one lane one way — "
         f"register author {author!r} ({a_why}) vs ledger actor {actor!r} ({b_why})")
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

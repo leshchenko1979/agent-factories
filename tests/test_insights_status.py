@@ -978,3 +978,10 @@ def test_the_routing_legs_have_ONE_home_and_the_exemption_is_an_explicit_paramet
     # single-field verb cannot serve this row and the refusal points at the door.
     assert insights.routing_group_violations(legacy, exempt_legacy=False) == [
         "surface_missing", "audience_not_public"]
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

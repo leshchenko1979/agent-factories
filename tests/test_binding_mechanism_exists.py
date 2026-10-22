@@ -288,3 +288,10 @@ def test_the_live_ledger_gained_nothing(tmp_path: Path) -> None:
             f"\n{LIVE_LEDGER.relative_to(REPO)} moved during the run and carries no `{MARKER}` row "
             "— consistent with a concurrent lawful append, not with a probe leak"
         )
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

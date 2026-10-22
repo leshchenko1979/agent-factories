@@ -565,3 +565,10 @@ def test_the_declaration_refuses_a_blank_why() -> None:
         protected2, _scratch2, problems2 = hygiene.load_declaration(root)
         assert not problems2, problems2
         assert [e["path"] for e in protected2] == ["/tmp/x-live.lock"]
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

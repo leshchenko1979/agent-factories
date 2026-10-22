@@ -250,3 +250,10 @@ def test_the_order_leg_is_RETIRED_and_this_shape_is_ACCEPTED() -> None:
             f"a claim preceding its intake must be ACCEPTED, not reported: {verified.stdout}"
         )
         assert "precedes its intake" not in verified.stdout, verified.stdout
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

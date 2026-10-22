@@ -585,3 +585,10 @@ def test_probe_reports_a_row_whose_timestamp_cannot_be_read() -> None:
     problems, excused = run_verdict_problems([{**_OK, "ts": "whenever"}], _PROBE_BOUNDARY)
     assert problems and "unparseable ts" in problems[0], problems
     assert excused == [], excused
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

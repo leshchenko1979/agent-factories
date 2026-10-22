@@ -186,3 +186,10 @@ def test_the_tests_never_write_the_live_ledger(tmp_path: Path) -> None:
     assert append_with_ref(ledger, "invented:1").returncode != 0
     assert append_with_ref(ledger, "commit:deadbeef").returncode == 0
     assert LIVE_LEDGER.read_bytes() == before, "a probe wrote the live state surface"
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

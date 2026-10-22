@@ -523,3 +523,10 @@ def test_probe_AC4_the_two_verdicts_are_NOT_confusable() -> None:
         _specimen(f"survey-2026-09-19 — workspace_gate=rc=1 {_STAMP}"), _PROBE_BOUNDARY
     )
     assert failing and VERDICT_KEY in failing[0], failing
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

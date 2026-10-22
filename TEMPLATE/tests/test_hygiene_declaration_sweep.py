@@ -272,3 +272,10 @@ def test_the_tool_PRINTS_the_sweep_on_every_run() -> None:
     )
     assert "hygiene declaration sweep:" in proc.stdout, proc.stdout[-600:] + proc.stderr[-400:]
     assert "removes: no" in proc.stdout, proc.stdout[-600:]
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

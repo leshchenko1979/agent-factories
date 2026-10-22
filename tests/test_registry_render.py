@@ -511,3 +511,10 @@ def test_a_shared_id_renders_once_in_the_block_and_once_in_the_index():
     assert len(index["announcements"]) == 1, index["announcements"]
     assert index["announcements"][0]["origins"] == ["alpha", "beta"]
     assert index["counts"]["announcements"] == 1
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

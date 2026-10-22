@@ -321,3 +321,10 @@ def test_the_tool_PRINTS_the_supersession_leg_on_every_run():
     # The exit code is deliberately NOT asserted: this factory's tree is shared, so a peer
     # lane's stranded path legitimately makes the audit non-zero, and that is not this
     # gate's subject.
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

@@ -190,3 +190,10 @@ def test_the_tool_PRINTS_the_population_on_every_run() -> None:
     assert "hygiene build residue:" in out, out
     assert "removes: no" in out, out
     assert "worktree(s)" in out, out
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

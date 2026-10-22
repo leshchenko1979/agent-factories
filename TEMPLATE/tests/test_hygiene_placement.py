@@ -461,3 +461,10 @@ def test_the_ledger_lock_is_declared_at_the_anchor_the_walk_can_reach():
         f"the ledger lock's NORMAL anchor ({normal}) resolved inside a declared placement "
         "directory — the walk would then see the lock, and the tree would have to declare it"
     )
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

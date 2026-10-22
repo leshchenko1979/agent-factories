@@ -329,3 +329,9 @@ def test_a_deleted_subtree_is_aged_by_its_nearest_existing_ancestor() -> None:
             f"{stranded.stdout}{stranded.stderr}"
         )
 
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

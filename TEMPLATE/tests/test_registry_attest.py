@@ -628,3 +628,10 @@ def test_a_reader_that_scanned_nothing_says_so_rather_than_reporting_silence(mon
     assert rc == 0, out
     assert "examined   0 session row(s)" in out, out
     assert "0 by notify" in out, out
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

@@ -1034,3 +1034,10 @@ def test_the_LIVE_register_declares_the_trio() -> None:
         return
     owners = set(declared_periodic_owners(register_path.read_text(encoding="utf-8")))
     assert {"HQ", "Triage", "Surveys"} <= owners, owners
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

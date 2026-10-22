@@ -206,3 +206,10 @@ def test_the_live_census_reads_a_population():
     assert leg["status"] == "ASSERTED", leg.get("reason")
     assert leg["total"] >= 1, "git reports at least the main tree"
     assert leg["primary_branch"] == "refs/heads/main", leg["primary_branch"]
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

@@ -574,3 +574,10 @@ def test_probe_a_thresholded_category_with_no_authored_pattern_RAISES(tmp_path, 
             "a thresholded category with no authored FrictionPattern must RAISE: counting a "
             "bucket and dropping it silently is the defect #273 closed"
         )
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

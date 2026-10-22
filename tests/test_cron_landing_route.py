@@ -750,3 +750,10 @@ def test_probe_is_offline() -> None:
             imported.add(node.module.split(".")[0])
     forbidden = imported & {"sqlite3", "subprocess", "socket", "urllib", "http"}
     assert not forbidden, f"the predicate must stay pure and offline, imports: {sorted(forbidden)}"
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

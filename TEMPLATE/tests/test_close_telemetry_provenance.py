@@ -440,3 +440,10 @@ def test_probe_ignores_non_close_events() -> None:
     }
     problems, excused = close_telemetry_provenance_problems([other], _PROBE_BOUNDARY)
     assert problems == [] and excused == [], (problems, excused)
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

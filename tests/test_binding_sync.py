@@ -446,3 +446,10 @@ def test_the_law_names_no_key_the_payload_lacks(tmp_path) -> None:
     assert module.main(["--repo", str(tree), "--apply"]) == 0
     actual = set(json.loads(module.receipt_path(tree).read_text()))
     assert declared <= actual, f"the law declares keys the payload lacks: {sorted(declared - actual)}"
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

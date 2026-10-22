@@ -329,3 +329,10 @@ def test_the_single_field_verbs_CHANGE_a_row_that_already_carries_the_group(tmp_
     row = json.loads(register.read_text(encoding="utf-8").strip())
     assert (row["audience"], row["process"]) == ("internal", "yes")
     assert insights.verify_insights()[0], "a changed group must still verify clean"
+
+if __name__ == "__main__":
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))
