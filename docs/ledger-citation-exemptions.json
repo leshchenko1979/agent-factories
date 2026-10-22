@@ -176,6 +176,14 @@
     {
       "row": 3886,
       "reason": "#523 close. Identical body to n=3882 and n=3884. '§9.2's row measures the gap rather than a word list' names `docs/instruments/kit.md` §9.2's F3 row, which is this subject's own remedy and the last criterion in the table. Class 5 -- the row is about ONE instrument and every section number in it is that instrument's own."
+    },
+    {
+      "row": 4049,
+      "reason": "#540 ruling, SELF-REFERENCE. The row carries literal numbered headings in its own body -- `## 6. A second defect, filed as its own unit` is its sixth section -- so `§6` names THIS ROW's own sixth section, not another document's. The gate's premise that a ledger row numbers no sections of its own is true of ordinary rows and false of a ruling row whose body is organised as `## N.` sections; three occurrences all point at that heading ('land §6's leg fix', '§6's discriminator is a separate unit', '#541 filed separately for §6'). Class 2 extended to a self-reference -- the referent is a row's own numbered part, and a row is not a document. The prose is correct as written: rewriting it to spell a `*.md` name would misname the referent, because the discriminator lives in the ruling text and in no tree file."
+    },
+    {
+      "row": 4050,
+      "reason": "#541 ruling, Class 2 -- a ROW REFERENCE's own numbered part. The row reads 'Full analysis and the store/gate half live in #540's ruling `n=4049` §6', so `§6` is explicitly qualified by the row reference `n=4049` and points at that ruling's sixth section. A row is not a document, so no `*.md` token exists to place in the 70-character window, and the citation resolves in no tree by design. The prose is correct as written and needs no repair."
     }
   ]
 }
