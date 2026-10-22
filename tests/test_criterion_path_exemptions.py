@@ -29,14 +29,19 @@ Ruling n=3539 fixed the shape, and this gate is its arm set:
   * `issue` narrows an entry to one board item, and a narrowed entry does not excuse another
     item's identical path.
 
-The live arm reconciles this factory's own store against this factory's own committed tree,
-so an entry that stops describing the tree reds the audit rather than the patrol alone.
+Two arms are LIVE, and neither judges this factory's store against a live population (#540,
+ruling n=4049). The gate judges the MACHINERY on a fixture store and a fixture population, and
+the live reconciliation stays where it belongs — `criterion_path_leg` in the patrol, which
+reads the real board. What the gate keeps from the live store is the one property the admission
+rule promises and nothing checked: every declared entry's `authority` must RESOLVE, to a
+`file:line` present in the committed tree or to an `n=` row present in the ledger at HEAD.
 """
 
 from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -52,6 +57,20 @@ RUNNER_PATH = REPO / "tools" / "patrol_host_state.py"
 LAW_ABSENT = "docs/hygiene-protected.json"
 LAW_ABSENT_TWIN = "TEMPLATE/docs/hygiene-protected.json"
 BLOCKED_ABSENT = "TEMPLATE/tests/test_audit_cadence.py"
+
+# The fixture population the MACHINERY arm judges over (#540): one undeclared absence and one
+# stale entry, both inside the fixture tree. Neither exists on this board — that arm's subject
+# is the partition, not this factory's own store.
+UNDECLARED_ABSENT = "tools/undeclared-probe.py"
+STALE_IN_FIXTURE = "docs/stale-in-fixture.json"
+
+# An `authority` is a CHECKABLE coordinate, not prose: a ruling row (`n=NNN`) or a law
+# `file:line` a reader can open. Resolving those against the COMMITTED tree and the ledger at
+# HEAD is what keeps the authority arm hermetic — no board read, no network.
+AUTHORITY_FILE_LINE = re.compile(
+    r"([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:md|py|json|jsonl|txt|toml|yaml|yml|sh)):(\d+)"
+)
+AUTHORITY_ROW = re.compile(r"\bn=(\d+)")
 
 def load_runner():
     spec = importlib.util.spec_from_file_location("patrol_host_state_criterion", RUNNER_PATH)
@@ -96,6 +115,65 @@ def _entry(path: str, *, authority: str = "skills/meta-factory/SKILL.md:414 + ru
     if issue is not None:
         entry["issue"] = issue
     return entry
+
+def _authority_coordinates(authority: str) -> list[tuple[str, str, int | None]]:
+    """Every checkable coordinate an `authority` names, in the order it names them."""
+    found: list[tuple[str, str, int | None]] = []
+    for path, line in AUTHORITY_FILE_LINE.findall(authority):
+        found.append(("file", path, int(line)))
+    for row in AUTHORITY_ROW.findall(authority):
+        found.append(("row", row, None))
+    return found
+
+def _head_ledger_rows() -> tuple[set[int] | None, str]:
+    """The `n` values in the ledger AT HEAD, or `(None, why)` when it cannot be read.
+
+    HEAD and not the working tree: the ledger is shared, another lane appends to it while this
+    gate runs, and a verdict that depends on an uncommitted append is reproducible by nobody.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(REPO), "show", "HEAD:./evidence/ledger.jsonl"],
+            capture_output=True, text=True, timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"git show HEAD:./evidence/ledger.jsonl could not run: {exc}"
+    if proc.returncode != 0:
+        lines = (proc.stderr or "").strip().splitlines()
+        return None, lines[-1] if lines else "git show HEAD:./evidence/ledger.jsonl failed"
+    rows: set[int] = set()
+    for number, line in enumerate(proc.stdout.splitlines(), start=1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.add(int(json.loads(line)["n"]))
+        except (ValueError, KeyError, TypeError):
+            return None, f"row {number} of the ledger at HEAD carries no readable `n`"
+    return rows, ""
+
+def _coordinate_resolves(kind: str, value: str, line: int | None,
+                         ledger_rows: set[int] | None, ledger_why: str) -> tuple[bool, str]:
+    """Whether one cited coordinate can actually be opened, and WHY NOT when it cannot."""
+    if kind == "row":
+        if ledger_rows is None:
+            return False, f"the ledger at HEAD could not be read: {ledger_why}"
+        if int(value) not in ledger_rows:
+            return False, "no row with that number in the ledger at HEAD"
+        return True, ""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(REPO), "show", f"HEAD:./{value}"],
+            capture_output=True, text=True, timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, f"git show HEAD:./{value} could not run: {exc}"
+    if proc.returncode != 0:
+        return False, "the file is not in the committed tree at HEAD"
+    total = len(proc.stdout.splitlines())
+    if line is not None and line > total:
+        return False, f"the file has {total} line(s) at HEAD, so line {line} cannot be opened"
+    return True, ""
 
 def check(module) -> tuple[list[str], int]:
     """Every arm, in one list, plus how many cases this gate examined."""
@@ -207,30 +285,95 @@ def check(module) -> tuple[list[str], int]:
     if not store_problems or entries:
         problems.append(f"arm 10: an unparseable store did not fail closed: {store_problems}")
 
-    # --- arm 11: the LIVE store reconciles against the LIVE committed tree --------------
-    # An ABSENT live store is the shipped state of a member factory (the `.example.json`
-    # skeleton is what ships; the real store is factory data), so this arm must not red it.
-    # The guard it loses by tolerating absence is not the important one: DELETING the store
-    # cannot silence the leg, because every absent path then becomes an undeclared PROBLEM
-    # — the failure mode of a missing store is a RED patrol, never a green one.
+    # --- arm 11: the MACHINERY, judged on a FIXTURE store and a FIXTURE population ------
+    # This arm used to reconcile the LIVE store against the LIVE committed tree, over a fixture
+    # issue that named exactly the two declared paths — so it judged the store's CONTENTS, not
+    # the predicate, and a THIRD lawful exemption red the gate (ruling n=4049, measured:
+    # `FAIL — 3 declared but 2 matched a live absence`). Three faults in one shape: a gate whose
+    # expectation is a mutable live artifact (rule 7 — the fixture is the control, the live read
+    # is corroboration), a surface that cannot grow, and a DUPLICATE of `criterion_path_leg`'s
+    # own live reconciliation — which is the defect rather than a second opinion.
+    # What it judges now is the PARTITION, in ONE read, over a store and a population that both
+    # live in the fixture: no board read, no `gh`.
+    cases += 1
+    machinery_store = _store_file({"exempt": [
+        _entry(LAW_ABSENT),
+        _entry(LAW_ABSENT_TWIN, issue=901),
+        _entry(STALE_IN_FIXTURE),
+    ]})
+    leg = _leg(
+        module, tree,
+        [_issue(900, f"Done when `{LAW_ABSENT}` and `{UNDECLARED_ABSENT}` exist."),
+         _issue(901, f"Done when `{LAW_ABSENT_TWIN}` exists."),
+         _issue(902, f"Done when `{BLOCKED_ABSENT}` passes."),
+         _issue(903, f"Done when `{LAW_ABSENT_TWIN}` exists.")],
+        store=machinery_store,
+    )
+    cov = leg["coverage"]
+    # declared-exempt 2 — the declared path on #900, and the NARROWED entry on #901, nothing
+    # else. unresolved 4 — the undeclared absence, the blocked absence (which must stay a
+    # problem WITH an exemption surface present), #903's spelling of a path the store narrows
+    # to #901, and the stale entry, which the leg counts here as well as naming separately.
+    if (cov["exemptions_declared"], cov["declared_exempt"], cov["unresolved"]) != (3, 2, 4):
+        problems.append(f"arm 11: the partition is wrong: {cov}")
+    excused_text = " ".join(leg["excused"])
+    for ref in (LAW_ABSENT, LAW_ABSENT_TWIN):
+        if ref not in excused_text:
+            problems.append(
+                f"arm 11: a declared path did not print as excused: {ref} — {leg['excused']}"
+            )
+    joined = " ".join(leg["problems"])
+    for ref in (UNDECLARED_ABSENT, BLOCKED_ABSENT, STALE_IN_FIXTURE):
+        if ref not in joined:
+            problems.append(
+                f"arm 11: a class that must red read clean: {ref} — {leg['problems']}"
+            )
+    # The narrowing must BIND, both ways: #901's declared path is excused and #903's identical
+    # spelling is not. A leg that ignored `issue` would pass a count-only assertion, so the two
+    # rows are read one at a time.
+    if not any("#903" in p and LAW_ABSENT_TWIN in p for p in leg["problems"]):
+        problems.append(
+            f"arm 11: a narrowed entry excused another item's identical path: {leg['problems']}"
+        )
+    for number, ref in ((900, LAW_ABSENT), (901, LAW_ABSENT_TWIN)):
+        if any(f"#{number}" in p and f"`{ref}`" in p for p in leg["problems"]):
+            problems.append(
+                f"arm 11: a DECLARED path was reported as a problem on #{number}: "
+                f"{ref} — {leg['problems']}"
+            )
+
+    # --- arm 12: every DECLARED entry's AUTHORITY resolves (#540(c)) --------------------
+    # The store's own admission rule is an AUTHORITY OBLIGATION — an entry carries "a ruling row
+    # `n=` or a law file:line a reader can open" — and nothing checked it, so an entry could
+    # cite a row that never existed and still excuse its path. This is the ONE live arm that
+    # replaces the content pin, and it is HERMETIC: the committed tree and the ledger AT HEAD,
+    # never the board and never the network. An ABSENT store is the shipped state of a member
+    # factory (the `.example.json` skeleton is what ships; the real store is factory data), so
+    # absence is not a failure here — and deleting the store cannot buy silence, because every
+    # absent path then becomes an undeclared PROBLEM in the patrol.
     cases += 1
     if STORE.is_file():
-        leg = module.criterion_path_leg(
-            [_issue(900, f"Done when `{LAW_ABSENT}` and `{LAW_ABSENT_TWIN}` exist.")],
-            read_at="gate", repo=REPO, rev="HEAD", exemptions_path=STORE,
-        )
-        cov = leg["coverage"]
-        if cov["exemptions_declared"] != cov["declared_exempt"]:
-            problems.append(
-                f"live arm: {cov['exemptions_declared']} declared but "
-                f"{cov['declared_exempt']} matched a live absence — a stale entry excuses "
-                f"nothing: {leg['problems']}"
-            )
-        if cov["unresolved"]:
-            problems.append(
-                f"live arm: {cov['unresolved']} undeclared absent path(s) among the "
-                f"declared set: {leg['problems']}"
-            )
+        entries, store_problems = module.load_criterion_path_exemptions(STORE)
+        if store_problems:
+            problems.append(f"live authority arm: the store does not load: {store_problems}")
+        ledger_rows, ledger_why = _head_ledger_rows()
+        for entry in entries:
+            coordinates = _authority_coordinates(entry["authority"])
+            if not coordinates:
+                problems.append(
+                    f"live authority arm: `{entry['path']}` states an authority that names no "
+                    f"file:line and no `n=` row, so no reader can check it: "
+                    f"{entry['authority']!r}"
+                )
+                continue
+            for kind, value, line in coordinates:
+                resolved, why = _coordinate_resolves(kind, value, line, ledger_rows, ledger_why)
+                if not resolved:
+                    cited = f"{value}:{line}" if line is not None else f"n={value}"
+                    problems.append(
+                        f"live authority arm: `{entry['path']}` cites {cited}, which does not "
+                        f"resolve: {why}"
+                    )
 
     return problems, cases
 
@@ -243,20 +386,14 @@ def main() -> int:
     problems, cases = check(module)
 
     live = "absent (empty state)"
-    population = "0 reference(s)"
+    authorities = "no authority to resolve"
     if STORE.is_file():
-        leg = module.criterion_path_leg(
-            [_issue(900, f"Done when `{LAW_ABSENT}` and `{LAW_ABSENT_TWIN}` exist.")],
-            read_at="gate", repo=REPO, rev="HEAD", exemptions_path=STORE,
-        )
-        cov = leg["coverage"]
-        live = f"{cov['exemptions_declared']} declared exemption(s)"
-        population = (
-            f"{cov['refs_examined']} reference(s) examined, {cov['unresolved']} unresolved, "
-            f"{cov['declared_exempt']} declared-exempt"
-        )
+        entries, _ = module.load_criterion_path_exemptions(STORE)
+        coordinates = sum(len(_authority_coordinates(e["authority"])) for e in entries)
+        live = f"{len(entries)} declared exemption(s)"
+        authorities = f"{coordinates} authority coordinate(s) resolved against HEAD"
 
-    summary = f"table {live}; {population}; probe: {cases} case(s) examined"
+    summary = f"table {live}; {authorities}; probe: {cases} case(s) examined"
     if problems:
         print(f"FAIL — {summary}", file=sys.stderr)
         for problem in problems:
