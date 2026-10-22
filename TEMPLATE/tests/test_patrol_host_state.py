@@ -11139,15 +11139,27 @@ def test_an_UNRESOLVABLE_activity_root_is_UNREADABLE_and_never_RAISES() -> None:
 
 # ---- #392: the section 4.1 own-elapsed-slot predicate, hosted -------------------------
 #
-# `docs/measurement-procedure.md` section 4.1 states the predicate as LAW and no code hosted
-# it. These probes pin the four verdicts and their ORDER, and they pin the ORDER because the
-# order is the law: a slot that has not arrived cannot have been missed, so `now < N` is
-# answered before `last_run_at` is read at all. Every probe is HERMETIC -- rows handed in,
-# the read instant handed in -- so no verdict here is decided by this box's live cron table.
+# `docs/measurement-procedure.md` section 4.1 states the predicate as LAW: cadence freshness
+# is judged against each job's OWN last elapsed slot, read WITH its timezone.
 #
-# THE POSITIVE CONTROL IS NOT OPTIONAL. A suite where every fixture reads HELD or NOT JUDGED
-# proves nothing about a predicate that never fires, so `test_the_leg_CAN_fire` drives the
-# same shape with a run that is too old and asserts the leg reports a problem.
+# #543 RE-BASED THE PREDICATE, and these probes are written against the re-based one. The
+# first host compared the TWO SCHEDULER COLUMNS (`last_run_at < slot` -> MISSED), which is
+# false for the whole of the scheduler's normal dispatch latency: measured over 1,068 paired
+# run rows the lateness is p50 35s, p95 94s, p99 423s, max 1,478s. The verdict is now decided
+# against `cron_job_runs` -- a dispatch RECORD -- and a slot with no record is judged only
+# past a grace DERIVED from that job's own lateness history. `HELD` is retired.
+#
+# THE FIVE CONTROLS THE RULING OWED, each with its own probe below, arm 2 the discriminator:
+#   1. inside `[slot, slot + grace)` -> NOT JUDGED, never MISSED (the false positive is gone)
+#   2. PAST `slot + grace` with no run row -> MISSED (a widened window that never fires
+#      proves nothing, which is why this arm exists)
+#   3. a job whose run rows stop entirely -> MISSED once past grace
+#   4. the grace is DERIVED, not a shared literal, and the render carries its derivation
+#   5. `HELD` cannot reappear: the bucket is gone, the retirement is printed, and a fixture
+#      that WOULD have satisfied the old precondition does not resurrect it
+#
+# EVERY PROBE IS HERMETIC -- rows, run records and the read instant are all handed in -- so
+# no verdict here is decided by this box's live cron table or runs table.
 
 def _cron_row(name: str, *, next_run_at: str, last_run_at: str = "", cron_expr: str = "0 9 * * *",
               timezone: str = "Europe/Moscow", home: str = "ops", row_id: str = "id-1") -> dict:
@@ -11164,181 +11176,395 @@ def _cron_row(name: str, *, next_run_at: str, last_run_at: str = "", cron_expr: 
         "home": home,
     }
 
-def test_a_slot_that_has_NOT_ARRIVED_is_NOT_JUDGED_and_never_MISSED() -> None:
-    """Clause 1's FIRST sentence, which is the order of the tests and not a preference.
+def _run_record(name: str, started_at: str, *, job_id: str = "id-1", home: str = "ops") -> dict:
+    """One `cron_job_runs` row in the shape `cron_run_fires` produces."""
+    return {
+        "job_id": job_id,
+        "job_name": name,
+        "started_at": started_at,
+        "status": "success",
+        "completed_at": started_at,
+        "error": "",
+        "content": "",
+        "suppressed": False,
+        "home": home,
+    }
 
-    This is the exact case that produced the retracted Miidas section 8 remedy: a FUTURE
-    slot read as a miss. The row here carries a `last_run_at` that is BEFORE its next slot,
-    which is the ordinary healthy state of every job on the box -- so a predicate that
-    judged `last_run_at < next_run_at` without asking whether the slot had arrived would
-    report the ENTIRE population as missed.
+def _daily_runs(name: str, *, lateness: tuple, last: str = "2026-10-20T06:00:00+00:00",
+                job_id: str = "id-1") -> list:
+    """A job's own run history: one run per day, each `lateness` seconds after its boundary.
+
+    Built by walking BACKWARD from `last` a day at a time, so the history lines up with the
+    `0 9 * * *` Europe/Moscow schedule the fixtures use (09:00 MSK = 06:00Z).
     """
-    now = RUNNER.reader_parse_ts("2026-10-21T03:00:00Z")
-    row = _cron_row("job-future", next_run_at="2026-10-21T06:00:00+00:00",
-                    last_run_at="2026-10-20T06:00:27Z")
-    record = RUNNER.cadence_slot_verdict_for(row, now=now)
+    base = RUNNER.reader_parse_ts(last)
+    records = []
+    for index, offset in enumerate(lateness):
+        instant = base - dt.timedelta(days=index) + dt.timedelta(seconds=offset)
+        records.append(_run_record(name, instant.isoformat(), job_id=job_id))
+    return list(reversed(records))
+
+def _instants(row: dict, records: list) -> list:
+    """The run RECORDS for one row, as the PARSED INSTANTS the grace and verdict take.
+
+    `cadence_grace_for` and `cadence_slot_verdict_for` do ARITHMETIC on what they are handed,
+    so their `runs` argument is a list of instants -- the shape `cadence_job_runs` returns --
+    and never the raw `cron_job_runs` rows. The leg performs exactly this conversion, so a
+    direct call that goes through here exercises the documented contract rather than a
+    private one.
+    """
+    return RUNNER.cadence_job_runs(row, records) or []
+
+def test_arm1_a_slot_inside_its_grace_is_NOT_JUDGED_and_never_MISSED() -> None:
+    """ARM 1: the false positive this unit exists to remove.
+
+    THE STATE THAT USED TO RED. A slot arrives at 06:00Z, the daemon wakes at 06:00:35Z, and
+    the old predicate read MISSED for every second in between -- for the ordinary dispatch
+    latency of a healthy box. Here the slot arrived 60 s ago with no run row yet, which is
+    inside this job's derived grace, so the verdict is NOT JUDGED and the leg raises no
+    problem.
+
+    The arm is not vacuous: the SAME row at the SAME grace is driven past the window in
+    arm 2 below, so the quiet here is attributable to the window and not to a leg that cannot
+    fire.
+    """
+    runs = _daily_runs("job-slow-dispatch", lateness=(35, 41, 29, 38))
+    row = _cron_row("job-slow-dispatch", next_run_at="2026-10-21T06:00:00+00:00",
+                    last_run_at="2026-10-20T06:00:35Z")
+    now = RUNNER.reader_parse_ts("2026-10-21T06:01:00Z")
+    record = RUNNER.cadence_slot_verdict_for(row, now=now, runs=_instants(row, runs))
     assert record["verdict"] == RUNNER.CADENCE_SLOT_NOT_JUDGED, record
-    assert "has not arrived" in record["reason"], record
-    assert "MISSED" not in record["verdict"], record
-    # and the leg built over it carries NO problem, so the verdict is not merely labelled
-    leg = RUNNER.cadence_slot_leg([row], ["ops"], [], read_at="2026-10-21T03:00:00Z")
-    assert leg["problems"] == [], leg
+    assert "inside this job's derived grace" in record["reason"], record
+    assert record["grace"]["grace_secs"] is not None, record
+
+    leg = RUNNER.cadence_slot_leg([row], ["ops"], [], read_at="2026-10-21T06:01:00Z",
+                                  fires=runs)
+    assert leg["problems"] == [], leg["problems"]
     assert leg["coverage"]["counts"][RUNNER.CADENCE_SLOT_MISSED] == 0, leg["coverage"]
 
-def test_a_slot_that_ARRIVED_with_no_run_AFTER_it_is_MISSED() -> None:
-    """The defect class itself: the slot arrived and nothing shows it was dispatched."""
-    now = RUNNER.reader_parse_ts("2026-10-21T07:00:00Z")
-    row = _cron_row("job-overdue", next_run_at="2026-10-21T06:00:00+00:00",
-                    last_run_at="2026-10-20T06:00:27Z")
-    record = RUNNER.cadence_slot_verdict_for(row, now=now)
+def test_arm2_PAST_its_grace_with_NO_run_row_still_reads_MISSED() -> None:
+    """ARM 2, THE DISCRIMINATOR: a widened window that never fires proves nothing.
+
+    Same job, same history, same derived grace as arm 1 -- only the read instant moves past
+    `slot + grace`. If a future change widens the tolerance without keeping a way to fire,
+    this arm is the one that reds.
+    """
+    runs = _daily_runs("job-slow-dispatch", lateness=(35, 41, 29, 38))
+    row = _cron_row("job-slow-dispatch", next_run_at="2026-10-21T06:00:00+00:00",
+                    last_run_at="2026-10-20T06:00:35Z")
+    # The grace this fixture derives is the floor (p95 of 29-41 s is under 120 s), so 300 s
+    # past the slot is unambiguously outside it.
+    now = RUNNER.reader_parse_ts("2026-10-21T06:05:00Z")
+    record = RUNNER.cadence_slot_verdict_for(row, now=now, runs=_instants(row, runs))
     assert record["verdict"] == RUNNER.CADENCE_SLOT_MISSED, record
-    assert "BEFORE it" in record["reason"], record
-    leg = RUNNER.cadence_slot_leg([row], ["ops"], [], read_at="2026-10-21T07:00:00Z")
-    assert len(leg["problems"]) == 1, leg
-    assert "job-overdue" in leg["problems"][0], leg["problems"]
-    # the REPORT names it too: a problem counted and never printed is not a report
-    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z", issues=[])
-    assert "MISSED: `job-overdue`" in out, out
-    assert "HELD 0, MISSED 1, NOT JUDGED 0, UNREADABLE 0" in out, out
+    assert "PAST this job's derived grace" in record["reason"], record
+    assert "no dispatch" in record["reason"], record
 
-def test_a_slot_that_ARRIVED_with_a_run_AT_or_after_it_is_HELD() -> None:
-    """The other half of the pair: the slot arrived AND was dispatched."""
-    now = RUNNER.reader_parse_ts("2026-10-21T07:00:00Z")
-    row = _cron_row("job-held", next_run_at="2026-10-21T06:00:00+00:00",
-                    last_run_at="2026-10-21T06:00:31Z")
-    record = RUNNER.cadence_slot_verdict_for(row, now=now)
-    assert record["verdict"] == RUNNER.CADENCE_SLOT_HELD, record
-    leg = RUNNER.cadence_slot_leg([row], ["ops"], [], read_at="2026-10-21T07:00:00Z")
-    assert leg["problems"] == [], leg
-    assert leg["coverage"]["counts"][RUNNER.CADENCE_SLOT_HELD] == 1, leg["coverage"]
+    leg = RUNNER.cadence_slot_leg([row], ["ops"], [], read_at="2026-10-21T06:05:00Z",
+                                  fires=runs)
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "job-slow-dispatch" in leg["problems"][0], leg["problems"]
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T06:05:00Z",
+                        issues=[])
+    assert "MISSED: `job-slow-dispatch`" in out, out
+    # AND THE DERIVATION IS IN THE REPORT, so the reader can audit the tolerance that let it
+    # fire rather than take the verdict on faith.
+    assert "grace DERIVED per job" in out, out
+    assert "grace 120s [floor]" in out, out
 
-def test_a_row_with_NO_next_run_at_is_UNREADABLE_with_its_REASON_and_never_HELD() -> None:
-    """#271: a job this host cannot read is not a job it cleared.
+def test_arm3_a_job_whose_run_rows_STOP_entirely_still_bites() -> None:
+    """ARM 3: the genuine-stop case, which is the reason this leg exists at all.
 
-    The empty form and the unparseable form are BOTH probed, because they are different
-    readings -- one is a row that records no slot, the other a row whose slot is text this
-    reader cannot place -- and a single probe over one of them would leave the other
-    rendering as whatever the branch happened to do.
+    The job's history is intact and its grace is derivable, but its newest run is days old,
+    so the slot it should have served has no record at or after it and the read instant is
+    far past the grace. A leg that stayed quiet here would have traded a false positive for a
+    false negative, which is the worse trade.
     """
-    now = RUNNER.reader_parse_ts("2026-10-21T07:00:00Z")
-    for raw in ("", "   ", "not-a-slot"):
-        row = _cron_row("job-unreadable", next_run_at=raw,
-                        last_run_at="2026-10-21T06:00:31Z")
-        record = RUNNER.cadence_slot_verdict_for(row, now=now)
-        assert record["verdict"] == RUNNER.CADENCE_SLOT_UNREADABLE, (raw, record)
-        assert record["reason"].strip(), (raw, record)
-        assert record["verdict"] != RUNNER.CADENCE_SLOT_HELD, (raw, record)
+    runs = _daily_runs("job-stopped", lateness=(35, 41, 29, 38),
+                       last="2026-10-17T06:00:00+00:00")
+    row = _cron_row("job-stopped", next_run_at="2026-10-21T06:00:00+00:00",
+                    last_run_at="2026-10-17T06:00:35Z")
+    leg = RUNNER.cadence_slot_leg([row], ["ops"], [], read_at="2026-10-21T07:00:00Z",
+                                  fires=runs)
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "job-stopped" in leg["problems"][0], leg["problems"]
 
-    leg = RUNNER.cadence_slot_leg([_cron_row("job-unreadable", next_run_at="")], ["ops"], [],
-                                  read_at="2026-10-21T07:00:00Z")
-    assert leg["coverage"]["counts"][RUNNER.CADENCE_SLOT_UNREADABLE] == 1, leg["coverage"]
-    assert leg["coverage"]["counts"][RUNNER.CADENCE_SLOT_HELD] == 0, leg["coverage"]
-    # SEVERITY SPLIT: an unreadable row is a READING LIMIT, not a problem -- only MISSED
-    # raises one. It is not thereby SILENT: #271 is satisfied by the report naming it with
-    # its reason, which the next lines hold to.
-    assert leg["problems"] == [], leg["problems"]
-    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z", issues=[])
-    assert "UNREADABLE: `job-unreadable`" in out, out
-    assert "no next_run_at" in out, out
-    assert "HELD 0, MISSED 0, NOT JUDGED 0, UNREADABLE 1" in out, out
+def test_arm4_the_grace_is_DERIVED_per_job_and_PRINTED_with_its_derivation() -> None:
+    """ARM 4: a hardcoded constant must be unable to produce these numbers.
 
-def test_a_ZONE_LESS_instant_is_UNREADABLE_never_assumed_UTC() -> None:
-    """A naive instant would be shifted by the reader's own assumption.
-
-    Every live row carries an offset (measured 2026-10-21: 42 of 42), so this costs nothing
-    today -- and ASSUMING UTC would move a `0 9 * * *` Moscow row's 06:00Z slot to 09:00Z,
-    manufacture a three-hour disagreement with the scheduler, and red a job that fired on
-    time. The strict reading is the only one that cannot invent a verdict.
+    TWO JOBS, TWO HISTORIES, TWO GRACES, driven through the same leg at the same instant. A
+    shared literal cannot satisfy both arms, so the pair is the control: one job's p95 sits
+    above the floor (its own lateness decides), the other's sits below it (the floor binds).
+    The render must carry BOTH values and the basis that produced each.
     """
-    now = RUNNER.reader_parse_ts("2026-10-21T07:00:00Z")
+    fast = _daily_runs("job-fast", lateness=(30, 33, 28, 31), job_id="id-fast")
+    slow = _daily_runs("job-slower", lateness=(300, 330, 280, 310), job_id="id-slow")
+    fast_row = _cron_row("job-fast", next_run_at="2026-10-21T06:00:00+00:00",
+                         last_run_at="2026-10-20T06:00:30Z", row_id="id-fast")
+    slow_row = _cron_row("job-slower", next_run_at="2026-10-21T06:00:00+00:00",
+                         last_run_at="2026-10-20T06:05:30Z", row_id="id-slow")
+
+    fast_grace = RUNNER.cadence_grace_for(fast_row, _instants(fast_row, fast))
+    slow_grace = RUNNER.cadence_grace_for(slow_row, _instants(slow_row, slow))
+    assert fast_grace["grace_secs"] == RUNNER.CADENCE_GRACE_FLOOR_SECS, fast_grace
+    assert fast_grace["basis"] == "floor", fast_grace
+    assert slow_grace["grace_secs"] > fast_grace["grace_secs"], (fast_grace, slow_grace)
+    assert slow_grace["basis"] == "p95", slow_grace
+    # NO SHARED LITERAL COULD PRODUCE BOTH: the two values differ, and the slower job's is
+    # the one its own history produced rather than a constant that happens to sit near it.
+    assert slow_grace["grace_secs"] != fast_grace["grace_secs"], (fast_grace, slow_grace)
+
+    leg = RUNNER.cadence_slot_leg([fast_row, slow_row], ["ops"], [],
+                                  read_at="2026-10-21T05:00:00Z", fires=fast + slow)
+    graces = {entry["name"]: entry for entry in leg["coverage"]["graces"]}
+    assert graces["job-fast"]["grace_secs"] == RUNNER.CADENCE_GRACE_FLOOR_SECS, graces
+    assert graces["job-slower"]["grace_secs"] == slow_grace["grace_secs"], graces
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T05:00:00Z",
+                        issues=[])
+    assert "grace 120s [floor]" in out, out
+    assert f"grace {slow_grace['grace_secs']:.0f}s [p95]" in out, out
+    # The derivation itself travels: sample size and the p95 behind the number.
+    assert "sample 4" in out, out
+
+def test_arm4b_the_CAP_and_the_PERIOD_clamp_both_bind_and_both_are_named() -> None:
+    """ARM 4's bounds, which the ruling required to be STATED rather than implied.
+
+    A tail that would exceed the cap is clamped to it, and a job whose period is shorter than
+    the clamped value is clamped again to a fraction of its own period -- with
+    `basis="period"` and `period_bound_binds` travelling, because that is the arm where the
+    verdict is a coin flip by construction and a reader has to be told so.
+    """
+    wild = _daily_runs("job-wild", lateness=(4000, 4200, 3900, 4100))
+    row = _cron_row("job-wild", next_run_at="2026-10-21T06:00:00+00:00",
+                    last_run_at="2026-10-20T07:08:00Z")
+    grace = RUNNER.cadence_grace_for(row, _instants(row, wild))
+    assert grace["grace_secs"] == RUNNER.CADENCE_GRACE_CAP_SECS, grace
+    assert grace["basis"] == "cap", grace
+
+    # A 30-minute job (`15,45 * * * *`) whose tail exceeds half its period: 1800 s period, so
+    # the period clamp lands at 900 s -- under the cap, which makes `period` the binding one.
+    every_half_hour = [
+        _run_record("job-halflhour", f"2026-10-20T{h:02d}:{m:02d}:{s:02d}+00:00")
+        for h, m, s in ((5, 45, 40), (6, 15, 50), (6, 45, 45), (7, 15, 35))
+    ]
+    half_row = _cron_row("job-halflhour", next_run_at="2026-10-20T07:45:00+00:00",
+                         last_run_at="2026-10-20T07:15:35Z", cron_expr="15,45 * * * *")
+    half_grace = RUNNER.cadence_grace_for(half_row, _instants(half_row, every_half_hour))
+    assert half_grace["period_secs"] == 1800.0, half_grace
+    assert half_grace["grace_secs"] <= half_grace["period_secs"] * \
+        RUNNER.CADENCE_GRACE_PERIOD_FRACTION, half_grace
+
+def test_arm5_HELD_cannot_reappear_and_its_RETIREMENT_is_printed() -> None:
+    """ARM 5: a retired verdict must be GONE and SAID to be gone.
+
+    Three separate readings, because each one alone can be satisfied while the defect
+    survives: the bucket is absent from the verdict vocabulary, the module exposes no `HELD`
+    constant for a future reader to reach for, and the report PRINTS the retirement -- an
+    absent bucket and a bucket that cannot fire render identically, and the second is the
+    defect.
+    """
+    assert "HELD" not in RUNNER.CADENCE_SLOT_VERDICTS, RUNNER.CADENCE_SLOT_VERDICTS
+    assert not hasattr(RUNNER, "CADENCE_SLOT_HELD"), "the retired constant is still exported"
+    retired = dict(RUNNER.CADENCE_SLOT_RETIRED)
+    assert "HELD" in retired, retired
+    assert "scheduler.rs" in retired["HELD"], retired
+
+    # A FIXTURE THAT WOULD HAVE SATISFIED THE OLD PRECONDITION. `last_run_at` is AFTER
+    # `next_run_at` here -- the shape `HELD` required and the writer cannot produce. It must
+    # now read DISPATCHED (a run row decides it), and it must NOT resurrect a bucket.
+    runs = _daily_runs("job-would-be-held", lateness=(35, 41, 29, 38))
+    row = _cron_row("job-would-be-held", next_run_at="2026-10-20T06:00:00+00:00",
+                    last_run_at="2026-10-20T06:00:35Z")
     record = RUNNER.cadence_slot_verdict_for(
-        _cron_row("job-naive", next_run_at="2026-10-21 06:00:00",
-                  last_run_at="2026-10-21T06:00:31Z"),
-        now=now,
-    )
-    assert record["verdict"] == RUNNER.CADENCE_SLOT_UNREADABLE, record
-    assert "no zone offset" in record["reason"], record
+        row, now=RUNNER.reader_parse_ts("2026-10-21T07:00:00Z"), runs=_instants(row, runs))
+    assert record["verdict"] == RUNNER.CADENCE_SLOT_DISPATCHED, record
+
+    leg = RUNNER.cadence_slot_leg([row], ["ops"], [],
+                                  read_at="2026-10-21T07:00:00Z", fires=runs)
+    counts = leg["coverage"]["counts"]
+    assert "HELD" not in counts, counts
+    assert counts[RUNNER.CADENCE_SLOT_DISPATCHED] == 1, counts
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z",
+                        issues=[])
+    assert "RETIRED verdict `HELD`" in out, out
+    # The totals line names the four live buckets and no retired one, so a reader scanning
+    # the counts cannot mistake the absence for a zero.
+    assert "HELD 0" not in out, out
+    assert "DISPATCHED 1" in out, out
+
+def test_the_verdict_does_NOT_depend_on_the_write_order_of_the_two_columns() -> None:
+    """THE EVIDENCE SOURCE, which is the half of #543 that has nothing to do with timing.
+
+    `last_run_at` here is BEFORE the slot -- the exact state the old predicate read as MISSED
+    -- while `cron_job_runs` records a dispatch 35 s after it. The row is DISPATCHED, because
+    a run RECORD answers the question and a column's value does not. This is the arm that
+    would still pass if the grace were set to zero, which is why it is separate from arms 1-3.
+    """
+    runs = [_run_record("job-lagging-column", "2026-10-21T06:00:35+00:00")]
+    row = _cron_row("job-lagging-column", next_run_at="2026-10-21T06:00:00+00:00",
+                    last_run_at="2026-10-20T06:00:27Z")
+    record = RUNNER.cadence_slot_verdict_for(
+        row, now=RUNNER.reader_parse_ts("2026-10-21T06:01:00Z"), runs=_instants(row, runs))
+    assert record["verdict"] == RUNNER.CADENCE_SLOT_DISPATCHED, record
+    assert "recorded in cron_job_runs" in record["reason"], record
+
+def test_an_UNDERTAKABLE_grace_is_NOT_JUDGED_rather_than_invented() -> None:
+    """A tolerance invented for a job whose history could not be read is the defect, not the fix.
+
+    Three shapes, each refused with its own reason: no dispatch history at all, a schedule
+    this reader cannot parse, and a schedule whose parse cannot reproduce the scheduler's own
+    stored slot (the independent-declaration guard). The last one is the important arm: it is
+    what caught this box's non-POSIX day-of-week numbering, and it must keep refusing rather
+    than fall back to a guess.
+    """
+    row = _cron_row("job-no-history", next_run_at="2026-10-21T06:00:00+00:00",
+                    last_run_at="2026-10-20T06:00:27Z")
+    grace = RUNNER.cadence_grace_for(row, [])
+    assert grace["grace_secs"] is None, grace
+    assert "no dispatch record" in grace["reason"], grace
+
+    record = RUNNER.cadence_slot_verdict_for(
+        row, now=RUNNER.reader_parse_ts("2026-10-21T07:00:00Z"), runs=[])
+    assert record["verdict"] == RUNNER.CADENCE_SLOT_NOT_JUDGED, record
+    assert record["grace_underivable"] is True, record
+    assert "UNDERTAKABLE" in record["reason"], record
+
+    # A schedule this reader cannot parse is refused, not approximated.
+    unparseable = _cron_row("job-bad-expr", next_run_at="2026-10-21T06:00:00+00:00",
+                            cron_expr="0 9 * * * *")
+    runs = _daily_runs("job-bad-expr", lateness=(30, 40))
+    assert RUNNER.cadence_grace_for(
+        unparseable, _instants(unparseable, runs))["grace_secs"] is None
+
+    # THE INDEPENDENT DECLARATION: `next_run_at` says the 21st, this row's expression says a
+    # different day, so the parse is not trustworthy and no grace comes out of it.
+    disagreeing = _cron_row("job-disagreeing", next_run_at="2026-10-21T06:00:00+00:00",
+                            cron_expr="0 9 1 * *")
+    disagreeing_runs = _daily_runs("job-disagreeing", lateness=(30, 40))
+    grace = RUNNER.cadence_grace_for(disagreeing, _instants(disagreeing, disagreeing_runs))
+    assert grace["grace_secs"] is None, grace
+    assert "does not reproduce" in grace["reason"], grace
+
+def test_the_SCHEDULER_day_of_week_dialect_is_1_is_SUNDAY_not_POSIX() -> None:
+    """The dialect this box actually schedules in, pinned so a future reader cannot "fix" it.
+
+    Measured 2026-10-22: `ai-antispam-wave0-unactivated-reprobe` carries `0 12 * * 2` and the
+    scheduler stored `2026-10-26T09:00:00+00:00` -- a MONDAY. Under POSIX numbering `2` is
+    Tuesday, so a POSIX reading would place that job's boundaries a day off and report every
+    dispatch as ~24 h late. Named days cannot discriminate the two dialects, which is exactly
+    why a numeric fixture is used here.
+    """
+    assert dt.date(2026, 10, 26).weekday() == 0, "the fixture date must be a Monday"
+    parsed = RUNNER.parse_cron_expr("0 12 * * 2")
+    monday = RUNNER.reader_parse_ts("2026-10-26T12:00:00+00:00")
+    assert RUNNER.cron_boundary_matches(monday, parsed), "dow=2 must match a Monday"
+    tuesday = RUNNER.reader_parse_ts("2026-10-27T12:00:00+00:00")
+    assert not RUNNER.cron_boundary_matches(tuesday, parsed), "dow=2 must NOT match a Tuesday"
+    # And a named day lands on the same weekday its name says, in the same dialect.
+    assert RUNNER.cron_boundary_matches(
+        RUNNER.reader_parse_ts("2026-10-26T09:00:00+00:00"),
+        RUNNER.parse_cron_expr("0 9 * * Mon"))
 
 def test_the_leg_CAN_fire_and_the_population_is_ALWAYS_printed() -> None:
-    """THE POSITIVE CONTROL, plus the empty-population arm it is paired with.
+    """The positive control, plus the empty-population arm it is paired with.
 
-    A suite whose fixtures all read HELD proves nothing, so this drives the same leg over
-    one row that MUST fail. The empty read is the second half: `examined 0` must render as
-    NOT RUN with its reason, never as a clean round, because a predicate that examined
-    nothing has not been shown to work (skill section 8).
+    The empty read is the second half: `examined 0` must render as NOT RUN with its reason,
+    never as a clean round, because a predicate that examined nothing has not been shown to
+    work (skill section 8).
     """
+    runs = _daily_runs("job-overdue", lateness=(35, 41))
     missed = _cron_row("job-overdue", next_run_at="2026-10-21T06:00:00+00:00",
                        last_run_at="2026-10-20T06:00:27Z")
-    held = _cron_row("job-held", next_run_at="2026-10-21T06:00:00+00:00",
-                     last_run_at="2026-10-21T06:00:31Z", row_id="id-2")
-    leg = RUNNER.cadence_slot_leg([missed, held], ["ops"], [], read_at="2026-10-21T07:00:00Z")
+    leg = RUNNER.cadence_slot_leg([missed], ["ops"], [], read_at="2026-10-21T07:00:00Z",
+                                  fires=runs)
     assert leg["status"] == "ASSERTED", leg
-    assert leg["coverage"]["examined"] == 2, leg["coverage"]
-    counts = leg["coverage"]["counts"]
-    assert (counts[RUNNER.CADENCE_SLOT_MISSED], counts[RUNNER.CADENCE_SLOT_HELD]) == (1, 1), counts
-    # DISCRIMINATING CONTROL: drop the overdue row and the same leg is clean, so the problem
-    # is attributable to the row and not to the leg's shape.
-    clean = RUNNER.cadence_slot_leg([held], ["ops"], [], read_at="2026-10-21T07:00:00Z")
-    assert clean["problems"] == [], clean
-    assert clean["coverage"]["counts"][RUNNER.CADENCE_SLOT_MISSED] == 0, clean["coverage"]
+    assert leg["coverage"]["examined"] == 1, leg["coverage"]
+    assert leg["coverage"]["counts"][RUNNER.CADENCE_SLOT_MISSED] == 1, leg["coverage"]
 
     empty = RUNNER.cadence_slot_leg([], [], ["ops: unable to open database file"],
                                     read_at="2026-10-21T07:00:00Z")
     assert empty["status"] == "NOT RUN", empty
     assert empty["problems"] == [], empty
     assert "NOT a clean round" in empty["coverage"]["reason"], empty["coverage"]
-    out = RUNNER.render([empty], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z", issues=[])
-    # The NOT RUN branch prints the coverage payload key-by-key, so the population appears
-    # as `examined: 0` -- the count is there either way, which is the point: `examined 0`
-    # and `examined 42` must never render identically.
+    out = RUNNER.render([empty], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z",
+                        issues=[])
     assert "examined: 0" in out, out
     assert "ops: unable to open database file" in out, out
 
+def test_no_runs_store_supplied_is_UNREADABLE_never_MISSED() -> None:
+    """The injection boundary, held to #271.
+
+    A leg handed no `cron_job_runs` store has not been told whether anything was dispatched.
+    Reporting that as MISSED would red every job in any probe that forgot the argument, and
+    reporting it as DISPATCHED would be a false clean -- so it is UNREADABLE with its reason,
+    which is the only reading that says "I could not answer".
+    """
+    row = _cron_row("job-no-store", next_run_at="2026-10-21T06:00:00+00:00")
+    record = RUNNER.cadence_slot_verdict_for(
+        row, now=RUNNER.reader_parse_ts("2026-10-21T07:00:00Z"), runs=None)
+    assert record["verdict"] == RUNNER.CADENCE_SLOT_UNREADABLE, record
+    assert "no cron_job_runs store was supplied" in record["reason"], record
+
+    leg = RUNNER.cadence_slot_leg([row], ["ops"], [], read_at="2026-10-21T07:00:00Z")
+    assert leg["coverage"]["counts"][RUNNER.CADENCE_SLOT_UNREADABLE] == 1, leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z",
+                        issues=[])
+    assert "UNREADABLE: `job-no-store`" in out, out
+
+def test_a_slot_that_has_NOT_ARRIVED_is_NOT_JUDGED_and_carries_no_verdict_of_its_own() -> None:
+    """The order of the tests, which is the law and not a preference.
+
+    This is the exact case that produced the retracted Miidas section 8 remedy: a FUTURE slot
+    read as a miss. The row carries a `last_run_at` BEFORE its next slot, the ordinary healthy
+    state of every job on the box.
+    """
+    runs = _daily_runs("job-future", lateness=(35, 41))
+    row = _cron_row("job-future", next_run_at="2026-10-21T06:00:00+00:00",
+                    last_run_at="2026-10-20T06:00:27Z")
+    # The grace is supplied the way the LEG supplies it, because it is a property of the job
+    # and the leg derives it for every row before any verdict is reached.
+    grace = RUNNER.cadence_grace_for(row, _instants(row, runs))
+    record = RUNNER.cadence_slot_verdict_for(
+        row, now=RUNNER.reader_parse_ts("2026-10-21T03:00:00Z"),
+        runs=_instants(row, runs), grace=grace)
+    assert record["verdict"] == RUNNER.CADENCE_SLOT_NOT_JUDGED, record
+    assert "has not arrived" in record["reason"], record
+    # AND THE GRACE STILL TRAVELS: it is a property of the JOB, so a healthy population --
+    # where every slot is in the future -- still prints the derivation it was judged against.
+    assert record["grace"]["grace_secs"] is not None, record
+
 def test_an_all_NOT_JUDGED_population_is_ASSERTED_and_says_NOTHING_OVERDUE() -> None:
-    """THE HEALTHY-BOX SHAPE, which is the population this leg sees almost every day.
+    """The healthy-box shape, which is the population this leg sees almost every day.
 
     `next_run_at` is the slot the scheduler is WAITING for and it ADVANCES on dispatch, so a
-    healthy row is permanently `now < next_run_at`. Measured live 2026-10-21T03:48Z: 42
-    enabled rows, 42 NOT JUDGED, 0 HELD, 0 MISSED. If that read as NOT RUN the leg could
-    never report a healthy box -- it would speak only once something had already gone wrong.
-
-    So this arm is ASSERTED with `judged 0`, and the two halves of the probe pin that the
-    zero is a MEASUREMENT and not a silence: the counts travel (NOT JUDGED == examined), the
-    report states "nothing overdue" in words, and the SAME fixture with one slot pushed into
-    the past goes MISSED -- so a green here is attributable to the rows, not to the leg.
+    healthy row is permanently `now < next_run_at`. Measured live 2026-10-22T12:52Z: 42
+    enabled rows, 42 NOT JUDGED. If that read as NOT RUN the leg could never report a healthy
+    box -- it would speak only once something had already gone wrong.
     """
     healthy = [
         _cron_row(f"job-pending-{i}", next_run_at="2026-10-22T06:00:00+00:00",
                   last_run_at="2026-10-21T06:00:31Z", row_id=f"id-{i}")
         for i in range(3)
     ]
-    leg = RUNNER.cadence_slot_leg(healthy, ["ops"], [], read_at="2026-10-21T07:00:00Z")
+    runs = _daily_runs("job-pending-0", lateness=(35, 41), job_id="id-0")
+    leg = RUNNER.cadence_slot_leg(healthy, ["ops"], [], read_at="2026-10-21T07:00:00Z",
+                                  fires=runs)
     assert leg["status"] == "ASSERTED", leg
     assert leg["problems"] == [], leg["problems"]
     counts = leg["coverage"]["counts"]
     assert counts[RUNNER.CADENCE_SLOT_NOT_JUDGED] == 3, counts
     assert leg["coverage"]["judged"] == 0, leg["coverage"]
-    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z", issues=[])
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z",
+                        issues=[])
     assert "NOT JUDGED 3, UNREADABLE 0" in out, out
     assert "nothing overdue" in out, out
 
-    # DISCRIMINATING CONTROL: same rows, one slot now in the PAST and never dispatched. The
-    # leg must go red on that row alone, so the ASSERTED above is not a leg that cannot fire.
-    overdue = _cron_row("job-overdue", next_run_at="2026-10-21T06:00:00+00:00",
-                        last_run_at="2026-10-20T06:00:27Z", row_id="id-x")
-    fired = RUNNER.cadence_slot_leg(healthy + [overdue], ["ops"], [],
-                                    read_at="2026-10-21T07:00:00Z")
-    assert fired["status"] == "ASSERTED", fired
-    assert len(fired["problems"]) == 1, fired["problems"]
-    assert "job-overdue" in fired["problems"][0], fired["problems"]
-
 def test_a_population_of_ONLY_UNREADABLE_rows_is_NOT_RUN_never_clean() -> None:
-    """The OTHER side of the split: PLACED, not judged, is what separates them.
+    """PLACED, not judged, is what separates the two readings.
 
     A row whose `next_run_at` cannot be placed was not measured at all, so a population of
-    nothing but those is NOT RUN -- the instrument looked and could place none of it. This is
-    the arm the severity split must NOT have softened: UNREADABLE raising no `problem` is a
-    statement about the exit code, never permission for the round to read as clean.
+    nothing but those is NOT RUN -- the instrument looked and could place none of it.
     """
     unreadable = [
         _cron_row(f"job-unreadable-{i}", next_run_at=raw, row_id=f"id-{i}")
@@ -11348,32 +11574,43 @@ def test_a_population_of_ONLY_UNREADABLE_rows_is_NOT_RUN_never_clean() -> None:
     assert leg["status"] == "NOT RUN", leg
     assert leg["coverage"]["counts"][RUNNER.CADENCE_SLOT_UNREADABLE] == 2, leg["coverage"]
     assert "could be PLACED" in leg["coverage"]["reason"], leg["coverage"]
-    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z", issues=[])
-    # BOTH rows named with their reasons -- a count with no reason is the shape #271 forbids.
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z",
+                        issues=[])
     assert "UNREADABLE: `job-unreadable-0`" in out, out
     assert "UNREADABLE: `job-unreadable-1`" in out, out
 
-    # DISCRIMINATING CONTROL: one readable row in the same population moves it off NOT RUN,
-    # so the refusal is keyed on placeability rather than on the fixture being small.
+    # DISCRIMINATING CONTROL: one readable row in the same population moves it off NOT RUN.
     readable = _cron_row("job-pending", next_run_at="2026-10-22T06:00:00+00:00", row_id="id-ok")
     mixed = RUNNER.cadence_slot_leg(unreadable + [readable], ["ops"], [],
-                                    read_at="2026-10-21T07:00:00Z")
+                                    read_at="2026-10-21T07:00:00Z", fires=[])
     assert mixed["status"] == "ASSERTED", mixed
     assert mixed["coverage"]["counts"][RUNNER.CADENCE_SLOT_UNREADABLE] == 2, mixed["coverage"]
 
+def test_a_ZONE_LESS_instant_is_UNREADABLE_never_assumed_UTC() -> None:
+    """A naive instant would be shifted by the reader's own assumption.
+
+    Every live row carries an offset (measured 2026-10-22: 34 of 34 enabled), so this costs
+    nothing today -- and ASSUMING UTC would move a `0 9 * * *` Moscow row's 06:00Z slot to
+    09:00Z, manufacture a three-hour disagreement with the scheduler, and red a job that fired
+    on time.
+    """
+    now = RUNNER.reader_parse_ts("2026-10-21T07:00:00Z")
+    record = RUNNER.cadence_slot_verdict_for(
+        _cron_row("job-naive", next_run_at="2026-10-21 06:00:00"),
+        now=now, runs=[])
+    assert record["verdict"] == RUNNER.CADENCE_SLOT_UNREADABLE, record
+    assert "no zone offset" in record["reason"], record
+
 def test_the_READ_PATH_carries_the_rows_own_ZONE() -> None:
-    """Clause 2: the predicate needs no zone because `next_run_at` carries it -- and this
-    probe pins that the READ still carries the zone for the REPORT, which is where a reader
-    needs it ("09:15 Moscow" is an address; 06:15Z alone is not).
+    """The predicate needs no zone because `next_run_at` carries it -- and the READ still
+    carries the zone for the REPORT, which is where a reader needs it ("09:15 Moscow" is an
+    address; 06:15Z alone is not).
 
     Driven through `box_cron_rows` over a THROWAWAY home, so the probe reads the real read
-    path rather than a stub -- the idiom this file already uses for the cron table.
+    path rather than a stub.
     """
     root = Path(tempfile.mkdtemp()) / "profiles"
     (root / "ops").mkdir(parents=True)
-    # BOTH homes, because the live box has both and the read refuses to call a missing
-    # default home "nothing to read" -- it lands in `unreached` and would fail this probe
-    # for a reason the probe is not about.
     _home_db(root.parent / "opencrabs.db",
              ("id-default", "factory-default-home", "", "", 1))
     db = root / "ops" / "opencrabs.db"
@@ -11393,15 +11630,12 @@ def test_the_READ_PATH_carries_the_rows_own_ZONE() -> None:
     assert unreached == [], unreached
     row = {r["name"]: r for r in rows}["factory-moscow-job"]
     assert row["timezone"] == "Europe/Moscow", row
-    # The SCHEDULER resolved 09:15 Moscow into 06:15Z; this host reads that instant and does
-    # NOT apply the zone a second time, which is the whole reason no tz parser is needed.
     record = RUNNER.cadence_slot_verdict_for(
-        row, now=RUNNER.reader_parse_ts("2026-10-21T07:00:00Z")
+        row, now=RUNNER.reader_parse_ts("2026-10-21T07:00:00Z"), runs=[]
     )
     assert record["verdict"] == RUNNER.CADENCE_SLOT_NOT_JUDGED, record
     assert record["timezone"] == "Europe/Moscow", record
     assert record["next_run_at"] == "2026-10-22T06:15:00+00:00", record
-
 
 # ---- #519: a ruling that no dispatch corroborates -----------------------------------
 #
