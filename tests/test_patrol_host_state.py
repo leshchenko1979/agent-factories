@@ -10382,6 +10382,61 @@ def test_the_criterion_path_leg_is_NOT_fooled_by_a_bare_number_in_the_same_sente
     assert "`tools/probe-criterion.py`" in leg["problems"][0], leg["problems"]
     assert leg["coverage"]["cited"] == 0, leg["coverage"]
 
+def test_the_criterion_path_leg_reads_a_TABLE_CELL_quote_as_a_CITATION() -> None:
+    """Ruling n=4056 adds the THIRD shape: a table cell whose content is a bare path token
+    cites it, because a report's own table row measures rather than obliges. The omission was
+    the ruling's — #541's body named four quotation shapes and n=4050 ruled two — so this arm
+    is the repair of that, not a widening the leg invented."""
+    issues = [_issue_with_body(
+        541, "OPEN",
+        "Measured, two store states:\n\n"
+        "| store | unresolved | of which |\n"
+        "|---|---|---|\n"
+        "| as committed | 5 | **2** — `TEMPLATE/tests/test_audit_cadence.py` |\n",
+    )]
+    tree = _criterion_tree("tools/probe.py")
+    leg = _criterion_leg(issues, repo=tree)
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["cited"] == 1, leg["coverage"]
+    cited = " ".join(leg["cited"])
+    assert "TEMPLATE/tests/test_audit_cadence.py" in cited, cited
+    assert "table cell" in cited, cited
+
+def test_the_criterion_path_leg_REDS_on_a_TABLE_CELL_that_carries_a_CRITERION() -> None:
+    """The cell branch asks what the CELL holds, not whether the line has a `|`. A cell that
+    carries prose is judged even though it sits in a table — otherwise the branch is a
+    catch-all keyed on punctuation, which is the class the ruling closed the shape set to
+    prevent."""
+    issues = [_issue_with_body(
+        541, "OPEN",
+        "| requirement | state |\n"
+        "|---|---|\n"
+        "| Done when `tools/probe-criterion.py` exists | owed |\n",
+    )]
+    tree = _criterion_tree("tools/probe.py")
+    leg = _criterion_leg(issues, repo=tree)
+    assert leg["problems"], "a criterion stated inside a table cell was excused"
+    assert "`tools/probe-criterion.py`" in leg["problems"][0], leg["problems"]
+    assert leg["coverage"]["cited"] == 0, leg["coverage"]
+
+def test_the_criterion_path_leg_JUDGES_bare_prose_with_no_attribution() -> None:
+    """THE DISCRIMINATOR (ruling n=4056). A token in bare prose with no attribution stays a
+    PROBLEM, even where a human can tell it was meant as an example. "The author obviously
+    meant an example" is the fifth specimen of the #99/#247/#278/#476 cycle, each time one
+    specimen after the fix, each time by adding vocabulary for the shape that had just bitten
+    — so the shape set is CLOSED at three plus attribution, and an unnamed shape surfaces as a
+    problem in the same place real debt appears rather than being silently excused."""
+    issues = [_issue_with_body(
+        540, "OPEN",
+        "Add `docs/some-new-law-forbidden.json` with valid authority and reason and you get "
+        "`FAIL — 3 declared but 2 matched a live absence`.",
+    )]
+    tree = _criterion_tree("tools/probe.py")
+    leg = _criterion_leg(issues, repo=tree)
+    assert leg["problems"], "bare prose with no attribution was excused — the branch became a catch-all"
+    assert "`docs/some-new-law-forbidden.json`" in leg["problems"][0], leg["problems"]
+    assert leg["coverage"]["cited"] == 0, leg["coverage"]
+
 if __name__ == "__main__":
     raise SystemExit(main())
 

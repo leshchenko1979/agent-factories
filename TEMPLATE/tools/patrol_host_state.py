@@ -7958,8 +7958,17 @@ def is_mechanism_path(ref: str) -> bool:
 # own body at 2026-10-22T00:40:00Z:
 #
 #   a FENCED BLOCK or BLOCKQUOTE     the patrol's own output, quoted as evidence
+#   a TABLE CELL that is a bare path  a report's own table row, measuring rather than obliging
 #   a sentence naming ANOTHER #NNN   "`TEMPLATE/tests/test_audit_cadence.py` is parked on the
 #                                    owner design gate" — #324's obligation, not this item's
+#
+# THE SHAPE SET IS CLOSED AT THREE plus attribution (ruling n=4056), and the closure IS the
+# recurrence guard: an unnamed shape must surface as a PROBLEM, loudly, in the same place real
+# debt appears, rather than being silently excused. So a token in BARE PROSE stays judged even
+# when a human can tell it was meant as an example — "the author obviously meant an example" is
+# the fifth specimen of the #99/#247/#278/#476 cycle, each time one specimen after the fix, each
+# time by adding vocabulary for the shape that had just bitten. The remedy for such a specimen
+# belongs at the SOURCE: mark it as a quote, and the law already recognises the marking.
 #
 # Judging those put two already-routed units' paths on a third unit's account, and worse:
 # filing a report that QUOTED a dead exemption REVIVED it, because a quoted path counted as a
@@ -7967,6 +7976,10 @@ def is_mechanism_path(ref: str) -> bool:
 # predicate is stated here, once, rather than patched at the finding.
 CRITERION_PATH_FENCE = re.compile(r"^\s{0,3}(?:```|~~~)")
 CRITERION_PATH_QUOTE = re.compile(r"^\s{0,3}>")
+# A TABLE ROW is a cell boundary, not a quotation: the branch below asks whether a cell's
+# content is a bare path token, so `| as committed | 5 | **2** — ... |` cites its paths and
+# `Done when `x` exists |` does not.
+CRITERION_PATH_TABLE = re.compile(r"^\s{0,3}\|")
 ISSUE_NUMBER_REF = re.compile(r"#(\d+)")
 SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
@@ -8009,6 +8022,20 @@ def criterion_path_citations(text: str, number: int) -> dict[str, str | None]:
         if CRITERION_PATH_QUOTE.match(line):
             for ref in refs:
                 occurrences.setdefault(ref, []).append("quoted inside a blockquote")
+            continue
+        if CRITERION_PATH_TABLE.match(line):
+            # A table row cites the paths in cells that hold LITTLE ELSE, and judges the ones
+            # in a cell that carries prose — so the discriminator is the CELL's own content,
+            # not the presence of a `|` on the line. A branch that cited every line holding a
+            # pipe would pass this arm and fail the bare-prose one, which is the control.
+            for cell in line.split("|"):
+                content = cell.strip()
+                for ref in CRITERION_PATH_REF.findall(content):
+                    rest = CRITERION_PATH_REF.sub("", content)
+                    rest = re.sub(r"[\s`*_—–\-:,.()\[\]\d]+", "", rest)
+                    occurrences.setdefault(ref, []).append(
+                        "quoted inside a table cell" if not rest else None
+                    )
             continue
         for sentence in SENTENCE_SPLIT.split(line):
             sentence_refs = CRITERION_PATH_REF.findall(sentence)
