@@ -184,6 +184,10 @@
     {
       "row": 4050,
       "reason": "#541 ruling, Class 2 -- a ROW REFERENCE's own numbered part. The row reads 'Full analysis and the store/gate half live in #540's ruling `n=4049` §6', so `§6` is explicitly qualified by the row reference `n=4049` and points at that ruling's sixth section. A row is not a document, so no `*.md` token exists to place in the 70-character window, and the citation resolves in no tree by design. The prose is correct as written and needs no repair."
+    },
+    {
+      "row": 4068,
+      "reason": "hq-cycle-2026-10-22T03 run. BOTH occurrences REPORT the bare-citation shape rather than commit it, and each is qualified by a row reference in the same clause. (1) 'The third is mine: n=4049 and n=4050 carry bare §6 citations naming no document' -- the `§6` is the object of 'carry', naming the two rows' citations, and the same sentence says both were already declared with their referent stated (this store's n=4049 and n=4050 entries). (2) 'n=4049 §6 is its OWN sixth section' -- a ROW REFERENCE's own numbered part, n=4049's sixth section, which is precisely the referent recorded in this store's n=4049 entry (that ruling body is organised as `## N.` headings). Class 2 -- a row reference's numbered part, and a row is not a document -- carrying class 3's reporting character, since the row announces the shape rather than citing a document. The prose is correct as written: it is the cycle's own account of the two exemptions it recorded, and rewriting it to spell a `*.md` token would misname a referent that lives in a ruling body and in no tree file."
     }
   ]
 }
