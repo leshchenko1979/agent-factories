@@ -765,8 +765,12 @@ PLACEMENT_MAP: tuple[tuple[str, tuple[str, ...], str], ...] = (
     # the TEMPLATE directory. Nothing is lost by moving the declaration up: the mirror branch
     # below generates `TEMPLATE/roles` from this entry whenever that directory exists.
     ("roles", ("markdown",), "one role file per lane; the template ships the four cards"),
-    ("tools", ("python", "shell", "javascript", "text"),
-     "an executable instrument; python is the house language and shell/js are permitted"),
+    ("tools", ("python", "shell", "javascript", "text", "json"),
+     "an executable instrument; python is the house language, shell/js are permitted, and a "
+     "JS asset carries its dependency manifest as JSON -- npm's format, with no alternative "
+     "(#520's `questions-render.package.json` is the first such asset: it is copied beside "
+     "`questions-render.mjs` at render time, and a JS toolchain cannot declare its "
+     "dependencies in any other format)"),
     ("tools/box", ("unit", "shell", "markdown"),
      "systemd units, the script that drives them, and a README"),
     ("tools/hooks", ("text",),
