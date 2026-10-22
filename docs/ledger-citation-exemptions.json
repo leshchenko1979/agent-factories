@@ -192,6 +192,10 @@
     {
       "row": 4121,
       "reason": "correction-4120 run, Class 2 -- a ROW REFERENCE's own numbered part, BOTH occurrences. (1) The row's heading reads '## Correction to `n=4120` §4 — the unclaimed backlog is 14 units, and two of them are this lane's own'. (2) Its body reads '`n=4120` §4 reported the dispatched-never-claimed set as **11 units**'. In both, `§4` is explicitly qualified by the row reference `n=4120` and points at that row's fourth section, whose heading is '## 4. The class my own ruling leaves unenforced' -- VERIFIED PRESENT in n=4120's own detail, so the referent exists and is unambiguous. A row is not a document, so no `*.md` token exists to place in the 70-character window, and the citation resolves in no tree by design: the referent lives in a ledger row's body and in no tree file. Rewriting it to spell a `*.md` name would MISNAME it. Same shape as this store's n=4050 and n=4068 entries. The prose is correct as written and needs no repair."
+    },
+    {
+      "row": 4124,
+      "reason": "INTAKE #547, Class 2 -- a ROW REFERENCE's own numbered part, and the SHARPEST instance in this store. The row reads 'n=4121 carries two bare §4 citations qualified by `n=4120`'. The `§4` is the object of 'carries', reporting n=4121's citation, and the same clause names its referent: n=4120's fourth section, whose heading '## 4. The class my own ruling leaves unenforced' is VERIFIED PRESENT in n=4120's own detail. A row is not a document, so no `*.md` token exists to place in the 70-character window. WHY THIS ENTRY IS ITSELF THE EVIDENCE FOR #547: n=4124 is the INTAKE ROW that FILES #547, whose whole subject is that this gate cannot distinguish a row-qualified citation from a dangling one. Filing the defect therefore required the exemption the defect is about -- the gate reds on a row that reports it. That is the class, demonstrated on the reporting act itself rather than argued. Same shape as this store's n=4050, n=4068 and n=4121 entries; the prose is correct as written and needs no repair."
     }
   ]
 }
