@@ -188,6 +188,10 @@
     {
       "row": 4068,
       "reason": "hq-cycle-2026-10-22T03 run. BOTH occurrences REPORT the bare-citation shape rather than commit it, and each is qualified by a row reference in the same clause. (1) 'The third is mine: n=4049 and n=4050 carry bare §6 citations naming no document' -- the `§6` is the object of 'carry', naming the two rows' citations, and the same sentence says both were already declared with their referent stated (this store's n=4049 and n=4050 entries). (2) 'n=4049 §6 is its OWN sixth section' -- a ROW REFERENCE's own numbered part, n=4049's sixth section, which is precisely the referent recorded in this store's n=4049 entry (that ruling body is organised as `## N.` headings). Class 2 -- a row reference's numbered part, and a row is not a document -- carrying class 3's reporting character, since the row announces the shape rather than citing a document. The prose is correct as written: it is the cycle's own account of the two exemptions it recorded, and rewriting it to spell a `*.md` token would misname a referent that lives in a ruling body and in no tree file."
+    },
+    {
+      "row": 4121,
+      "reason": "correction-4120 run, Class 2 -- a ROW REFERENCE's own numbered part, BOTH occurrences. (1) The row's heading reads '## Correction to `n=4120` §4 — the unclaimed backlog is 14 units, and two of them are this lane's own'. (2) Its body reads '`n=4120` §4 reported the dispatched-never-claimed set as **11 units**'. In both, `§4` is explicitly qualified by the row reference `n=4120` and points at that row's fourth section, whose heading is '## 4. The class my own ruling leaves unenforced' -- VERIFIED PRESENT in n=4120's own detail, so the referent exists and is unambiguous. A row is not a document, so no `*.md` token exists to place in the 70-character window, and the citation resolves in no tree by design: the referent lives in a ledger row's body and in no tree file. Rewriting it to spell a `*.md` name would MISNAME it. Same shape as this store's n=4050 and n=4068 entries. The prose is correct as written and needs no repair."
     }
   ]
 }
