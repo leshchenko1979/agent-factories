@@ -7953,6 +7953,82 @@ def is_mechanism_path(ref: str) -> bool:
         return True
     return base[base.rindex("."):] in MECHANISM_SUFFIXES
 
+# A backticked mechanism path is not a CRITERION merely because it appears on a criterion
+# surface (#541). Two shapes QUOTE a path without obliging anything, both measured on #540's
+# own body at 2026-10-22T00:40:00Z:
+#
+#   a FENCED BLOCK or BLOCKQUOTE     the patrol's own output, quoted as evidence
+#   a sentence naming ANOTHER #NNN   "`TEMPLATE/tests/test_audit_cadence.py` is parked on the
+#                                    owner design gate" — #324's obligation, not this item's
+#
+# Judging those put two already-routed units' paths on a third unit's account, and worse:
+# filing a report that QUOTED a dead exemption REVIVED it, because a quoted path counted as a
+# live absence — a dead-debt verdict controlled by whichever report happens to be open. So the
+# predicate is stated here, once, rather than patched at the finding.
+CRITERION_PATH_FENCE = re.compile(r"^\s{0,3}(?:```|~~~)")
+CRITERION_PATH_QUOTE = re.compile(r"^\s{0,3}>")
+ISSUE_NUMBER_REF = re.compile(r"#(\d+)")
+SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+def criterion_path_citations(text: str, number: int) -> dict[str, str | None]:
+    """`{ref: citation reason or None}` for ONE criterion surface of issue `number` (#541).
+
+    `None` means the token is a CRITERION and must be judged. A string means every occurrence
+    of that token on this surface is a CITATION, and the string is the reason to PRINT — an
+    excuse nobody can read is how a wrong excuse hides, which is the rule the exemption store
+    already learned and this leg inherits.
+
+    THE NAMED OCCURRENCE WINS. A path quoted in a fence and ALSO named as a criterion on the
+    same surface is judged, because one obligation is enough; so the map is keyed per token
+    and its value is `None` when ANY occurrence is a criterion.
+
+    THE POPULATION'S SIZE DOES NOT SHRINK. The caller counts a cited token exactly as it
+    counts a judged one and prints it as `cited:`, so a leg that simply dropped every token
+    would read as a smaller population rather than as a cleaner one — and #519 clause 3
+    forbids repairing the population instead of the predicate.
+
+    The two shapes are the ruling's (n=4050), not a heuristic: a fence or blockquote is quoted
+    instrument output, and a sentence naming a DIFFERENT `#NNN` attributes its paths to that
+    item. A lexical blacklist was refused because two of the four measured phantom tokens sit
+    in ordinary prose, and this class has already failed that way four times
+    (#99, #247, #278, #476).
+    """
+    occurrences: dict[str, list[str | None]] = {}
+    in_fence = False
+    for line in text.splitlines():
+        if CRITERION_PATH_FENCE.match(line):
+            in_fence = not in_fence
+            continue
+        refs = CRITERION_PATH_REF.findall(line)
+        if not refs:
+            continue
+        if in_fence:
+            for ref in refs:
+                occurrences.setdefault(ref, []).append("quoted inside a fenced block")
+            continue
+        if CRITERION_PATH_QUOTE.match(line):
+            for ref in refs:
+                occurrences.setdefault(ref, []).append("quoted inside a blockquote")
+            continue
+        for sentence in SENTENCE_SPLIT.split(line):
+            sentence_refs = CRITERION_PATH_REF.findall(sentence)
+            if not sentence_refs:
+                continue
+            others = sorted({
+                found for found in ISSUE_NUMBER_REF.findall(sentence) if int(found) != number
+            })
+            if others:
+                reason = f"attributed to #{', #'.join(others)}"
+                for ref in sentence_refs:
+                    occurrences.setdefault(ref, []).append(reason)
+            else:
+                for ref in sentence_refs:
+                    occurrences.setdefault(ref, []).append(None)
+    return {
+        ref: (reasons[0] if all(reason is not None for reason in reasons) else None)
+        for ref, reasons in occurrences.items()
+    }
+
 def committed_tree_rev(repo: Path, rev: str = "HEAD") -> tuple[str | None, str]:
     """Resolve `rev` to a COMMIT in `repo`, or the reason it cannot be read (#450, template-instruments.md §7.5).
 
@@ -8133,6 +8209,7 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
             "status": "NOT RUN",
             "problems": [],
             "excused": [],
+            "cited": [],
             "coverage": {
                 "reason": (
                     f"the reading revision could not be resolved, so no criterion path was "
@@ -8149,6 +8226,7 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
     open_items = 0
     closed_items = 0
     absences: list[dict] = []
+    cited: list[dict] = []
     for issue in issues:
         number = issue.get("number")
         if number is None:
@@ -8161,10 +8239,16 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
         for comment in ruling_comments(issue):
             surfaces.append(("ruling comment", comment.get("body") or ""))
         for where, text in surfaces:
-            for ref in sorted(set(CRITERION_PATH_REF.findall(text))):
+            # The ATTRIBUTION test (#541): a token quoted in a fence or a blockquote, or named
+            # in a sentence that attributes it to ANOTHER item, is a CITATION — examined and
+            # printed, never judged and never dropped.
+            for ref, citation in sorted(criterion_path_citations(text, number).items()):
                 if not is_mechanism_path(ref):
                     continue
                 examined += 1
+                if citation is not None:
+                    cited.append({"issue": number, "where": where, "ref": ref, "why": citation})
+                    continue
                 present, why = committed_path_present(ref, repo=repo, rev=commit)
                 if why:
                     unreadable.append(f"`{ref}`: {why}")
@@ -8181,6 +8265,7 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
             "status": "NOT RUN",
             "problems": [],
             "excused": [],
+            "cited": [],
             "coverage": {
                 "reason": (
                     f"{len(unreadable)} of {examined} reference(s) could not be probed "
@@ -8242,6 +8327,11 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
         "status": "ASSERTED",
         "problems": problems,
         "excused": excused,
+        "cited": [
+            f"issue #{item['issue']} criterion ({item['where']}) names `{item['ref']}` — CITED, "
+            f"not a criterion: {item['why']}"
+            for item in cited
+        ],
         "coverage": {
             "refs_examined": examined,
             "issues_read": open_items,
@@ -8249,6 +8339,7 @@ def criterion_path_leg(issues: list[dict], *, read_at: str,
             "surfaces": ["body", "ruling comment"],
             "read_at": read_at,
             "absences": len(absences),
+            "cited": len(cited),
             "declared_exempt": len(used),
             "unresolved": len(problems) - len(store_problems),
             "exemptions_declared": len(entries),
@@ -11440,7 +11531,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  criterion paths (issue body and ruling comment): "
                 f"{cov['refs_examined']} reference(s) examined over "
                 f"{cov['issues_read']} issue(s), {cov.get('unresolved', len(leg['problems']))} "
-                f"unresolved, {cov.get('declared_exempt', 0)} declared-exempt — "
+                f"unresolved, {cov.get('declared_exempt', 0)} declared-exempt, "
+                f"{cov.get('cited', 0)} cited — "
                 f"{cov['closed_items_excluded']} closed item(s) outside the population — "
                 f"board read at {cov['read_at']}, judged against the tree at "
                 f"{cov.get('read_rev') or 'an unrecorded revision'}"
@@ -11450,6 +11542,12 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             # path, and the whole point of the store is that a reader can check it.
             for line in leg["excused"]:
                 lines.append(f"  excused: {line}")
+            # EVERY CITATION PRINTS, with its reason (#541, ruling n=4050): same discipline
+            # one line up. A token the leg examined and did not judge is invisible unless it
+            # is shown, and "clean" and "cited" must be different output rather than the same
+            # one — otherwise a leg that dropped the token reads exactly like this one.
+            for line in leg.get("cited") or []:
+                lines.append(f"  cited: {line}")
         elif leg["name"] == "score-conversion":
             # THE POPULATION IS PRINTED (#112, section 8, #67): "no regression" and "no
             # artifact parsed" are the same verdict otherwise, and the second is the state

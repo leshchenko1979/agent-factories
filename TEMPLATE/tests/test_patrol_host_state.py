@@ -10256,6 +10256,132 @@ def test_538_the_render_PRINTS_the_scoping_and_the_board_it_read() -> None:
     assert "carrying 1 closed" in out2, out2
     assert "judged_closed_subject" in out2, out2
     assert rc2 == 0, out2
+# --- #541: a QUOTED path is a citation, not a criterion ------------------------------------
+# Ruling n=4050. Measured on #540's own body at 2026-10-22T00:40:00Z: four phantom tokens, in
+# TWO shapes — the two `hygiene-protected.json` spellings sat in a FENCED BLOCK quoting the
+# patrol's output, and `tests/test_commit_subject_issue_refs.py` / `TEMPLATE/tests/
+# test_audit_cadence.py` sat in PROSE SENTENCES naming #529 and #324 as their owners. So a
+# fence-skip catches 2 of 4, and narrowing the population to "Done when" constructs catches all
+# four and loses criteria stated in plain body prose — the surface #172 was about. Both were
+# refused. What the leg implements instead is an ATTRIBUTION test, and the excuse PRINTS.
+
+def _citation_store(payload) -> Path:
+    """A store file for a probe, in its own directory, never the live one."""
+    directory = Path(tempfile.mkdtemp(prefix="patrol-citation-store-"))
+    path = directory / "criterion-path-exemptions.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+def test_the_criterion_path_leg_reads_a_FENCED_quote_as_a_CITATION_and_prints_it() -> None:
+    """Arm 1. A path quoted in a fenced block is the patrol's own output quoted as evidence,
+    not an obligation — it reads CLEAN and prints `cited:` WITH its reason, because an excuse
+    nobody can read is how a wrong excuse hides."""
+    issues = [_issue_with_body(
+        540, "OPEN",
+        "The leg reports two dead exemptions:\n\n"
+        "```\n"
+        "  excused: `docs/hygiene-protected.json` — declared absent-by-law\n"
+        "```\n",
+    )]
+    tree = _criterion_tree("tools/probe.py")
+    leg = _criterion_leg(issues, repo=tree)
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["refs_examined"] == 1, leg["coverage"]
+    assert leg["coverage"]["cited"] == 1, leg["coverage"]
+    cited = " ".join(leg["cited"])
+    assert "docs/hygiene-protected.json" in cited, cited
+    assert "fenced block" in cited, cited
+    # The token was EXAMINED, never dropped: the population's size is unchanged.
+    assert leg["coverage"]["refs_examined"] == 1, leg["coverage"]
+
+def test_the_criterion_path_leg_REDS_on_the_same_path_named_as_a_CRITERION() -> None:
+    """Arm 2. The SAME path, named as a criterion in prose with no other subject in its
+    sentence, is judged — and where a path is both quoted and named, the NAMED occurrence
+    wins, because one obligation is enough."""
+    issues = [_issue_with_body(
+        540, "OPEN",
+        "Quoted for context:\n\n"
+        "```\n"
+        "`docs/hygiene-protected.json`\n"
+        "```\n\n"
+        "Done when `docs/hygiene-protected.json` exists.\n",
+    )]
+    tree = _criterion_tree("tools/probe.py")
+    leg = _criterion_leg(issues, repo=tree)
+    assert leg["problems"], "a path NAMED as a criterion must be judged, quoted elsewhere or not"
+    assert "`docs/hygiene-protected.json`" in leg["problems"][0], leg["problems"]
+    assert "dispatch a work item" in leg["problems"][0], leg["problems"]
+    assert leg["coverage"]["refs_examined"] == 1, leg["coverage"]
+    assert leg["coverage"]["cited"] == 0, leg["coverage"]
+
+def test_the_criterion_path_leg_does_NOT_let_a_QUOTED_dead_exemption_revive_itself() -> None:
+    """Arm 3, the DISCRIMINATOR. This is the shape that made #540 self-silencing: a defect
+    report QUOTES the dead exemption it reports, so the quoted path counted as a live absence
+    and the entry stopped reading stale — a dead-debt verdict controlled by whichever report
+    was open. Measured: `exemptions_declared 2, declared_exempt 2` and NO stale finding at
+    00:40Z, against both being dead at 00:03:33Z.
+
+    Arms 1 and 2 alone both pass on a leg that simply DROPPED every token, so this arm is the
+    one that pins the fix: the entry must still report `matches no live absence`.
+    """
+    dead_path = "docs/dead-exemption-probe.json"
+    store = _citation_store({"exempt": [{
+        "path": dead_path,
+        "authority": "skills/meta-factory/SKILL.md:414 + ruling n=2693",
+        "reason": "probe: an entry whose work is done, reported as dead",
+    }]})
+    issues = [_issue_with_body(
+        540, "OPEN",
+        "The patrol now reports this entry as dead:\n\n"
+        "```\n"
+        f"`{dead_path}`: the exemption matches no live absence, so it excuses nothing\n"
+        "```\n",
+    )]
+    tree = _criterion_tree("tools/probe.py")
+    leg = _criterion_leg(issues, repo=tree, exemptions_path=store)
+    cov = leg["coverage"]
+    assert cov["exemptions_declared"] == 1, cov
+    assert cov["declared_exempt"] == 0, cov
+    joined = " ".join(leg["problems"])
+    assert "matches no live absence" in joined, (
+        f"quoting a dead exemption REVIVED it — the #540 shape is back: {leg['problems']}"
+    )
+    assert dead_path in joined, leg["problems"]
+    # ...and the quoted token itself is still counted and printed, not silently dropped.
+    assert cov["cited"] == 1, cov
+    assert dead_path in " ".join(leg["cited"]), leg["cited"]
+
+def test_the_criterion_path_leg_attributes_a_prose_path_to_the_OTHER_item_it_names() -> None:
+    """The second citation shape, measured on the same body: a path in ordinary prose whose
+    sentence names a DIFFERENT `#NNN` is that item's obligation, not this one's. A fence-skip
+    alone catches 2 of the 4 phantom tokens; this shape is the other 2."""
+    issues = [_issue_with_body(
+        540, "OPEN",
+        "Not in scope: `tests/test_commit_subject_issue_refs.py` is #529's, dispatched at "
+        "n=3992, and `TEMPLATE/tests/test_audit_cadence.py` is parked on #324's design gate.",
+    )]
+    tree = _criterion_tree("tools/probe.py")
+    leg = _criterion_leg(issues, repo=tree)
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["refs_examined"] == 2, leg["coverage"]
+    assert leg["coverage"]["cited"] == 2, leg["coverage"]
+    cited = " ".join(leg["cited"])
+    assert "#529" in cited and "#324" in cited, cited
+    assert "attributed to" in cited, cited
+
+def test_the_criterion_path_leg_is_NOT_fooled_by_a_bare_number_in_the_same_sentence() -> None:
+    """The attribution test must not excuse a criterion merely because the sentence carries a
+    number: `#540` IS this item, so a sentence naming only its own number judges the path."""
+    issues = [_issue_with_body(
+        540, "OPEN",
+        "Done when `tools/probe-criterion.py` exists for #540.",
+    )]
+    tree = _criterion_tree("tools/probe.py")
+    leg = _criterion_leg(issues, repo=tree)
+    assert leg["problems"], "a sentence naming only this item's own number excused its path"
+    assert "`tools/probe-criterion.py`" in leg["problems"][0], leg["problems"]
+    assert leg["coverage"]["cited"] == 0, leg["coverage"]
+
 if __name__ == "__main__":
     raise SystemExit(main())
 
