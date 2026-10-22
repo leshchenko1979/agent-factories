@@ -36,17 +36,31 @@ that read the code alone would agree with the audit's constant but not with its 
 would misread a future kill code. So the class reads the FLAG first and falls back to the
 code for a record that carries no flag.
 
+THIS GATE'S OWN WALL IS READ, NOT WRITTEN (#414). The outer `subprocess.run` used to carry
+`timeout=900` while the declared budget for this gate was 1008.75 s — two sources for one
+number, and the literal won at runtime, so the gate killed its own audit 108.75 s inside its
+allowance and could not be satisfied by a round that legitimately needed the time. Raising
+the literal would have re-armed the same drift the moment the budget was re-measured upward.
+The wall now comes from `registry/gates.json` through `tools/gate_budget.py`, and the SOURCE
+is printed with it, so a gate silently running on the fleet default is visible instead of
+silent. A kill at that wall is reported as NO VERDICT and exits with the fleet's kill code,
+never as a FAIL: the audit produced no verdict, so this gate has none to give.
+
 Run:  python3 tests/test_shipped_audit_runs.py
 Exit: 0 the shipped audit ran and every verdict is accounted for; 1 a FAIL, a silent
-      skip, a stale declaration, or a probe that failed to bite.
+      skip, a stale declaration, or a probe that failed to bite; 124 the outer wall fired
+      and no verdict exists — a kill, not a red (#206, #414).
 """
 
 from __future__ import annotations
 
 import ast
 import json
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -55,12 +69,43 @@ REPO = Path(__file__).resolve().parent.parent
 # records for a budget kill (`TEMPLATE/tools/audit.py` imports it from here too). Imported
 # rather than copied, so the two surfaces cannot drift apart.
 sys.path.insert(0, str(REPO / "tools"))
-from gate_budget import TIMEOUT_EXIT_CODE  # noqa: E402
+from gate_budget import (  # noqa: E402
+    TIMEOUT_EXIT_CODE,
+    GateBudgetManifestError,
+    gates_manifest_path,
+    load_gate_budgets,
+)
 SHIPPED = REPO / "TEMPLATE"
 SHIPPED_AUDIT = SHIPPED / "tools" / "audit.py"
 # The declared non-green population: FACTORY DATA, repo-side, in its own file so an entry
 # is visible debt rather than a line buried in this gate.
 DECLARED = REPO / "docs" / "shipped-audit-skips.json"
+
+# THIS GATE'S OWN BUDGET KEY, and the reason it is a key rather than a number (#414).
+# The wall below used to be `timeout=900` written into the call, while the budget lived in
+# `registry/gates.json` as `budget_sec 1008.75`. Two sources, one number, and the constant
+# won at runtime: the audit was killed 108.75 s BEFORE its own declared budget, on a
+# machine where a legitimate round could reach it. Raising the literal would have fixed
+# that day and re-armed the same drift the moment the budget was re-measured upward --
+# which its own `margin_x 4.003` against `measured_sec 252.0` invites. So the gate reads
+# its own declared cap through the shared reader, and there is ONE number.
+BUDGET_KEY = "tests/test_shipped_audit_runs.py"
+
+
+def inner_wall(manifest: Path | None = None) -> tuple[float, str]:
+    """This gate's declared wall, and whether it was DECLARED or fell to the default.
+
+    The second element is not decoration. A gate with no entry in the manifest silently
+    runs on the fleet default -- 69.27 s here, against a round that has been measured at
+    252 s -- so a reader meeting a kill must be able to see WHICH cap killed it. The
+    source is printed with the verdict for exactly that reason.
+
+    Raises `GateBudgetManifestError` for a manifest that exists and cannot be read: an
+    unreadable budget set is indistinguishable from no budget set, and defaulting over it
+    would silently re-cap every gate (the rule `gate_budget` itself states).
+    """
+    budgets = load_gate_budgets(manifest)
+    return budgets.resolve(BUDGET_KEY)
 
 _failures: list[str] = []
 
@@ -314,6 +359,137 @@ def probes() -> None:
           clean["NO VERDICT"] == [], "NO VERDICT == []")
 
 
+def budget_controls() -> None:
+    """#414: the wall is READ from the manifest, and a kill at it is NO VERDICT, not a FAIL.
+
+    Three arms, and the third is the one that pins the defect. The first two could both pass
+    on a gate that read the number and then ignored it, so the third runs the gate for real
+    against a fixture tree whose audit outlives a fixture budget — and then against a MUTANT
+    whose call site carries the old `timeout=900` literal, which must NOT read NO VERDICT.
+    Without that mutant the control would pass on the literal too, since a 900 s wall also
+    fails to kill a 2 s fixture.
+    """
+    # ARM 1 — the wall IS this gate's own declared budget, read through the shared reader,
+    # and the reader says so. A gate with no entry would silently run on the fleet default
+    # (69.27 s here against a round measured at 252 s), which is why the SOURCE is asserted
+    # and not just the number.
+    manifest = REPO / "registry" / "gates.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    declared_sec = ((data.get("gates") or {}).get(BUDGET_KEY) or {}).get("budget_sec")
+    wall, source = inner_wall()
+    check("WALL: the inner wall IS this gate's declared budget, and the reader says `declared`",
+          declared_sec is not None and wall == declared_sec and source == "declared",
+          f"{wall}s ({source}) against the manifest's {declared_sec}s")
+
+    # ARM 2 — the number is READ, not a literal: a fixture manifest moves it. This is what
+    # separates a real read from a constant that happens to equal today's budget. The fixture
+    # is built through the module's OWN margin law (`budget_sec == margin_for(measured) *
+    # measured`), because a thin hand-written entry is refused by the reader — which is the
+    # reader working, not an inconvenience to route around.
+    from gate_budget import margin_for
+
+    def fixture_manifest(measured_sec: float) -> dict:
+        return {
+            "default": {"budget_sec": round(margin_for(measured_sec) * measured_sec, 4)},
+            "gates": {BUDGET_KEY: {
+                "budget_sec": round(margin_for(measured_sec) * measured_sec, 4),
+                "measured_sec": measured_sec,
+                "margin_x": margin_for(measured_sec),
+                "measured_at": "HEAD",
+            }},
+        }
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fixture = Path(tmp) / "gates.json"
+        fixture_data = fixture_manifest(1080.0)
+        fixture.write_text(json.dumps(fixture_data), encoding="utf-8")
+        moved, moved_source = inner_wall(fixture)
+        check("CONTROL: a different DECLARED number moves the wall, so it is read",
+              moved == fixture_data["gates"][BUDGET_KEY]["budget_sec"] != wall
+              and moved_source == "declared",
+              f"{moved}s from the fixture manifest, {moved_source} (live wall {wall}s)")
+
+        # A gate with NO entry falls to the fleet default and SAYS so. Printed, not silent:
+        # that is the difference between a declared fallback and an exempt-by-silence one.
+        fixture.write_text(json.dumps({
+            "default": {"budget_sec": 77.0},
+            "gates": {},
+        }), encoding="utf-8")
+        fell, fell_source = inner_wall(fixture)
+        check("CONTROL: an undeclared gate falls to the default AND reports `default`",
+              fell == 77.0 and fell_source == "default",
+              f"{fell}s, source `{fell_source}`")
+
+    # ARM 3 — a kill at the wall reads NO VERDICT. Driven through the gate as a PROCESS,
+    # against a fixture tree: the fixture audit registers one gate and then outlives the
+    # fixture budget, so the only possible outcome is the outer wall firing.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "repo"
+        (root / "tests").mkdir(parents=True)
+        (root / "tools").mkdir(parents=True)
+        (root / "TEMPLATE" / "tools").mkdir(parents=True)
+        shutil.copyfile(REPO / "tools" / "gate_budget.py", root / "tools" / "gate_budget.py")
+        # A registration the AST can find, then a sleep longer than the fixture budget.
+        (root / "TEMPLATE" / "tools" / "audit.py").write_text(
+            "import time\n"
+            "gates_to_run = []\n"
+            'gates_to_run.append(["tests/slow.py"])\n'
+            "time.sleep(2.0)\n"
+            'print("{}")\n', encoding="utf-8")
+        slow_manifest = Path(tmp) / "gates.json"
+        slow_manifest.write_text(json.dumps(fixture_manifest(0.1)), encoding="utf-8")
+
+        gate_src = (REPO / "tests" / "test_shipped_audit_runs.py").read_text(encoding="utf-8")
+        gate = root / "tests" / "test_shipped_audit_runs.py"
+        gate.write_text(gate_src, encoding="utf-8")
+
+        def run_gate(path: Path) -> subprocess.CompletedProcess:
+            env = dict(os.environ, OC_GATES_MANIFEST=str(slow_manifest))
+            return subprocess.run([sys.executable, str(path), "--no-controls"],
+                                  cwd=str(root), capture_output=True, text=True,
+                                  env=env, timeout=120)
+
+        killed = run_gate(gate)
+        check("KILL: the outer wall fires and the gate reports NO VERDICT",
+              killed.returncode == TIMEOUT_EXIT_CODE and "NO VERDICT" in killed.stdout,
+              f"exit {killed.returncode}, "
+              f"{(killed.stdout or killed.stderr).strip().splitlines()[-1:]}")
+        check("KILL: and it is NOT reported as a FAIL, so a kill is distinguishable from a red",
+              killed.returncode != 1
+              and "gate FAILED" not in killed.stdout
+              and not any(l.strip().startswith("FAIL") for l in killed.stdout.splitlines()),
+              f"exit {killed.returncode}; a red would be exit 1 with a `FAIL` check line")
+
+        # THE MUTANT — the same gate with the old literal at the call site. It must NOT read
+        # NO VERDICT at this budget, because 900 s cannot kill a 2 s fixture. This is the arm
+        # that proves ARM 3 measured the READ and not merely the presence of a kill path.
+        #
+        # THE ANCHOR IS THE CALL SITE, and it must not be spellable inside this function —
+        # so it is assembled from two halves. A literal anchor is self-matching: the first
+        # version used the bare string `timeout=wall_sec`, which also appears in the MUTATION
+        # code itself, so the replace rewrote the mutation and left the call site intact — a
+        # no-op that still reported "a real mutation" because the text changed somewhere.
+        # Measured: that mutant read 124 exactly like the real gate. Raising it to a longer
+        # literal did not fix it, it moved the collision up a level (the anchor then matched
+        # its own assignment). The halves below cannot collide with either.
+        anchor = "text=True, timeout=" + "wall_sec,"
+        check("MUTATION: the anchor names the CALL SITE and is unique in the file",
+              gate_src.count(anchor) == 1, f"{gate_src.count(anchor)} occurrence(s)")
+        mutated = gate_src.replace(anchor, "text=True, timeout=" + "900,", 1)
+        check("MUTATION: the mutant carries the old literal, so it is a real mutation",
+              mutated != gate_src, "call site rewritten to `timeout=900`")
+        mutant = root / "tests" / "mutant_shipped_audit_runs.py"
+        mutant.write_text(mutated, encoding="utf-8")
+        survived = run_gate(mutant)
+        check("MUTATION: with the literal restored, the fixture budget does NOT kill — so "
+              "ARM 3 measured the read",
+              survived.returncode != TIMEOUT_EXIT_CODE
+              and "killed at this gate's declared budget" not in survived.stdout,
+              f"exit {survived.returncode} (a literal 900 s wall cannot kill a 2 s fixture); "
+              f"the class NAME still prints as `NO VERDICT: 0`, which is why this asserts on "
+              f"the kill MESSAGE and not on the class")
+
+
 def main() -> int:
     print("shipped audit — the tree the kit hands to members, EXECUTED (#199)")
 
@@ -345,10 +521,46 @@ def main() -> int:
     # RUN THE INSTRUMENT. The shipped audit is the only thing that knows how to invoke its
     # own registrations — re-deriving the invocation here is the defect #195 declared the
     # mode map to prevent.
-    proc = subprocess.run(
-        [sys.executable, "tools/audit.py", "--json"],
-        cwd=str(SHIPPED), capture_output=True, text=True, timeout=900,
-    )
+    #
+    # THE WALL IS READ, NOT WRITTEN (#414). `timeout=900` used to sit in this call while the
+    # declared budget was 1008.75 — so this gate killed the audit 108.75 s inside its own
+    # allowance and could not be satisfied by a round that legitimately needed the time. The
+    # wall now comes from the manifest entry for THIS gate, and the source is printed, so a
+    # gate running on the fleet default rather than its own measurement is visible instead of
+    # silent.
+    try:
+        wall_sec, wall_source = inner_wall()
+    except GateBudgetManifestError as exc:
+        print(f"  FAIL  the gate-budget manifest exists and cannot be read: {exc}")
+        print("             an unreadable budget set is indistinguishable from no budget set,")
+        print("             and defaulting over it would silently re-cap every gate")
+        return 1
+    print(f"  wall: {wall_sec:.2f}s for this gate ({wall_source} — {gates_manifest_path()})")
+
+    try:
+        proc = subprocess.run(
+            [sys.executable, "tools/audit.py", "--json"],
+            cwd=str(SHIPPED), capture_output=True, text=True, timeout=wall_sec,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # A BUDGET KILL IS NOT A FAILURE (#206, #414). `TimeoutExpired` is an unhandled
+        # exception here, so a kill raised out of this call and the gate exited as a plain
+        # failure — the exact mislabelling #206's NO VERDICT class exists to prevent, one
+        # level up from where it was modelled. The audit never reported a verdict, so this
+        # gate has none to give: it says so, in the class's own words, and exits with the
+        # kill code the fleet already uses, so a caller can tell this from a red.
+        killed = f"{wall_sec:.2f}s ({wall_source})"
+        print(f"  NO VERDICT  the shipped audit was killed at this gate's declared budget — "
+              f"{killed}")
+        print(f"      it neither passed nor failed: the audit produced no verdict to "
+              f"classify. Its own record, if it wrote one, is the authority on WHICH gate "
+              f"was still running; this gate's `timeout` is the OUTER wall and says nothing "
+              f"about the inner one. Regime: a wall measured while other work shares this "
+              f"box does not size the next wall (n=3984).")
+        print(f"      not counted as a FAIL: exit {TIMEOUT_EXIT_CODE}, the fleet's kill code "
+              f"(#{206})")
+        del exc
+        return TIMEOUT_EXIT_CODE
     try:
         payload = json.loads(proc.stdout)
     except json.JSONDecodeError:
@@ -391,7 +603,13 @@ def main() -> int:
         for p in got["FAIL"]:
             print(f"      {p}")
 
-    probes()
+    # The controls are skipped only when a CALLER says so — the kill arms below run this
+    # gate as a nested process against a fixture tree, and a copy that re-ran its own
+    # controls would spawn copies of itself without end. Every ordinary invocation runs
+    # them, including the one the gate set derives.
+    if "--no-controls" not in sys.argv:
+        probes()
+        budget_controls()
 
     if _failures or got["FAIL"]:
         print(f"shipped audit gate FAILED: {len(_failures)} probe failure(s), "
