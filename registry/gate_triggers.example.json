@@ -745,6 +745,12 @@
       "docs/products.example.json",
       "docs/products.json",
       "tools/roadmap.py"
+    ],
+    "tests/test_gate_direct_invocation.py": [
+      "TEMPLATE/tests/test_gate_direct_invocation.py",
+      "tests/test_gate_direct_invocation.py",
+      "tests/test_*.py",
+      "TEMPLATE/tests/test_*.py"
     ]
   }
 }

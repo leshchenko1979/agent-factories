@@ -3149,7 +3149,8 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     #     twin reds there rather than here.
     #
     #     Script-form, and it carries NO `registry/gates.json` budget entry -- a budget value
-    #     is the measurement duty's on the manifest's own derivation rule (state §11), so it
+    #     is the measurement duty's under the one-writer rule in skills/meta-factory/state.md,
+    #     so it
     #     runs on the declared default and the audit prints that it did.
     if (repo_root / "tests/test_gate_direct_invocation.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_gate_direct_invocation.py"])
