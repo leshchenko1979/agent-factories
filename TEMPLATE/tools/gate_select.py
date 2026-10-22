@@ -39,10 +39,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import NamedTuple
 
 MAP_RELATIVE = "registry/gate_triggers.json"
 MAP_EXAMPLE_RELATIVE = "TEMPLATE/registry/gate_triggers.example.json"
 AUDIT_RELATIVE = "tools/audit.py"
+BUDGET_MODULE = "gate_budget.py"
 DEFAULT = "full"
 
 
@@ -160,6 +162,46 @@ def _load_module(root: Path, relative: str, name: str):
     return module
 
 
+def declared_kill_code() -> int:
+    """The fleet's kill code, READ from `tools/gate_budget.py` (#544).
+
+    A second literal `124` in this module would be a private copy of a fleet constant, and
+    a private copy goes stale silently: the day the fleet moves its kill code this runner
+    keeps classifying the OLD number as a kill and reports every real kill as a FAILURE --
+    the precise misreading the NO VERDICT class exists to prevent. So the declaration is
+    imported, never retyped.
+
+    Read from THIS module's own directory, not from the tree under judgement: the kill code
+    is a property of the runner, and a clean checkout is not the authority on it. An
+    unreadable declaration is a hard failure rather than a fallback to 124, because a
+    classifier that cannot read its own vocabulary cannot say which class a run belongs to,
+    and guessing the vocabulary is how the literal got here in the first place.
+    """
+    module = _load_module(
+        Path(__file__).resolve().parent, BUDGET_MODULE, "oc_gate_budget_kill_code"
+    )
+    if module is None or not hasattr(module, "TIMEOUT_EXIT_CODE"):
+        raise SystemExit(
+            f"gate-select: cannot read {BUDGET_MODULE}, which declares the fleet's kill "
+            f"code; without it a killed gate cannot be told from a failed one."
+        )
+    return module.TIMEOUT_EXIT_CODE
+
+TIMEOUT_EXIT_CODE = declared_kill_code()
+
+class GateRun(NamedTuple):
+    """What a gate set produced: failures AND kills, kept apart on purpose (#544).
+
+    `failures` is a positive finding -- a gate ran and returned non-zero. `no_verdicts` is
+    the ABSENCE of a finding -- a gate was killed at its declared budget, so it neither
+    passed nor failed. Collapsing the second into the first is what made a load-dependent
+    kill read as a regression; keeping them in one object keeps a caller from silently
+    reading only half the verdict.
+    """
+
+    failures: list[str]
+    no_verdicts: list[str]
+
 def registered_commands(root: Path) -> dict[str, list[str]]:
     """`{gate key: argv}` read from the audit's OWN registration — the live list (#436).
 
@@ -250,7 +292,7 @@ def remove_clean_checkout(root: Path, target: Path) -> None:
     )
     shutil.rmtree(target.parent, ignore_errors=True)
 
-def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> list[str]:
+def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> GateRun:
     """Run each gate's registered argv; return the failures, each naming the gate.
 
     The argv is the audit's own, interpreter included (#436), so it is executed VERBATIM —
@@ -273,9 +315,18 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> lis
     reported as "no registered argv" — a message that sends the reader to the audit when
     the missing thing is the tree. The check is scoped to the clean checkout: under
     `--staged` the worktree IS the change under test and its shape is not in question.
+
+    A KILL IS NOT A FAILURE (#544). A gate that exits `TIMEOUT_EXIT_CODE` was killed at its
+    declared budget: it produced no verdict, so calling it a failure asserts something the
+    run never established. Measured on this box, same run, same bytes — the gate printed
+    `NO VERDICT ... not counted as a FAIL: exit 124, the fleet's kill code (#206)` while
+    this function reported `FAILED ... rc=124` one layer up, and an author reading the
+    second concludes their change broke something. The two classes are returned separately
+    so a caller cannot read one and believe it has the other.
     """
     commands = registered_commands(root)
     failures: list[str] = []
+    no_verdicts: list[str] = []
     for gate in gates:
         if tree_label != "worktree" and not (root / gate).is_file():
             failures.append(f"{gate} — selected, but not present in the {tree_label}")
@@ -291,9 +342,14 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> lis
         except OSError as exc:
             failures.append(f"{gate} — could not execute: {exc}")
             continue
-        if proc.returncode != 0:
+        if proc.returncode == TIMEOUT_EXIT_CODE:
+            no_verdicts.append(
+                f"{gate} — killed at its declared budget (exit {proc.returncode}); "
+                f"it neither passed nor failed"
+            )
+        elif proc.returncode != 0:
             failures.append(f"{gate} — rc={proc.returncode}")
-    return failures
+    return GateRun(failures, no_verdicts)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -384,13 +440,43 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.run:
         try:
-            failures = run_gates(judged_root, result["gates"], tree_label)
+            run = run_gates(judged_root, result["gates"], tree_label)
         finally:
             if checkout is not None:
                 remove_clean_checkout(root, checkout)
-        for failure in failures:
+        for failure in run.failures:
             print(f"gate-select: FAILED {failure}", file=sys.stderr)
-        return 1 if failures else 0
+        for killed in run.no_verdicts:
+            print(f"gate-select: NO VERDICT {killed}", file=sys.stderr)
+        # THE EXIT CODE CARRIES THE DISTINCTION (#544). A run is not a pass just because
+        # nothing failed: if a gate was killed, no verdict was taken on it, and rc=0 would
+        # report a clean bill for work that never happened. The codes, in precedence order:
+        #   1   — at least one gate FAILED. A positive finding outranks an absence of one,
+        #         and it is the code the pre-commit leg already blocks on.
+        #   124 — nothing failed, but at least one gate was KILLED. This is the fleet's kill
+        #         code (#206), reused rather than invented: two vocabularies for one event
+        #         is how a reader learns to trust neither. It is explicitly NOT a failure —
+        #         a caller that treats it as one is doing exactly what this unit removed.
+        #   0   — every selected gate ran and returned zero.
+        if run.failures:
+            if run.no_verdicts:
+                print(
+                    f"gate-select: {len(run.failures)} gate(s) FAILED and "
+                    f"{len(run.no_verdicts)} took NO VERDICT; the failures are reported "
+                    f"above and the exit code is theirs (1).",
+                    file=sys.stderr,
+                )
+            return 1
+        if run.no_verdicts:
+            print(
+                f"gate-select: NO VERDICT on {len(run.no_verdicts)} gate(s) — no verdict "
+                f"was taken on them, so this run is NOT a pass and must not be read as "
+                f"one. Exit {TIMEOUT_EXIT_CODE}, the fleet's kill code (#206), not 1: "
+                f"nothing failed here, a budget fired.",
+                file=sys.stderr,
+            )
+            return TIMEOUT_EXIT_CODE
+        return 0
     return 0
 
 

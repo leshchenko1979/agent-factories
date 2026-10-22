@@ -22,6 +22,7 @@ Run: python3 tests/test_gate_triggers.py   (rc=0 clean)
 from __future__ import annotations
 
 import importlib.util
+import re
 import json
 import os
 import shutil
@@ -424,7 +425,7 @@ def probe_the_run_mode_executes_gates_with_the_interpreter() -> None:
             encoding="utf-8",
         )
         try:
-            failures = module.run_gates(
+            run = module.run_gates(
                 root, ["tests/fixture_script_gate.py", "tests/test_fixture_gate.py"]
             )
         except OSError as exc:
@@ -434,7 +435,11 @@ def probe_the_run_mode_executes_gates_with_the_interpreter() -> None:
                 f"raised {type(exc).__name__}: {exc}",
             )
             return
-        check("both registered forms run to rc=0", failures == [], f"failures={failures}")
+        check(
+            "both registered forms run to rc=0",
+            run.failures == [] and run.no_verdicts == [],
+            f"failures={run.failures} no_verdicts={run.no_verdicts}",
+        )
         check(
             "the SCRIPT gate actually RAN (its marker exists)",
             script_marker.is_file(),
@@ -696,6 +701,186 @@ def probe_the_range_fails_a_gate_the_clean_checkout_cannot_materialise() -> None
             f"stderr={proc.stderr[:300]}",
         )
 
+FIXTURE_AUDIT_544 = (
+    "from __future__ import annotations\n"
+    "import sys\n"
+    "from pathlib import Path\n"
+    "\n"
+    "sys.path.insert(0, str(Path(__file__).resolve().parent))\n"
+    "from gate_budget import gate_key_for_cmd  # noqa: E402\n"
+    "\n"
+    "gates_to_run = []\n"
+    'gates_to_run.append([sys.executable, "tests/pass_gate.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/fail_gate.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/kill_gate.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/kill99_gate.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/kill124_gate.py"])\n'
+    "\n"
+    "def registered_gates(repo_root):\n"
+    "    return [cmd for cmd in gates_to_run if gate_key_for_cmd(cmd, repo_root)]\n"
+)
+
+def _declared_kill_code() -> int:
+    """The fleet kill code, READ from the declaration rather than imported.
+
+    `gate_budget` defines a frozen dataclass, and `_load` does not register the module in
+    `sys.modules` — dataclasses resolves `cls.__module__` through that registry and raises
+    AttributeError. Parsing the single assignment keeps the arm honest (it reads the same
+    declaration the tool reads) without dragging the module's import machinery in.
+    """
+    found = re.findall(r"^TIMEOUT_EXIT_CODE\s*=\s*(\d+)\s*$", GATE_BUDGET.read_text(), re.M)
+    assert len(found) == 1, f"gate_budget.py must declare TIMEOUT_EXIT_CODE once, saw {found}"
+    return int(found[0])
+
+def _fixture_544(root: Path) -> None:
+    """A hermetic tree whose gates return the exact codes #544 must tell apart."""
+    (root / "tools").mkdir(parents=True, exist_ok=True)
+    (root / "tests").mkdir(parents=True, exist_ok=True)
+    (root / "registry").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(GATE_BUDGET, root / "tools" / "gate_budget.py")
+    (root / "tools" / "audit.py").write_text(FIXTURE_AUDIT_544, encoding="utf-8")
+    kill = _declared_kill_code()
+    for name, code in (
+        ("pass_gate", 0),
+        ("fail_gate", 1),
+        ("kill_gate", kill),
+        ("kill99_gate", 99),
+        ("kill124_gate", 124),
+    ):
+        (root / "tests" / f"{name}.py").write_text(
+            f"raise SystemExit({code})\n", encoding="utf-8"
+        )
+    (root / "registry" / "gate_triggers.json").write_text(
+        json.dumps(
+            {
+                "default": "full",
+                "floor": [],
+                "gates": {
+                    "tests/pass_gate.py": ["t-pass"],
+                    "tests/fail_gate.py": ["t-fail"],
+                    "tests/kill_gate.py": ["t-kill"],
+                    "tests/kill99_gate.py": ["t-kill99"],
+                    "tests/kill124_gate.py": ["t-kill124"],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+def _run_cli_544(root: Path, trigger: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(GATE_SELECT), "--repo-root", str(root), "--paths", trigger, "--run"],
+        capture_output=True,
+        text=True,
+    )
+
+def probe_a_kill_is_not_a_failure() -> None:
+    """#544: a gate killed at its budget is NO VERDICT, never FAILED, and never rc=0.
+
+    Measured on the live box, same run, same bytes: the gate printed `NO VERDICT ... not
+    counted as a FAIL: exit 124, the fleet's kill code (#206)` while this runner reported
+    `FAILED ... rc=124` one layer up. An author reading the runner concludes their change
+    broke something when no verdict was ever taken on it.
+
+    Four arms, and arm 2 is the discriminator: a change that merely adds a string and
+    softens every non-zero exit would pass arms 1 and 3 while destroying the failure class.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _fixture_544(root)
+
+        # ARM 1 — the kill reads NO VERDICT and is absent from the failures.
+        killed = _run_cli_544(root, "t-kill")
+        check(
+            "ARM 1: a gate exiting the kill code prints NO VERDICT",
+            "NO VERDICT" in killed.stderr,
+            f"stderr={killed.stderr[-300:]}",
+        )
+        check(
+            "ARM 1: ... and is NOT reported as FAILED",
+            "FAILED" not in killed.stderr,
+            f"stderr={killed.stderr[-300:]}",
+        )
+        check(
+            "ARM 1: ... and the run is NOT a pass (rc must not be 0)",
+            killed.returncode != 0,
+            f"rc={killed.returncode}",
+        )
+        check(
+            "ARM 1: ... and rc is the fleet's kill code, not 1",
+            killed.returncode == _declared_kill_code(),
+            f"rc={killed.returncode}",
+        )
+
+        # ARM 2 — THE DISCRIMINATOR: a genuine failure in the same runner still FAILS.
+        failed = _run_cli_544(root, "t-fail")
+        check(
+            "ARM 2: a gate exiting 1 still prints FAILED",
+            "FAILED" in failed.stderr,
+            f"stderr={failed.stderr[-300:]}",
+        )
+        check(
+            "ARM 2: ... and still yields a non-zero exit",
+            failed.returncode != 0,
+            f"rc={failed.returncode}",
+        )
+        check(
+            "ARM 2: ... and is NOT dressed up as NO VERDICT",
+            "NO VERDICT" not in failed.stderr,
+            f"stderr={failed.stderr[-300:]}",
+        )
+
+        # ARM 3 — precedence: a mixed run is non-zero, and the failure owns the code.
+        (root / "registry" / "gate_triggers.json").write_text(
+            json.dumps(
+                {
+                    "default": "full",
+                    "floor": [],
+                    "gates": {
+                        "tests/kill_gate.py": ["t-mixed"],
+                        "tests/fail_gate.py": ["t-mixed"],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        mixed = _run_cli_544(root, "t-mixed")
+        check(
+            "ARM 3: a mixed kill+failure run reports BOTH classes",
+            "NO VERDICT" in mixed.stderr and "FAILED" in mixed.stderr,
+            f"stderr={mixed.stderr[-300:]}",
+        )
+        check(
+            "ARM 3: ... and the failure owns the exit code (1, not the kill code)",
+            mixed.returncode == 1,
+            f"rc={mixed.returncode}",
+        )
+        # The mixed arm rewrote the map; restore it so the clean arm has a subject. A
+        # trigger that resolves to nothing is not a clean run — it is a run of every gate.
+        _fixture_544(root)
+        passed = _run_cli_544(root, "t-pass")
+        check(
+            "ARM 3: a clean run still exits 0 — the control that the change did not red everything",
+            passed.returncode == 0,
+            f"rc={passed.returncode} stderr={passed.stderr[-200:]}",
+        )
+
+        # ARM 4 — DECLARATION, NOT LITERAL: move the declaration and the class follows it.
+        module = _load("oc_gate_select_544", GATE_SELECT)
+        module.TIMEOUT_EXIT_CODE = 99
+        run = module.run_gates(root, ["tests/kill99_gate.py", "tests/kill124_gate.py"])
+        check(
+            "ARM 4: the class follows the DECLARED kill code, so 99 reads NO VERDICT",
+            len(run.no_verdicts) == 1 and "kill99_gate" in run.no_verdicts[0],
+            f"no_verdicts={run.no_verdicts} failures={run.failures}",
+        )
+        check(
+            "ARM 4: ... and a hardcoded 124 would report this gate as a FAILURE",
+            len(run.failures) == 1 and "kill124_gate" in run.failures[0],
+            f"no_verdicts={run.no_verdicts} failures={run.failures}",
+        )
+        module.TIMEOUT_EXIT_CODE = _declared_kill_code()
+
 PROBES = (
     probe_every_registered_gate_is_covered,
     probe_every_map_key_is_registered,
@@ -709,6 +894,7 @@ PROBES = (
     probe_the_run_mode_executes_gates_with_the_interpreter,
     probe_the_range_judges_the_range_not_the_worktree,
     probe_the_range_fails_a_gate_the_clean_checkout_cannot_materialise,
+    probe_a_kill_is_not_a_failure,
 )
 
 
