@@ -407,6 +407,12 @@ PAIRS = [
     ("tests/gate_registry.py", "TEMPLATE/tests/gate_registry.py"),
     ("tests/test_gate_registration.py", "TEMPLATE/tests/test_gate_registration.py"),
     ("tests/test_gate_invocation_mode.py", "TEMPLATE/tests/test_gate_invocation_mode.py"),
+    # The direct-invocation gate (#542, ruling n=4071). Paired because its POPULATION is the
+    # root `tests/test_*.py` set itself: a twin that drifted would judge a different tree than
+    # the one it shipped beside, and the whole point of the gate is that the shipped copies
+    # run when invoked the way the docs say. The TEMPLATE copy carries the mechanism; a
+    # factory inherits it because it inherits the 24 pytest-family gates it polices.
+    ("tests/test_gate_direct_invocation.py", "TEMPLATE/tests/test_gate_direct_invocation.py"),
     ("tests/test_gate_fixtures_closure.py", "TEMPLATE/tests/test_gate_fixtures_closure.py"),
     # The blast-radius gate selector, its gate, and its map's example (#294, ruling n=2106).
     # The selector is a TOOL, so it pairs like every other tool. The map's SHAPE ships as an

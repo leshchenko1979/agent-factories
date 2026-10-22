@@ -1009,6 +1009,19 @@ REQUIRED_GATES: tuple[str, ...] = (
     # never one that authorizes 8 of 14. Measured twice (#462 conversion, #461 release), both
     # by measurement and neither by a gate.
     "test_declared_event_population.py",
+    # Added with its registration (issue #542, ruling n=4071). REQUIRED is the correct grain
+    # and OPTIONAL is not: the gate walks `tests/test_*.py` and parses them with `ast`, so it
+    # reads no live board, no fleet manifest and no box-local fixture, and it passes in a
+    # bootstrapped factory exactly as it does here -- a factory needs it MORE, because it
+    # inherits the pytest-family gates whose documented invocation executes nothing. It is
+    # byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory from
+    # dropping the detector and keeping the files it was meant to police. THE MECHANISM IT
+    # GUARDS: `python3 tests/<name>.py` on a file with no `__main__` block imports the module
+    # and runs NO test, reporting rc=0 with zero bytes of output -- indistinguishable from a
+    # pass to every reader, log and lane that pipes it. Measured at three wrong diagnoses in
+    # one night on `tests/test_hygiene_placement.py`, which was RED and correct on main while
+    # the script form reported it green three times.
+    "test_gate_direct_invocation.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather

@@ -508,7 +508,8 @@
     "tools/ledger.py": "script",
     "tools/roadmap.py": "script",
     "tests/test_duty_receipt_exemptions.py": "script",
-    "tests/test_ledger_ref_roles.py": "script"
+    "tests/test_ledger_ref_roles.py": "script",
+    "tests/test_gate_direct_invocation.py": "script"
   },
   "exits": {
     "tests/test_audit_inflight_guard.py": {
@@ -856,6 +857,9 @@
     "tests/test_criterion_path_exemptions.py": {
       "class": "exemption-table",
       "table": "docs/criterion-path-exemptions.json"
+    },
+    "tests/test_gate_direct_invocation.py": {
+      "class": "always-satisfiable"
     }
   }
 }

@@ -3134,6 +3134,26 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_criterion_path_exemptions.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_criterion_path_exemptions.py"])
 
+    # tests/test_gate_direct_invocation.py -- issue #542, ruling n=4071. THE MECHANISM IT
+    # GUARDS: `python3 tests/<name>.py` on a file with no `__main__` block imports the module
+    # and runs NO test, reporting rc=0 with zero bytes of output -- a shape indistinguishable
+    # from a pass to every reader, log and lane that pipes it. Measured at three wrong
+    # diagnoses in one night on `tests/test_hygiene_placement.py`, which was RED and correct
+    # on main while the script form reported it green three times.
+    #
+    #     It walks `tests/test_*.py` and parses each with `ast`, requiring a module-level
+    #     `if __name__ == "__main__":` whose body CALLS something. Both halves are
+    #     load-bearing: a substring check passes a COMMENTED-OUT trailer, and a body of `pass`
+    #     satisfies "has a block" while executing nothing. Population: every root gate; the
+    #     TEMPLATE twins are held byte-identical by tests/test_template_sync.py, so a drifted
+    #     twin reds there rather than here.
+    #
+    #     Script-form, and it carries NO `registry/gates.json` budget entry -- a budget value
+    #     is the measurement duty's on the manifest's own derivation rule (state §11), so it
+    #     runs on the declared default and the audit prints that it did.
+    if (repo_root / "tests/test_gate_direct_invocation.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_gate_direct_invocation.py"])
+
     return gates_to_run
 
 
