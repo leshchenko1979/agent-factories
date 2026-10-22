@@ -2765,6 +2765,19 @@ def parse_blocks(markdown):
 # without parsing HTML.
 RENDER_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "questions-render.mjs")
+# The renderer's DEPENDENCY MANIFEST, shipped BESIDE it (#520, ruling n=3863). Node
+# resolves a bare ESM import by walking up from the importing module's own directory,
+# so the five packages questions-render.mjs imports must be installed in render_dir()
+# -- the directory the renderer is copied into and run from. Until this file existed
+# the kit declared `node` on PATH and nothing else, so a member who adopted the tool
+# had no tracked artifact telling it which packages to install: the provisioning lived
+# in OUR evidence directory, which no member reads, and on this box it was a hand-made
+# untracked file. The manifest is copied into the build dir as `package.json` by
+# render_page() so the member's ONE step is `npm install` in that directory; the
+# install itself stays MANUAL because it is a network operation and no gate may
+# depend on network access.
+RENDER_MANIFEST_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "questions-render.package.json")
 # The Node process needs node_modules beside it, so it runs from the build dir.
 # Overridable so the selftest can point at a scratch tree.
 RENDER_TIMEOUT = 30
@@ -2961,19 +2974,32 @@ def render_via_node(spec):
         os.makedirs(directory, exist_ok=True)
     except OSError as exc:
         return None, "build dir unwritable (%s)" % exc.__class__.__name__
-    target = os.path.join(directory, "render.mjs")
-    try:
-        with open(RENDER_SRC, "r", encoding="utf-8") as fh:
-            wanted = fh.read()
-        current = None
-        if os.path.isfile(target):
-            with open(target, "r", encoding="utf-8") as fh:
-                current = fh.read()
-        if current != wanted:
-            with open(target, "w", encoding="utf-8") as fh:
-                fh.write(wanted)
-    except OSError as exc:
-        return None, "renderer copy failed (%s)" % exc.__class__.__name__
+    # The renderer AND its dependency manifest land beside each other (#520): node
+    # resolves the manifest's packages by walking up from the module's directory, so
+    # placing package.json in the build dir is what makes the member's `npm install`
+    # run in the right place. A manifest that fails to place is a fault like any
+    # other -- an install nobody can discover is the defect this fixes.
+    for source, name, missing, failed in (
+            (RENDER_SRC, "render.mjs", "renderer source missing",
+             "renderer copy failed"),
+            (RENDER_MANIFEST_SRC, "package.json",
+             "renderer dependency manifest missing",
+             "dependency manifest copy failed")):
+        if not os.path.isfile(source):
+            return None, missing
+        try:
+            with open(source, "r", encoding="utf-8") as fh:
+                wanted = fh.read()
+            target = os.path.join(directory, name)
+            current = None
+            if os.path.isfile(target):
+                with open(target, "r", encoding="utf-8") as fh:
+                    current = fh.read()
+            if current != wanted:
+                with open(target, "w", encoding="utf-8") as fh:
+                    fh.write(wanted)
+        except OSError as exc:
+            return None, "%s (%s)" % (failed, exc.__class__.__name__)
     try:
         proc = subprocess.run(
             ["node", "render.mjs"],           # ARGV LIST: never shell=True
@@ -2993,8 +3019,21 @@ def render_via_node(spec):
         cause = next((l for l in lines if "Error" in l), None)
         if cause is None and lines:
             cause = lines[-1]
-        return None, "renderer rc=%d%s" % (proc.returncode,
-                                           (": " + cause.strip()) if cause else "")
+        reason = "renderer rc=%d%s" % (proc.returncode,
+                                       (": " + cause.strip()) if cause else "")
+        # A DECLARATION A MEMBER CANNOT DISCOVER IS HALF A REMEDY (#520, n=3863).
+        # ERR_MODULE_NOT_FOUND is the one fault whose fix is a named, manual step, so
+        # the reason names it: the packages are declared in the package.json this
+        # function just placed beside the renderer, and `npm install` in that
+        # directory is the whole remedy. Naming the DIRECTORY matters -- node
+        # resolves the packages by walking up from the renderer, so an install run
+        # anywhere else leaves this fault exactly as it was.
+        if "ERR_MODULE_NOT_FOUND" in (proc.stderr or ""):
+            reason += (" -- the renderer's packages are NOT installed. Run "
+                       "`npm install` in %s, which holds the package.json this "
+                       "tool places there; installing elsewhere does not resolve "
+                       "them." % directory)
+        return None, reason
     if not proc.stdout.strip():
         return None, "renderer produced no output"
     return proc.stdout, None

@@ -206,13 +206,28 @@ def render(obj: dict) -> str:
 # of an `ArgumentParser` is the objective mark of "this has an interface of its own",
 # which is why `tools/registry.py` and `tools/telemetry.py` are `standalone` even though
 # `tools/ledger.py` imports them -- a factory missing `registry.py` is behind on an
-# instrument, not missing a dependency. The ten below carry no CLI and no importer of
+# instrument, not missing a dependency. The modules below carry no CLI and no importer of
 # their own would work without them.
+#
+# A DATA closure is declared on the same reasoning, and the ArgumentParser discriminator
+# does not reach it because the file is not code. `TEMPLATE/tools/questions-render.package.json`
+# (#520, ruling n=3863) is the renderer's dependency manifest: the tool copies it beside
+# the renderer in the directory node resolves packages from, so a factory that ports the
+# renderer without it cannot install the five packages that renderer imports, and renders
+# nothing. That is the closure shape -- absence breaks the PARENT -- one stage later than
+# import: at render rather than at import. It is a manifest-tracked entry rather than
+# prose in the closure field because the census hashes FILES, so a manifest is the only
+# shape in which this declaration can be checked at all.
 CLOSURE_MODULES = frozenset({
     # tools/ -- imported by the executables, never invoked directly
     "TEMPLATE/tools/field_predicate.py",     # imported_by 10 shipped files
     "TEMPLATE/tools/gate_budget.py",         # imported by tools/audit.py
     "TEMPLATE/tools/ledger_declaration.py",  # the HARD tier: raises at import
+    "TEMPLATE/tools/questions-render.package.json",  # the renderer's dependency
+                                             # manifest (#520): node resolves these
+                                             # packages from the directory the tool
+                                             # places it in, so a port without it
+                                             # renders nothing
     "TEMPLATE/tools/reconstruction.py",      # the HARD tier: raises at import
     "TEMPLATE/tools/kit_pin.py",             # loaded BY PATH by tools/patrol_host_state.py
                                              # (KIT_PIN) and by a factory's own pin gate; it

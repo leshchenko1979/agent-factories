@@ -14,7 +14,7 @@ Frame §1 fixes the declaration form: **an instrument is a DECLARED object**, de
 |---|---|
 | **name** | Open Questions register |
 | **executable(s)** | the CLI; verbs `ask` · `answer` · `amend` · `notify` · `list` · `publish` · `lint` · `gc`. Its path law is §5.1 |
-| **closure** | the render asset that must sit BESIDE the binary, and `node` on PATH — declared, never derived (frame §1.1). A one-file install is INCOMPLETE, not minimal: it registers happily and publishes nothing (§5.2) |
+| **closure** | the render asset that must sit BESIDE the binary, its **dependency manifest** (`tools/questions-render.package.json`, which the tool places in the render directory as `package.json`), and `node` on PATH — declared, never derived (frame §1.1). The packages that manifest pins are installed by a MANUAL `npm install` in the render directory: a network step, so no gate may depend on it (#520). A one-file install is INCOMPLETE, not minimal: it registers happily and publishes nothing (§5.2) |
 | **gate set** | the instrument's own suite, `tests/test_questions.py`; this law pair is gated by `tests/test_docs_sync.py` |
 | **version source** | the kit manifest — DERIVED, never hand-typed (frame §7.1) |
 | **data surfaces** | the register store in the profile home, shared by every install shape, so no member owes a migration; shipped `.example` versus factory-owned is declared at adoption (§5.4) |
@@ -23,7 +23,7 @@ Frame §1 fixes the declaration form: **an instrument is a DECLARED object**, de
 
 ## 2. The declared file set
 
-**Predicate:** the shipped paths the kit manifest classifies `standalone` that carry this instrument —
+**Predicate:** the shipped paths the kit manifest classifies `standalone` that carry this instrument, plus the one path it classifies `closure` — a data file with no interface of its own, which the instrument cannot render without (#520) —
 plus, per frame §1.4, every path the executable reaches **indirectly**, which here is **none**: the CLI
 imports only the standard library and its one repo-relative path constant is the render asset that must
 sit beside it. **Scope:** `registry/kit.json`, whose population is the `TEMPLATE/` half. Both halves are
@@ -35,14 +35,15 @@ listed because the pair is what a member adopts; the manifest hashes the `TEMPLA
 | 2 | `tools/questions-render.mjs` ↔ `TEMPLATE/tools/questions-render.mjs` | `standalone` | **the render asset**, resolved beside the binary — a one-file install registers happily and publishes nothing (§5.2) |
 | 3 | `tests/test_questions.py` ↔ `TEMPLATE/tests/test_questions.py` | `standalone` | **the gate** — invokes the tool's own `selftest` |
 | 4 | `docs/instruments/open-questions.md` ↔ `TEMPLATE/docs/instruments/open-questions.md` | `standalone` | this file |
+| 5 | *(no root half)* ↔ `TEMPLATE/tools/questions-render.package.json` | `closure` | **the dependency manifest** — the five npm packages the renderer imports, pinned. The tool places it in the render directory as `package.json`, so the member's one step is `npm install` THERE (§5.2). `closure` because it has no interface of its own and a port without it renders nothing |
 
 **A reader holding this file and a tree can answer *"is this instrument complete here?"* without
 enumerating imports**, which is what frame §1 requires of a declaration. The member's reload link
 (`skills/<skill dir>/open-questions.md`) is deliberately **not** in this set: it is the member's own
 act under frame §6.1, and the transport creates no links.
 
-**At THIS repo the set reads 2 of 4, and that reading is DECLARED rather than a gap.** Rows 1–2 are the
-DELIVERED executables: at source they exist only at their `TEMPLATE/` halves, and no root-side copy is
+**At THIS repo the set reads 2 of 5, and that reading is DECLARED rather than a gap.** Rows 1–2 and row 5 are the
+DELIVERED files: at source they exist only at their `TEMPLATE/` halves, and no root-side copy is
 owed — the CLI a caller runs is resolved by §5.1's glob under a **skill's tools root**, never from this
 tree, and no root-side `tools/questions` is tracked anywhere in this repo's history. Rows 3–4 sit at
 root because this repo is the instrument's own law home and gate home; those root copies are the
@@ -233,9 +234,15 @@ The CLI is located by a glob under the skill's tools root, and the resolution de
 
 The path is resolved at call time, so no clause in this file may pin it.
 
-### 5.2 The install closure is TWO files, and the failure is SILENT
+### 5.2 The install closure is THREE files, and the failure is SILENT
 
-The binary resolves its render asset BESIDE ITSELF, by a name that tracks the binary's own name. The closure is therefore the tool PLUS that asset, and the two names are coupled: renaming or relocating one leg without the other breaks the render path.
+The binary resolves its render asset BESIDE ITSELF, by a name that tracks the binary's own name. The closure is therefore the tool, that asset, AND the asset's dependency manifest, which the tool places in the render directory as `package.json`; the names are coupled, so renaming or relocating one leg without the others breaks the render path.
+
+**The dependency leg is DECLARED now, and it used to be nowhere (#520).** The renderer imports five npm packages (`react`, `react-dom`, `zod`, `@json-render/core`, `@json-render/react`), and node resolves them by walking up from the renderer's own directory — so they must be installed in the render directory, not at a repo root. Until the manifest shipped, the kit declared `node` on PATH and nothing else: the provisioning existed only in this factory's own evidence directory, which no member reads, and on the source box it was a hand-made untracked file, so the working instance was never evidence that the kit provided it. A member who adopted the tool had no tracked artifact naming the packages.
+
+**`npm install` stays MANUAL, and the failure text now names it.** Installing is a network operation, so the tool must never attempt it and no gate may depend on network access; the remedy makes the step DECLARED and discoverable rather than automatic. The manifest's pins are the porting lane's to choose and the member's to install — this file sets no version policy. What the tool guarantees is the two halves that can be guaranteed offline: it PLACES the manifest beside the renderer, and when a render fails with `ERR_MODULE_NOT_FOUND` it names the directory to run `npm install` in. Naming the directory matters — an install run anywhere else leaves the fault exactly as it was.
+
+**The failure is a FAST fail, not a timeout.** A missing package exits in roughly 0.2 s with rc=1; the render timeout branch is reached only by a child that HANGS, so the timeout is not this fault's mechanism and shortening it would fix nothing (correction recorded at ledger `n=3860`, adopted by ruling `n=3863`).
 
 The hazard is NAMING, not content — a rename separates the halves while each file remains individually correct. And the failure is soft: a half-install registers a question happily and publishes nothing, so a caller checking only the exit code reads a stranded question as a success. This is why §1's `closure` field is DECLARED rather than derived (frame §1.1), and why a one-file install is INCOMPLETE rather than minimal.
 

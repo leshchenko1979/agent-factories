@@ -1,0 +1,14 @@
+{
+  "name": "oc-questions-render",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "description": "Dependencies of the Open Questions renderer (questions-render.mjs). The tool copies this file to package.json in its build directory; run `npm install` THERE to install them. A missing package fails fast (rc=1, ERR_MODULE_NOT_FOUND) and the page keeps serving the last good build.",
+  "dependencies": {
+    "@json-render/core": "0.21.0",
+    "@json-render/react": "0.21.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "zod": "4.5.4"
+  }
+}

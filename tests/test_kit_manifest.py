@@ -186,6 +186,14 @@ def main() -> int:
               r.returncode == 1 and "UNLISTED" in r.stdout and UNLISTED in r.stdout,
               [l.strip() for l in r.stdout.splitlines() if "UNLISTED" in l][:1] or r.stdout[:80])
 
+        # An arm that ADDS a file to the shared copy must take it away again: the arms
+        # below share this tempdir, and a leftover is not a note, it is a refusal every
+        # later `--check` inherits. Measured: ARM 9's control read
+        # `1 unrunnable-standalone` for this very file and could not tell a masked
+        # refusal from a class change — which is the one thing that control exists for.
+        (root / UNLISTED).unlink()
+        run()
+
         # ARM 6 — THE PIN VEHICLE IS OUTSIDE THE MANIFEST POPULATION, and it excludes
         # NOTHING ELSE. The vehicle carries the manifest's own content, so it cannot
         # carry its own digest; when only the generator knew that, the hook reported a
@@ -214,6 +222,45 @@ def main() -> int:
         check("the pin vehicle is OUTSIDE the population, and a real escaped file is still named",
               got.get("in_pop") is False and got.get("unlisted") == [escaped],
               r.stdout.strip()[:140] or r.stderr.strip()[:140])
+
+        # ARM 9 — THE DEPENDENCY MANIFEST IS A DECLARED CLOSURE, and the DECLARATION is
+        # what the census reads (#520, ruling n=3863). The renderer imports five npm
+        # packages and node resolves them by walking up from the renderer's own
+        # directory, so a factory that ports the renderer without this file cannot
+        # install them and renders nothing — the closure shape, one stage later than
+        # import. The class is a VALUE, so it can be written without being read; three
+        # legs, and the third is the one that pins it:
+        #   (a) the committed manifest carries the path AS `closure`;
+        #   (b) the class comes from the DECLARATION rather than a suffix rule — removing
+        #       the path from CLOSURE_MODULES in a copy and regenerating moves it to the
+        #       residual `standalone`, so the loss of the declaration is VISIBLE rather
+        #       than silent. That residual default is the failure this arm exists for:
+        #       `classify()` returns `standalone` for anything undeclared, and a member
+        #       reading `standalone` would be told it is BEHIND on an instrument rather
+        #       than missing a file its renderer cannot start without;
+        #   (c) `--check` on the mutated copy is still in agreement, so (b) measured a
+        #       class change and not a refusal for some other reason.
+        DEP = "TEMPLATE/tools/questions-render.package.json"
+        check("the manifest classes the renderer's dependency manifest as closure",
+              classes.get(DEP) == "closure", repr(classes.get(DEP)))
+        check("and that class names a file the kit actually ships",
+              (root / DEP).is_file(), DEP)
+        gen = root / "tools/kit_manifest.py"
+        gen_src = gen.read_text(encoding="utf-8")
+        stripped = gen_src.replace('    "TEMPLATE/tools/questions-render.package.json",', "", 1)
+        check("the declaration was found in the generator, so the mutation below is not a no-op",
+              stripped != gen_src, "anchor line present")
+        gen.write_text(stripped, encoding="utf-8")
+        run()
+        fell = json.loads((root / "registry/kit.json").read_text())["classes"].get(DEP)
+        check("CONTROL: undeclared, the class FALLS to the residual default",
+              fell == "standalone", repr(fell))
+        r = run("--check")
+        check("CONTROL: and the census is still in agreement, so that was a class change alone",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[:600])
+        gen.write_text(gen_src, encoding="utf-8")
+        run()
+
 
     # ARM 7 — HERMETICITY: the mutation arms ran on a copy, so the live shipped file is
     # byte-identical. Measured rather than asserted.
