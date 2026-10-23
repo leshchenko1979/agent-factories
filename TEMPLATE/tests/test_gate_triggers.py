@@ -881,6 +881,87 @@ def probe_a_kill_is_not_a_failure() -> None:
         )
         module.TIMEOUT_EXIT_CODE = _declared_kill_code()
 
+def probe_a_failed_receipt_carries_the_childs_word() -> None:
+    """#552 (ruling `n=4167`), leg 1: the runner carries the child's own diagnosis.
+
+    `tools/gate_select.py` recorded `rc=<n>` and nothing else, so the gate's own stderr --
+    where it already writes `UNMEASURED` or `DISAGREE` -- died at the one surface a lane
+    reads, and "a peer was running the audit" printed exactly like "your change broke this
+    gate". Measured on the live box: the same commit read rc=0 solo and rc=1 under a
+    concurrent peer audit (26m33s of overlap) and the receipt named neither.
+
+    Arm 2 is the discriminator. A change that pastes the child's FIRST stderr line lands
+    this tree's own `2 problem(s):` header -- a line that names no cause while looking like
+    one -- so the skip is asserted rather than assumed; without that arm the receipt would
+    look fixed while telling the reader nothing.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _fixture_544(root)
+        (root / "tests" / "diag_gate.py").write_text(
+            "import sys\n"
+            "print('2 problem(s):', file=sys.stderr)\n"
+            "print('  tests/example.py: the pair is UNMEASURED rather than agreeing',\n"
+            "      file=sys.stderr)\n"
+            "raise SystemExit(1)\n",
+            encoding="utf-8",
+        )
+        (root / "tests" / "silent_gate.py").write_text(
+            "raise SystemExit(1)\n", encoding="utf-8"
+        )
+        (root / "registry" / "gate_triggers.json").write_text(
+            json.dumps(
+                {
+                    "default": "full",
+                    "floor": [],
+                    "gates": {
+                        "tests/diag_gate.py": ["t-diag"],
+                        "tests/silent_gate.py": ["t-silent"],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        # The fixture audit's `gates_to_run` is the argv source the runner reads (#436), so a
+        # gate it does not register is reported "no registered argv" and never RUN -- which is
+        # how the first draft of this probe passed its negative arms while testing nothing.
+        with (root / "tools" / "audit.py").open("a", encoding="utf-8") as handle:
+            handle.write(
+                'gates_to_run.append([sys.executable, "tests/diag_gate.py"])\n'
+                'gates_to_run.append([sys.executable, "tests/silent_gate.py"])\n'
+            )
+        module = _load("oc_gate_select_552", GATE_SELECT)
+
+        diag = module.run_gates(root, ["tests/diag_gate.py"])
+        check(
+            "ARM 1: a FAILED receipt carries the child's own diagnosis",
+            len(diag.failures) == 1
+            and "UNMEASURED rather than agreeing" in diag.failures[0],
+            f"failures={diag.failures}",
+        )
+        check(
+            "ARM 2 (discriminator): the bare count header is SKIPPED, never carried",
+            "problem(s)" not in " ".join(diag.failures),
+            f"failures={diag.failures}",
+        )
+        check(
+            "ARM 1: ... and the receipt still names the rc it reports",
+            "rc=1" in diag.failures[0],
+            f"failures={diag.failures}",
+        )
+        check(
+            "ARM 3: a plain failure is still FAILED, never reclassified as NO VERDICT",
+            diag.no_verdicts == [],
+            f"no_verdicts={diag.no_verdicts}",
+        )
+
+        silent = module.run_gates(root, ["tests/silent_gate.py"])
+        check(
+            "ARM 3: a child that wrote nothing yields the bare receipt, no dangling separator",
+            silent.failures == ["tests/silent_gate.py — rc=1"],
+            f"failures={silent.failures}",
+        )
+
 PROBES = (
     probe_every_registered_gate_is_covered,
     probe_every_map_key_is_registered,
@@ -895,6 +976,7 @@ PROBES = (
     probe_the_range_judges_the_range_not_the_worktree,
     probe_the_range_fails_a_gate_the_clean_checkout_cannot_materialise,
     probe_a_kill_is_not_a_failure,
+    probe_a_failed_receipt_carries_the_childs_word,
 )
 
 

@@ -859,7 +859,15 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 "cmd": " ".join(cmd),
                 "exit_code": res.returncode,
                 "passed": res.returncode == 0,
-                "unknown": False,
+                # A gate that CHOOSES the kill code exits NORMALLY, so it never raises
+                # `TimeoutExpired` and would otherwise be recorded `unknown: False` -- a
+                # plain FAILURE. That is one run described two ways by two surfaces, and
+                # shipping the gate-side split alone would MOVE the false red rather than
+                # remove it (#552, ruling `n=4167`). The choice is read as UNKNOWN for the
+                # same reason a kill is: no verdict was taken. The wall-clock below stays a
+                # real measurement -- the gate ended on its own -- which is why
+                # `duration_is_lower_bound` remains False here and only here.
+                "unknown": res.returncode == TIMEOUT_EXIT_CODE,
                 "duration_sec": round(t_el, 2),
                 # A COMPLETED run's wall-clock is the measurement. Its presence on every
                 # record is what makes its ABSENCE on a kill readable as "this number is not

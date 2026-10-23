@@ -46,14 +46,19 @@ only that the two documented invocations agree about which one they run.
 
 Run:  python3 tests/test_gate_entry_point_equivalence.py
 Exit: 0 every registered module's two invocations reach the same population and agree on rc;
-      1 a SUBSET, an rc disagreement, a form over budget, or a failed control; 2 the registry
-      or call sites could not be read (an unreadable population is never a clean one).
+      1 a SUBSET, an rc disagreement, or a failed control -- a MEASURED problem;
+      124 the ONLY problem class is UNMEASURED (a pair starved past its budget even at the
+      pool's contention factor): nothing was measured, so nothing failed, and the runner
+      reports NO VERDICT (#552, ruling n=4167). Never green;
+      2 the registry, the call sites, or the fleet kill code could not be read (an unreadable
+      population -- or an unreadable exit class -- is never a clean one).
 """
 
 from __future__ import annotations
 
 import ast
 import concurrent.futures
+import importlib.util
 import json
 import subprocess
 import sys
@@ -63,6 +68,51 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 TESTS = REPO / "tests"
+BUDGET_MODULE = "gate_budget.py"
+
+def _declared_kill_code() -> int:
+    """The fleet's kill code, READ from `tools/gate_budget.py` -- never retyped (#552).
+
+    This gate's non-green class must carry the SAME number `tools/gate_select.py` keys its
+    NO VERDICT path on, so a second literal `124` here would be a private copy of a fleet
+    constant and two literals is exactly how one run gets described two ways by two
+    surfaces -- the defect this item removes (ruling `n=4167`).
+
+    The module is registered in `sys.modules` BEFORE `exec_module` because `gate_budget`
+    defines a frozen dataclass, and `dataclasses` resolves `cls.__module__` through that
+    registry (measured on 3.14.6 by `tools/gate_select.py:152-158`, same convention).
+
+    Read from THIS file's own tree, not from the tree under judgement: the kill code is a
+    property of the instrument. An unreadable declaration is a HARD failure (exit 2) rather
+    than a fallback to a literal, because a gate that cannot name its own exit class must not
+    guess one.
+    """
+    source = Path(__file__).resolve().parent.parent / "tools" / BUDGET_MODULE
+    spec = importlib.util.spec_from_file_location("oc_gate_budget_552", source)
+    if spec is None or spec.loader is None:
+        print(
+            f"entry-point equivalence: cannot load {source}, which declares the fleet's "
+            f"kill code; refusing to guess it (exit 2)",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["oc_gate_budget_552"] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop("oc_gate_budget_552", None)
+        raise
+    if not hasattr(module, "TIMEOUT_EXIT_CODE"):
+        print(
+            f"entry-point equivalence: {source} declares no TIMEOUT_EXIT_CODE, so this gate "
+            f"cannot name the class a starved pair belongs to; refusing to guess (exit 2)",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    return module.TIMEOUT_EXIT_CODE
+
+TIMEOUT_EXIT_CODE = _declared_kill_code()
 
 # Declared, so the measured half is bounded and its shape is reviewable rather than emergent.
 WORKERS = 6
@@ -218,7 +268,13 @@ def _run(argv: list[str], timeout: float) -> tuple[int, str]:
         tail = (done.stdout + done.stderr).strip().splitlines()
         return done.returncode, (tail[-1][:200] if tail else "")
     except subprocess.TimeoutExpired:
-        return 124, f"exceeded its {timeout:.0f}s ceiling (solo budget x pool contention)"
+        # The ceiling is a KILL, so it reports the fleet's kill code -- read, never retyped
+        # (#552). This is the value that makes a starved pair a different class from a
+        # disagreeing one.
+        return (
+            TIMEOUT_EXIT_CODE,
+            f"exceeded its {timeout:.0f}s ceiling (solo budget x pool contention)",
+        )
 
 
 def _compare(module: str, entry: dict, timeout: float) -> dict:
@@ -249,6 +305,11 @@ def evaluate(repo: Path = REPO) -> dict:
 
     kinds: dict[str, int] = {}
     problems: list[str] = []
+    # A STARVED PAIR IS NOT A FAILED ONE (#552, ruling n=4167). Kept in its own list so the
+    # caller can report WHICH non-green class it holds; folding it into `problems` is what
+    # made a load artefact print as a regression. It is still non-green: see
+    # `verdict_exit_code()`.
+    unmeasured: list[str] = []
     to_measure: list[tuple[str, dict, float]] = []
     examined = 0
 
@@ -299,8 +360,8 @@ def evaluate(repo: Path = REPO) -> dict:
                         f"({result['registered_tail']!r}), "
                         f"script={result['script_rc']} ({result['script_tail']!r})"
                     )
-                if 124 in (result["registered_rc"], result["script_rc"]):
-                    problems.append(
+                if TIMEOUT_EXIT_CODE in (result["registered_rc"], result["script_rc"]):
+                    unmeasured.append(
                         f"{result['module']}: a form exceeded its budget even at the pool's "
                         f"contention factor, so the pair is UNMEASURED rather than agreeing"
                     )
@@ -308,10 +369,32 @@ def evaluate(repo: Path = REPO) -> dict:
     return {
         "kinds": kinds,
         "problems": problems,
+        "unmeasured": unmeasured,
         "measured": sorted(measured, key=lambda r: r["module"]),
         "modules": examined,
     }
 
+
+def verdict_exit_code(problems: list[str], unmeasured: list[str]) -> int:
+    """Which non-green class a run reports, and with which code (#552, ruling `n=4167`).
+
+    A MEASURED problem -- a DISAGREE, a SUBSET, a failed control -- is a verdict, and a
+    verdict outranks the absence of one, so it owns rc 1. A run whose ONLY problem class is
+    UNMEASURED never took a verdict on the pair it names: it reports the fleet's kill code,
+    which `tools/gate_select.py` already keys its NO VERDICT path on (#544), and
+    `tools/audit.py` now reads as `unknown: True`. One run, one class, both surfaces.
+
+    NEITHER IS GREEN. The split changes WHICH non-green class a starved pair reports, never
+    WHETHER it is non-green -- an unmeasured pair must stay unable to read as agreement.
+
+    Pure over its inputs, so control arm 6 can BUILD both shapes and compare their codes
+    without running a suite.
+    """
+    if problems:
+        return 1
+    if unmeasured:
+        return TIMEOUT_EXIT_CODE
+    return 0
 
 def controls() -> list[str]:
     """Five arms, each building the shape it judges rather than asserting around a constant."""
@@ -427,6 +510,33 @@ if __name__ == "__main__":
     if kind != "SUBSET":
         problems.append(f"arm 5 (selector): classified {kind}, expected SUBSET ({detail})")
 
+    # ARM 6 -- #552: the exit code SPLITS the two non-green classes, and both shapes are
+    # BUILT here rather than asserted around a constant. A control that read one code back
+    # and compared it to itself would pass with the split deleted.
+    measured_shape = ["tests/example.py: the two invocations DISAGREE on rc"]
+    starved_shape = [
+        "tests/example.py: a form exceeded its budget even at the pool's contention factor, "
+        "so the pair is UNMEASURED rather than agreeing"
+    ]
+    for label, got, want in (
+        ("measured only", verdict_exit_code(measured_shape, []), 1),
+        ("starved only", verdict_exit_code([], starved_shape), TIMEOUT_EXIT_CODE),
+        ("both classes", verdict_exit_code(measured_shape, starved_shape), 1),
+        ("clean", verdict_exit_code([], []), 0),
+    ):
+        if got != want:
+            problems.append(f"arm 6 (exit code, {label}): {got}, expected {want}")
+    if verdict_exit_code([], starved_shape) == verdict_exit_code(measured_shape, []):
+        problems.append(
+            "arm 6 (exit code): a starved pair and a measured disagreement SHARE a code -- "
+            "the split does not bite, and load still reads as a regression"
+        )
+    if verdict_exit_code([], starved_shape) == 0:
+        problems.append(
+            "arm 6 (exit code): a starved pair reads GREEN -- the repair traded a false red "
+            "for a vacuous pass"
+        )
+
     return problems
 
 
@@ -434,6 +544,7 @@ def main() -> int:
     result = evaluate(REPO)
     kinds = result["kinds"]
     problems = result["problems"] + controls()
+    unmeasured = result["unmeasured"]
 
     print(
         f"entry-point equivalence: examined {result['modules']} registered gate module(s) -- "
@@ -453,11 +564,31 @@ def main() -> int:
         print(f"\n{len(problems)} problem(s):", file=sys.stderr)
         for problem in problems:
             print(f"  {problem}", file=sys.stderr)
-        return 1
+    # Printed in BOTH cases: when a measured problem owns the exit code, the starvation that
+    # may have produced it is still the reader's business -- that is leg 1 of the ruling, and
+    # it is what makes the residual "both classes" run legible instead of merely red.
+    if unmeasured:
+        print(
+            f"\n{len(unmeasured)} unmeasured pair(s) -- NO VERDICT, not a disagreement:",
+            file=sys.stderr,
+        )
+        for line in unmeasured:
+            print(f"  {line}", file=sys.stderr)
+
+    code = verdict_exit_code(problems, unmeasured)
+    if code:
+        if code == TIMEOUT_EXIT_CODE:
+            print(
+                f"entry-point equivalence: NO VERDICT -- {len(unmeasured)} pair(s) exceeded "
+                f"their ceiling under the pool's own contention, so nothing was measured and "
+                f"nothing failed; exit {code}, the fleet's kill code (#552), not 1",
+                file=sys.stderr,
+            )
+        return code
 
     print(
         f"entry-point equivalence: clean -- {result['modules']} module(s) examined, "
-        f"{len(result['measured'])} rc pair(s) compared, 0 disagreement(s), 5 control arm(s) bit"
+        f"{len(result['measured'])} rc pair(s) compared, 0 disagreement(s), 6 control arm(s) bit"
     )
     return 0
 

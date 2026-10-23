@@ -292,6 +292,36 @@ def remove_clean_checkout(root: Path, target: Path) -> None:
     )
     shutil.rmtree(target.parent, ignore_errors=True)
 
+DIAGNOSIS_LIMIT = 200
+"""One bound for the cause a FAILED receipt carries, so the receipt stays one readable line."""
+
+_BARE_COUNT_HEADER = re.compile(
+    r"^\d+\s+(?:problem|error|failure|issue|warning)(?:s|\(s\))?\s*:?$", re.IGNORECASE
+)
+
+def first_stderr_diagnosis(text: str | None, limit: int = DIAGNOSIS_LIMIT) -> str:
+    """The first line of a failing child's stderr that STATES a cause, collapsed and BOUNDED.
+
+    The runner recorded only `rc=<n>`, so a gate's own word -- `UNMEASURED`, `DISAGREE`, a
+    pytest assertion -- died at the one surface a lane reads, and "a peer was running the
+    audit" printed exactly like "your change broke this gate" (#552, ruling `n=4167`). The
+    child's stderr is where it already states the cause.
+
+    A BARE COUNT HEADER IS SKIPPED, and that is measured rather than defensive: this tree's
+    own gates open stderr with `2 problem(s):` and put the cause on the lines BELOW it, so a
+    literal first-line rule would land `rc=1: 2 problem(s):` in the receipt -- a line that
+    names no cause while looking like a diagnosis. The skip is narrow (a line that is ONLY a
+    count and a noun), so a one-line cause that happens to begin with a number survives.
+
+    Empty when the child wrote nothing: an absent cause is stated by its absence, never by a
+    dangling separator.
+    """
+    lines = [" ".join(line.split()) for line in (text or "").splitlines()]
+    lines = [line for line in lines if line]
+    if lines and _BARE_COUNT_HEADER.match(lines[0]):
+        lines = lines[1:]
+    return lines[0][:limit] if lines else ""
+
 def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> GateRun:
     """Run each gate's registered argv; return the failures, each naming the gate.
 
@@ -323,6 +353,12 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
     this function reported `FAILED ... rc=124` one layer up, and an author reading the
     second concludes their change broke something. The two classes are returned separately
     so a caller cannot read one and believe it has the other.
+
+    A FAILED RECEIPT CARRIES THE CHILD'S OWN WORD (#552, ruling `n=4167`). The line reads
+    `<gate> — rc=<n>: <the child's first diagnostic stderr line>`, bounded to one line.
+    The gate already writes `UNMEASURED` or `DISAGREE` there, and this function used to
+    discard it -- so "a peer was running the audit" and "your change broke this gate"
+    arrived as the same string, which is the whole of the filing.
     """
     commands = registered_commands(root)
     failures: list[str] = []
@@ -348,7 +384,10 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
                 f"it neither passed nor failed"
             )
         elif proc.returncode != 0:
-            failures.append(f"{gate} — rc={proc.returncode}")
+            cause = first_stderr_diagnosis(proc.stderr)
+            failures.append(
+                f"{gate} — rc={proc.returncode}" + (f": {cause}" if cause else "")
+            )
     return GateRun(failures, no_verdicts)
 
 

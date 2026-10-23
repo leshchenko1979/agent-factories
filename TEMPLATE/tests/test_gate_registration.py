@@ -1539,6 +1539,52 @@ def probe_a_genuine_failure_is_never_retried() -> None:
     )
 
 
+def probe_a_chosen_kill_code_is_unknown_not_failed() -> None:
+    """#552 (ruling `n=4167`): a gate that CHOOSES exit 124 is UNKNOWN in the audit payload.
+
+    `unknown` was set in exactly ONE place -- the `except TimeoutExpired` branch -- so a gate
+    that exited 124 on its own exited NORMALLY, was recorded `passed: False, unknown: False`,
+    and was counted FAILED. After the gate-side split that same run reads NO VERDICT one
+    layer down, which is one run described two ways by two surfaces: the ruling therefore
+    made this reader part of the acceptance, not a follow-up.
+
+    Arm 2 is the discriminator: a genuine failure in the same reader must stay FAILED, so the
+    change cannot pass by calling every non-zero exit unknown.
+    """
+    audit = _audit_module()
+    gate_budget = _gate_budget_module()
+    chosen = audit.run_gate(
+        ["/bin/sh", "-c", f"exit {gate_budget.TIMEOUT_EXIT_CODE}"], REPO, 30.0
+    )
+    check(
+        "a gate that CHOOSES the kill code is UNKNOWN, never a plain failure",
+        chosen["unknown"] is True and chosen["passed"] is False,
+        f"unknown={chosen['unknown']}, passed={chosen['passed']}",
+    )
+    check(
+        "... and it carries the kill code it chose, unchanged",
+        chosen["exit_code"] == gate_budget.TIMEOUT_EXIT_CODE,
+        f"exit_code={chosen['exit_code']}",
+    )
+    check(
+        "... and it COMPLETED, so it is never retried and its wall-clock is a measurement",
+        chosen["attempts"] == 1 and chosen["duration_is_lower_bound"] is False,
+        f"attempts={chosen['attempts']}, "
+        f"lower_bound={chosen['duration_is_lower_bound']}",
+    )
+    verdict = audit.judge_gates([_synthetic_gate(True, False), chosen])
+    check(
+        "... so the payload reads UNKNOWN, not DEGRADED -- the two surfaces now agree",
+        verdict.status == "UNKNOWN" and len(verdict.unknown) == 1,
+        f"status={verdict.status}, unknown={len(verdict.unknown)}",
+    )
+    failed = audit.run_gate(["/bin/sh", "-c", "exit 1"], REPO, 30.0)
+    check(
+        "ARM 2 (discriminator): a genuine failure stays FAILED, never unknown",
+        failed["unknown"] is False and failed["passed"] is False,
+        f"unknown={failed['unknown']}, passed={failed['passed']}",
+    )
+
 def probe_a_real_timeout_lands_in_unknown_end_to_end(timed_out: dict) -> None:
     """PART 2, end to end: a REAL timed-out result, judged by the REAL verdict.
 
@@ -2960,6 +3006,7 @@ def main() -> int:
     timed_out = probe_a_timeout_carries_true_elapsed_and_a_distinct_exit_code()
     probe_the_retry_is_bounded_and_recorded(timed_out)
     probe_a_genuine_failure_is_never_retried()
+    probe_a_chosen_kill_code_is_unknown_not_failed()
     probe_a_real_timeout_lands_in_unknown_end_to_end(timed_out)
     probe_a_killed_gate_is_never_rendered_as_a_measurement(timed_out)
     probe_the_staleness_join_reaches_the_verdict_line(timed_out)
