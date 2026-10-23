@@ -109,6 +109,13 @@
       "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
       "measured_sec": 0.29
     },
+    "tests/test_gate_entry_point_equivalence.py": {
+      "budget_sec": 337.15,
+      "margin_x": 4.009,
+      "measured_at": "e63dd048e9893f35d4f5e3c60f9a8e859d3823a5",
+      "measured_sec": 84.1,
+      "load_at_measure": 1.92
+    },
     "tests/test_gate_fixtures_closure.py": {
       "budget_sec": 38.15,
       "margin_x": 4.08,
@@ -429,6 +436,7 @@
     "tests/test_declared_boundary_census.py": "script",
     "tests/test_docs_sync.py": "script",
     "tests/test_duplicate_prose.py": "script",
+    "tests/test_gate_entry_point_equivalence.py": "script",
     "tests/test_gate_fixtures_closure.py": "pytest",
     "tests/test_gate_invocation_mode.py": "script",
     "tests/test_gate_registration.py": "script",
@@ -588,6 +596,9 @@
       "class": "always-satisfiable"
     },
     "tests/test_duplicate_prose.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_gate_entry_point_equivalence.py": {
       "class": "always-satisfiable"
     },
     "tests/test_gate_fixtures_closure.py": {

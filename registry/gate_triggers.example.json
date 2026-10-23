@@ -146,6 +146,11 @@
       "docs/**",
       "skills/**"
     ],
+    "tests/test_gate_entry_point_equivalence.py": [
+      "registry/gates.json",
+      "tests/**",
+      "tools/audit.py"
+    ],
     "tests/test_gate_fixtures_closure.py": [
       "TEMPLATE/registry/gates.example.json",
       "TEMPLATE/tests/**",

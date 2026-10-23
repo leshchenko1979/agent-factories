@@ -3155,6 +3155,29 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_gate_direct_invocation.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_gate_direct_invocation.py"])
 
+    # tests/test_gate_entry_point_equivalence.py -- issue #492, ruling n=3426. THE MECHANISM IT
+    # GUARDS: a gate module's SCRIPT invocation and the argv this audit appends for it must
+    # agree on `rc` for the same tree. #475 found the instance -- `main()` reached 2 of 3 legs,
+    # so `python3 tests/test_score_artifact_sections.py` read rc=0 over a population that
+    # excluded `harness_binding_leg` while the registered form read rc=1 on the same bytes --
+    # and closed it PER-MODULE; nothing detected the next module to grow the split.
+    #
+    #     An `rc` comparison alone is VACUOUS on a green tree (both forms return 0), so a
+    #     STATIC leg runs first and reds on the #475 shape while every gate is green: a
+    #     `pytest.main` carrying a selector, or direct calls to a STRICT subset of the module's
+    #     tests, is a SUBSET and fails whether or not the two agree today. The residual
+    #     `main()`-routed population is MEASURED under both invocations, and a form over budget
+    #     is UNMEASURED rather than agreeing. The 56 script-mode modules are IDENTICAL-COMMAND
+    #     (the registered argv IS the script command) and the 30 full-file ones run the same
+    #     population by construction, so running their pairs would compare a command with
+    #     itself; the population is PRINTED beside the verdict so a green reads as a scope.
+    #
+    #     Script-form, and it carries its OWN `registry/gates.json` budget entry (262.03 s at
+    #     65.32 s measured): its runtime is far above the default's basis, so leaving it
+    #     undeclared would drag the default's derivation up for every other fall-through gate.
+    if (repo_root / "tests/test_gate_entry_point_equivalence.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_gate_entry_point_equivalence.py"])
+
     return gates_to_run
 
 
