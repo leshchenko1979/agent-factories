@@ -1,0 +1,502 @@
+{
+  "schema_version": 1,
+  "cycle_id": "20261023-broker-c1",
+  "status": "COMPLETED",
+  "started_at": "2026-10-23T10:08:45Z",
+  "ended_at": "2026-10-23T10:34:10Z",
+  "duration_review_min": 20.5,
+  "duration_cycle_min": 25.4,
+  "cadence": {
+    "trigger": {
+      "kind": "version_bumps",
+      "every": 5,
+      "note": ""
+    },
+    "boundary": {
+      "ref": null,
+      "at": null,
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+ ACCEPTED",
+      "accepted_since": 0
+    },
+    "fires": false,
+    "evaluated_at": "2026-10-23T10:08:45Z"
+  },
+  "corpus": {
+    "hash": null,
+    "pack": null,
+    "pack_status": "absent"
+  },
+  "lenses": {
+    "A": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-A.md",
+      "sha256": "9f3460836868ab3dadb64cefc51fe5182207bf1d25e8e013adadc4760aa6cda1",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:29:13Z",
+      "recorded_by": "auditor-A",
+      "reason": null
+    },
+    "B": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-B.md",
+      "sha256": "715e3365169463d319b5703cb03649a1a4fb183b74b4037ac0845dfaa846ea18",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:14:54Z",
+      "recorded_by": null,
+      "reason": null
+    },
+    "G": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-G.md",
+      "sha256": "75245b865aaf7c3f3019e641be897cab03badb066852efbb30eb79d1fda6de37",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:15:44Z",
+      "recorded_by": null,
+      "reason": null
+    },
+    "J": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-J.md",
+      "sha256": "ea67828aa8c17fda65e7b7fb991304d4486a00a9289fc991f20a4f650b050a5e",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:29:13Z",
+      "recorded_by": "auditor-J",
+      "reason": null
+    },
+    "P": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-P.md",
+      "sha256": "fa77e631a36c48ba63102393735d2414999e6db7f9d1ca629528b69067e7b19c",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:26:12Z",
+      "recorded_by": null,
+      "reason": null
+    },
+    "C": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-C.md",
+      "sha256": "9ae96970e9ab40aae43ae40c3f89238c1ce421737ba00deb4542d59051357159",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:24:29Z",
+      "recorded_by": null,
+      "reason": null
+    },
+    "E": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-E.md",
+      "sha256": "537cc3d1852ea35c873a48c0dd61bfc5e10547372d072219848640a41ba844d5",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:19:35Z",
+      "recorded_by": null,
+      "reason": null
+    },
+    "F": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-F.md",
+      "sha256": "d9f40c231881fac19ef137771856875ddee41fd68bdcb6baf65fca594f0c47e7",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:18:12Z",
+      "recorded_by": null,
+      "reason": null
+    },
+    "D": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-D.md",
+      "sha256": "44d2ca4b819c3b9ea844ba7cdb83bc746cbdc1a759a8cb2cb4221f10d8a15016",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:19:46Z",
+      "recorded_by": null,
+      "reason": null
+    },
+    "H": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-H.md",
+      "sha256": "3df02d7d78f573c9d07a0db31841f0ed527e49d6e8e903537f050c15942f8349",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:29:14Z",
+      "recorded_by": "auditor-H",
+      "reason": null
+    },
+    "M": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-M.md",
+      "sha256": "ce4272afea8d4f8276d451e1accabeb4519f7085611b235c1062e74761da3257",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:16:36Z",
+      "recorded_by": null,
+      "reason": null
+    },
+    "T": {
+      "status": "WAIVED",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:10:22Z",
+      "recorded_by": null,
+      "reason": "\u041d\u0435\u0442 \u043f\u043e\u0444\u0430\u043a\u0442\u043e\u0440\u043d\u043e\u0439 \u0442\u0435\u043b\u0435\u043c\u0435\u0442\u0440\u0438\u0438 \u0442\u043e\u043a\u0435\u043d\u043e\u0432 \u043f\u043e workflow \u0431\u0440\u043e\u043a\u0435\u0440\u0441\u043a\u0438\u0445 \u0437\u0430\u043f\u0440\u043e\u0441\u043e\u0432: \u043f\u0440\u043e\u0433\u043e\u043d\u044b \u0438\u0434\u0443\u0442 \u0432 \u043e\u0431\u0449\u0435\u0439 \u0441\u0435\u0441\u0441\u0438\u0438, \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0443\u0441\u043f\u0435\u0448\u043d\u043e\u0439 \u0437\u0430\u0434\u0430\u0447\u0438 \u0438\u0437 \u0411\u0414 \u043d\u0435 \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u043c\u0430. \u0413\u0435\u0439\u0442 \u043f\u0443\u0441\u0442\u043e\u0433\u043e \u0434\u043d\u044f \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043b\u0438\u043d\u0437\u0430 P, \u0432\u0435\u0441 \u043f\u0440\u043e\u043c\u043f\u0442\u0430 \u2014 \u043b\u0438\u043d\u0437\u0430 B."
+    },
+    "I": {
+      "status": "WAIVED",
+      "report_path": null,
+      "sha256": null,
+      "verdict": null,
+      "receipt": null,
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:10:21Z",
+      "recorded_by": null,
+      "reason": "\u041b\u0438\u043d\u0437\u0430 I \u2014 \u043c\u0435\u0442\u0430-\u0440\u0435\u0432\u044c\u044e \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430 \u043b\u0438\u043d\u0437: \u043a\u0430\u0442\u0430\u043b\u043e\u0433 \u043f\u0440\u0438\u043d\u0430\u0434\u043b\u0435\u0436\u0438\u0442 HQ agent-factories, \u0430 \u043e\u0431\u044a\u0435\u043a\u0442 \u044d\u0442\u043e\u0433\u043e \u0446\u0438\u043a\u043b\u0430 \u2014 \u043f\u0440\u043e\u0446\u0435\u0441\u0441 redevest-ai; \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430 \u0432 \u0446\u0435\u043b\u044c \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442."
+    },
+    "S": {
+      "status": "COMPLETED",
+      "report_path": "reviews/20261023-broker-c1/reports/lens-S.md",
+      "sha256": "d2a4da1693f4646faefafe224863fe6982a1e04f6788fc17b00e1b26dca413b7",
+      "verdict": null,
+      "receipt": "verified",
+      "fallback": null,
+      "recorded_at": "2026-10-23T10:13:53Z",
+      "recorded_by": null,
+      "reason": null
+    }
+  },
+  "waivers": [
+    {
+      "lens": "I",
+      "reason": "\u041b\u0438\u043d\u0437\u0430 I \u2014 \u043c\u0435\u0442\u0430-\u0440\u0435\u0432\u044c\u044e \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430 \u043b\u0438\u043d\u0437: \u043a\u0430\u0442\u0430\u043b\u043e\u0433 \u043f\u0440\u0438\u043d\u0430\u0434\u043b\u0435\u0436\u0438\u0442 HQ agent-factories, \u0430 \u043e\u0431\u044a\u0435\u043a\u0442 \u044d\u0442\u043e\u0433\u043e \u0446\u0438\u043a\u043b\u0430 \u2014 \u043f\u0440\u043e\u0446\u0435\u0441\u0441 redevest-ai; \u0443\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432\u043e \u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0430 \u0432 \u0446\u0435\u043b\u044c \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442.",
+      "by": "parent-lane",
+      "waived_at": "2026-10-23T10:10:21Z"
+    },
+    {
+      "lens": "T",
+      "reason": "\u041d\u0435\u0442 \u043f\u043e\u0444\u0430\u043a\u0442\u043e\u0440\u043d\u043e\u0439 \u0442\u0435\u043b\u0435\u043c\u0435\u0442\u0440\u0438\u0438 \u0442\u043e\u043a\u0435\u043d\u043e\u0432 \u043f\u043e workflow \u0431\u0440\u043e\u043a\u0435\u0440\u0441\u043a\u0438\u0445 \u0437\u0430\u043f\u0440\u043e\u0441\u043e\u0432: \u043f\u0440\u043e\u0433\u043e\u043d\u044b \u0438\u0434\u0443\u0442 \u0432 \u043e\u0431\u0449\u0435\u0439 \u0441\u0435\u0441\u0441\u0438\u0438, \u0441\u0442\u043e\u0438\u043c\u043e\u0441\u0442\u044c \u0443\u0441\u043f\u0435\u0448\u043d\u043e\u0439 \u0437\u0430\u0434\u0430\u0447\u0438 \u0438\u0437 \u0411\u0414 \u043d\u0435 \u0432\u043e\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u0438\u043c\u0430. \u0413\u0435\u0439\u0442 \u043f\u0443\u0441\u0442\u043e\u0433\u043e \u0434\u043d\u044f \u043f\u0440\u043e\u0432\u0435\u0440\u044f\u0435\u0442 \u043b\u0438\u043d\u0437\u0430 P, \u0432\u0435\u0441 \u043f\u0440\u043e\u043c\u043f\u0442\u0430 \u2014 \u043b\u0438\u043d\u0437\u0430 B.",
+      "by": "parent-lane",
+      "waived_at": "2026-10-23T10:10:22Z"
+    }
+  ],
+  "proposals": [],
+  "codification_plan": [
+    {
+      "finding": "C-1 SKILL.md:28 request_received \u043d\u0435 \u0441\u043e\u0437\u0434\u0430\u0451\u0442 \u0441\u0442\u0440\u043e\u043a\u0443 \u2014 \u043d\u0443\u0436\u0435\u043d request_new",
+      "disposition": "routed",
+      "home": "B1 SKILL.md:26-31",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:49Z"
+    },
+    {
+      "finding": "C-2 \u043d\u0435\u0442 --draft \u0432 reestr_send.py; \u043f\u0440\u0430\u0432\u0438\u043b\u043e \u0447\u0435\u0440\u043d\u043e\u0432\u0438\u043a\u0430 \u043d\u0435\u0438\u0441\u043f\u043e\u043b\u043d\u0438\u043c\u043e",
+      "disposition": "routed",
+      "home": "B5 reestr_send.py",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:50Z"
+    },
+    {
+      "finding": "C-3 podborka_deck.py \u0431\u0435\u0437 argparse/__main__ \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u0442 PDF",
+      "disposition": "routed",
+      "home": "B7 podborka_deck.py",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:50Z"
+    },
+    {
+      "finding": "C-4 \u0438\u0441\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0435 \u043c\u0430\u0441\u0441\u043e\u0432\u044b\u0445 \u0440\u0430\u0441\u0441\u044b\u043b\u043e\u043a \u0431\u0435\u0437 \u043f\u043e\u0440\u043e\u0433\u0430 \u043e\u0442\u043c\u0435\u043d\u044f\u0435\u0442 \u0433\u0435\u0439\u0442",
+      "disposition": "routed",
+      "home": "B14 reestr_core.py MASS_MIN + SKILL.md:55,94",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:50Z"
+    },
+    {
+      "finding": "C-5 pending_draft \u0431\u0435\u0437 \u043f\u0438\u0441\u0430\u0442\u0435\u043b\u044f, \u043e\u0431\u044a\u044f\u0432\u043b\u0435\u043d \u0437\u0430\u043a\u0440\u044b\u0442\u0438\u0435\u043c \u0431\u0430\u0433\u0430",
+      "disposition": "routed",
+      "home": "B13 reestr_core/reestr_touch/reestr_lint + plan:204",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:50Z"
+    },
+    {
+      "finding": "C-6 \u043f\u043b\u0430\u043d :253 \u043f\u0440\u043e\u0442\u0438\u0432 :356/README \u043e \u0432\u044b\u0432\u043e\u0434\u0435 \u0445\u043e\u0434\u0430 \u043f\u043e \u0430\u0432\u0442\u043e\u0440\u0443",
+      "disposition": "routed",
+      "home": "B11 plan-sistema-napominanii.md:253",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:50Z"
+    },
+    {
+      "finding": "S-1 SKILL.md:51 \u043f\u0440\u0435\u0434\u043f\u0438\u0441\u044b\u0432\u0430\u0435\u0442 \u043a\u043b\u0430\u0441\u0441\u0438\u0444\u0438\u0446\u0438\u0440\u043e\u0432\u0430\u0442\u044c \u0441\u043c\u044b\u0441\u043b \u0441\u043e\u043e\u0431\u0449\u0435\u043d\u0438\u044f",
+      "disposition": "routed",
+      "home": "B2 SKILL.md:49-53",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:51Z"
+    },
+    {
+      "finding": "S-2 SKILL.md:45 \u00ab\u043b\u0438\u043d\u0442\u0435\u0440 \u043f\u0430\u0434\u0430\u0435\u0442 \u0432 \u0442\u0440\u0435\u0434\u00bb \u043d\u0435\u0432\u0435\u0440\u043d\u043e; ; \u0432\u043c\u0435\u0441\u0442\u043e &&",
+      "disposition": "routed",
+      "home": "B3 SKILL.md:36-45",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:51Z"
+    },
+    {
+      "finding": "S-3 --summary \u0435\u0436\u0435\u0434\u043d\u0435\u0432\u043d\u043e, \u0430 \u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0430 \u043f\u043e \u043f\u043e\u043d\u0435\u0434\u0435\u043b\u044c\u043d\u0438\u043a\u0430\u043c; --today <\u0434\u0430\u0442\u0430>",
+      "disposition": "routed",
+      "home": "B3 SKILL.md:36-45",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:51Z"
+    },
+    {
+      "finding": "S-4 README:83 \u00ab\u043e\u0442\u043f\u0440\u0430\u0432\u043b\u044f\u0435\u0442 \u043f\u043e \u043e\u0434\u043e\u0431\u0440\u0435\u043d\u0438\u044e\u00bb \u043f\u0440\u043e\u0442\u0438\u0432 \u043a\u0430\u043d\u043e\u043d\u0430",
+      "disposition": "routed",
+      "home": "B12 README.md:83",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:52Z"
+    },
+    {
+      "finding": "S-5 \u043f\u0435\u0440\u0432\u044b\u0439 \u0448\u0430\u0433 \u043e\u0431\u0445\u043e\u0434\u0430 \u043c\u0430\u0442\u0447\u0438\u0442 globs \u0441\u043a\u0438\u043b\u043b\u0430: 57 \u043e\u0442\u043a\u0430\u0437\u043e\u0432 \u0433\u0435\u0439\u0442\u0430",
+      "disposition": "routed",
+      "home": "B6 reestr_walk.py + trigger_cmd",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:52Z"
+    },
+    {
+      "finding": "S-6 \u0442\u0435\u043b\u043e \u0441\u043a\u0438\u043b\u043b\u0430 18519 \u0411 \u043f\u0440\u0438 \u043f\u043e\u0442\u043e\u043b\u043a\u0435 16000 \u0411 \u2014 \u0441\u0435\u0440\u0435\u0434\u0438\u043d\u0430 \u0442\u0435\u0440\u044f\u0435\u0442\u0441\u044f",
+      "disposition": "routed",
+      "home": "B4 SKILL.md \u0446\u0435\u043b\u0438\u043a\u043e\u043c",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:52Z"
+    },
+    {
+      "finding": "S-7 \u043f\u0435\u0440\u0435\u0441\u043a\u0430\u0437 \u00ab\u0427\u0435\u0439 \u0445\u043e\u0434\u00bb \u0432 \u0441\u043a\u0438\u043b\u043b\u0435, \u043f\u0440\u043e\u043f\u0443\u0449\u0435\u043d \u0441\u0438\u043d\u043e\u043d\u0438\u043c answer_received",
+      "disposition": "routed",
+      "home": "B4 SKILL.md:71",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:52Z"
+    },
+    {
+      "finding": "S-8 \u00a76 \u043f\u043b\u0430\u043d\u0430: \u043d\u0435\u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044e\u0449\u0435\u0435 author_offer_sent, \u044f\u0437\u044b\u043a \u0441\u0445\u0435\u043c\u044b 1",
+      "disposition": "routed",
+      "home": "B11 plan:403,406",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:53Z"
+    },
+    {
+      "finding": "S-9 law_lint.py \u043e\u0431\u0445\u043e\u0434\u0438\u0442 \u0442\u043e\u043b\u044c\u043a\u043e skills/ \u0438 scripts/, projects/ \u0432\u043d\u0435 \u0433\u0435\u0439\u0442\u0430",
+      "disposition": "routed",
+      "home": "B17 law_lint.py:315",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:53Z"
+    },
+    {
+      "finding": "S-10 \u0433\u0435\u0439\u0442 \u043a\u0440\u043e\u043d\u0430 30 \u0441 \u043f\u0430\u0434\u0430\u0435\u0442 \u043e\u0442\u043a\u0440\u044b\u0442\u044b\u043c \u043f\u0440\u0438 CHAT_TIMEOUT=40",
+      "disposition": "routed",
+      "home": "B15 trigger_cmd + trigger.rs:88",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:53Z"
+    },
+    {
+      "finding": "H-1 last_event \u0441\u0442\u0430\u0432\u0438\u0442\u0441\u044f \u043c\u0435\u0442\u043a\u043e\u0439 \u0441\u043e\u0431\u044b\u0442\u0438\u044f, \u0430 \u043d\u0435 \u043c\u0430\u043a\u0441\u0438\u043c\u0443\u043c\u043e\u043c \u0438\u0441\u0442\u043e\u0440\u0438\u0438",
+      "disposition": "routed",
+      "home": "B8 reestr_touch.py:674,941",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:53Z"
+    },
+    {
+      "finding": "H-2 touches \u0440\u0430\u0441\u0445\u043e\u0434\u0438\u0442\u0441\u044f \u0441 \u0438\u0441\u0442\u043e\u0440\u0438\u0435\u0439 \u0443 \u043f\u044f\u0442\u0438 \u0443\u0447\u0430\u0441\u0442\u0438\u0439",
+      "disposition": "routed",
+      "home": "B8 reestr_touch.py:462 vs 841-851 + reestr_lint.py",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:54Z"
+    },
+    {
+      "finding": "H-3 refusal \u0437\u0430\u043a\u0440\u044b\u043b \u0441\u0442\u0440\u043e\u043a\u0443, \u0440\u0430\u0431\u043e\u0442\u0430 \u043f\u0440\u043e\u0434\u043e\u043b\u0436\u0435\u043d\u0430 \u0431\u0435\u0437 \u0441\u043e\u0431\u044b\u0442\u0438\u044f \u043f\u0435\u0440\u0435\u043e\u0442\u043a\u0440\u044b\u0442\u0438\u044f",
+      "disposition": "routed",
+      "home": "B10 reestr_touch.py:924-926",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:54Z"
+    },
+    {
+      "finding": "H-13 \u0434\u0432\u043e\u0439\u043d\u0430\u044f \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0430 \u043f\u0440\u0438 \u0441\u0431\u043e\u0435 \u043c\u043e\u0441\u0442\u0430 (except -> None,'')",
+      "disposition": "routed",
+      "home": "B5 reestr_send.py:60,196",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:54Z"
+    },
+    {
+      "finding": "H-14 migrate_reestr_v2.py \u043f\u0438\u0448\u0435\u0442 \u0440\u0435\u0435\u0441\u0442\u0440 \u043d\u0435\u0430\u0442\u043e\u043c\u0430\u0440\u043d\u043e",
+      "disposition": "routed",
+      "home": "B9 migrate_reestr_v2.py:302",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:55Z"
+    },
+    {
+      "finding": "H-15 read-modify-write \u0431\u0435\u0437 flock \u2014 \u043f\u043e\u0442\u0435\u0440\u044f\u043d\u043d\u043e\u0435 \u043e\u0431\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435",
+      "disposition": "routed",
+      "home": "B9 reestr_core.py:215 + reestr_touch.py",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:55Z"
+    },
+    {
+      "finding": "H-16 refusal/deal_closed \u0432 \u0434\u0432\u0443\u0445 \u0441\u043b\u043e\u0432\u0430\u0440\u044f\u0445: \u0441\u043c\u044b\u0441\u043b \u043f\u043e \u043d\u0430\u043b\u0438\u0447\u0438\u044e --offer",
+      "disposition": "routed",
+      "home": "B10 reestr_core.py:86",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:55Z"
+    },
+    {
+      "finding": "H-17 --track/--customer/--topic \u043f\u0440\u043e\u0433\u043b\u0430\u0442\u044b\u0432\u0430\u044e\u0442\u0441\u044f \u043c\u043e\u043b\u0447\u0430 \u0432\u043d\u0435 \u0441\u0432\u043e\u0435\u0433\u043e \u0441\u043e\u0431\u044b\u0442\u0438\u044f",
+      "disposition": "routed",
+      "home": "B10 reestr_touch.py:638",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:56Z"
+    },
+    {
+      "finding": "H-18 --peer \u043c\u043e\u043b\u0447\u0430 \u0438\u0433\u043d\u043e\u0440\u0438\u0440\u0443\u0435\u0442\u0441\u044f \u043f\u0440\u0438 --party",
+      "disposition": "routed",
+      "home": "B10 reestr_touch.py:1007, reestr_send.py:155",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:56Z"
+    },
+    {
+      "finding": "H-19 --dry-run \u043e\u0442\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u0432\u043d\u0435 \u043e\u043a\u043d\u0430 \u043e\u0442\u043f\u0440\u0430\u0432\u043a\u0438",
+      "disposition": "routed",
+      "home": "B5 reestr_send.py:177",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:56Z"
+    },
+    {
+      "finding": "H-20 \u0447\u0438\u0441\u043b\u0430 \u043b\u043e\u0442\u0430 \u0437\u0430\u0448\u0438\u0442\u044b \u043b\u0438\u0442\u0435\u0440\u0430\u043b\u0430\u043c\u0438 \u0432 podborka_deck.py",
+      "disposition": "routed",
+      "home": "B7 podborka_deck.py:78",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:57Z"
+    },
+    {
+      "finding": "H-21 \u0443 \u0440\u0435\u0435\u0441\u0442\u0440\u0430 \u043d\u0435\u0442 \u0438\u043d\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430 \u0447\u0442\u0435\u043d\u0438\u044f: 92 \u043e\u0434\u043d\u043e\u0440\u0430\u0437\u043e\u0432\u044b\u0445 \u0441\u043a\u0440\u0438\u043f\u0442\u0430",
+      "disposition": "routed",
+      "home": "B6 reestr_walk.py / reestr_due.py",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:57Z"
+    },
+    {
+      "finding": "H-22 \u043a\u043e\u043c\u043c\u0438\u0442 \u0440\u0435\u0435\u0441\u0442\u0440\u0430 \u043d\u0435 \u0438\u043c\u0435\u0435\u0442 \u043a\u043e\u043c\u0430\u043d\u0434\u044b \u0438 \u043d\u0435 \u043f\u0440\u043e\u0438\u0441\u0445\u043e\u0434\u0438\u0442 \u0432 \u043f\u0440\u043e\u0433\u043e\u043d\u0435",
+      "disposition": "routed",
+      "home": "B6 reestr_walk.py + README.md:92",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:57Z"
+    },
+    {
+      "finding": "B-F3 12 \u0446\u0438\u0442\u0430\u0442 \u0437\u0430\u043f\u0440\u0435\u0449\u0451\u043d\u043d\u044b\u0445 \u0444\u0440\u0430\u0437 \u0432\u043d\u0443\u0442\u0440\u0438 \u0442\u0440\u0451\u0445 \u0437\u0430\u043f\u0440\u0435\u0442\u043e\u0432",
+      "disposition": "routed",
+      "home": "B4 SKILL.md:61",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:57Z"
+    },
+    {
+      "finding": "B-F4 \u043f\u0435\u0440\u0435\u0447\u0435\u043d\u044c 4 \u043a\u043e\u043d\u0442\u0440\u0430\u0433\u0435\u043d\u0442\u043e\u0432 \u0432 \u0437\u0430\u043a\u043e\u043d\u0435 \u043f\u0440\u0438 13 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0430\u0445",
+      "disposition": "routed",
+      "home": "B16 counterparties address_form + SKILL.md:59",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:58Z"
+    },
+    {
+      "finding": "USER.md:37 \u00ab\u043e\u0431\u0440\u0430\u0449\u0435\u043d\u0438\u0435 \u043d\u0430 \u0432\u044b\u00bb \u043f\u0440\u043e\u0442\u0438\u0432\u043e\u0440\u0435\u0447\u0438\u0442 \u043a\u0430\u043d\u043e\u043d\u0443 \u0441\u043a\u0438\u043b\u043b\u0430",
+      "disposition": "routed",
+      "home": "B16 USER.md:37",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:58Z"
+    },
+    {
+      "finding": "MEMORY.md:1683 \u043f\u0440\u0430\u0432\u0438\u043b\u043e \u0430\u0434\u0440\u0435\u0441\u0430\u0446\u0438\u0438 \u043e\u0442\u0447\u0451\u0442\u0430 \u0432 18358 \u0436\u0438\u0432\u0451\u0442 \u0442\u043e\u043b\u044c\u043a\u043e \u0432 \u043f\u0430\u043c\u044f\u0442\u0438",
+      "disposition": "routed",
+      "home": "B16 SKILL.md \u0415\u0436\u0435\u0434\u043d\u0435\u0432\u043d\u044b\u0439 \u043e\u0431\u0445\u043e\u0434",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:58Z"
+    },
+    {
+      "finding": "MEMORY.md:1655 \u0434\u043e\u0441\u0442\u0430\u0432\u043a\u0430 \u043e\u0442\u0447\u0451\u0442\u0430 \u043a\u0440\u043e\u043d\u0430 \u043e\u043f\u0438\u0441\u0430\u043d\u0430 \u0442\u043e\u043b\u044c\u043a\u043e \u0432 \u043f\u0430\u043c\u044f\u0442\u0438",
+      "disposition": "routed",
+      "home": "B16 SKILL.md \u0415\u0436\u0435\u0434\u043d\u0435\u0432\u043d\u044b\u0439 \u043e\u0431\u0445\u043e\u0434",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:58Z"
+    },
+    {
+      "finding": "AGENTS.md:261 \u043e\u043f\u0435\u0440\u0430\u0446\u0438\u043e\u043d\u043d\u0430\u044f \u0437\u0430\u043f\u0438\u0441\u044c \u043c\u0438\u0433\u0440\u0430\u0446\u0438\u0438 \u0432 \u0444\u0430\u0439\u043b\u0435 \u043f\u0440\u0430\u0432\u0438\u043b",
+      "disposition": "routed",
+      "home": "B16 AGENTS.md:261",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:59Z"
+    },
+    {
+      "finding": "AGENTS.md:253,265 \u0434\u0432\u0430 \u0440\u0430\u0437\u0434\u0435\u043b\u0430 \u043e\u0431 \u043e\u0434\u043d\u043e\u043c: \u043a\u043e\u043f\u0438\u044f \u0438 \u0443\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c",
+      "disposition": "routed",
+      "home": "B16 AGENTS.md:253,265",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:59Z"
+    },
+    {
+      "finding": ".bak \u0432 \u043a\u0430\u043d\u043e\u043d-\u043a\u0430\u0442\u0430\u043b\u043e\u0433\u0435 \u2014 DELETE-SAFE, \u043d\u0443\u0436\u043d\u043e \u0441\u043e\u0433\u043b\u0430\u0441\u0438\u0435 \u0432\u043b\u0430\u0434\u0435\u043b\u044c\u0446\u0430",
+      "disposition": "routed",
+      "home": "B18 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u0435",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:59Z"
+    },
+    {
+      "finding": "podborka_map.py \u043c\u0451\u0440\u0442\u0432: 0 \u0438\u043c\u043f\u043e\u0440\u0442\u043e\u0432, \u0442\u0430\u0439\u043b\u044b \u0434\u0443\u0431\u043b\u0438\u0440\u0443\u044e\u0442\u0441\u044f",
+      "disposition": "routed",
+      "home": "B18 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u0435",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:33:59Z"
+    },
+    {
+      "finding": "\u0436\u0438\u0432\u043e\u0435 \u0441\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435 \u0440\u0435\u0435\u0441\u0442\u0440\u0430 \u043d\u0435 \u0437\u0430\u043a\u043e\u043c\u043c\u0438\u0447\u0435\u043d\u043e",
+      "disposition": "routed",
+      "home": "B6 \u043a\u043e\u043c\u043c\u0438\u0442 \u0432 \u043f\u0440\u043e\u0433\u043e\u043d\u0435 \u043e\u0431\u0445\u043e\u0434\u0430",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:34:00Z"
+    },
+    {
+      "finding": "35% \u0437\u0430\u043f\u0438\u0441\u0435\u0439 \u2014 \u0440\u0435\u043f\u0435\u0442\u0438\u0446\u0438\u044f --dry-run",
+      "disposition": "routed",
+      "home": "B6 reestr_walk.py",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:34:00Z"
+    },
+    {
+      "finding": "owner_due \u043d\u0435\u0442 \u0432 \u0441\u0445\u0435\u043c\u0435 \u0441\u0442\u0440\u043e\u043a\u0438 (plan:462)",
+      "disposition": "routed",
+      "home": "B11 plan:462",
+      "reason": null,
+      "recorded_at": "2026-10-23T10:34:00Z"
+    }
+  ],
+  "frozen_at": "2026-10-23T10:34:10Z",
+  "inputs_snapshot": {
+    "taken_at": "2026-10-23T10:34:10Z",
+    "channels": [
+      {
+        "kind": "dir",
+        "ref": "proposals",
+        "exists": false
+      }
+    ]
+  },
+  "step0_log": [],
+  "updated_at": "2026-10-23T10:34:10Z"
+}
