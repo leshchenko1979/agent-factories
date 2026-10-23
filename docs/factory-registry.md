@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-10-22T07:17:05Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-10-23T06:26:45Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-10-22T07:17:05Z` |
+| generated | live reads | resolved `2026-10-23T06:26:45Z` |
 
 ## Announcements
 
@@ -39,9 +39,9 @@ Deduplicated by `id` across every fragment: several lanes noticing one fact is o
   - affects: profile · since: 2026-09-28T23:23:39Z · declared by: miidas
 - 🟡 **`miidas-slot-volume-git-config-carries-remote-credential`** — Every miidas client slot volume's .git/config (mode 644) carries the template remote with an INLINE ACCOUNT-LEVEL token, and this is now ACCEPTED AS DATED by the owner (2026-09-28T09:18:36Z) — leshchenko1979/miidas#61 is closed by decision, not by fix, so no rotation is coming. The operational rule therefore stands permanently rather than pending: a peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing — it outlives the container, the credential is readable by the client's own agent and not only by a host operator, and the agent image layer carries it too.
   - affects: profile · since: 2026-09-27T11:39:51Z · declared by: miidas
-- 🟡 **`ops-daemon-dies-at-cgroup-cap`** — Measured 2026-10-22T06:32Z on opencrabs-ops: memory.current 2,119,274,496 of 2,147,483,648 B = 98.69%, headroom 26.9 MiB; swap 2,455,474,176 of 2,684,354,560 = 91.47% with swap.peak == swap.max, so the swap ceiling has been touched; memory.peak 385,024 B OVER memory.max; memory.events high 5 / max 416,828 / oom_kill 0 — both reclaim counters roughly doubled in 24h while oom_kill stayed 0, i.e. the kernel is pressing hard and still not killing. No new kill in 11h33m (NRestarts=2, ActiveEnterTimestamp 2026-10-21T19:01:09Z, MainPID 2097291, RSS 1,071.0 MiB). dmesg reads 20 ops-unit kills and that is a RING-BUFFER WINDOW, not a lifetime count — a new kill arrives while an older line is evicted, so the total does not move. NRestarts 0 is also not a clean life: a binary swap resets it. 31 Gatus endpoints, still NONE watching this daemon.
+- 🟡 **`ops-daemon-dies-at-cgroup-cap`** — Measured 2026-10-23T06:23Z on opencrabs-ops: memory.current 2,132,307,968 of 2,147,483,648 B = 99.29%, headroom 14.5 MiB; swap 2,449,580,032 of 2,684,354,560 = 91.25% with 223.9 MiB free and swap.peak == swap.max, so the swap ceiling has been touched; memory.peak 316 KiB OVER memory.max; memory.events high 1 / max 223,128 / oom 0 / oom_kill 0 — throttled, not OOM-killed in this incarnation. The kernel DOES still kill, and the text this replaces had it backwards: dmesg's three newest ops kills are 2026-10-22T13:48:28Z (pid 2097291), 2026-10-21T19:01:25Z (pid 807063) and 2026-10-21T00:27:34Z (pid 2815652), and pid 2097291 is the process that text called the live MainPID. Now MainPID 3237387, NRestarts=3, ActiveEnterTimestamp 2026-10-22T13:48:12Z. dmesg reads 20 ops-unit kills and that is a RING-BUFFER WINDOW, not a lifetime count. The binding reserve is the SWAP remainder, not the effective margin: the burst recorder logged a 1,063.7 MiB child burst at 2026-10-23T06:04:02Z against 0.3 MiB headroom (used 4,607.7 of 4,608.0 MiB = 99.99%), and that burst is larger than the swap still free. It IS watched: Gatus endpoint 34 infra_oc-ops-daemon reads 17 results / 0 failures, pushing false on restart and a true heartbeat every 600s (05:28-06:18Z), across 33 configured endpoints — the 'NONE watching this daemon' claim is EXPIRED.
   - affects: profile · since: 2026-09-27T06:13:19Z · review by: 2026-11-20 · declared by: infra-factory
-- 🟡 **`mac-cdp-tunnels-flap-on-sleep`** — The Mac is UP again (uptime 16:56 at 2026-10-22T06:36Z, after weeks powered off). Both tunnels read 0 failures across their last 50 probes (mac-tunnel 02:24-06:29Z, mac-cdp-tunnel 05:44-06:33Z) and nightly backups have succeeded three consecutive nights (2026-10-20T17:27Z, 10-21T01:00Z, 10-22T00:42Z). The prior claims that it was powered off and that no backup had completed since 2026-10-02 are EXPIRED. The sleep/flap hazard is unchanged for when it next sleeps, and the CDP tunnel is STILL UNSUPERVISED: the live forwarder is a hand-launched 'ssh -N -L 9222' with no unit behind it, so a sleep still costs a manual restart.
+- 🟡 **`mac-cdp-tunnels-flap-on-sleep`** — The Mac is UP: both tunnel endpoints read 0 failures (mac-tunnel 100 results, newest 2026-10-23T06:21:14Z; mac-cdp-tunnel 101 results, newest 06:23:15Z), and the last nightly backup success is 2026-10-23T00:42:32Z, though infra_mac-backup still reads 40 failures of 69 results. NEW AND SHARPER: mac-cdp-tunnel is green because it SSHes to the Mac and curls the Mac's OWN localhost:9222 — it never touches the forwarder, so its green is not evidence that the tunnel is supervised. The forwarder is still hand-launched: on agents, pid 3330904 'ssh -f -N -L 9222:localhost:9222 mac', started 2026-10-22T16:26:34Z, with no unit, cron entry or timer for it on vpn, apps or agents. A sleep still costs a manual restart, and the monitoring cannot tell you it happened.
   - affects: profile · since: 2026-09-26 · review by: 2026-11-20 · declared by: infra-factory
 - 🟡 **`miidas-platform-compose-is-repo-written`** — The miidas platform compose on agents-old (/data/projects/miidas/compose/docker-compose.yml) is written from our repo: manager/deploy.sh:49 and deploy-all.sh:35 each scp the repo copy over the live one, so a host-side edit there is silently reverted by the next of those deploys. (landing/deploy.sh:27 was a third call site until landing/ was retired in #108 — that script is now a refuse stub.) That directory deliberately carries no .env, so a hand-run `docker compose up -d` from it fails closed naming the missing variable — use the sanctioned scripts, or pass --env-file ../.master.env. The sync helper is deploy_lib.sh:157-159 and the sanctioned path is miidas_compose() at deploy_lib.sh:163.
   - affects: profile · since: 2026-09-26 · declared by: miidas
@@ -82,9 +82,9 @@ SCOPE CORRECTION, load-bearing: this series is an OPS-HOME read while the openin
 
 - 🔵 **`issue-routing-two-boards`** — Issue routing is TWO streams, not three (owner order 2026-10-09): EVERY OpenCrabs binary issue (runtime behaviour, channels, providers, TUI, memory, tools) goes to the fork board leshchenko1979/opencrabs, and factory issues (tooling, CI, release automation, process) to leshchenko1979/opencrabs-dev-factory. Upstream opencrabs/opencrabs receives PULL REQUESTS ONLY — no new issues. The 2026-10-03 three-stream law and its fork-only-defect discriminator are SUPERSEDED; the #761 boundary register and the census FORK_ONLY_SURFACE predicate survive unchanged as commit-portability instruments — they decide whether a COMMIT can be ported upstream, never which tracker an issue goes to.
   - affects: profile · since: 2026-10-09 · declared by: opencrabs-dev
-- 🔵 **`opencrabs-home-unmanaged-growth`** — On agents, /root/.opencrabs reads 18G and profiles/ops 13G at 2026-10-22T06:30Z, UP from 16G/11G on 2026-10-21: the growth resumed after the one-day drop. Nothing reaps a profile home — hygiene.py's SCRATCH_ROOT is /tmp-only — so the single reap policy still does not reach it.
+- 🔵 **`opencrabs-home-unmanaged-growth`** — On agents, /root/.opencrabs reads 20G and profiles/ops 15G at 2026-10-23T06:24Z, UP from 18G/13G on 2026-10-22: the growth resumed. ops is the whole story — every other profile is 1008K except family at 839M and oc348probe at 17M. / is 87% used (50G of 58G, 8.0G free). Nothing reaps a profile home: hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy still does not reach it.
   - affects: profile · since: 2026-10-09 · declared by: infra-factory
-  - evidence: ledger n=1161 (2026-10-06 q22 dig, /root/.opencrabs at 16G); re-measured on agents 2026-10-21T06:06Z: `du -sh /root/.opencrabs` = 16G, `du -sh /root/.opencrabs/profiles/ops` = 11G, memory/ 4.1G, opencrabs.db 3.3G, opencrabs-dev 2.2G; prior read 2026-10-20T06:07Z gave 17G / 13G with memory/ 5.8G. Parts of the 11G: 4.1 + 3.3 = 7.4G for memory/ plus the session DB.
+  - evidence: Re-measured on agents 2026-10-23T06:24:03Z: du -sh /root/.opencrabs = 20G, du -sh /root/.opencrabs/profiles/ops = 15G, every other profile 1008K except family 839M and oc348probe 17M (avito 1008K, code-spike 1008K, miidas 1008K); df -h / = /dev/sda1 58G, 50G used, 8.0G free, 87%. Prior read 2026-10-22T06:30Z gave 18G / 13G; 2026-10-21T06:06Z gave 16G / 11G; ledger n=1161 (2026-10-06 q22 dig, 16G) and its 2026-10-21 parts read memory/ 4.1G + opencrabs.db 3.3G + opencrabs-dev 2.2G. Reap surface unchanged: tools/hygiene.py SCRATCH_ROOT covers /tmp only, so no reap reaches a profile home.
 - 🔵 **`brain-metrics-baseline-measured`** — Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir / --window) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument.
 
 LEG C — CORRECTED 2026-10-01; the earlier wording is SUPERSEDED, not repeated. The earlier text claimed the automatic threshold trigger was DORMANT, having "fired 0 times since the 1M window". That is FALSE on this box today, measured two ways in one turn: (a) the trigger line itself — "Context at NN% (>65%) — triggering LLM compaction", emitted at src/brain/agent/service/compaction.rs:445/460 (the earlier text cited :418; the line moved) — fired 525 times across 20 distinct sessions in the 2026-10-01 log, this lane's session among them, and this lane was compacted mid-loop today; (b) the instrument's LEG C, which parses the DIFFERENT summarizer line at context.rs, read n=159 events in its 24h window — mean 73022 tok = 36.5% of a 200000-token window, median 79677, p90 114738, max 156319. The trigger line's denominator is NOT the provider window: it is effective tokens over effective max (the window minus reserves), so the earlier notice's equation "the 65-percent gate = 650000 tokens" conflates two denominators, which the instrument's own BOUNDS section 1 forbids. Never read a trigger-line percentage as a fraction of the provider window.
@@ -184,21 +184,21 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
 | `ai-antispam-118-probe` | ops | `0 4 1 1 *` | UTC | **no** | 0 | **absent** | 2027-01-01T04:00:00+00:00 | — | — |
-| `ai-antispam-bot-service-health` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T06:15:00+00:00 | — | — |
+| `ai-antispam-bot-service-health` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-24T06:15:00+00:00 | — | — |
 | `ai-antispam-day7-retire-wake` | ops | `15 6 22 9 *` | UTC | **no** | 0 | **absent** | 2027-09-22T06:15:00+00:00 | session:acc3fa9b-cefa-4e35-bf87-422696e558f0 | — |
-| `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-10-22T07:45:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
+| `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-10-23T06:45:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
 | `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T07:00:00+00:00 | — | — |
-| `ai-antispam-outreach-db-sync` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T06:15:00+00:00 | — | — |
-| `ai-antispam-outreach-mining-tranche` | ops | `15 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-10-23T06:15:00+00:00 | — | — |
-| `ai-antispam-outreach-stream-joins` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T00:00:00+00:00 | — | — |
-| `ai-antispam-outreach-watch-poll` | ops | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-22T12:07:00+00:00 | — | — |
+| `ai-antispam-outreach-db-sync` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-24T06:15:00+00:00 | — | — |
+| `ai-antispam-outreach-mining-tranche` | ops | `15 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-10-26T06:15:00+00:00 | — | — |
+| `ai-antispam-outreach-stream-joins` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-24T00:00:00+00:00 | — | — |
+| `ai-antispam-outreach-watch-poll` | ops | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T12:07:00+00:00 | — | — |
 | `ai-antispam-owner-digest` | ops | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T06:30:00+00:00 | — | — |
-| `ai-antispam-self-audit-daily` | ops | `50 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T05:50:00+00:00 | — | — |
-| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-22T12:40:00+00:00 | — | — |
-| `ai-antispam-timeout-monitor` | ops | `0 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-22T12:00:00+00:00 | — | — |
-| `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-22T12:25:00+00:00 | — | out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skil… |
+| `ai-antispam-self-audit-daily` | ops | `50 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-24T05:50:00+00:00 | — | — |
+| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T06:40:00+00:00 | — | — |
+| `ai-antispam-timeout-monitor` | ops | `0 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T12:00:00+00:00 | — | — |
+| `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T12:25:00+00:00 | — | out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skil… |
 | `ai-antispam-watch-funnel-day7-report` | ops | `0 9 22 9 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-09-22T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-wave0-reply-sweep` | ops | `0 12 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-22T09:00:00+00:00 | — | — |
+| `ai-antispam-wave0-reply-sweep` | ops | `0 12 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T09:00:00+00:00 | — | — |
 | `ai-antispam-wave0-unactivated-reprobe` | ops | `0 12 * * 2` | Europe/Moscow | yes | 0 | **absent** | 2026-10-26T09:00:00+00:00 | — | — |
 
 Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
@@ -213,7 +213,7 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 | purpose | Give the owner timely Value-ranked route intelligence from the InferHub inference auction — which routes to use, at what measured price and reliability — and keep production gateway routing (New-API channel tiers and the client fallback chain) pointed at the best measured Value. |
 | profile | `ops` |
 | repo | `/root/inferhub-watch` |
-| law | `/root/inferhub-watch/skills/inferhub/SKILL.md` — revision 1.0.192 |
+| law | `/root/inferhub-watch/skills/inferhub/SKILL.md` — revision 1.0.196 |
 | owns | ['leshchenko1979/inferhub-watch (/root/inferhub-watch): probe engine, sync and switcher scripts, tests, evidence ledger, and the skills/inferhub process law', 'Grafana dashboard inferhub-watch on grafana.l1979.ru — its panels and queries (datasource inferhub-pg); the dashboard JSON is ours to author', 'Postgres inferhub_logs on apps — route_metrics, usage_logs and model_rollup; this factory is their writer. model_rollup added 2026-09-23 (issue #133): a 30-row aggregate refreshed every 10 min by the no-wake host runner, same shape as route_metrics', "The new_api channels table on apps as an AUTHORED POLICY OBJECT — the tier ladder named in an earlier fragment NO LONGER EXISTS. Live 2026-10-04: exactly THREE rows — id 43 gemini (status 1 = ENABLED, priority 100, auto_ban 1), id 44 iq-75-plus (status 1 = enabled, priority 200, auto_ban 0), id 46 iq-80-plus (status 3 = AUTO-BANNED by ChannelDisableThreshold=15 at 2026-09-26T14:41:40Z, reason recorded verbatim 'status_code=503, combo has no member with a provider within budget right now'; priority 210). The 09-25T22:33:39Z re-enable of id 43 is NO LONGER UNATTRIBUTED: it was the owner's own admin session (new_api.audit_logs row 1121, auth_method=session, username=root, admin_id=1, role=100, matching other_info.status_time to the second, 14s after a failing test_time) — his own later message to a lane said he had been adjusting the config. It was disabled again 2026-09-26T07:03:33Z (audit row 1127) after measurement showed 43's members are a strict subset of 44's at an identical 0.003 bid while priority 300 made it the first call on every request. Nothing scheduled writes these rows: sync_newapi_channels.py declares only the ch-tierN-* names. AMENDED 2026-10-04 (GET /api/channel/ read live this turn): id 43 was RE-ENABLED and its priority dropped 300 -> 100, so id 44 iq-75-plus (priority 200) is now the FIRST call on every request and 43 is the degraded fallback; id 46 is still status 3 / priority 210 / auto_ban 1.", 'Client-side fallback-chain order and provider settings for all OpenCrabs profiles (three live 2026-10-16: default, family, ops) (owner-granted 2026-09-19)', 'The Inferhub watch forum and its factory lanes (HQ thread 2, worker threads 32 and 559, Grafana thread 557)', "This factory's own crons and its daily GitHub Actions sweep"] |
 | does not own | ['The New-API gateway itself — its container, config and serving behaviour on apps (Infra Factory / LLM Gateway lane). We author the channel policy; they run the gateway.', 'Grafana deployment and provisioning, and the generic /grafana skill tooling in /root/vds-servers (Infra Factory)', 'The upstream provider api.inferhub.dev — external; we measure it and never change it', 'OpenCrabs core source (/root/opencrabs): we may file fork issues for runtime anomalies we observe, but we never open PRs or edit source (external-lane boundary)', "Other member factories' repos, lanes and process law", 'Host and box infrastructure (owner)'] |
 | substrates owned | ['leshchenko1979/inferhub-watch', "skills/inferhub/SKILL.md — this factory's process law; HQ-only authorship", 'Postgres inferhub_logs on apps — route_metrics, usage_logs, model_rollup', 'Grafana dashboard inferhub-watch — panels and queries', 'The new_api channels table — priority, auto_ban and model_mapping policy. Live 2026-10-04: three rows, ids 43 (ENABLED, prio 100) / 44 (enabled, prio 200) / 46 (auto-banned, prio 210); the tier ladder is gone and no automatic writer runs.'] |
@@ -249,10 +249,10 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
 | `inferhub-auto-switcher` | ops | `33 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:33:00+00:00 | — | — |
-| `inferhub-daily-report` | ops | `0 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T05:00:00+00:00 | — | — |
-| `inferhub-hq-pacemaker` | ops | `10 */6 * * *` | UTC | yes | 1 | present | 2026-10-22T12:10:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
+| `inferhub-daily-report` | ops | `0 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-24T05:00:00+00:00 | — | — |
+| `inferhub-hq-pacemaker` | ops | `10 */6 * * *` | UTC | yes | 1 | present | 2026-10-23T12:10:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
 | `inferhub-self-audit-daily` | ops | `40 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T06:40:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
-| `inferhub-usage-logs-sync` | ops | `23 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-22T12:23:00+00:00 | — | — |
+| `inferhub-usage-logs-sync` | ops | `23 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T12:23:00+00:00 | — | — |
 
 Attribution basis: deliver_to -> lane, name prefix.
 3 of 5 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
@@ -261,7 +261,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-10-22T06:47:51Z |
+| freshness | ✅ attested 2026-10-23T06:26:39Z |
 | purpose | Keep the VDS fleet (vpn, apps, agents, agents-old) and the services it hosts observable, healthy and self-healing: intake Gatus alerts, diagnose hosts, apply safe remediation, and own the fleet infrastructure source repo. |
 | profile | `ops` |
 | repo | `/root/vds-servers` |
@@ -269,7 +269,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 | owns | ['Fleet host operations on vpn, apps, agents and agents-old - diagnosis (host-diag), service and container lifecycle, disk cleanup and safe remediation', 'Gatus monitoring: endpoint configuration, alert intake and recovery routing (gatus-notify on vpn)', 'The fleet infrastructure source repo /root/vds-servers - fleet configs, host scripts, the process register and the factory ledger', 'Host and workspace hygiene: the single reap policy (tools/hygiene.py), its derived gate line, and disk-threshold remediation', 'The Mac access path as fleet infrastructure - the CDP tunnel to the Mac and the route pin on its physical NIC', 'Infra Factory process law and its own lanes (HQ, Triage, Surveys)'] |
 | does not own | ['OpenCrabs daemon and harness source, and its development process (/root/opencrabs) - that is opencrabs-dev', 'The factory template, cross-factory laws and fleet measurement - that is meta-factory', 'ai-antispam business logic, its outreach campaign and its Postgres state - that is ai-antispam', 'Miidas product and accounting logic - that is miidas; this factory owns only host-level uptime for its containers', 'InferHub model routing, pricing and token economics - that is inferhub-watch', 'Application logic of services hosted on the fleet (tg-scanner-hub, llm-gateway): hosted and monitored here, changed in their own repos', "Other profiles' brain files and configuration (default, family)", 'The OpenCrabs log-guard watchdog and its root-crontab line on agents (/usr/local/bin/opencrabs-log-guard.sh) - host infrastructure operated by the owner (Alexey). Its source exists in no factory repo, so no factory can declare it as code it owns; it mitigates a closed OpenCrabs daemon defect class (leshchenko1979/opencrabs#21).'] |
 | substrates owned | ['/root/vds-servers - the fleet infrastructure source repo (single-writer: its ledger and evidence are appended by tools/ledger.py alone)', 'The fleet hosts vpn, apps, agents and agents-old - host-level state: systemd units, containers, disk, /usr/local/bin scripts', 'Gatus monitoring configuration and alert routing on vpn', 'The Mac access path (vpn/mac-access: CDP tunnel and route pin)'] |
-| attested at | 2026-10-22T06:47:51Z |
+| attested at | 2026-10-23T06:26:39Z |
 
 **Services**
 
@@ -294,9 +294,9 @@ Attribution basis: deliver_to -> lane, name prefix.
   - affects: profile · since: 2026-09-19 · declared by: infra-factory
 - 🟡 **`gatus-config-carries-live-credentials`** — vpn/services/gatus/config/config.yaml carries live credentials in plaintext, including SSH private-key blocks. Never grep it with a context flag (-A/-B), and never print a parsed form of it - json.dumps of a single endpoint dict renders the key field verbatim. Read the KEY NAMES only; to compare a value, hash it in place. The read discipline is necessary but not sufficient: the PRINT is the second chokepoint, and it is the one that fails when the read felt safe. A third chokepoint is any TOOL whose output path renders the file's content: a diff, a checksum-and-dump, or a guard that prints a drift diff between two key-bearing copies discloses both. Read the output path before you ship the tool, not after.
   - affects: profile · since: 2026-09-23 · review by: 2026-11-06 · declared by: infra-factory
-- 🟡 **`mac-cdp-tunnels-flap-on-sleep`** — The Mac is UP again (uptime 16:56 at 2026-10-22T06:36Z, after weeks powered off). Both tunnels read 0 failures across their last 50 probes (mac-tunnel 02:24-06:29Z, mac-cdp-tunnel 05:44-06:33Z) and nightly backups have succeeded three consecutive nights (2026-10-20T17:27Z, 10-21T01:00Z, 10-22T00:42Z). The prior claims that it was powered off and that no backup had completed since 2026-10-02 are EXPIRED. The sleep/flap hazard is unchanged for when it next sleeps, and the CDP tunnel is STILL UNSUPERVISED: the live forwarder is a hand-launched 'ssh -N -L 9222' with no unit behind it, so a sleep still costs a manual restart.
+- 🟡 **`mac-cdp-tunnels-flap-on-sleep`** — The Mac is UP: both tunnel endpoints read 0 failures (mac-tunnel 100 results, newest 2026-10-23T06:21:14Z; mac-cdp-tunnel 101 results, newest 06:23:15Z), and the last nightly backup success is 2026-10-23T00:42:32Z, though infra_mac-backup still reads 40 failures of 69 results. NEW AND SHARPER: mac-cdp-tunnel is green because it SSHes to the Mac and curls the Mac's OWN localhost:9222 — it never touches the forwarder, so its green is not evidence that the tunnel is supervised. The forwarder is still hand-launched: on agents, pid 3330904 'ssh -f -N -L 9222:localhost:9222 mac', started 2026-10-22T16:26:34Z, with no unit, cron entry or timer for it on vpn, apps or agents. A sleep still costs a manual restart, and the monitoring cannot tell you it happened.
   - affects: profile · since: 2026-09-26 · review by: 2026-11-20 · declared by: infra-factory
-- 🟡 **`ops-daemon-dies-at-cgroup-cap`** — Measured 2026-10-22T06:32Z on opencrabs-ops: memory.current 2,119,274,496 of 2,147,483,648 B = 98.69%, headroom 26.9 MiB; swap 2,455,474,176 of 2,684,354,560 = 91.47% with swap.peak == swap.max, so the swap ceiling has been touched; memory.peak 385,024 B OVER memory.max; memory.events high 5 / max 416,828 / oom_kill 0 — both reclaim counters roughly doubled in 24h while oom_kill stayed 0, i.e. the kernel is pressing hard and still not killing. No new kill in 11h33m (NRestarts=2, ActiveEnterTimestamp 2026-10-21T19:01:09Z, MainPID 2097291, RSS 1,071.0 MiB). dmesg reads 20 ops-unit kills and that is a RING-BUFFER WINDOW, not a lifetime count — a new kill arrives while an older line is evicted, so the total does not move. NRestarts 0 is also not a clean life: a binary swap resets it. 31 Gatus endpoints, still NONE watching this daemon.
+- 🟡 **`ops-daemon-dies-at-cgroup-cap`** — Measured 2026-10-23T06:23Z on opencrabs-ops: memory.current 2,132,307,968 of 2,147,483,648 B = 99.29%, headroom 14.5 MiB; swap 2,449,580,032 of 2,684,354,560 = 91.25% with 223.9 MiB free and swap.peak == swap.max, so the swap ceiling has been touched; memory.peak 316 KiB OVER memory.max; memory.events high 1 / max 223,128 / oom 0 / oom_kill 0 — throttled, not OOM-killed in this incarnation. The kernel DOES still kill, and the text this replaces had it backwards: dmesg's three newest ops kills are 2026-10-22T13:48:28Z (pid 2097291), 2026-10-21T19:01:25Z (pid 807063) and 2026-10-21T00:27:34Z (pid 2815652), and pid 2097291 is the process that text called the live MainPID. Now MainPID 3237387, NRestarts=3, ActiveEnterTimestamp 2026-10-22T13:48:12Z. dmesg reads 20 ops-unit kills and that is a RING-BUFFER WINDOW, not a lifetime count. The binding reserve is the SWAP remainder, not the effective margin: the burst recorder logged a 1,063.7 MiB child burst at 2026-10-23T06:04:02Z against 0.3 MiB headroom (used 4,607.7 of 4,608.0 MiB = 99.99%), and that burst is larger than the swap still free. It IS watched: Gatus endpoint 34 infra_oc-ops-daemon reads 17 results / 0 failures, pushing false on restart and a true heartbeat every 600s (05:28-06:18Z), across 33 configured endpoints — the 'NONE watching this daemon' claim is EXPIRED.
   - affects: profile · since: 2026-09-27T06:13:19Z · review by: 2026-11-20 · declared by: infra-factory
 - 🔵 **`board-gates-declared-inapplicable`** — The two board/ledger agreement gates are RETIRED, not red. tests/test_close_board_recorded.py and tests/test_board_intake_recorded.py assert a board/ledger close agreement, and this factory's issue board IS its ledger — ONE surface — so the two-surface predicate is INAPPLICABLE rather than failed. They were declared RED BY DESIGN at ledger n=611 and were the only REDs in the 23-gate audit. As of 2026-10-19 they are retired through the KIT'S DECLARED-ABSENT STATE, never by deletion: each reads the declared boundary from docs/ledger-invariants.json, this tree declares none, so each prints a named SKIP ('no docs/ledger-invariants.json — the boundary is a DECLARED factory parameter (#78 clause b)') and STILL RUNS EVERY PROBE — 11 on the close gate, 15 on the intake gate. HOW TO READ THEM NOW: a SKIP is the expected, correct state and is NOT a regression; but a RED from either gate IS a real defect — the retire was built so it cannot disguise a removed or broken gate. The four judgement probes are hermetic (a synthetic tree), and each gate keeps a positive control: a DECLARED boundary must still fail a bad row. The old 'RED BY DESIGN, do not file as a regression' instruction is WITHDRAWN — filing one of these as a regression is now the wrong call only if it SKIPPED; if it FAILED, file it. Owner directive 2026-10-19: 'i don't want to be asked such low level questions any more' — q27 is answered and the class (kit convention, internal mechanics) is now HQ's to decide, never the owner register's. Commits aed7c5af (gates + roles/hq.md + ledger n=1482) and 0c4952eb (prose refs). Full audit after: 24/24 gates PASS.
   - affects: profile · since: 2026-09-27 · review by: 2026-10-26 · declared by: infra-factory
@@ -307,16 +307,16 @@ Attribution basis: deliver_to -> lane, name prefix.
   - affects: profile · since: 2026-10-01T19:35:04Z · review by: 2026-11-16 · declared by: infra-factory
 - 🟡 **`gatus-page-can-be-silently-lost`** — A Gatus alert page can be SILENTLY LOST: the relay on vpn forwards it over an SSH hop to the agents host's A2A gateway, and when that hop fails the receiver records delivered=false (transport_error) and the target lane is never woken. The owner's q16 ACCEPTS the loss, so no factory may treat a Gatus page as a guaranteed wake - verify the episode in the receiver's store or the ledger when the alert matters.
   - affects: profile · since: 2026-10-07 · review by: 2026-11-20 · declared by: infra-factory
-- 🔵 **`opencrabs-home-unmanaged-growth`** — On agents, /root/.opencrabs reads 18G and profiles/ops 13G at 2026-10-22T06:30Z, UP from 16G/11G on 2026-10-21: the growth resumed after the one-day drop. Nothing reaps a profile home — hygiene.py's SCRATCH_ROOT is /tmp-only — so the single reap policy still does not reach it.
+- 🔵 **`opencrabs-home-unmanaged-growth`** — On agents, /root/.opencrabs reads 20G and profiles/ops 15G at 2026-10-23T06:24Z, UP from 18G/13G on 2026-10-22: the growth resumed. ops is the whole story — every other profile is 1008K except family at 839M and oc348probe at 17M. / is 87% used (50G of 58G, 8.0G free). Nothing reaps a profile home: hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy still does not reach it.
   - affects: profile · since: 2026-10-09 · declared by: infra-factory
-  - evidence: ledger n=1161 (2026-10-06 q22 dig, /root/.opencrabs at 16G); re-measured on agents 2026-10-21T06:06Z: `du -sh /root/.opencrabs` = 16G, `du -sh /root/.opencrabs/profiles/ops` = 11G, memory/ 4.1G, opencrabs.db 3.3G, opencrabs-dev 2.2G; prior read 2026-10-20T06:07Z gave 17G / 13G with memory/ 5.8G. Parts of the 11G: 4.1 + 3.3 = 7.4G for memory/ plus the session DB.
+  - evidence: Re-measured on agents 2026-10-23T06:24:03Z: du -sh /root/.opencrabs = 20G, du -sh /root/.opencrabs/profiles/ops = 15G, every other profile 1008K except family 839M and oc348probe 17M (avito 1008K, code-spike 1008K, miidas 1008K); df -h / = /dev/sda1 58G, 50G used, 8.0G free, 87%. Prior read 2026-10-22T06:30Z gave 18G / 13G; 2026-10-21T06:06Z gave 16G / 11G; ledger n=1161 (2026-10-06 q22 dig, 16G) and its 2026-10-21 parts read memory/ 4.1G + opencrabs.db 3.3G + opencrabs-dev 2.2G. Reap surface unchanged: tools/hygiene.py SCRATCH_ROOT covers /tmp only, so no reap reaches a profile home.
 
 **Lanes**
 
 | topic (declared) | observed topic | thread | role | session | session title | status | channel | last active | lane announcements |
 |---|---|---|---|---|---|---|---|---|---|
 | HQ | `HQ` | 4 | hq | `6a314aac-94db-4b11-974c-f53decc25b9d` | Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4] | resolved | telegram | 2026-10-13T11:38:05Z | — |
-| Gatus alert routing and fleet triage | `Triage` | 5 | triage | `fb67ca75-8735-4c39-80be-06b59bd4365f` | Gatus alert routing and fleet triage | resolved | telegram | 2026-09-29T10:13:20Z | — |
+| Gatus alert routing and fleet triage | `Triage` | 5 | triage | `fb67ca75-8735-4c39-80be-06b59bd4365f` | Gatus alert routing and fleet triage | resolved | telegram | 2026-10-22T16:23:31Z | — |
 | Surveys | `Surveys` | 7 | surveys | `8daa376e-367c-452d-840f-0c18d66ef60a` | Telegram: Infra Factory / Surveys [chat:-1004486255170:topic:7] | resolved | telegram | 2026-09-29T07:42:08Z | — |
 | LLM Gateway | `LLM Gateway` | 467 | gateway | `8b278a4f-531d-4d7b-8c79-87d30f9257bd` | Telegram: Infra Factory / LLM Gateway [chat:-1004486255170:topic:467] | resolved | telegram | 2026-10-04T20:22:56Z | — |
 | TG Hub | `TG Hub` | 475 | _unstated_ | `a360e13f-4e34-4fac-8a1d-770644040903` | Telegram: Infra Factory / TG Hub [chat:-1004486255170:topic:475] | resolved | telegram | 2026-10-01T00:10:26Z | — |
@@ -325,12 +325,12 @@ Attribution basis: deliver_to -> lane, name prefix.
 
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
-| `infra-audit-stamp-first-fire-check` | ops | `30 7 22 10 *` | UTC | yes | 0 | **absent** | 2026-10-22T07:30:00+00:00 | telegram:-1004486255170:4 | — |
-| `infra-handler-escalation-check` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T00:00:00+00:00 | — | P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service… |
+| `infra-audit-stamp-first-fire-check` | ops | `30 7 22 10 *` | UTC | **no** | 0 | **absent** | 2027-10-22T07:30:00+00:00 | telegram:-1004486255170:4 | — |
+| `infra-handler-escalation-check` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-24T00:00:00+00:00 | — | P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service… |
 | `infra-mac-backup-verify-oneshot` | ops | `15 19 28 9 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-09-28T16:15:00+00:00 | telegram:-1004486255170:4 | — |
-| `infra-sender-logs-check` | ops | `05 18 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-22T15:05:00+00:00 | — | — |
-| `infra-surveys-daily` | ops | `5 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T06:05:00+00:00 | — | — |
-| `infra-triage-patrol` | ops | `5 */6 * * *` | UTC | yes | 0 | present | 2026-10-22T12:05:00+00:00 | — | /root/vds-servers/tools/triage_preflight.py |
+| `infra-sender-logs-check` | ops | `05 18 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T15:05:00+00:00 | — | — |
+| `infra-surveys-daily` | ops | `5 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-24T06:05:00+00:00 | — | — |
+| `infra-triage-patrol` | ops | `5 */6 * * *` | UTC | yes | 0 | present | 2026-10-23T12:05:00+00:00 | — | /root/vds-servers/tools/triage_preflight.py |
 
 Attribution basis: deliver_to -> chat, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
@@ -413,16 +413,16 @@ LATEST READING 2026-10-22T06:35:27Z — this block SUPERSEDES the 2026-10-18 rea
 
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
-| `factory-binding-sync` | ops | `20 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-22T12:20:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | python3 /root/agent-factories/tools/sync_binding.py --apply |
+| `factory-binding-sync` | ops | `20 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T12:20:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | python3 /root/agent-factories/tools/sync_binding.py --apply |
 | `factory-growth-map-biweekly` | ops | `0 9 1,15 * *` | Europe/Moscow | yes | 0 | **absent** | 2026-11-01T06:00:00+00:00 | — | — |
-| `factory-hq-pacemaker` | ops | `50 */6 * * *` | UTC | yes | 1 | present | 2026-10-22T12:50:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | — |
+| `factory-hq-pacemaker` | ops | `50 */6 * * *` | UTC | yes | 1 | present | 2026-10-23T06:50:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | — |
 | `factory-insights-weekly` | ops | `0 18 * * Fri` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T15:00:00+00:00 | — | python3 /root/agent-factories/tools/synthesize_insights.py --audit |
-| `factory-measurement-daily` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T06:00:00+00:00 | — | — |
-| `factory-publish` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-22T12:00:00+00:00 | — | — |
-| `factory-questions-redeliver` | ops | `12 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-22T12:12:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | /root/.opencrabs/profiles/ops/scripts/oc_questions_redeliver.sh |
-| `factory-registry-attest` | ops | `0 6 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T06:00:00+00:00 | — | — |
+| `factory-measurement-daily` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-24T06:00:00+00:00 | — | — |
+| `factory-publish` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T12:00:00+00:00 | — | — |
+| `factory-questions-redeliver` | ops | `12 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T12:12:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | /root/.opencrabs/profiles/ops/scripts/oc_questions_redeliver.sh |
+| `factory-registry-attest` | ops | `0 6 * * *` | UTC | yes | 0 | **absent** | 2026-10-24T06:00:00+00:00 | — | — |
 | `factory-template-weekly` | ops | `0 9 * * Mon` | Europe/Moscow | yes | 0 | **absent** | 2026-10-26T06:00:00+00:00 | — | python3 /root/agent-factories/tools/roadmap.py --cadence |
-| `factory-triage-patrol` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-22T12:00:00+00:00 | — | out=$(gh issue list -R leshchenko1979/agent-factories --state open --li… |
+| `factory-triage-patrol` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T12:00:00+00:00 | — | out=$(gh issue list -R leshchenko1979/agent-factories --state open --li… |
 
 Attribution basis: deliver_to -> lane, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
@@ -481,7 +481,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 
 | topic (declared) | observed topic | thread | role | session | session title | status | channel | last active | lane announcements |
 |---|---|---|---|---|---|---|---|---|---|
-| HQ | `HQ` | 4 | hq | `e4f96a33-45ac-412e-8788-1b678cf2addb` | Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4] | resolved | telegram | 2026-10-21T12:50:39Z | — |
+| HQ | `HQ` | 4 | hq | `e4f96a33-45ac-412e-8788-1b678cf2addb` | Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4] | resolved | telegram | 2026-10-22T16:05:12Z | — |
 | Agent runtime | `Agent runtime` | 6 | _unstated_ | `5a5335ee-db68-46fe-b13e-a082b2beadb5` | Telegram: Miidas Factory / Agent runtime [chat:-1003996392908:topic:6] | resolved | telegram | 2026-10-19T08:54:11Z | — |
 | Manager | `Manager` | 9 | _unstated_ | `b64ca6ba-9ec0-47f7-8450-0d25b6c1d854` | Telegram: Miidas Factory / Manager [chat:-1003996392908:topic:9] | resolved | telegram | 2026-09-25T16:25:13Z | — |
 | Worker | `Worker — #108 landing/ superseded` | 56 | worker | `b57efabd-85df-4467-bed7-f5a596285f68` | Telegram: Miidas Factory / Worker — #39 board vs ledger comparison gate [chat:-1003996392908:topic:56] | resolved | telegram | 2026-09-29T07:19:56Z | — |
@@ -491,7 +491,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
-| `miidas-hq-daily-trigger` | ops | `0 9 * * *` | UTC | yes | 0 | **absent** | 2026-10-22T09:00:00+00:00 | session:e4f96a33-45ac-412e-8788-1b678cf2addb | — |
+| `miidas-hq-daily-trigger` | ops | `0 9 * * *` | UTC | yes | 0 | **absent** | 2026-10-23T09:00:00+00:00 | session:e4f96a33-45ac-412e-8788-1b678cf2addb | — |
 
 Attribution basis: deliver_to -> lane.
 
@@ -617,8 +617,8 @@ These rows name no known factory in their `deliver_to` and match no naming prefi
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
 | `reminder-answer-adolfo` | family | `0 10 1 10 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-10-01T07:00:00+00:00 | telegram:133526395 | — |
-| `tamara_accounting_sync` | family | `0 21 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-22T18:00:00+00:00 | telegram:-1004286036984 | python3 /root/.opencrabs/profiles/family/projects/tamara-raschety/cron_… |
-| `avito-broadcast-daily` | ops | `5 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T06:05:00+00:00 | — | timeout 25 /root/avito-realty-bot/scripts/daily_broadcast.sh; rc=$?; ec… |
+| `tamara_accounting_sync` | family | `0 21 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-23T18:00:00+00:00 | telegram:-1004286036984 | python3 /root/.opencrabs/profiles/family/projects/tamara-raschety/cron_… |
+| `avito-broadcast-daily` | ops | `5 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-24T06:05:00+00:00 | — | timeout 25 /root/avito-realty-bot/scripts/daily_broadcast.sh; rc=$?; ec… |
 | `oc626-resolve-probe` | ops | `0 4 1 1 *` | UTC | **no** | 0 | **absent** | 2027-01-01T04:00:00+00:00 | — | true |
 | `tmp-nulltrigger-probe` | ops | `4 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:04:00+00:00 | — | — |
 | `tmp-trigger-control-neg` | ops | `0 0 1 1 *` | UTC | **no** | 0 | **absent** | 2027-01-01T00:00:00+00:00 | — | printf 'BEHIND\t0\n' |
