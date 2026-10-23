@@ -5784,22 +5784,36 @@ def test_probe_the_BRIDGE_resolves_a_slug_subject() -> None:
 
     The ruling is stamped under a SLUG (`foreign-instrument-coupling`) while the issue is
     filed a row later under `#85`, so the strict form returns None and the row is invisible
-    to `ruled`. The bridge is a row that REFERENCES this ruling's `n` and itself names an
-    issue — which is exactly the real n=545 / n=546 pair.
+    to `ruled`. The bridge is a row that POINTS AT this ruling (`ref row:<n>`, the ledger's
+    declared ref form) and itself names an issue — the n=545 / n=546 shape. A row that only
+    QUOTES the ruling is evidence and does not bridge (#551 remedy 2).
     """
     pred = RUNNER.load_predicate()
     ruling = {"n": 545, "event": "ruling", "subject": "foreign-instrument-coupling",
               "detail": "OWNER ORDER: do not use the instruments ..."}
+    # The citing row must carry a TYPED pointer (`ref row:<n>`) before its mention of the
+    # ruling's `n` counts as ownership — remedy 2 of #551's ruling, and the reason the two
+    # halves landed in separate commits.
     dispatch = {"n": 546, "event": "dispatch", "subject": "#85",
-                "detail": "DISPATCH #85 ... Ruling n=545; issue filed at https://x/issues/85"}
-    issue, arm, _bridge = RUNNER.resolve_ruling_issue(ruling, [ruling, dispatch], pred)
+                "detail": "DISPATCH #85 ... Ruling n=545 ref row:545; issue filed at https://x/issues/85"}
+    issue, arm, bridge = RUNNER.resolve_ruling_issue(ruling, [ruling, dispatch], pred)
     assert (issue, arm) == (85, "bridged"), (issue, arm)
+    assert bridge == {"n": 546, "event": "dispatch"}, bridge
 
     # A bare-number subject is ALSO a real form (n=516 carries subject `77`, which its own
     # correction row n=518 complains about) — so the bridge must read it too.
-    bare = {"n": 517, "event": "dispatch", "subject": "77", "detail": "see Ruling n=545"}
+    bare = {"n": 517, "event": "dispatch", "subject": "77",
+            "detail": "see Ruling n=545, ref row:545"}
     issue, arm, _bridge = RUNNER.resolve_ruling_issue(ruling, [ruling, bare], pred)
     assert (issue, arm) == (77, "bridged"), (issue, arm)
+
+    # REMEDY 2 — the SAME mention WITHOUT the typed pointer is evidence, not ownership, so
+    # the row stays unbridgeable. This is the arm that would have caught all 16
+    # mis-attributions measured before the narrowing.
+    quote_only = {"n": 547, "event": "dispatch", "subject": "#85",
+                  "detail": "DISPATCH #85 ... Ruling n=545; issue filed at https://x/issues/85"}
+    issue, arm, _bridge = RUNNER.resolve_ruling_issue(ruling, [ruling, quote_only], pred)
+    assert (issue, arm) == (None, "unbridgeable"), (issue, arm)
 
 def test_probe_the_DECLARED_arm_is_constructible_because_it_has_NO_live_instance() -> None:
     """Arm 3, driven off a FIXTURE because the token has zero live rows.
@@ -5813,6 +5827,36 @@ def test_probe_the_DECLARED_arm_is_constructible_because_it_has_NO_live_instance
               "detail": "a ruling that governs a concern rather than an item. governs=1234"}
     issue, arm, _bridge = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
     assert (issue, arm) == (1234, "declared"), (issue, arm)
+
+def test_probe_an_issue_quoting_an_ORPHANED_ROW_resolves_to_unbridgeable() -> None:
+    """#551 remedy 3's acceptance: a DANGLING pointer adopts nothing.
+
+    A row can mention the ruling and still aim its typed pointer at a row this ledger does
+    not hold — `ref row:949` when no 949 was ever stamped. The mention is there, so a
+    substring predicate hands over the row's issue; the pointer is dangling, so ownership is
+    NOT established. The ruling stays `unbridgeable` and is printed, rather than silently
+    adopting `#777`.
+
+    Driven off a FIXTURE because the live ledger carries no such pair today, and paired with
+    a positive control in the same test: the refusal must come from the pointer's TARGET,
+    never from a predicate that cannot resolve at all.
+    """
+    pred = RUNNER.load_predicate()
+    ruling = {"n": 950, "event": "ruling", "subject": "slug-with-no-issue",
+              "detail": "a ruling about a concern"}
+
+    # Mentions the ruling (so the substring test PASSES) but points at an ORPHANED row.
+    dangling = {"n": 951, "event": "dispatch", "subject": "#777",
+                "detail": "DISPATCH #777 ... Ruling n=950; ref row:949"}
+    issue, arm, bridge = RUNNER.resolve_ruling_issue(ruling, [ruling, dangling], pred)
+    assert (issue, arm, bridge) == (None, "unbridgeable", None), (issue, arm, bridge)
+
+    # Positive control: the same row, pointing at the ruling itself, DOES bridge.
+    pointing = {"n": 952, "event": "dispatch", "subject": "#777",
+                "detail": "DISPATCH #777 ... Ruling n=950; ref row:950"}
+    issue, arm, bridge = RUNNER.resolve_ruling_issue(ruling, [ruling, pointing], pred)
+    assert (issue, arm) == (777, "bridged"), (issue, arm)
+    assert bridge == {"n": 952, "event": "dispatch"}, bridge
 
 def test_probe_the_leg_PRINTS_an_unbridgeable_row_instead_of_dropping_it() -> None:
     """Clause 2: a resolver that cannot place a row must SAY SO.
@@ -5872,7 +5916,8 @@ def test_probe_the_BRIDGE_is_the_thing_that_moves_the_population() -> None:
     issues = [_issue_with_comments(85, "OPEN", "## RULED — settled on the board.\n")]
     ruling = {"n": 545, "event": "ruling", "subject": "foreign-instrument-coupling",
               "detail": f"the clause comment={_comment_numeric(85)}"}
-    dispatch = {"n": 546, "event": "dispatch", "subject": "#85", "detail": "Ruling n=545"}
+    dispatch = {"n": 546, "event": "dispatch", "subject": "#85",
+                "detail": "Ruling n=545 ref row:545"}
 
     with_bridge = RUNNER.board_ruling_leg(issues, [ruling, dispatch], read_at="probe",
                                           predicate=pred,
@@ -8006,8 +8051,10 @@ def test_the_board_unruled_leg_resolves_the_RULING_namespace_and_PRINTS_an_unpla
     rows = [
         _stall_row(41, "intake", "#941", 3, now=now),
         _stall_row(42, "ruling", "slug-probe", 2.9, now=now),
-        # the DISPATCH BRIDGE: a later row references the ruling's `n` and names the issue
-        _stall_row(43, "dispatch", "#941", 2.8, now=now, detail="Ruling n=42"),
+        # the DISPATCH BRIDGE: a later row POINTS AT the ruling (`ref row:42`) and names the
+        # issue — the typed pointer is what makes it ownership rather than a quotation
+        _stall_row(43, "dispatch", "#941", 2.8, now=now,
+                   detail="Ruling n=42 ref row:42"),
         _stall_row(44, "intake", "#942", 3, now=now),
         _stall_row(45, "ruling", "another-slug-probe", 2.9, now=now),
     ]

@@ -1087,6 +1087,10 @@ def board_closed_leg(issues: list[dict], rows: list[dict], *, gate=None,
 # A ROW THAT RESOLVES TO NO ISSUE IS PRINTED, never silently dropped: a resolver that
 # cannot place a row must say so, or the leg reports a smaller population than it examined.
 RULING_GOVERNS_KEY = "governs="
+# The ledger's DECLARED ref form for a pointer to another ROW (`--ref row:<n>`,
+# `CORE_REF_KINDS` in tools/ledger.py). A bridging row must carry one of these before its
+# mention of a ruling's `n` is read as OWNERSHIP rather than as evidence (#551 remedy 2).
+_RULING_ROW_REF = re.compile(r"\bref\s+row:(\d+)\b")
 _RULING_ISSUE_URL = re.compile(r"/issues/(\d+)\b")
 _RULING_BARE_NUMBER = re.compile(r"^(\d+)$")
 
@@ -1186,6 +1190,19 @@ def issue_from_row(row: dict, predicate) -> int | None:
     return None
 
 
+def _names_row_as_ref(detail: str, n: int) -> bool:
+    """Whether `detail` carries a TYPED pointer to row `n` — `ref row:<n>` or `governs=<n>`.
+
+    The declared ref form is the ONLY thing that separates ownership from a quotation: a
+    bare `n=<n>` appears in every row that merely DISCUSSES this one, and treating that as
+    ownership is what #551 filed (#551, ruling n=4157 remedy 2). Both spellings are read
+    here, and nothing else is — widening this predicate re-opens the defect.
+    """
+    for value in _RULING_ROW_REF.findall(detail):
+        if int(value) == n:
+            return True
+    return re.search(rf"{re.escape(RULING_GOVERNS_KEY)}{n}\b", detail) is not None
+
 def resolve_ruling_issue(
     ruling: dict, rows: list[dict], predicate
 ) -> tuple[int | None, str, dict | None]:
@@ -1203,9 +1220,18 @@ def resolve_ruling_issue(
     this predicate ownership and evidence are the same substring. Measured before the fix:
     16 of 28 bridged rulings attribute to an issue their own detail never names (`n=826`
     bridges to `#453` while naming `#129`). Naming the source row turns an implied
-    attribution into one a reader can re-litigate row by row; it deliberately does NOT
-    change WHICH rows bridge — that narrowing is remedy 2, and changing both at once would
-    leave no reader able to tell which move altered the population.
+    attribution into one a reader can re-litigate row by row. It landed ALONE first, so
+    that the population it exposed was measurable before anything moved it (remedy 1).
+
+    REMEDY 2 has since landed (same ruling): a bare `n=<M>` mention is now admitted only
+    when the citing row carries a TYPED pointer to this ruling — `ref row:<M>` (the ledger's
+    own declared ref form) or `governs=<M>`. Measured over 4,167 rows before narrowing:
+    `strict 626 / bridged 28 / unbridgeable 12`, and after: `strict 626 / bridged 0 /
+    unbridgeable 40`. The narrowing costs NO reachability — `set(issues_before) -
+    set(issues_after)` is EMPTY, because every one of the 28 also carries a strict ruling,
+    which is the ruling's own Correction 2 confirmed against the live ledger rather than
+    taken on trust. What it buys is that an arm printed as auditable no longer counts
+    evidence as ownership.
     """
     own = issue_from_row(ruling, predicate)
     if own is not None:
@@ -1222,6 +1248,12 @@ def resolve_ruling_issue(
                 continue
             detail = str(other.get("detail") or "")
             if not re.search(rf"\bn={n}\b", detail):
+                continue
+            # REMEDY 2 (#551, ruling n=4157): a bare mention is EVIDENCE, not ownership.
+            # Without this test a row that merely QUOTES this ruling while discussing some
+            # OTHER item hands over its issue number — measured 16 of 28 bridged rulings
+            # attributing to an issue their own detail never names.
+            if not _names_row_as_ref(detail, n):
                 continue
             bridged = issue_from_row(other, predicate)
             if bridged is not None:
