@@ -66,6 +66,15 @@ TESTS = REPO / "tests"
 
 # Declared, so the measured half is bounded and its shape is reviewable rather than emergent.
 WORKERS = 6
+# The registry's `budget_sec` bounds a gate run ALONE -- that is the condition the audit runs
+# it under, one at a time. This gate runs WORKERS children at once on a shared box, so a
+# child's wall time is inflated by its own pool's contention before any peer load is counted,
+# and bounding it by the SOLO budget makes the verdict a function of ambient load rather than
+# of the bytes. Measured 2026-10-23 at load 14.93/4 cores: `test_hq_delegation.py` (solo
+# budget 17.87 s) was starved to rc 124, which this gate reports as an UNMEASURED problem --
+# a FALSE RED over a tree whose two forms agree. So the ceiling is the solo budget scaled by
+# the pool's own width. A child that exceeds even THAT is genuinely hung, and stays loud.
+CONTENTION_FACTOR = WORKERS
 EXECUTABLE_PLACEHOLDER = "<sys.executable>"
 
 
@@ -209,7 +218,7 @@ def _run(argv: list[str], timeout: float) -> tuple[int, str]:
         tail = (done.stdout + done.stderr).strip().splitlines()
         return done.returncode, (tail[-1][:200] if tail else "")
     except subprocess.TimeoutExpired:
-        return 124, f"exceeded its {timeout:.0f}s declared budget"
+        return 124, f"exceeded its {timeout:.0f}s ceiling (solo budget x pool contention)"
 
 
 def _compare(module: str, entry: dict, timeout: float) -> dict:
@@ -270,7 +279,10 @@ def evaluate(repo: Path = REPO) -> dict:
                 f"{module}: no `__main__` guard, so its script form runs nothing and exits 0"
             )
         elif kind == "UNPROVEN":
-            budget = float(budgets.get(module, {}).get("budget_sec", default_budget))
+            budget = (
+                float(budgets.get(module, {}).get("budget_sec", default_budget))
+                * CONTENTION_FACTOR
+            )
             to_measure.append((module, entry, budget))
 
     measured: list[dict] = []
@@ -289,8 +301,8 @@ def evaluate(repo: Path = REPO) -> dict:
                     )
                 if 124 in (result["registered_rc"], result["script_rc"]):
                     problems.append(
-                        f"{result['module']}: a form exceeded its declared budget, so the pair "
-                        f"is UNMEASURED rather than agreeing"
+                        f"{result['module']}: a form exceeded its budget even at the pool's "
+                        f"contention factor, so the pair is UNMEASURED rather than agreeing"
                     )
 
     return {
