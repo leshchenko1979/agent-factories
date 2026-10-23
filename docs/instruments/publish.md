@@ -1,6 +1,6 @@
 # The pusher
 
-**Owns:** the pusher's own law — its twelve statuses, its exit codes, its receipt, its grace
+**Owns:** the pusher's own law — its fifteen statuses, its exit codes, its receipt, its grace
 window, and the waiting primitive. It owns **no** cross-instrument definition; those live in
 `template-instruments.md`, the frame, which this file cites and never restates.
 **Writer:** the Worker lane. **Authority:** **HQ retains cross-factory authority** — any clause
@@ -9,7 +9,7 @@ here that binds a member factory is HQ's, and so is the process law *about* inst
 push"* keeps its single home in `skills/meta-factory/SKILL.md` §4; this file **cites** it and
 states only what is true of the executable.
 
-**Why a home was owed (issue #482).** The pusher reports twelve statuses and exits with two
+**Why a home was owed (issue #482).** The pusher reports fifteen statuses and exits with two
 different contracts depending on how it was called, and neither was written down anywhere. A
 caller that looped on the exit code therefore could not tell "the round ran" from "the round
 refused" — and one status, `not-on-branch`, was actively dishonest about which it was. The law
@@ -46,8 +46,8 @@ caller must act on, and waiting on it would loop forever on a state that will ne
 | `not-on-branch` | HEAD is detached and on **neither end** of the configured branch's line | no |
 | `unbound-repo` | **STARTUP refusal** (#525): no `--repo` was passed and the tree this copy of the tool sits in is not a git work tree — the shape of a copy fetched to `/tmp`, whose derived root is `/`. The round stops before it asks the remote anything, so this is **not** a verdict about any repository | no |
 | `no-remote` | git **answered** and the configured remote is not configured in this repository (rc 2) | no |
-| `remote-unread` | git **could not be asked** whether the remote is configured — the spawn failed (rc 127) or the call timed out (rc 124). A transient, never a verdict about the repository (#493) | **yes — one of two** |
-| `unreachable` | the remote could not be asked (fetch or `ls-remote` failed) | no |
+| `remote-unread` | git **could not be asked** — the spawn failed (rc 127) or the call timed out (rc 124). Covers **both** the `remote get-url` question (#493) and a **fetch** that never answered (#527). A transient, never a verdict about the repository | **yes — one of two** |
+| `unreachable` | git **answered** and refused: the fetch or `ls-remote` came back with a non-transient rc, so the remote really is unreachable from here (#527) | no |
 | `unreadable` | the unpushed-commit log could not be read | no |
 | `push-failed` | the push itself was refused | no |
 | `would-publish` | a report-only round found work it *would* publish; it publishes nothing | no |
@@ -82,6 +82,20 @@ round on a transient, which is the worst of both: wrong and final. So the fold d
 waits on `held`. Both reasons quote git's own stderr verbatim, so the reader sees what git said
 rather than a sentence this tool invented. The exit code is 1 either way: a round that could not
 ask is not a round that ran.
+
+**The same conflation lived on the OTHER path, and `rc` settles it there too** (#527, ruling
+n=4135). The `--apply` round syncs before it publishes: fetch, then fast-forward. When the fetch
+failed, the round used to report `unreachable` — terminal — so a fetch that merely **timed out**
+stopped the round with its polls unspent. The measured instance (2026-10-20 21:36Z) is the whole
+argument: `status=unreachable`, reason *"git fetch origin main timed out after 120s"*, `polls=10
+wait_secs=290`, three commits waiting — and the verdict was false within six minutes, because
+three manual fetches in the **same tree** took 1.87 / 1.75 / 1.74 s against a 120 s timeout, a
+~70× margin. The round only published because a peer lane's pusher happened to run there; the
+receipt names that push, not this round. So `sync_remote` now returns the fetch's `rc` and the
+round applies the **one** predicate `GIT_TRANSIENT_RC`: 124 or 127 means the remote was never
+read, so the status is `remote-unread` and `--wait` re-polls. A non-transient rc stays
+`unreachable`, because there git ANSWERED and the remote really is out of reach — the positive
+control, and it must stay able to go red.
 
 ## 3. The exit codes
 

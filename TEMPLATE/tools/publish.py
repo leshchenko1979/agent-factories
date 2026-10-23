@@ -539,7 +539,7 @@ def blocking_paths(repo: Path, tip: str):
     return sorted(local & incoming)
 
 def sync_remote(repo: Path, remote: str, branch: str):
-    """`{"ok", "reason", "blocking", "before", "after"}` -- fetch, then fast-forward.
+    """`{"ok", "reason", "blocking", "before", "after", "rc"}` -- fetch, then fast-forward.
 
     One round of the owner's shape (a). `ok` is True only when the fetch ran AND the
     fast-forward was accepted -- an already-level or already-ahead checkout is accepted
@@ -547,14 +547,23 @@ def sync_remote(repo: Path, remote: str, branch: str):
     a NON-EMPTY list means the fast-forward was blocked by the working tree; an EMPTY one
     beside a still-behind tree means git refused for a reason this reading did not model,
     which the caller must treat as a divergence rather than as a clean sync.
+
+    A REFUSED FETCH CARRIES ITS rc, because rc is what decides whether the round may WAIT on
+    it (#527, ruling n=4135). `_git` returns 124 when git did not answer in time and 127 when
+    the spawn failed -- both mean the remote was never read, so the caller must HOLD. A remote
+    that git ANSWERED about and found unresolvable is a different fact and stays terminal. This
+    function does not classify: it reports `rc` and lets `publish()` apply the one predicate
+    `GIT_TRANSIENT_RC`, so the two readers cannot drift apart.
     """
-    result = {"ok": False, "stage": "", "reason": "", "blocking": [], "before": "", "after": ""}
+    result = {"ok": False, "stage": "", "reason": "", "blocking": [], "before": "", "after": "",
+              "rc": 0}
     rc, out, _ = _git(repo, "rev-parse", "HEAD")
     if rc == 0:
         result["before"] = out.strip()
     rc, out, err = _git(repo, "fetch", remote, branch)
     if rc != 0:
         result["stage"] = "fetch"
+        result["rc"] = rc
         result["reason"] = (err or out).strip() or f"git fetch exited {rc}"
         return result
     rc, out, err = _git(repo, "merge", "--ff-only", f"{remote}/{branch}")
@@ -797,6 +806,7 @@ def publish(
         report["sync"] = {
             "ok": synced["ok"],
             "stage": synced["stage"],
+            "rc": synced["rc"],
             "before": synced["before"],
             "after": synced["after"],
             "blocking": synced["blocking"],
@@ -804,10 +814,29 @@ def publish(
         }
         if not synced["ok"]:
             if synced["stage"] == "fetch":
+                # THE rc DECIDES WHETHER THIS ROUND MAY WAIT (#527, ruling n=4135).
+                # Measured instance: 2026-10-20 21:36Z, `status=unreachable`, reason "git fetch
+                # origin main timed out after 120s", `polls=10 wait_secs=290` -- the round
+                # stopped with three commits waiting and 10 polls unspent, and the verdict was
+                # false within six minutes (three manual fetches in the SAME tree took 1.87 /
+                # 1.75 / 1.74 s against GIT_TIMEOUT 120, a ~70x margin). A fetch timeout is the
+                # instrument failing to answer, not a fact about the remote, so it is the same
+                # class #493 fixed at `no-remote` and takes the same WAITABLE status: `--wait`
+                # re-polls, and a genuine resolution failure (git ANSWERED) stays terminal.
+                if synced["rc"] in GIT_TRANSIENT_RC:
+                    report["status"] = "remote-unread"
+                    report["reason"] = (
+                        f"git could not be ASKED to fetch {remote}/{branch} (rc "
+                        f"{synced['rc']}), so this round could not sync before publishing: "
+                        f"{synced['reason']} -- a TRANSIENT, not a verdict about this "
+                        f"repository, so the round waits on it"
+                    )
+                    return report
                 report["status"] = "unreachable"
                 report["reason"] = (
-                    f"{remote}/{branch} could not be fetched, so this round could not sync "
-                    f"before publishing: {synced['reason']}"
+                    f"{remote}/{branch} could not be fetched (rc {synced['rc']}) -- git "
+                    f"ANSWERED and refused, so this is a verdict about the remote rather than "
+                    f"a transient: {synced['reason']}"
                 )
                 return report
             if synced["blocking"]:

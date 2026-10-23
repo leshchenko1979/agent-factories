@@ -1699,6 +1699,153 @@ def no_remote_is_still_a_verdict_arm() -> None:
         f"lines={len(lines)} reason={waited.get('reason','')[:200]}",
     )
 
+def fetch_timeout_holds_arm() -> None:
+    """#527 (ruling n=4135) ARM 1: a fetch TIMEOUT is a transient the round WAITS on.
+
+    The measured instance (2026-10-20 21:36Z, this tree): `status=unreachable`, reason "git
+    fetch origin main timed out after 120s", `polls=10 wait_secs=290` -- the round stopped with
+    three commits waiting and ten polls unspent, and the verdict was false within six minutes
+    (three manual fetches in the SAME tree took 1.87 / 1.75 / 1.74 s against a 120 s timeout).
+    It only published because a PEER lane's pusher happened to run there.
+
+    So this arm drives the timeout through the only door `_git` reaches 124 by -- `subprocess.run`
+    raising `TimeoutExpired` -- and only for the FETCH, because the round makes several git calls
+    and failing them all would test nothing: the point is that ONE transient fetch no longer
+    terminates the round. The patch is applied around the reads and restored in `finally`, since
+    `pub.subprocess` IS the `subprocess` module and would otherwise disarm this file's own
+    `git()` helper.
+    """
+    real_run = pub.subprocess.run
+
+    def fetch_times_out(args, **kwargs):
+        if "fetch" in args:
+            raise pub.subprocess.TimeoutExpired(cmd=list(args), timeout=kwargs.get("timeout", 0))
+        return real_run(args, **kwargs)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote = init_bare(root / "remote.git")
+        work = init_work(root / "work", remote)
+        commit(work, "seed.txt")
+        git(work, "push", "-q", "origin", "main:main")
+        commit(work, "waiting-to-publish.txt")
+
+        pub.subprocess.run = fetch_times_out
+        try:
+            rc, _, err = pub._git(work, "fetch", "origin", "main")
+            synced = pub.sync_remote(work, "origin", "main")
+            report = pub.publish(work, grace_secs=0, apply=True)
+            clock = SteppingClock(step_secs=60.0)
+            lines: list[str] = []
+            waited = pub.wait_for_publish(
+                work, grace_secs=0, timeout=600, poll_secs=0,
+                now_fn=clock, emit=lines.append, sleep_fn=lambda _s: None,
+            )
+        finally:
+            pub.subprocess.run = real_run
+
+    stderr = err.strip()
+    check(
+        rc == pub.GIT_RC_TIMED_OUT and rc in pub.GIT_TRANSIENT_RC,
+        "ARM 1 (#527): a fetch timeout REACHES `_git` as rc 124, the transient the fold keys on",
+        f"rc={rc} transient={pub.GIT_TRANSIENT_RC}",
+    )
+    check(
+        synced["stage"] == "fetch" and synced.get("rc") == pub.GIT_RC_TIMED_OUT,
+        "ARM 1 (#527): `sync_remote` REPORTS the fetch's rc, so the caller can classify it",
+        f"stage={synced.get('stage')!r} rc={synced.get('rc')!r}",
+    )
+    check(
+        report["status"] == "remote-unread" and report["status"] != "unreachable",
+        "ARM 1 (#527): a fetch timeout reports `remote-unread`, NOT the terminal `unreachable`",
+        f"status={report['status']!r} reason={report.get('reason','')[:240]}",
+    )
+    check(
+        bool(stderr) and stderr in report["reason"],
+        "ARM 1 (#527): the reason QUOTES what git/_git measured, verbatim",
+        f"stderr={stderr!r} reason={report.get('reason','')[:240]}",
+    )
+    check(
+        "TRANSIENT" in report["reason"],
+        "ARM 1 (#527): the reason SAYS transient, so a reader is not left to infer it",
+        f"reason={report.get('reason','')[:240]}",
+    )
+    check(
+        len(lines) > 1 and waited.get("wait_timed_out") is True,
+        "ARM 1 (#527): the wait RE-POLLS instead of stopping after the first transient",
+        f"polls={waited.get('polls')} lines={len(lines)} timed_out={waited.get('wait_timed_out')}",
+    )
+    check(
+        "cannot become published by waiting" not in waited["reason"],
+        "ARM 1 (#527): the wait never takes the terminal branch on a timed-out fetch",
+        f"reason={waited.get('reason','')[:240]}",
+    )
+
+def fetch_refusal_is_still_terminal_arm() -> None:
+    """#527 (ruling n=4135) ARM 2 -- THE POSITIVE CONTROL, and it must stay able to go RED.
+
+    Making a timeout waitable must not make every failed fetch waitable. A remote git ANSWERED
+    about and refused -- a non-transient rc such as 128 -- really is out of reach from here, and
+    that is a verdict about the remote, not a transient. It stays `unreachable`, it stays
+    TERMINAL, and the round still stops rather than polling to its own timeout.
+
+    The discriminator is the rc, and it is injected here rather than staged from a broken remote
+    so the arm isolates the CLASSIFICATION branch: `ls-remote` must succeed (or the round would
+    stop one step earlier, at the remote-tip read, and this control would prove nothing about
+    the sync).
+    """
+    real_run = pub.subprocess.run
+
+    def fetch_is_refused(args, **kwargs):
+        if "fetch" in args:
+            return pub.subprocess.CompletedProcess(
+                args, 128, "",
+                "fatal: 'origin' does not appear to be a git repository",
+            )
+        return real_run(args, **kwargs)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote = init_bare(root / "remote.git")
+        work = init_work(root / "work", remote)
+        commit(work, "seed.txt")
+        git(work, "push", "-q", "origin", "main:main")
+        commit(work, "waiting-to-publish.txt")
+
+        pub.subprocess.run = fetch_is_refused
+        try:
+            synced = pub.sync_remote(work, "origin", "main")
+            report = pub.publish(work, grace_secs=0, apply=True)
+            clock = SteppingClock(step_secs=60.0)
+            lines: list[str] = []
+            waited = pub.wait_for_publish(
+                work, grace_secs=0, timeout=600, poll_secs=0,
+                now_fn=clock, emit=lines.append, sleep_fn=lambda _s: None,
+            )
+        finally:
+            pub.subprocess.run = real_run
+
+    check(
+        synced.get("rc") == 128 and 128 not in pub.GIT_TRANSIENT_RC,
+        "ARM 2 CONTROL (#527): a refused fetch carries a NON-transient rc, so the rc discriminates",
+        f"rc={synced.get('rc')!r} transient={pub.GIT_TRANSIENT_RC}",
+    )
+    check(
+        report["status"] == "unreachable",
+        "ARM 2 CONTROL (#527): a fetch git ANSWERED about STILL reads `unreachable`",
+        f"status={report['status']!r} reason={report.get('reason','')[:240]}",
+    )
+    check(
+        "ANSWERED" in report["reason"],
+        "ARM 2 CONTROL (#527): the reason says git ANSWERED, so it is not read as a transient",
+        f"reason={report.get('reason','')[:240]}",
+    )
+    check(
+        len(lines) == 1 and "cannot become published by waiting" in waited["reason"],
+        "ARM 2 CONTROL (#527): the wait STOPS after one poll -- `unreachable` is still TERMINAL",
+        f"lines={len(lines)} reason={waited.get('reason','')[:240]}",
+    )
+
 def documented_statuses_arm() -> None:
     """#482 (order 4): the status table has a HOME, and that home is GATED.
 
@@ -1831,6 +1978,8 @@ def main() -> int:
     unbound_repo_control_bites()
     transient_spawn_failure_arm()
     no_remote_is_still_a_verdict_arm()
+    fetch_timeout_holds_arm()
+    fetch_refusal_is_still_terminal_arm()
     documented_statuses_arm()
     report_arms()
 
