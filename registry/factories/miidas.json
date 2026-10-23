@@ -156,14 +156,14 @@
     },
     {
       "id": "agents-old-degraded",
-      "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, miidas.l1979.ru 200. The wedge class is MITIGATED, not fixed \u2014 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe, miidas-ru-proxy unbounded. 6 cgroup OOM kills this boot, all task=git, last 2026-10-14 10:15:15Z, none since. Read swap as a gauge, not a trend: a slot restart releases its swap and resets the figure (1031 -> 221 -> 301 MiB used across 10-18..20, no new kills); the 10-19 resets came from inbound SSH (2.27.120.75), not the manager nor this lane. Per-container cgroup counters reset with the container: maple reads oom_kill 0 since restart, silent on its 4 earlier kills \u2014 the kernel's 6 are the lifetime figure. THE MONITORING BLIND IS CLOSED: agents-old carries FIVE green Gatus endpoints \u2014 infra agents-old (host-diag, 5m), the miidas group re-pointed from the dead apps IP to ssh://89.125.120.5:52676 (manager, cdp, landing), plus miidas-slots (2m, telegram alerts) \u2014 so a fourth wedge now PAGES.",
+      "text": "agents-old (89.125.120.5:52676) RECOVERED 2026-10-13 11:25Z after infra q25 (power-cycle, then 2 GiB swap): 6 miidas containers up and healthy, miidas.l1979.ru 200. The wedge class is MITIGATED, not fixed \u2014 961 MiB / 1 CPU carrying 6 containers whose caps still oversubscribe, miidas-ru-proxy unbounded. CORRECTED 2026-10-23: the OOM-kill class is NOT dormant \u2014 7 cgroup OOM kills this boot (not 6), all task=git, the newest 2026-10-21T14:32:30Z at anon-rss 727 MiB, the largest yet; the previous six ended 2026-10-14T10:15:15Z. Read swap as a gauge, not a trend (349/2047 MiB used at this read). Per-container cgroup counters reset with the container: maple reads oom_kill 0 since restart, silent on its 4 earlier kills \u2014 the kernel's 7 are the lifetime figure. THE MONITORING BLIND IS CLOSED: agents-old carries FIVE green Gatus endpoints \u2014 infra agents-old (host-diag, 5m), the miidas group re-pointed from the dead apps IP to ssh://89.125.120.5:52676 (manager, cdp, landing), plus miidas-slots (2m, telegram alerts) \u2014 so a fourth wedge now PAGES.",
       "severity": "warning",
       "affects": [
         "miidas",
         "profile"
       ],
       "scope": "profile",
-      "evidence": "measured 2026-10-15 by the miidas HQ lane \u2014 ssh agents-old 6 containers healthy; uptime -s 2026-10-13 11:25:00; swap 2047/770 used; journalctl -b 0 -k | grep 'Memory cgroup out of memory: Killed' = 6, all git; maple memory.events oom_kill 4 unchanged; miidas.l1979.ru 200 @0.54s; miidas.ru 200 @0.53s. Supersedes infra n=1249 / n=1272 recurrence rows.",
+      "evidence": "measured 2026-10-23T06:1xZ by the miidas HQ lane \u2014 `journalctl -b 0 -k | grep -c 'Memory cgroup out of memory: Killed'` = 7, all task=git, last 2026-10-21T14:32:30Z (anon-rss 727412 kB); uptime -s 2026-10-13 11:25:00; free -m total 961 / available 448 MiB, swap 349 of 2047 used; docker ps 6 `^miidas-`, volume ls 2 `^miidas_`; apps 0 containers / 1 volume. Supersedes the 'none since 2026-10-14' reading.",
       "since": "2026-10-11"
     },
     {
@@ -175,6 +175,16 @@
         "miidas"
       ],
       "evidence": "leshchenko1979/miidas#114 closed 2026-10-14; manager/slot_heal.py:58 MIN_HEADROOM_BYTES; manager/health.py:149 _self_heal_dead_slots -> :169 heal_dead_slots; docs/adr/0021-dead-slot-liveness-and-bounded-self-heal.md."
+    },
+    {
+      "id": "opencrabs-config-alerts-reach-client-chats",
+      "text": "OpenCrabs delivers its config-audit verdict to the owner's last chat WITHOUT a chat-type check (upstream opencrabs#784, still open), so any factory whose bot_owner chat is a client group will leak config findings into that client's group. miidas hit it: 5 findings every 6 h into a paying client's group. MITIGATED on our side only \u2014 the raw-template window that produced them is closed (miidas#118), and a status-drift guard landed (miidas#119) \u2014 NOT fixed at the channel: the next audit finding on any slot can still reach the client.",
+      "severity": "warning",
+      "affects": [
+        "profile"
+      ],
+      "since": "2026-10-22",
+      "evidence": "leshchenko1979/opencrabs#784 (open, unassigned, no PR); miidas#118 and #119 closed 2026-10-22; root cause in /root/miidas/evidence/2026-10-21-client-config-alert-loop.md (commit e5638bb). Measured 2026-10-22T06:24:47Z: alert pair landed in the client group, restored 5 s later."
     }
   ],
   "lanes": [
@@ -210,7 +220,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-22T06:47:00Z",
+  "attested_at": "2026-10-23T06:05:08Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
