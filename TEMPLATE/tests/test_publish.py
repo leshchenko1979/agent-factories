@@ -1570,6 +1570,135 @@ def unbound_repo_control_bites() -> None:
             f"status={data['status']!r} reason={data.get('reason','')[:160]}",
         )
 
+def transient_spawn_failure_arm() -> None:
+    """#493 (ruling n=3427) ARM 1: a spawn failure is a TRANSIENT, never a `no-remote` verdict.
+
+    The measured instance: `_git` returns **127** when `subprocess.run` cannot even start git
+    (`except OSError`), and 124 when it times out. The fold used to read `rc, _, _` -- the rc
+    and the stderr both DISCARDED -- so every failure of that call meant the same thing, and it
+    meant `no-remote`: a statement about the repository that nobody had measured, on a path that
+    is TERMINAL. Wrong and final in one breath, and the round aborted on a transient.
+
+    So this arm drives the spawn failure itself, through the only door `_git` reaches 127 by,
+    and asserts the three things the ruling names: the round does NOT report `no-remote`, it does
+    NOT take the terminal branch, and the reason QUOTES the stderr `_git` measured rather than a
+    sentence this module composed. The stderr is read back from `_git` inside the patch, so the
+    arm compares the reason against what git actually wrote -- it does not hard-code a message
+    that a git version bump could falsify.
+    """
+    real_run = pub.subprocess.run
+
+    def cannot_spawn(*_args, **_kwargs):
+        raise OSError("spawn failed: [Errno 2] No such file or directory: 'git'")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        remote = init_bare(root / "remote.git")
+        work = init_work(root / "work", remote)
+        commit(work, "seed.txt")
+        git(work, "push", "-q", "origin", "main:main")
+        commit(work, "publish-me.txt")
+
+        # PATCHED AROUND THE READS ONLY. `pub.subprocess` IS the `subprocess` module, so the
+        # patch would also disarm this file's own `git()` helper -- every repo above is built
+        # BEFORE it is applied, and it is restored in `finally` before any check runs.
+        pub.subprocess.run = cannot_spawn
+        try:
+            rc, _, err = pub._git(work, "remote", "get-url", "origin")
+            report = pub.publish(work, grace_secs=0)
+            clock = SteppingClock(step_secs=60.0)
+            lines: list[str] = []
+            waited = pub.wait_for_publish(
+                work, grace_secs=0, timeout=600, poll_secs=0,
+                now_fn=clock, emit=lines.append, sleep_fn=lambda _s: None,
+            )
+        finally:
+            pub.subprocess.run = real_run
+
+    stderr = err.strip()
+    check(
+        rc == pub.GIT_RC_SPAWN_FAILED and rc in pub.GIT_TRANSIENT_RC,
+        "ARM 1: the spawn failure REACHES `_git` as rc 127, the transient the fold keys on",
+        f"rc={rc} transient={pub.GIT_TRANSIENT_RC}",
+    )
+    check(
+        report["status"] == "remote-unread" and report["status"] != "no-remote",
+        "ARM 1: a spawn failure reports `remote-unread`, NOT the fabricated `no-remote` verdict",
+        f"status={report['status']!r} reason={report.get('reason','')[:200]}",
+    )
+    check(
+        bool(stderr) and stderr in report["reason"],
+        "ARM 1: the reason QUOTES the stderr `_git` measured, verbatim, on the transient path",
+        f"stderr={stderr!r} reason={report.get('reason','')[:200]}",
+    )
+    check(
+        "TRANSIENT" in report["reason"],
+        "ARM 1: the reason SAYS it is a transient, so a reader is not left to infer it",
+        f"reason={report.get('reason','')[:200]}",
+    )
+    check(
+        "remote-unread" in pub.WAITABLE and "remote-unread" in pub.PLAIN_NONZERO,
+        "ARM 1: `remote-unread` is WAITABLE (a later poll can clear it) and exits nonzero",
+        f"waitable={pub.WAITABLE}",
+    )
+    check(
+        len(lines) > 1 and waited.get("wait_timed_out") is True,
+        "ARM 1: the wait POLLS to its own budget instead of stopping after one poll",
+        f"polls={waited.get('polls')} lines={len(lines)} timed_out={waited.get('wait_timed_out')}",
+    )
+    check(
+        "cannot become published by waiting" not in waited["reason"],
+        "ARM 1: the wait does NOT take the terminal branch -- it never says the status is final",
+        f"reason={waited.get('reason','')[:200]}",
+    )
+
+def no_remote_is_still_a_verdict_arm() -> None:
+    """#493 (ruling n=3427) ARM 2 -- THE POSITIVE CONTROL, and it must stay able to go RED.
+
+    Fixing a false verdict must not delete the true one. A repository that genuinely has no
+    `origin` still reads `no-remote`, still stops, and still exits nonzero -- and the discriminator
+    is the rc git actually returned: **2**, git ANSWERING the question, not failing to be asked.
+
+    The rc is MEASURED here rather than asserted from memory: if a git version ever returns
+    something else for an absent remote, this arm fails and names the number, which is the only
+    way the fold's `GIT_RC_NO_SUCH_REMOTE` constant stays honest.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "r"
+        repo.mkdir(parents=True)
+        git(repo, "init", "-q")
+        git(repo, "symbolic-ref", "HEAD", "refs/heads/main")
+        rc, _, err = pub._git(repo, "remote", "get-url", "origin")
+        report = pub.publish(repo, grace_secs=0)
+        clock = SteppingClock()
+        lines: list[str] = []
+        waited = pub.wait_for_publish(
+            repo, grace_secs=0, timeout=600, poll_secs=0,
+            now_fn=clock, emit=lines.append, sleep_fn=lambda _s: None,
+        )
+
+    stderr = err.strip()
+    check(
+        rc == pub.GIT_RC_NO_SUCH_REMOTE and rc not in pub.GIT_TRANSIENT_RC,
+        "ARM 2 CONTROL: git ANSWERED an absent remote with rc 2 -- the answer, not a failure to ask",
+        f"rc={rc} expected={pub.GIT_RC_NO_SUCH_REMOTE}",
+    )
+    check(
+        report["status"] == "no-remote",
+        "ARM 2 CONTROL: a genuinely absent remote STILL reads `no-remote` -- the true verdict survives",
+        f"status={report['status']!r} reason={report.get('reason','')[:200]}",
+    )
+    check(
+        bool(stderr) and stderr in report["reason"],
+        "ARM 2 CONTROL: the `no-remote` reason QUOTES git's own stderr, verbatim",
+        f"stderr={stderr!r} reason={report.get('reason','')[:200]}",
+    )
+    check(
+        len(lines) == 1 and "cannot become published by waiting" in waited["reason"],
+        "ARM 2 CONTROL: the wait STOPS after one poll, so `no-remote` is still TERMINAL",
+        f"lines={len(lines)} reason={waited.get('reason','')[:200]}",
+    )
+
 def documented_statuses_arm() -> None:
     """#482 (order 4): the status table has a HOME, and that home is GATED.
 
@@ -1602,12 +1731,13 @@ def documented_statuses_arm() -> None:
         f"nonzero={len(pub.PLAIN_NONZERO)} published={len(pub.TERMINAL_PUBLISHED)} "
         f"waitable={len(pub.WAITABLE)} all={len(pub.ALL_STATUSES)}",
     )
-    # FOURTEEN since #525 (ruling n=3895) added the STARTUP refusal `unbound-repo`. The count is
-    # stated here rather than derived so that ADDING a status is a deliberate act with a doc row
-    # and a law line, never a side effect of a branch somebody added.
+    # FIFTEEN since #493 (ruling n=3427) split the remote question into an ANSWERED `no-remote`
+    # and an UNANSWERED `remote-unread`. The count is stated here rather than derived so that
+    # ADDING a status is a deliberate act with a doc row and a law line, never a side effect of
+    # a branch somebody added.
     check(
-        len(pub.ALL_STATUSES) == 14 and len(set(pub.ALL_STATUSES)) == 14,
-        "the status set is FOURTEEN distinct statuses, as the law states",
+        len(pub.ALL_STATUSES) == 15 and len(set(pub.ALL_STATUSES)) == 15,
+        "the status set is FIFTEEN distinct statuses, as the law states",
         f"count={len(pub.ALL_STATUSES)} distinct={len(set(pub.ALL_STATUSES))}",
     )
     twinned = (ROOT / "TEMPLATE" / "docs" / "instruments" / "publish.md").read_bytes()
@@ -1699,6 +1829,8 @@ def main() -> int:
     repo_root_is_copy_independent_arm()
     unbound_repo_arm()
     unbound_repo_control_bites()
+    transient_spawn_failure_arm()
+    no_remote_is_still_a_verdict_arm()
     documented_statuses_arm()
     report_arms()
 

@@ -28,22 +28,25 @@ ruled at ledger `n=1168`.
 The executable is `tools/publish.py`, shipped as a byte-gated pair with
 `TEMPLATE/tools/publish.py`.
 
-## 2. The fourteen statuses
+## 2. The fifteen statuses
 
-A round always ends in exactly one of these. `held` is the **only** status that can become
-publishable by waiting — every other terminal status is a verdict the caller must act on.
+A round always ends in exactly one of these. Two of them are **waitable** — `held` and
+`remote-unread` — because neither is a verdict about the repository: one says the commit is
+too young, the other says git could not be asked at all. Every other status is a verdict the
+caller must act on, and waiting on it would loop forever on a state that will never change.
 
 | status | what it means | a caller may wait for it |
 |---|---|---|
 | `published` | the push landed; the receipt records the pushed sha | it is the goal |
 | `in-sync` | HEAD is level with the remote tip; nothing of this checkout's is unpushed | it is the goal |
-| `held` | the newest unpushed commit is younger than the grace window, so it stays LOCAL | **yes — the only one** |
+| `held` | the newest unpushed commit is younger than the grace window, so it stays LOCAL | **yes — one of two** |
 | `behind` | HEAD is a PURE ANCESTOR of the tip: a stale checkout with nothing of its own | no |
 | `diverged` | the branch is not an ancestor of HEAD; reported, never resolved | no |
 | `ff-blocked` | the sync could fast-forward, but local edits sit on paths it would overwrite | no |
 | `not-on-branch` | HEAD is detached and on **neither end** of the configured branch's line | no |
 | `unbound-repo` | **STARTUP refusal** (#525): no `--repo` was passed and the tree this copy of the tool sits in is not a git work tree — the shape of a copy fetched to `/tmp`, whose derived root is `/`. The round stops before it asks the remote anything, so this is **not** a verdict about any repository | no |
-| `no-remote` | the configured remote is not configured in this repository | no |
+| `no-remote` | git **answered** and the configured remote is not configured in this repository (rc 2) | no |
+| `remote-unread` | git **could not be asked** whether the remote is configured — the spawn failed (rc 127) or the call timed out (rc 124). A transient, never a verdict about the repository (#493) | **yes — one of two** |
 | `unreachable` | the remote could not be asked (fetch or `ls-remote` failed) | no |
 | `unreadable` | the unpushed-commit log could not be read | no |
 | `push-failed` | the push itself was refused | no |
@@ -68,13 +71,25 @@ rejection. **Containment, never equality**: a remote that advanced *past* our co
 carries our work, and an equality test would call that a failure. The server's message is
 preserved in `reason`, so the race stays visible; it just stops being a verdict.
 
+**`no-remote` and `remote-unread` are different QUESTIONS, and only one of them was answered**
+(#493, ruling n=3427). The round asks git *is this remote configured?* and that call can fail
+before git ever forms an opinion: a spawn failure (rc 127) or a timeout (rc 124) means **git
+never answered**. Reporting that as `no-remote` is a **fabricated verdict** — it says something
+about the repository that nobody measured — and because `no-remote` is terminal it aborted the
+round on a transient, which is the worst of both: wrong and final. So the fold discriminates on
+**rc**, not on the mere presence of an error: `rc 2` is git saying *no such remote* (the real
+`no-remote`), while a transient rc yields `remote-unread` and the round **waits**, exactly as it
+waits on `held`. Both reasons quote git's own stderr verbatim, so the reader sees what git said
+rather than a sentence this tool invented. The exit code is 1 either way: a round that could not
+ask is not a round that ran.
+
 ## 3. The exit codes
 
 Two contracts, because a report and a wait are different questions.
 
 | invocation | exit 0 | exit 1 |
 |---|---|---|
-| `python3 tools/publish.py [--apply]` | the round RAN — `published`, `already-published`, `held`, `in-sync`, `behind`, `diverged`, `would-publish` | the round could not be completed — `unbound-repo`, `no-remote`, `not-on-branch`, `unreachable`, `unreadable`, `push-failed`, `ff-blocked` |
+| `python3 tools/publish.py [--apply]` | the round RAN — `published`, `already-published`, `held`, `in-sync`, `behind`, `diverged`, `would-publish` | the round could not be completed — `unbound-repo`, `no-remote`, `remote-unread`, `not-on-branch`, `unreachable`, `unreadable`, `push-failed`, `ff-blocked` |
 | `python3 tools/publish.py --wait` | **only** `published`, `in-sync` and `already-published` | **every** other status |
 
 **`not-on-branch` was the defect (issue #482, order 2).** It exited 0 beside the refusals above

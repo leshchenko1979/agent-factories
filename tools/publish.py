@@ -88,7 +88,7 @@ WAIT_POLL_SECS = 15
 ALL_STATUSES = (
     "published", "in-sync", "held", "behind", "diverged", "ff-blocked",
     "not-on-branch", "no-remote", "unreachable", "unreadable", "push-failed",
-    "would-publish", "already-published", "unbound-repo",
+    "would-publish", "already-published", "unbound-repo", "remote-unread",
 )
 # `unbound-repo` JOINED THE SET AT #525 (ruling n=3895, item 1). It is the STARTUP refusal, not
 # a round verdict: the caller named no `--repo` and the tree this FILE sits in is not a git work
@@ -96,6 +96,13 @@ ALL_STATUSES = (
 # It is distinct from `no-remote` on purpose. `no-remote` is a verdict ABOUT a repository; in
 # this shape there is no repository, only an assumption, and the old default reported the
 # assumption as a fact ("`origin` is not configured in this repository" about `repo: "/"`).
+# `remote-unread` JOINED THE SET AT #493 (ruling n=3427, order 1). It is the shape #493 exists
+# to remove: `_git` returns 127 when the SPAWN itself fails and 124 when git does not answer in
+# time, and BOTH mean git never replied -- so the round knows nothing about the repository and
+# must say so. Folding those into `no-remote` published a verdict nobody measured ("`origin` is
+# not configured in this repository") and took the TERMINAL branch, so a transient that would
+# clear on the next poll aborted the round instead. It is WAITABLE for exactly that reason, and
+# it is NOT `unreadable`: that one means git answered and the commit log could not be parsed.
 # The statuses the PLAIN path reports as a FAILURE (exit 1). `behind` and `diverged` are
 # deliberately absent: they are reports the round was asked to make, not failures.
 # `already-published` is absent for the same reason in a stronger form: the work IS on the
@@ -105,16 +112,21 @@ PLAIN_NONZERO = (
     # #525: the startup refusal. Nothing was read, nothing was asked, nothing was published --
     # the round could not be completed, which is exactly what this tuple declares.
     "unbound-repo",
+    # #493: git never answered, so the round could not be completed either. It exits 1 like the
+    # rest of this tuple and is WAITABLE in the tuple below -- a round that stopped because the
+    # instrument was missing is a failure to report, never a completed round.
+    "remote-unread",
 )
 
-# THE THIRTEEN STATUSES, PARTITIONED BY WHAT A BLOCKING CALLER MAY DO WITH THEM (#482).
+# THE STATUSES, PARTITIONED BY WHAT A BLOCKING CALLER MAY DO WITH THEM (#482).
 # `published`, `in-sync` and `already-published` are the three that mean the work is on the
 # remote; every other terminal status is a verdict the caller must act on rather than wait
-# through. `held` is the ONLY status that can become publishable by waiting -- it is the
-# grace window working -- so `--wait` loops on that one alone and exits non-zero on all the
-# rest. The terminal, unpublishable set is: no-remote, not-on-branch, unreachable,
-# ff-blocked, behind, diverged, unreadable, push-failed (and `would-publish`, which cannot
-# occur under an applying round).
+# through. TWO statuses can become publishable by waiting: `held` is the grace window working,
+# and `remote-unread` (#493, ruling n=3427) is git NOT ANSWERING -- a transient the next poll
+# can clear, which is precisely why it must not be terminal. `--wait` loops on those two and
+# exits non-zero on all the rest. The terminal, unpublishable set is: no-remote, not-on-branch,
+# unreachable, ff-blocked, behind, diverged, unreadable, push-failed (and `would-publish`, which
+# cannot occur under an applying round).
 #
 # `already-published` (#518, ruling n=3841) is TERMINAL-SUCCESS and NOT WAITABLE: a round
 # whose push was rejected because a peer had already landed its commit has nothing left to
@@ -122,9 +134,20 @@ PLAIN_NONZERO = (
 # therefore writes no receipt -- collapsing the two would let a receipt-forging round hide
 # behind a success.
 TERMINAL_PUBLISHED = ("published", "in-sync", "already-published")
-WAITABLE = ("held",)
+WAITABLE = ("held", "remote-unread")
 LS_REMOTE_TIMEOUT = 30
 GIT_TIMEOUT = 120
+
+# THE rc FIELD DECIDES WHAT A FAILED `git remote get-url` MEANS (#493, ruling n=3427).
+# `_git` returns three DISTINCT rcs for three distinct facts, and folding them into one verdict
+# was the defect. 2 is MEASURED on this box: `git remote get-url <absent>` exits 2 and writes
+# `error: No such remote '<name>'` -- git ANSWERED, so that is a real verdict about the
+# repository. 127 and 124 are the instrument failing to answer AT ALL (`_git`'s own two
+# exception paths), so the round knows nothing and must wait rather than report a fact.
+GIT_RC_NO_SUCH_REMOTE = 2
+GIT_RC_TIMED_OUT = 124
+GIT_RC_SPAWN_FAILED = 127
+GIT_TRANSIENT_RC = (GIT_RC_TIMED_OUT, GIT_RC_SPAWN_FAILED)
 
 _FIELD = "\x1f"
 _RECORD = "\x1e"
@@ -719,10 +742,24 @@ def publish(
         "sync": None,
     }
 
-    rc, _, _ = _git(repo, "remote", "get-url", remote)
+    rc, _, err = _git(repo, "remote", "get-url", remote)
     if rc != 0:
+        # #493 (ruling n=3427): `rc` is the FIELD, and `_git`'s stderr is CARRIED, never
+        # discarded -- on BOTH paths, so the reason quotes git's own words rather than a
+        # sentence this module composed. A transient means git never answered, so reporting
+        # `no-remote` would publish a verdict about a repository nobody consulted AND take the
+        # terminal branch; the round waits instead.
+        stderr = (err or "").strip()
+        quoted = stderr or "(git wrote nothing to stderr)"
+        if rc in GIT_TRANSIENT_RC:
+            report["status"] = "remote-unread"
+            report["reason"] = (
+                f"git could not be ASKED whether {remote} is configured (rc {rc}): {quoted} "
+                f"-- a TRANSIENT, not a verdict about this repository, so the round waits on it"
+            )
+            return report
         report["status"] = "no-remote"
-        report["reason"] = f"{remote} is not configured in this repository"
+        report["reason"] = f"{remote} is not configured in this repository (rc {rc}): {quoted}"
         return report
 
     current, why = head_branch(repo, remote, branch)
@@ -952,11 +989,13 @@ def wait_for_publish(
 ) -> dict:
     """Poll a publishing round until it publishes, or until a status that cannot.
 
-    The caller reads the RETURNED report's `status`: `published` and `in-sync` mean the work
-    is on the remote, and EVERY other value is terminal and unpublishable. Only `held` -- the
-    grace window working -- can become publishable by waiting, so it is the only status this
-    loops on. A caller that asked to block until publication and did not get one has not
-    published, which is why the exit code is not the plain round's.
+    The caller reads the RETURNED report's `status`: `published`, `in-sync` and
+    `already-published` mean the work is on the remote, and every status OUTSIDE `WAITABLE` is
+    terminal and unpublishable. Two statuses can become publishable by waiting -- `held` (the
+    grace window working) and `remote-unread` (#493, ruling n=3427: git never answered, so the
+    next poll can clear it) -- and those are what this loops on. A caller that asked to block
+    until publication and did not get one has not published, which is why the exit code is not
+    the plain round's.
 
     The clock, the emitter and the sleep are INJECTED so a gate can drive a window that would
     otherwise cost 900 real seconds -- the same discipline the round's own `now` parameter
