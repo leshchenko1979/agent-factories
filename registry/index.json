@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-10-23T06:18:14Z",
+  "resolved_at": "2026-10-23T06:39:46Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -221,11 +221,11 @@
       "id": "ops-daemon-dies-at-cgroup-cap",
       "severity": "warning",
       "scope": "profile",
-      "text": "Measured 2026-10-23T06:2xZ on opencrabs-ops: memory.current 2,143,367,168 of 2,147,483,648 B = 99.8083%, headroom 3.93 MiB; swap.current 2,252,582,912 of 2,684,354,560 = 83.9153% with swap.peak == swap.max; memory.peak 316.0 KiB OVER memory.max; memory.events high 1 / max 176,608 / oom_kill 0. Unit identity: MainPID 3237387, NRestarts 3, ActiveEnterTimestamp 2026-10-22 13:48:12 UTC — sampled twice 20 s apart with MainPID unchanged, so it is not currently cycling. TWO CORRECTIONS to the prior text: (1) 'NONE watching this daemon' is FALSE — infra_oc-ops-daemon (endpoint_id 34) has been live since 2026-10-23T03:44Z with a 15 m expiry, pushing false on restart and a true heartbeat every 10 m; (2) 'the kernel is still not killing' is FALSE — the kernel's own record carries two kills, 2026-10-21T19:01:25Z and 2026-10-22T13:48:28Z, and oom_kill 0 is a PER-INCARNATION counter, where a fresh zero is indistinguishable from a clean life. dmesg's 20 ops-unit kills is a RING-BUFFER WINDOW, not a lifetime total.",
+      "text": "Measured 2026-10-23T06:23:19Z on opencrabs-ops: memory.current 2,132,307,968 of 2,147,483,648 B = 99.29%, headroom 14.5 MiB; swap 2,449,580,032 of 2,684,354,560 = 91.25% (223.9 MiB free) with swap.peak == swap.max, so the swap ceiling has been touched; memory.peak 316 KiB OVER memory.max; memory.events high 1 / max 223,128 / oom 0 / oom_kill 0 — throttled, not OOM-killed in this incarnation. Unit identity: MainPID 3237387, NRestarts 3, ActiveEnterTimestamp 2026-10-22 13:48:12 UTC. TWO CORRECTIONS to the prior text: (1) 'NONE watching this daemon' is FALSE — infra_oc-ops-daemon (endpoint_id 34) reads 17 results / 0 failures across 33 configured endpoints, pushing false on restart and a true heartbeat every 600 s; (2) 'the kernel is still not killing' is FALSE — the kernel's own record carries three kills, newest 2026-10-22T13:48:28Z at pid 2097291, which is the very process that text called the live MainPID. dmesg's 20 ops-unit kills is a RING-BUFFER WINDOW, not a lifetime total, and oom_kill 0 is a PER-INCARNATION counter where a fresh zero is indistinguishable from a clean life. The binding reserve is the SWAP remainder, not the effective margin: the burst recorder logged a 1,063.7 MiB child burst at 2026-10-23T06:04:02Z against 0.3 MiB headroom (used 4,607.7 of 4,608.0 MiB = 99.99%), and that burst is larger than the swap still free.",
       "since": "2026-09-27T06:13:19Z",
       "review_by": "2026-11-20",
       "check": null,
-      "evidence": "Measured 2026-10-23T06:1xZ by the infra-factory lane and sent in this round's attestation answer (ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f). The writer transcribed the member's measured figures into this text verbatim; the member was sent the applied wording for correction.",
+      "evidence": "Read 2026-10-23T06:23:19Z from cgroup /sys/fs/cgroup/user.slice/user-0.slice/user@0.service/app.slice/opencrabs-ops.service: memory.current 2132307968, memory.max 2147483648, memory.peak 2147807232, memory.swap.current 2449580032, memory.swap.max 2684354560, memory.swap.peak 2684354560, memory.events 'low 0 high 1 max 223128 oom 0 oom_kill 0 oom_group_kill 0'; systemctl --user show -p MainPID -p NRestarts -p ActiveEnterTimestamp -p OOMScoreAdjust -> MainPID=3237387, NRestarts=3, ActiveEnterTimestamp Thu 2026-10-22 13:48:12 UTC, OOMScoreAdjust=100. dmesg oom-kill lines for the unit: 20 total; newest three at uptime 2905377.435759 / 2837754.362776 / 2770923.367520 = 2026-10-22T13:48:28Z / 2026-10-21T19:01:25Z / 2026-10-21T00:27:34Z against boot 2026-09-18T22:45:31Z. Burst recorder /var/log/oc-burst/2026-10-23.max verbatim: '2026-10-23T06:04:02Z 1089268 child_kb=1089268 daemon_kb=3032776 eff_kb=551175 head_kb=312 used_kb=4718280 env_kb=4718592 nchild=20'; .min at 06:08:43Z head_kb=21364. Gatus on vpn, sqlite file:/data/projects/gatus/data/gatus.db?mode=ro: 33 endpoints, infra_oc-ops-daemon endpoint_id 34, 17 results / 0 failures, newest six success 05:28:01 / 05:38:01 / 05:48:01 / 05:58:01 / 06:08:01 / 06:18:01Z. Round provenance: attestation answer ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f; prior ledger n=1423 (20 kills, KillMode=process + OOMPolicy=continue, falsified orphan-accumulation premise of n=1421) and n=1479 (arena two-sample plateau, MALLOC_ARENA_MAX as open lead). The three sentences this replaces — 'MainPID 2097291', 'the kernel is pressing hard and still not killing', '31 Gatus endpoints, still NONE watching this daemon' — are all FALSE against the reads above.",
       "affects": [
         "profile"
       ],
@@ -238,11 +238,11 @@
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "severity": "warning",
       "scope": "profile",
-      "text": "The Mac is UP and both tunnels are clean: on vpn, infra_mac-cdp-tunnel reads 0 failures across 104 results and infra_mac-tunnel 0 across 109, all green through 2026-10-23T06:14Z. The 'Mac powered off' framing is EXPIRED. The sleep/flap hazard itself is unchanged and demonstrated: a 2h38m outage ran 2026-10-22T13:48:56Z -> 16:26:56Z (the 7th restore), and the CDP tunnel is STILL UNSUPERVISED — the live forwarder is a hand-launched 'ssh -N -L 9222' with no unit behind it (zero mac/cdp hits in crontab -l, systemctl list-timers --all and /root on vpn, apps and agents), so a sleep still costs a manual restart. DO NOT read infra_mac-backup as healthy: it carries 40 failures / 69 results and its last REAL success is 2026-10-23T00:42:32Z — the 03:37:18 result is synthetic (a peer's route-probe POST), not a backup.",
+      "text": "The Mac is UP and both tunnel endpoints read clean: infra_mac-cdp-tunnel 101 results / 0 failures (newest 2026-10-23T06:23:15Z) and infra_mac-tunnel 100 / 0 (newest 06:21:14Z). The 'Mac powered off' framing is EXPIRED, and the sleep/flap hazard is demonstrated rather than theoretical: a 2h38m outage ran 2026-10-22T13:48:56Z -> 16:26:56Z (the 7th restore). NEW AND SHARPER: mac-cdp-tunnel's green does NOT prove the tunnel is supervised — its probe SSHes to the Mac and curls the Mac's OWN localhost:9222, so it only proves the Mac's DevTools port answers, never that a forwarder survives. The forwarder is still hand-launched: on agents, pid 3330904 'ssh -f -N -L 9222:localhost:9222 mac', started 2026-10-22T16:26:34Z, with zero unit, cron entry or timer for it on vpn, apps or agents — so a sleep still costs a manual restart and the monitoring cannot tell you it happened. DO NOT read infra_mac-backup as healthy: 40 failures / 69 results, last REAL success 2026-10-23T00:42:32Z — the 03:37:18 result is synthetic (a peer's route-probe POST), not a backup.",
       "since": "2026-09-26",
       "review_by": "2026-11-20",
       "check": null,
-      "evidence": "Measured 2026-10-23T06:1xZ by the infra-factory lane and sent in this round's attestation answer (ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f). The writer transcribed the member's measured figures into this text verbatim; the member was sent the applied wording for correction.",
+      "evidence": "Read 2026-10-23T06:21-06:24Z. Gatus on vpn (sqlite file:/data/projects/gatus/data/gatus.db?mode=ro): infra_mac-tunnel endpoint_id 13, 100 results / 0 failures, newest 2026-10-23T06:21:14Z at 5 m cadence; infra_mac-cdp-tunnel endpoint_id 15, 101 results / 0 failures, newest 2026-10-23T06:23:15Z at 1 m cadence; infra_mac-backup endpoint_id 21, 69 results / 40 failures, successes 2026-10-23T03:37:18Z (synthetic peer route-probe POST), 2026-10-23T00:42:32Z, 2026-10-22T00:42:43Z, 2026-10-21T01:00:34Z, 2026-10-20T17:27:15Z, then a failure 2026-10-19T18:02:25Z. Why cdp green is uninformative: config.yaml:615-629 defines it as url ssh://78.17.187.4:15259 with body 'curl -s --max-time 3 http://localhost:9222/json/version | grep -c Macintosh' — the curl executes ON the Mac. The forwarder was located by ps across all three hosts: on agents, pid 3330904 'ssh -f -N -L 9222:localhost:9222 mac', ps lstart 'Thu Oct 22 16:26:34 2026', etime 13:59:16; nothing on vpn or apps. Supervision census: crontab -l and systemctl list-timers --all grepped for cdp|mac on vpn, apps and agents returned zero rows on all three. Forwarder liveness: on agents, curl -s --max-time 4 http://localhost:9222/json/version returned Chrome/150.0.7871.1016, rc=0. Round provenance: attestation answer ledger n=1671, commit 0d0ff39f. Prior evidence retained: 2026-09-29 pmset -g (sleep 0, powernap 1, womp 1, repeating wake 2:55AM), hw.model Mac16,10; 2026-09-26 six Mac connections of 2m00s-2m44s lifetime, 290 accepts / 79 timeouts in one day, ledger n=493.",
       "affects": [
         "profile"
       ],
@@ -476,11 +476,11 @@
       "id": "opencrabs-home-unmanaged-growth",
       "severity": "info",
       "scope": null,
-      "text": "On agents, /root/.opencrabs reads 20G and profiles/ops 15G at 2026-10-23T06:2xZ — UP from the 18G/13G this entry carried, which was itself up from 16G/11G on 2026-10-21. The growth resumed and is unmanaged: nothing reaps a profile home, since hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy still does not reach it.",
+      "text": "On agents, /root/.opencrabs reads 20G and profiles/ops 15G at 2026-10-23T06:24:03Z, UP from the 18G/13G this entry carried (itself up from 16G/11G on 2026-10-21). ops is the whole story: every other profile is 1008K except family at 839M and oc348probe at 17M. / is 87% used (50G of 58G, 8.0G free). The growth is unmanaged — nothing reaps a profile home, since hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy still does not reach it.",
       "since": "2026-10-09",
       "review_by": null,
       "check": null,
-      "evidence": "Measured 2026-10-23T06:1xZ by the infra-factory lane and sent in this round's attestation answer (ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f). The writer transcribed the member's measured figures into this text verbatim; the member was sent the applied wording for correction.",
+      "evidence": "Re-measured on agents 2026-10-23T06:24:03Z: du -sh /root/.opencrabs = 20G, du -sh /root/.opencrabs/profiles/ops = 15G; every other profile 1008K except family 839M and oc348probe 17M (avito, code-spike, miidas all 1008K); df -h / = /dev/sda1 58G, 50G used, 8.0G free, 87%. Series: 2026-10-22T06:30Z 18G/13G, 2026-10-21T06:06Z 16G/11G, ledger n=1161 (2026-10-06 q22 dig, 16G) with its parts read memory/ 4.1G + opencrabs.db 3.3G + opencrabs-dev 2.2G. Reap surface unchanged: tools/hygiene.py SCRATCH_ROOT covers /tmp only, so no reap reaches a profile home. Round provenance: attestation answer ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f.",
       "affects": [
         "profile"
       ],
@@ -1017,7 +1017,7 @@
       "factory": "infra-factory",
       "display_name": "Infra Factory",
       "status": "attested",
-      "attested_at": "2026-10-23T06:16:39Z",
+      "attested_at": "2026-10-23T06:39:39Z",
       "profile": "ops",
       "repo": "/root/vds-servers",
       "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
@@ -1216,7 +1216,7 @@
         {
           "id": "mac-cdp-tunnels-flap-on-sleep",
           "severity": "warning",
-          "text": "The Mac is UP and both tunnels are clean: on vpn, infra_mac-cdp-tunnel reads 0 failures across 104 results and infra_mac-tunnel 0 across 109, all green through 2026-10-23T06:14Z. The 'Mac powered off' framing is EXPIRED. The sleep/flap hazard itself is unchanged and demonstrated: a 2h38m outage ran 2026-10-22T13:48:56Z -> 16:26:56Z (the 7th restore), and the CDP tunnel is STILL UNSUPERVISED — the live forwarder is a hand-launched 'ssh -N -L 9222' with no unit behind it (zero mac/cdp hits in crontab -l, systemctl list-timers --all and /root on vpn, apps and agents), so a sleep still costs a manual restart. DO NOT read infra_mac-backup as healthy: it carries 40 failures / 69 results and its last REAL success is 2026-10-23T00:42:32Z — the 03:37:18 result is synthetic (a peer's route-probe POST), not a backup.",
+          "text": "The Mac is UP and both tunnel endpoints read clean: infra_mac-cdp-tunnel 101 results / 0 failures (newest 2026-10-23T06:23:15Z) and infra_mac-tunnel 100 / 0 (newest 06:21:14Z). The 'Mac powered off' framing is EXPIRED, and the sleep/flap hazard is demonstrated rather than theoretical: a 2h38m outage ran 2026-10-22T13:48:56Z -> 16:26:56Z (the 7th restore). NEW AND SHARPER: mac-cdp-tunnel's green does NOT prove the tunnel is supervised — its probe SSHes to the Mac and curls the Mac's OWN localhost:9222, so it only proves the Mac's DevTools port answers, never that a forwarder survives. The forwarder is still hand-launched: on agents, pid 3330904 'ssh -f -N -L 9222:localhost:9222 mac', started 2026-10-22T16:26:34Z, with zero unit, cron entry or timer for it on vpn, apps or agents — so a sleep still costs a manual restart and the monitoring cannot tell you it happened. DO NOT read infra_mac-backup as healthy: 40 failures / 69 results, last REAL success 2026-10-23T00:42:32Z — the 03:37:18 result is synthetic (a peer's route-probe POST), not a backup.",
           "scope": "profile",
           "since": "2026-09-26",
           "review_by": "2026-11-20",
@@ -1224,12 +1224,12 @@
           "affects": [
             "profile"
           ],
-          "evidence": "Measured 2026-10-23T06:1xZ by the infra-factory lane and sent in this round's attestation answer (ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f). The writer transcribed the member's measured figures into this text verbatim; the member was sent the applied wording for correction."
+          "evidence": "Read 2026-10-23T06:21-06:24Z. Gatus on vpn (sqlite file:/data/projects/gatus/data/gatus.db?mode=ro): infra_mac-tunnel endpoint_id 13, 100 results / 0 failures, newest 2026-10-23T06:21:14Z at 5 m cadence; infra_mac-cdp-tunnel endpoint_id 15, 101 results / 0 failures, newest 2026-10-23T06:23:15Z at 1 m cadence; infra_mac-backup endpoint_id 21, 69 results / 40 failures, successes 2026-10-23T03:37:18Z (synthetic peer route-probe POST), 2026-10-23T00:42:32Z, 2026-10-22T00:42:43Z, 2026-10-21T01:00:34Z, 2026-10-20T17:27:15Z, then a failure 2026-10-19T18:02:25Z. Why cdp green is uninformative: config.yaml:615-629 defines it as url ssh://78.17.187.4:15259 with body 'curl -s --max-time 3 http://localhost:9222/json/version | grep -c Macintosh' — the curl executes ON the Mac. The forwarder was located by ps across all three hosts: on agents, pid 3330904 'ssh -f -N -L 9222:localhost:9222 mac', ps lstart 'Thu Oct 22 16:26:34 2026', etime 13:59:16; nothing on vpn or apps. Supervision census: crontab -l and systemctl list-timers --all grepped for cdp|mac on vpn, apps and agents returned zero rows on all three. Forwarder liveness: on agents, curl -s --max-time 4 http://localhost:9222/json/version returned Chrome/150.0.7871.1016, rc=0. Round provenance: attestation answer ledger n=1671, commit 0d0ff39f. Prior evidence retained: 2026-09-29 pmset -g (sleep 0, powernap 1, womp 1, repeating wake 2:55AM), hw.model Mac16,10; 2026-09-26 six Mac connections of 2m00s-2m44s lifetime, 290 accepts / 79 timeouts in one day, ledger n=493."
         },
         {
           "id": "ops-daemon-dies-at-cgroup-cap",
           "severity": "warning",
-          "text": "Measured 2026-10-23T06:2xZ on opencrabs-ops: memory.current 2,143,367,168 of 2,147,483,648 B = 99.8083%, headroom 3.93 MiB; swap.current 2,252,582,912 of 2,684,354,560 = 83.9153% with swap.peak == swap.max; memory.peak 316.0 KiB OVER memory.max; memory.events high 1 / max 176,608 / oom_kill 0. Unit identity: MainPID 3237387, NRestarts 3, ActiveEnterTimestamp 2026-10-22 13:48:12 UTC — sampled twice 20 s apart with MainPID unchanged, so it is not currently cycling. TWO CORRECTIONS to the prior text: (1) 'NONE watching this daemon' is FALSE — infra_oc-ops-daemon (endpoint_id 34) has been live since 2026-10-23T03:44Z with a 15 m expiry, pushing false on restart and a true heartbeat every 10 m; (2) 'the kernel is still not killing' is FALSE — the kernel's own record carries two kills, 2026-10-21T19:01:25Z and 2026-10-22T13:48:28Z, and oom_kill 0 is a PER-INCARNATION counter, where a fresh zero is indistinguishable from a clean life. dmesg's 20 ops-unit kills is a RING-BUFFER WINDOW, not a lifetime total.",
+          "text": "Measured 2026-10-23T06:23:19Z on opencrabs-ops: memory.current 2,132,307,968 of 2,147,483,648 B = 99.29%, headroom 14.5 MiB; swap 2,449,580,032 of 2,684,354,560 = 91.25% (223.9 MiB free) with swap.peak == swap.max, so the swap ceiling has been touched; memory.peak 316 KiB OVER memory.max; memory.events high 1 / max 223,128 / oom 0 / oom_kill 0 — throttled, not OOM-killed in this incarnation. Unit identity: MainPID 3237387, NRestarts 3, ActiveEnterTimestamp 2026-10-22 13:48:12 UTC. TWO CORRECTIONS to the prior text: (1) 'NONE watching this daemon' is FALSE — infra_oc-ops-daemon (endpoint_id 34) reads 17 results / 0 failures across 33 configured endpoints, pushing false on restart and a true heartbeat every 600 s; (2) 'the kernel is still not killing' is FALSE — the kernel's own record carries three kills, newest 2026-10-22T13:48:28Z at pid 2097291, which is the very process that text called the live MainPID. dmesg's 20 ops-unit kills is a RING-BUFFER WINDOW, not a lifetime total, and oom_kill 0 is a PER-INCARNATION counter where a fresh zero is indistinguishable from a clean life. The binding reserve is the SWAP remainder, not the effective margin: the burst recorder logged a 1,063.7 MiB child burst at 2026-10-23T06:04:02Z against 0.3 MiB headroom (used 4,607.7 of 4,608.0 MiB = 99.99%), and that burst is larger than the swap still free.",
           "scope": "profile",
           "since": "2026-09-27T06:13:19Z",
           "review_by": "2026-11-20",
@@ -1237,7 +1237,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "Measured 2026-10-23T06:1xZ by the infra-factory lane and sent in this round's attestation answer (ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f). The writer transcribed the member's measured figures into this text verbatim; the member was sent the applied wording for correction."
+          "evidence": "Read 2026-10-23T06:23:19Z from cgroup /sys/fs/cgroup/user.slice/user-0.slice/user@0.service/app.slice/opencrabs-ops.service: memory.current 2132307968, memory.max 2147483648, memory.peak 2147807232, memory.swap.current 2449580032, memory.swap.max 2684354560, memory.swap.peak 2684354560, memory.events 'low 0 high 1 max 223128 oom 0 oom_kill 0 oom_group_kill 0'; systemctl --user show -p MainPID -p NRestarts -p ActiveEnterTimestamp -p OOMScoreAdjust -> MainPID=3237387, NRestarts=3, ActiveEnterTimestamp Thu 2026-10-22 13:48:12 UTC, OOMScoreAdjust=100. dmesg oom-kill lines for the unit: 20 total; newest three at uptime 2905377.435759 / 2837754.362776 / 2770923.367520 = 2026-10-22T13:48:28Z / 2026-10-21T19:01:25Z / 2026-10-21T00:27:34Z against boot 2026-09-18T22:45:31Z. Burst recorder /var/log/oc-burst/2026-10-23.max verbatim: '2026-10-23T06:04:02Z 1089268 child_kb=1089268 daemon_kb=3032776 eff_kb=551175 head_kb=312 used_kb=4718280 env_kb=4718592 nchild=20'; .min at 06:08:43Z head_kb=21364. Gatus on vpn, sqlite file:/data/projects/gatus/data/gatus.db?mode=ro: 33 endpoints, infra_oc-ops-daemon endpoint_id 34, 17 results / 0 failures, newest six success 05:28:01 / 05:38:01 / 05:48:01 / 05:58:01 / 06:08:01 / 06:18:01Z. Round provenance: attestation answer ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f; prior ledger n=1423 (20 kills, KillMode=process + OOMPolicy=continue, falsified orphan-accumulation premise of n=1421) and n=1479 (arena two-sample plateau, MALLOC_ARENA_MAX as open lead). The three sentences this replaces — 'MainPID 2097291', 'the kernel is pressing hard and still not killing', '31 Gatus endpoints, still NONE watching this daemon' — are all FALSE against the reads above."
         },
         {
           "id": "board-gates-declared-inapplicable",
@@ -1294,7 +1294,7 @@
         {
           "id": "opencrabs-home-unmanaged-growth",
           "severity": "info",
-          "text": "On agents, /root/.opencrabs reads 20G and profiles/ops 15G at 2026-10-23T06:2xZ — UP from the 18G/13G this entry carried, which was itself up from 16G/11G on 2026-10-21. The growth resumed and is unmanaged: nothing reaps a profile home, since hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy still does not reach it.",
+          "text": "On agents, /root/.opencrabs reads 20G and profiles/ops 15G at 2026-10-23T06:24:03Z, UP from the 18G/13G this entry carried (itself up from 16G/11G on 2026-10-21). ops is the whole story: every other profile is 1008K except family at 839M and oc348probe at 17M. / is 87% used (50G of 58G, 8.0G free). The growth is unmanaged — nothing reaps a profile home, since hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy still does not reach it.",
           "scope": null,
           "since": "2026-10-09",
           "review_by": null,
@@ -1302,7 +1302,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "Measured 2026-10-23T06:1xZ by the infra-factory lane and sent in this round's attestation answer (ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f). The writer transcribed the member's measured figures into this text verbatim; the member was sent the applied wording for correction."
+          "evidence": "Re-measured on agents 2026-10-23T06:24:03Z: du -sh /root/.opencrabs = 20G, du -sh /root/.opencrabs/profiles/ops = 15G; every other profile 1008K except family 839M and oc348probe 17M (avito, code-spike, miidas all 1008K); df -h / = /dev/sda1 58G, 50G used, 8.0G free, 87%. Series: 2026-10-22T06:30Z 18G/13G, 2026-10-21T06:06Z 16G/11G, ledger n=1161 (2026-10-06 q22 dig, 16G) with its parts read memory/ 4.1G + opencrabs.db 3.3G + opencrabs-dev 2.2G. Reap surface unchanged: tools/hygiene.py SCRATCH_ROOT covers /tmp only, so no reap reaches a profile home. Round provenance: attestation answer ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f."
         }
       ]
     },
@@ -2607,8 +2607,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-23T06:30:00+00:00",
-      "last_run_at": "2026-10-22T06:31:01Z",
+      "next_run_at": "2026-10-24T06:30:00+00:00",
+      "last_run_at": "2026-10-23T06:30:33Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2671,8 +2671,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-23T06:25:00+00:00",
-      "last_run_at": "2026-10-23T00:25:38Z",
+      "next_run_at": "2026-10-23T12:25:00+00:00",
+      "last_run_at": "2026-10-23T06:25:27Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "profile": "ops",
@@ -2799,8 +2799,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-23T06:23:00+00:00",
-      "last_run_at": "2026-10-23T00:23:37Z",
+      "next_run_at": "2026-10-23T12:23:00+00:00",
+      "last_run_at": "2026-10-23T06:23:25Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2911,8 +2911,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-23T06:20:00+00:00",
-      "last_run_at": "2026-10-23T00:20:35Z",
+      "next_run_at": "2026-10-23T12:20:00+00:00",
+      "last_run_at": "2026-10-23T06:20:56Z",
       "deliver_to": "session:2646d31a-71ee-49f0-be81-9c8dc32d32fa",
       "trigger_cmd": "python3 /root/agent-factories/tools/sync_binding.py --apply",
       "profile": "ops",
