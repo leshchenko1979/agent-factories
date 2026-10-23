@@ -113,7 +113,7 @@
     "tests/test_gate_entry_point_equivalence.py": {
       "budget_sec": 337.15,
       "margin_x": 4.009,
-      "measured_at": "ba946e34d9b1f6ed309084b5cc9320dfb183c056",
+      "measured_at": "e8f0bb989697ad9a0b7e71a5b574a3d728e08808",
       "measured_sec": 84.1,
       "load_at_measure": 1.92
     },
