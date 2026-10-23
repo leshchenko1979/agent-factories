@@ -1186,21 +1186,34 @@ def issue_from_row(row: dict, predicate) -> int | None:
     return None
 
 
-def resolve_ruling_issue(ruling: dict, rows: list[dict], predicate) -> tuple[int | None, str]:
-    """`(issue, arm)` for a ruling row — the arm NAMED so a resolution is auditable.
+def resolve_ruling_issue(
+    ruling: dict, rows: list[dict], predicate
+) -> tuple[int | None, str, dict | None]:
+    """`(issue, arm, bridge)` for a ruling row — the arm NAMED and its SOURCE row named too.
 
     `arm` is `"strict"`, `"declared"` (`governs=`), `"bridged"` or `"unbridgeable"`. The
     tier is reported rather than implied, the same discipline the canonicality ladder uses:
     a resolution that does not say how it was reached cannot be re-litigated when the
     vocabulary moves.
+
+    `bridge` is the row that SUPPLIED a `"bridged"` resolution — `{"n": ..., "event": ...}`
+    — and `None` for every other arm (#551, ruling n=4157). The third element exists
+    because the arm alone says HOW a resolution was reached and nothing about WHAT reached
+    it: the bridge is any OTHER row whose `detail` merely MENTIONS `n=<this row>`, so to
+    this predicate ownership and evidence are the same substring. Measured before the fix:
+    16 of 28 bridged rulings attribute to an issue their own detail never names (`n=826`
+    bridges to `#453` while naming `#129`). Naming the source row turns an implied
+    attribution into one a reader can re-litigate row by row; it deliberately does NOT
+    change WHICH rows bridge — that narrowing is remedy 2, and changing both at once would
+    leave no reader able to tell which move altered the population.
     """
     own = issue_from_row(ruling, predicate)
     if own is not None:
-        return own, "strict"
+        return own, "strict", None
 
     declared = re.search(rf"{re.escape(RULING_GOVERNS_KEY)}(\d+)", str(ruling.get("detail") or ""))
     if declared:
-        return int(declared.group(1)), "declared"
+        return int(declared.group(1)), "declared", None
 
     n = ruling.get("n")
     if n is not None:
@@ -1212,9 +1225,12 @@ def resolve_ruling_issue(ruling: dict, rows: list[dict], predicate) -> tuple[int
                 continue
             bridged = issue_from_row(other, predicate)
             if bridged is not None:
-                return bridged, "bridged"
+                return bridged, "bridged", {
+                    "n": other.get("n"),
+                    "event": str(other.get("event") or ""),
+                }
 
-    return None, "unbridgeable"
+    return None, "unbridgeable", None
 
 RULING_HEADINGS = ("## RULED", "## RULING", "## Amendment")
 """The heads a ruling comment OPENS with — widened to the spellings the board uses (#245).
@@ -1549,6 +1565,11 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
     ruled: set[int] = set()
     arms = {"strict": 0, "declared": 0, "bridged": 0}
     unbridgeable: list[dict] = []
+    # THE BRIDGES ARE NAMED, NOT COUNTED (#551, ruling n=4157): the `bridged` arm says HOW a
+    # resolution was reached and, until this list existed, nothing about WHAT reached it, so
+    # a resolution could not be re-litigated row by row. Every bridge carries the resolving
+    # ruling's `n`, the row that supplied the mention, and that row's `event`.
+    bridges: list[dict] = []
     # TWO COUNTERS, because `len(ruled)` answers neither question (#545, ruling n=4096).
     # `ruling_rows` is the ROWS READ — a field named `rulings_read` must be the rows the
     # ledger handed this leg, never a sum derived from the sets it built. `resolved_rows`
@@ -1564,11 +1585,20 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
         if row.get("event") != "ruling":
             continue
         ruling_rows += 1
-        number, arm = resolve_ruling_issue(row, rows, predicate)
+        number, arm, bridge = resolve_ruling_issue(row, rows, predicate)
         if number is not None:
             ruled.add(number)
             resolved_rows += 1
             arms[arm] = arms.get(arm, 0) + 1
+            if bridge is not None:
+                bridges.append(
+                    {
+                        "issue": number,
+                        "ruling_n": row.get("n"),
+                        "via_n": bridge.get("n"),
+                        "via_event": bridge.get("event"),
+                    }
+                )
         else:
             # PRINTED, never dropped: a resolver that cannot place a row must say so, or
             # the leg reports a smaller population than it examined (#243 clause 2).
@@ -1729,6 +1759,10 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             "rulings_unbridgeable": len(unbridgeable),
             "resolution_arms": arms,
             "unbridgeable_rows": unbridgeable,
+            # WHICH ROW SUPPLIED EACH BRIDGE (#551, ruling n=4157). Printed, never implied:
+            # the arm alone says HOW, and a reader who cannot see WHAT reached the verdict
+            # cannot re-litigate it row by row.
+            "bridged_via": bridges,
             "bound": bound_text,
             "bound_refusal": bound_refusal,
             "bound_key": RULING_BOUNDARY_KEY,
@@ -8454,11 +8488,14 @@ def board_unruled_leg(
     ruled: set[int] = set()
     arms = {"strict": 0, "declared": 0, "bridged": 0}
     unbridgeable: list[dict] = []
+    # Named, never merely counted — the same attribution the board-ruling leg carries, so
+    # the two legs cannot disagree about how a bridge was sourced (#551, ruling n=4157).
+    bridges: list[dict] = []
     for row in rows:
         if str(row.get("event") or "") != "ruling":
             continue
         ruling_rows += 1
-        number, arm = resolve_ruling_issue(row, rows, predicate)
+        number, arm, bridge = resolve_ruling_issue(row, rows, predicate)
         if number is None:
             unbridgeable.append(
                 {"n": row.get("n"), "subject": str(row.get("subject") or "")}
@@ -8472,6 +8509,15 @@ def board_unruled_leg(
             # `rulings_repeated` name the bucket that the two numbers alone hide.
             resolved_rows += 1
             arms[arm] = arms.get(arm, 0) + 1
+            if bridge is not None:
+                bridges.append(
+                    {
+                        "issue": number,
+                        "ruling_n": row.get("n"),
+                        "via_n": bridge.get("n"),
+                        "via_event": bridge.get("event"),
+                    }
+                )
 
     intake_rows_read = sum(
         1 for row in rows if str(row.get("event") or "") == "intake"
@@ -8537,6 +8583,7 @@ def board_unruled_leg(
             "rulings_unbridgeable": len(unbridgeable),
             "unbridgeable_rows": unbridgeable,
             "resolution_arms": arms,
+            "bridged_via": bridges,
             "population_unruled": len(population),
             "items_owed_ruling": len(owed),
             "owed": [entry["issue"] for entry in owed],
@@ -8654,7 +8701,7 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
         if str(row.get("event") or "") != "ruling":
             continue
         ruling_rows_read += 1
-        number, _arm = resolve_ruling_issue(row, rows, predicate)
+        number, _arm, _bridge = resolve_ruling_issue(row, rows, predicate)
         if number is not None:
             ruled.add(number)
             resolved_rows += 1
@@ -12268,6 +12315,11 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"ledger keeps and this leg does NOT de-duplicate; "
                 f"{cov['rulings_unbridgeable']} unbridgeable)"
             )
+            for entry in cov.get("bridged_via", []):
+                lines.append(
+                    f"    BRIDGED #{entry['issue']} via ruling n={entry['ruling_n']} "
+                    f"-- supplied by row n={entry['via_n']} ({entry['via_event']})"
+                )
             lines.append(
                 f"  population (OPEN, intake row, NO ruling row): "
                 f"{cov['population_unruled']} item(s) -- {cov['items_owed_ruling']} past "

@@ -5776,7 +5776,7 @@ def test_probe_the_strict_arm_still_resolves() -> None:
     strictly numeric by design and its own gate depends on that."""
     pred = RUNNER.load_predicate()
     ruling = {"n": 1, "event": "ruling", "subject": "#42", "detail": "ruled"}
-    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
+    issue, arm, _bridge = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
     assert (issue, arm) == (42, "strict"), (issue, arm)
 
 def test_probe_the_BRIDGE_resolves_a_slug_subject() -> None:
@@ -5792,13 +5792,13 @@ def test_probe_the_BRIDGE_resolves_a_slug_subject() -> None:
               "detail": "OWNER ORDER: do not use the instruments ..."}
     dispatch = {"n": 546, "event": "dispatch", "subject": "#85",
                 "detail": "DISPATCH #85 ... Ruling n=545; issue filed at https://x/issues/85"}
-    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling, dispatch], pred)
+    issue, arm, _bridge = RUNNER.resolve_ruling_issue(ruling, [ruling, dispatch], pred)
     assert (issue, arm) == (85, "bridged"), (issue, arm)
 
     # A bare-number subject is ALSO a real form (n=516 carries subject `77`, which its own
     # correction row n=518 complains about) — so the bridge must read it too.
     bare = {"n": 517, "event": "dispatch", "subject": "77", "detail": "see Ruling n=545"}
-    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling, bare], pred)
+    issue, arm, _bridge = RUNNER.resolve_ruling_issue(ruling, [ruling, bare], pred)
     assert (issue, arm) == (77, "bridged"), (issue, arm)
 
 def test_probe_the_DECLARED_arm_is_constructible_because_it_has_NO_live_instance() -> None:
@@ -5811,7 +5811,7 @@ def test_probe_the_DECLARED_arm_is_constructible_because_it_has_NO_live_instance
     pred = RUNNER.load_predicate()
     ruling = {"n": 900, "event": "ruling", "subject": "some-concern",
               "detail": "a ruling that governs a concern rather than an item. governs=1234"}
-    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
+    issue, arm, _bridge = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
     assert (issue, arm) == (1234, "declared"), (issue, arm)
 
 def test_probe_the_leg_PRINTS_an_unbridgeable_row_instead_of_dropping_it() -> None:
@@ -5824,7 +5824,7 @@ def test_probe_the_leg_PRINTS_an_unbridgeable_row_instead_of_dropping_it() -> No
     pred = RUNNER.load_predicate()
     ruling = {"n": 901, "event": "ruling", "subject": "no-issue-anywhere",
               "detail": "governs nothing identifiable"}
-    issue, arm = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
+    issue, arm, _bridge = RUNNER.resolve_ruling_issue(ruling, [ruling], pred)
     assert (issue, arm) == (None, "unbridgeable"), (issue, arm)
 
     # ...and the leg's coverage carries them, so the print is not the only reader.

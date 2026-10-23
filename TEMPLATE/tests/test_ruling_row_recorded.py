@@ -145,7 +145,11 @@ def _resolver():
     """
     module = _load("_pairing_patrol", PATROL)
     predicate = module.load_predicate()
-    return lambda row, rows: module.resolve_ruling_issue(row, rows, predicate)
+    # The live resolver now returns (issue, arm, bridge) -- #551, ruling n=4157.
+    # This adapter's own contract is (row, rows) -> (issue, arm); the bridge
+    # attribution is not what `ruling_pairing_problems` consumes, so it is
+    # dropped HERE rather than at every caller.
+    return lambda row, rows: module.resolve_ruling_issue(row, rows, predicate)[:2]
 
 
 def _declared_pairing(detail: str, fp) -> str | None:
