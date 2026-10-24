@@ -124,11 +124,11 @@
       "measured_sec": 9.35
     },
     "tests/test_gate_registration.py": {
-      "budget_sec": 71.11,
-      "margin_x": 4.043,
-      "measured_at": "f6709eb62fca3d039722501cd39f760e8ba5028f",
-      "measured_sec": 17.59,
-      "load_at_measure": 7.19
+      "budget_sec": 58.91,
+      "margin_x": 4.052,
+      "measured_at": "8df0dad8311d33df01ca703bc01837cba33202e8",
+      "measured_sec": 14.54,
+      "load_at_measure": 8.38
     },
     "tests/test_hq_delegation.py": {
       "budget_sec": 17.87,
