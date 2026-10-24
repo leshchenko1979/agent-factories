@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-10-24T06:36:41Z",
+  "resolved_at": "2026-10-24T06:57:25Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -255,11 +255,11 @@
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "severity": "warning",
       "scope": "profile",
-      "text": "The Mac is UP and both tunnel endpoints read clean: infra_mac-cdp-tunnel 110 results / 0 failures (newest 2026-10-23T06:54:15Z) and infra_mac-tunnel 106 / 0 (newest 06:51:15Z). The 'Mac powered off' framing is EXPIRED, and the sleep/flap hazard is demonstrated rather than theoretical: a 2h38m outage ran 2026-10-22T13:48:56Z -> 16:26:56Z (the 7th restore). NEW AND SHARPER: mac-cdp-tunnel's green does NOT prove the tunnel is supervised — its probe SSHes to the Mac and curls the Mac's OWN localhost:9222, so it only proves the Mac's DevTools port answers, never that a forwarder survives. The forwarder is still hand-launched: on agents, pid 3330904 'ssh -f -N -L 9222:localhost:9222 mac', started 2026-10-22T16:26:34Z, with zero unit, cron entry or timer for it on vpn, apps or agents — so a sleep still costs a manual restart and the monitoring cannot tell you it happened. DO NOT read infra_mac-backup as healthy: 40 failures / 69 results, last REAL success 2026-10-23T00:42:32Z — the 03:37:18 result is synthetic (a peer's route-probe POST), not a backup.",
+      "text": "THIS ENDPOINT WAS RED FOR 20 h 18 min WHILE THE TEXT ABOVE CALLED IT CLEAN. Gatus's own event table: UNHEALTHY 2026-10-23T10:05:09Z -> HEALTHY 2026-10-24T06:23:09Z, during which infra_mac-cdp-tunnel (endpoint_id 15) failed every probe. THE MECHANISM, read from the endpoint's own definition rather than inferred: it is NOT a Mac-localhost check. The URL is ssh://78.17.187.4:15259 — which `getent hosts` resolves to THIS host, agents — and the body then runs `curl -s --max-time 3 http://localhost:9222/json/version | grep -c Macintosh` ON AGENTS. `grep -c` exits 1 on zero matches, so the probe is red whenever nothing listens on agents' loopback:9222; the probed object is the FORWARDER, not the Mac. THE MAC WAS HEALTHY THROUGHOUT: with the endpoint red, `ssh mac` succeeded and CDP answered Chrome/150.0.7871.1016 with a Macintosh User-Agent. THE DEFECT WAS SUPERVISION, NOW CLOSED. The forwarder was hand-launched every time, so it died and nothing brought it back. It is now a repo unit, agents/services/mac-cdp/mac-cdp-tunnel.service (vds-servers 6bd06c02), Restart=always with ServerAliveInterval 15 x3 — so ssh EXITS on a missed probe when the Mac sleeps instead of holding a half-open socket that reads up while forwarding nothing. Supervision is proven by positive control, not asserted: the MainPID was killed deliberately, systemd restarted it, NRestarts went 0 -> 1, the listener returned and the predicate read green. It binds BOTH loopbacks because `getent hosts localhost` on agents returns ::1 only, so an IPv4-only bind would pass solely through curl's fallback. THE MONTH IS WORSE THAN ANY RETAINED WINDOW SHOWS: endpoint 15 is 6,151 successful of 42,355 executions = 85.48% failure, and endpoint 13 (mac-tunnel) is 3,135 of 8,476 = 63.01% failure, so 13 reading 109/109 today describes the last ~1.8 h and not the month. Anything longer than the retained window reads endpoint_uptimes.",
       "since": "2026-09-26",
       "review_by": "2026-11-20",
       "check": null,
-      "evidence": "Read 2026-10-23T06:21-06:24Z. Gatus on vpn (sqlite file:/data/projects/gatus/data/gatus.db?mode=ro): infra_mac-tunnel endpoint_id 13, 106 results / 0 failures, newest 2026-10-23T06:51:15Z at 5 m cadence; infra_mac-cdp-tunnel endpoint_id 15, 110 results / 0 failures, newest 2026-10-23T06:54:15Z at 1 m cadence (both ordered by timestamp desc — the statuses API does NOT sort); infra_mac-backup endpoint_id 21, 69 results / 40 failures, successes 2026-10-23T03:37:18Z (synthetic peer route-probe POST), 2026-10-23T00:42:32Z, 2026-10-22T00:42:43Z, 2026-10-21T01:00:34Z, 2026-10-20T17:27:15Z, then a failure 2026-10-19T18:02:25Z. Why cdp green is uninformative: config.yaml:615-629 defines it as url ssh://78.17.187.4:15259 with body 'curl -s --max-time 3 http://localhost:9222/json/version | grep -c Macintosh' — the curl executes ON the Mac. The forwarder was located by ps across all three hosts: on agents, pid 3330904 'ssh -f -N -L 9222:localhost:9222 mac', ps lstart 'Thu Oct 22 16:26:34 2026', etime 13:59:16; nothing on vpn or apps. Supervision census: crontab -l and systemctl list-timers --all grepped for cdp|mac on vpn, apps and agents returned zero rows on all three. Forwarder liveness: on agents, curl -s --max-time 4 http://localhost:9222/json/version returned Chrome/150.0.7871.1016, rc=0. Round provenance: attestation answer ledger n=1671, commit 0d0ff39f. Prior evidence retained: 2026-09-29 pmset -g (sleep 0, powernap 1, womp 1, repeating wake 2:55AM), hw.model Mac16,10; 2026-09-26 six Mac connections of 2m00s-2m44s lifetime, 290 accepts / 79 timeouts in one day, ledger n=493.",
+      "evidence": "Read 2026-10-24T06:23Z-06:54:27Z. Gatus on vpn, sqlite file:/data/projects/gatus/data/gatus.db?mode=ro. endpoint_events for endpoint_id 15, latest six by endpoint_event_id desc: HEALTHY 2026-10-24T06:23:09, UNHEALTHY 2026-10-23T10:05:09, HEALTHY 2026-10-22T22:01:56, UNHEALTHY 2026-10-22T22:00:59, HEALTHY 2026-10-22T16:26:56, UNHEALTHY 2026-10-22T13:48:56 — the 10-23T10:05:09 -> 10-24T06:23:09 episode is 20 h 18 min. endpoint_results ep15 retained window: 108 results, 32 successful, oldest 2026-10-24T05:07:09, newest 06:54:09, last success 06:54:09. ep13: 109 results / 109 successful, newest 06:52:08. endpoint_uptimes 30-day, 85 entries each: ep15 42,355 executions / 6,151 successful = 85.48% failure; ep13 8,476 / 3,135 = 63.01% failure. Endpoint definitions from the deployed config, structure only: mac-cdp-tunnel url ssh://78.17.187.4:15259 interval 1m body 'curl -s --max-time 3 http://localhost:9222/json/version | grep -c Macintosh' conditions '[CONNECTED] == true' and '[STATUS] == 0'; agents url ssh://78.17.187.4:15259 interval 5m body '/usr/local/bin/host-diag' — the SAME URL, differing only in body and cadence, which is why one stayed green while the other went red. agents' ~/.ssh/config maps 'Host agents' to 127.0.0.1:22 and vpn's maps it to 78.17.187.4:15259; `getent hosts localhost` on agents returns ::1 only. Forwarder before the fix: absent (no :9222 listener; the only surviving `ssh -L` was an unrelated 15432->apps tunnel). Mac verified healthy 2026-10-24T06:20Z: ssh mac returned SSH_OK and curl http://localhost:9222/json/version returned Chrome/150.0.7871.1016 with a Macintosh User-Agent. Fix: agents/services/mac-cdp/mac-cdp-tunnel.service, vds-servers commit 6bd06c02, ledger n=1740 claim / n=1741 run. The prior text's '110 results / 0 failures (newest 2026-10-23T06:54:15Z)' was true only of the window it was read in, four hours before the outage began.",
       "affects": [
         "profile"
       ],
@@ -493,11 +493,11 @@
       "id": "opencrabs-home-unmanaged-growth",
       "severity": "info",
       "scope": null,
-      "text": "On agents, /root/.opencrabs reads 20G and profiles/ops 15G at 2026-10-23T06:54:37Z, UP from the 18G/13G this entry carried (itself up from 16G/11G on 2026-10-21). ops is the whole story: every other profile is 1008K except family at 839M and oc348probe at 17M. / is 87% used (50G of 58G, 7.9G free). The growth is unmanaged — nothing reaps a profile home, since hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy still does not reach it.",
+      "text": "On agents, /root/.opencrabs reads 17G and profiles/ops 12G at 2026-10-24T06:54:27Z — DOWN 3G from the 20G/15G this entry carried, which was itself up from 18G/13G on 2026-10-23 and 16G/11G on 2026-10-22. / is at 82% (47G of 58G, 11G free), down from 87%. THE CAUSE OF THE 3G FALL IS NOT ESTABLISHED, and no reap in this repo can explain it: tools/hygiene.py builds /tmp/{namespace}-* paths (lines 117-125) and rejects any non-/tmp/ path (line 179), so the sanctioned reaper's reach is /tmp only, and the citation 'SCRATCH_ROOT' this entry used to carry no longer exists in that file. ops remains the whole story — every other profile is 1008K except family at 841M and oc348probe at 18M — and inside ops the memory store dominates: memory/memory.db is 4.74 GiB carrying a 3.87 GiB freelist (81.6% free pages), while opencrabs.db is 3.35 GiB with 41 free pages (packed). A 3G swing in a day against a store that is four-fifths empty is consistent with a vacuum or a delete landing, but that is a hypothesis and it is NOT measured here; nothing in this factory pruned it.",
       "since": "2026-10-09",
       "review_by": null,
       "check": null,
-      "evidence": "Re-measured on agents 2026-10-23T06:54:37Z: du -sh /root/.opencrabs = 20G, du -sh /root/.opencrabs/profiles/ops = 15G; every other profile 1008K except family 839M and oc348probe 17M (avito, code-spike, miidas all 1008K); df -h / = /dev/sda1 58G, 50G used, 7.9G free, 87%. Series: 2026-10-22T06:30Z 18G/13G, 2026-10-21T06:06Z 16G/11G, ledger n=1161 (2026-10-06 q22 dig, 16G) with its parts read memory/ 4.1G + opencrabs.db 3.3G + opencrabs-dev 2.2G. Reap surface unchanged: tools/hygiene.py SCRATCH_ROOT covers /tmp only, so no reap reaches a profile home. Round provenance: attestation answer ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f.",
+      "evidence": "Re-measured on agents 2026-10-24T06:54:27Z: du -sh /root/.opencrabs = 17G, du -sh /root/.opencrabs/profiles/ops = 12G; other profiles family 841M, oc348probe 18M, miidas 1008K; df -h / -> root filesystem 58G total, 47G used, 11G free, 82%. Prior reads for the trend: 20G/15G at 2026-10-23T06:54:37Z, 18G/13G at 2026-10-22T06:30Z, 16G/11G at 2026-10-21. ops composition, du -sh: memory 5.1G, opencrabs.db 3.4G, opencrabs-dev 2.2G, logs 480M, tmp 265M, skills 200M, bin 88M, projects 36M. SQLite pragmas read read-only (file:...?mode=ro): memory/memory.db file size 5,088,874,496 B, page_count 1,242,401, page_size 4,096, freelist_count 1,013,444 = 4,151,066,624 B free = 3.87 GiB of 4.74 GiB = 81.6%; opencrabs.db file size 3,598,938,112 B, page_count 878,672, freelist_count 41 = 0.16 MiB free. Reaper reach proven in bytes: tools/hygiene.py lines 117-125 build /tmp/{namespace}-* and line 179 rejects any path not under /tmp/; `grep SCRATCH_ROOT tools/hygiene.py` returns no match, so that identifier is gone from the file this entry used to cite. No cause for the 3G fall is claimed: nothing was found that could reap a profile home, and the fall is recorded as an unexplained observation.",
       "affects": [
         "profile"
       ],
@@ -1034,7 +1034,7 @@
       "factory": "infra-factory",
       "display_name": "Infra Factory",
       "status": "attested",
-      "attested_at": "2026-10-24T06:36:24Z",
+      "attested_at": "2026-10-24T06:57:10Z",
       "profile": "ops",
       "repo": "/root/vds-servers",
       "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
@@ -1233,7 +1233,7 @@
         {
           "id": "mac-cdp-tunnels-flap-on-sleep",
           "severity": "warning",
-          "text": "The Mac is UP and both tunnel endpoints read clean: infra_mac-cdp-tunnel 110 results / 0 failures (newest 2026-10-23T06:54:15Z) and infra_mac-tunnel 106 / 0 (newest 06:51:15Z). The 'Mac powered off' framing is EXPIRED, and the sleep/flap hazard is demonstrated rather than theoretical: a 2h38m outage ran 2026-10-22T13:48:56Z -> 16:26:56Z (the 7th restore). NEW AND SHARPER: mac-cdp-tunnel's green does NOT prove the tunnel is supervised — its probe SSHes to the Mac and curls the Mac's OWN localhost:9222, so it only proves the Mac's DevTools port answers, never that a forwarder survives. The forwarder is still hand-launched: on agents, pid 3330904 'ssh -f -N -L 9222:localhost:9222 mac', started 2026-10-22T16:26:34Z, with zero unit, cron entry or timer for it on vpn, apps or agents — so a sleep still costs a manual restart and the monitoring cannot tell you it happened. DO NOT read infra_mac-backup as healthy: 40 failures / 69 results, last REAL success 2026-10-23T00:42:32Z — the 03:37:18 result is synthetic (a peer's route-probe POST), not a backup.",
+          "text": "THIS ENDPOINT WAS RED FOR 20 h 18 min WHILE THE TEXT ABOVE CALLED IT CLEAN. Gatus's own event table: UNHEALTHY 2026-10-23T10:05:09Z -> HEALTHY 2026-10-24T06:23:09Z, during which infra_mac-cdp-tunnel (endpoint_id 15) failed every probe. THE MECHANISM, read from the endpoint's own definition rather than inferred: it is NOT a Mac-localhost check. The URL is ssh://78.17.187.4:15259 — which `getent hosts` resolves to THIS host, agents — and the body then runs `curl -s --max-time 3 http://localhost:9222/json/version | grep -c Macintosh` ON AGENTS. `grep -c` exits 1 on zero matches, so the probe is red whenever nothing listens on agents' loopback:9222; the probed object is the FORWARDER, not the Mac. THE MAC WAS HEALTHY THROUGHOUT: with the endpoint red, `ssh mac` succeeded and CDP answered Chrome/150.0.7871.1016 with a Macintosh User-Agent. THE DEFECT WAS SUPERVISION, NOW CLOSED. The forwarder was hand-launched every time, so it died and nothing brought it back. It is now a repo unit, agents/services/mac-cdp/mac-cdp-tunnel.service (vds-servers 6bd06c02), Restart=always with ServerAliveInterval 15 x3 — so ssh EXITS on a missed probe when the Mac sleeps instead of holding a half-open socket that reads up while forwarding nothing. Supervision is proven by positive control, not asserted: the MainPID was killed deliberately, systemd restarted it, NRestarts went 0 -> 1, the listener returned and the predicate read green. It binds BOTH loopbacks because `getent hosts localhost` on agents returns ::1 only, so an IPv4-only bind would pass solely through curl's fallback. THE MONTH IS WORSE THAN ANY RETAINED WINDOW SHOWS: endpoint 15 is 6,151 successful of 42,355 executions = 85.48% failure, and endpoint 13 (mac-tunnel) is 3,135 of 8,476 = 63.01% failure, so 13 reading 109/109 today describes the last ~1.8 h and not the month. Anything longer than the retained window reads endpoint_uptimes.",
           "scope": "profile",
           "since": "2026-09-26",
           "review_by": "2026-11-20",
@@ -1241,7 +1241,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "Read 2026-10-23T06:21-06:24Z. Gatus on vpn (sqlite file:/data/projects/gatus/data/gatus.db?mode=ro): infra_mac-tunnel endpoint_id 13, 106 results / 0 failures, newest 2026-10-23T06:51:15Z at 5 m cadence; infra_mac-cdp-tunnel endpoint_id 15, 110 results / 0 failures, newest 2026-10-23T06:54:15Z at 1 m cadence (both ordered by timestamp desc — the statuses API does NOT sort); infra_mac-backup endpoint_id 21, 69 results / 40 failures, successes 2026-10-23T03:37:18Z (synthetic peer route-probe POST), 2026-10-23T00:42:32Z, 2026-10-22T00:42:43Z, 2026-10-21T01:00:34Z, 2026-10-20T17:27:15Z, then a failure 2026-10-19T18:02:25Z. Why cdp green is uninformative: config.yaml:615-629 defines it as url ssh://78.17.187.4:15259 with body 'curl -s --max-time 3 http://localhost:9222/json/version | grep -c Macintosh' — the curl executes ON the Mac. The forwarder was located by ps across all three hosts: on agents, pid 3330904 'ssh -f -N -L 9222:localhost:9222 mac', ps lstart 'Thu Oct 22 16:26:34 2026', etime 13:59:16; nothing on vpn or apps. Supervision census: crontab -l and systemctl list-timers --all grepped for cdp|mac on vpn, apps and agents returned zero rows on all three. Forwarder liveness: on agents, curl -s --max-time 4 http://localhost:9222/json/version returned Chrome/150.0.7871.1016, rc=0. Round provenance: attestation answer ledger n=1671, commit 0d0ff39f. Prior evidence retained: 2026-09-29 pmset -g (sleep 0, powernap 1, womp 1, repeating wake 2:55AM), hw.model Mac16,10; 2026-09-26 six Mac connections of 2m00s-2m44s lifetime, 290 accepts / 79 timeouts in one day, ledger n=493."
+          "evidence": "Read 2026-10-24T06:23Z-06:54:27Z. Gatus on vpn, sqlite file:/data/projects/gatus/data/gatus.db?mode=ro. endpoint_events for endpoint_id 15, latest six by endpoint_event_id desc: HEALTHY 2026-10-24T06:23:09, UNHEALTHY 2026-10-23T10:05:09, HEALTHY 2026-10-22T22:01:56, UNHEALTHY 2026-10-22T22:00:59, HEALTHY 2026-10-22T16:26:56, UNHEALTHY 2026-10-22T13:48:56 — the 10-23T10:05:09 -> 10-24T06:23:09 episode is 20 h 18 min. endpoint_results ep15 retained window: 108 results, 32 successful, oldest 2026-10-24T05:07:09, newest 06:54:09, last success 06:54:09. ep13: 109 results / 109 successful, newest 06:52:08. endpoint_uptimes 30-day, 85 entries each: ep15 42,355 executions / 6,151 successful = 85.48% failure; ep13 8,476 / 3,135 = 63.01% failure. Endpoint definitions from the deployed config, structure only: mac-cdp-tunnel url ssh://78.17.187.4:15259 interval 1m body 'curl -s --max-time 3 http://localhost:9222/json/version | grep -c Macintosh' conditions '[CONNECTED] == true' and '[STATUS] == 0'; agents url ssh://78.17.187.4:15259 interval 5m body '/usr/local/bin/host-diag' — the SAME URL, differing only in body and cadence, which is why one stayed green while the other went red. agents' ~/.ssh/config maps 'Host agents' to 127.0.0.1:22 and vpn's maps it to 78.17.187.4:15259; `getent hosts localhost` on agents returns ::1 only. Forwarder before the fix: absent (no :9222 listener; the only surviving `ssh -L` was an unrelated 15432->apps tunnel). Mac verified healthy 2026-10-24T06:20Z: ssh mac returned SSH_OK and curl http://localhost:9222/json/version returned Chrome/150.0.7871.1016 with a Macintosh User-Agent. Fix: agents/services/mac-cdp/mac-cdp-tunnel.service, vds-servers commit 6bd06c02, ledger n=1740 claim / n=1741 run. The prior text's '110 results / 0 failures (newest 2026-10-23T06:54:15Z)' was true only of the window it was read in, four hours before the outage began."
         },
         {
           "id": "ops-daemon-dies-at-cgroup-cap",
@@ -1311,7 +1311,7 @@
         {
           "id": "opencrabs-home-unmanaged-growth",
           "severity": "info",
-          "text": "On agents, /root/.opencrabs reads 20G and profiles/ops 15G at 2026-10-23T06:54:37Z, UP from the 18G/13G this entry carried (itself up from 16G/11G on 2026-10-21). ops is the whole story: every other profile is 1008K except family at 839M and oc348probe at 17M. / is 87% used (50G of 58G, 7.9G free). The growth is unmanaged — nothing reaps a profile home, since hygiene.py's SCRATCH_ROOT is /tmp-only, so the single reap policy still does not reach it.",
+          "text": "On agents, /root/.opencrabs reads 17G and profiles/ops 12G at 2026-10-24T06:54:27Z — DOWN 3G from the 20G/15G this entry carried, which was itself up from 18G/13G on 2026-10-23 and 16G/11G on 2026-10-22. / is at 82% (47G of 58G, 11G free), down from 87%. THE CAUSE OF THE 3G FALL IS NOT ESTABLISHED, and no reap in this repo can explain it: tools/hygiene.py builds /tmp/{namespace}-* paths (lines 117-125) and rejects any non-/tmp/ path (line 179), so the sanctioned reaper's reach is /tmp only, and the citation 'SCRATCH_ROOT' this entry used to carry no longer exists in that file. ops remains the whole story — every other profile is 1008K except family at 841M and oc348probe at 18M — and inside ops the memory store dominates: memory/memory.db is 4.74 GiB carrying a 3.87 GiB freelist (81.6% free pages), while opencrabs.db is 3.35 GiB with 41 free pages (packed). A 3G swing in a day against a store that is four-fifths empty is consistent with a vacuum or a delete landing, but that is a hypothesis and it is NOT measured here; nothing in this factory pruned it.",
           "scope": null,
           "since": "2026-10-09",
           "review_by": null,
@@ -1319,7 +1319,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "Re-measured on agents 2026-10-23T06:54:37Z: du -sh /root/.opencrabs = 20G, du -sh /root/.opencrabs/profiles/ops = 15G; every other profile 1008K except family 839M and oc348probe 17M (avito, code-spike, miidas all 1008K); df -h / = /dev/sda1 58G, 50G used, 7.9G free, 87%. Series: 2026-10-22T06:30Z 18G/13G, 2026-10-21T06:06Z 16G/11G, ledger n=1161 (2026-10-06 q22 dig, 16G) with its parts read memory/ 4.1G + opencrabs.db 3.3G + opencrabs-dev 2.2G. Reap surface unchanged: tools/hygiene.py SCRATCH_ROOT covers /tmp only, so no reap reaches a profile home. Round provenance: attestation answer ledger n=1671, evidence/infra-factory-fragment-decay-audit-2026-10-23.md, commit 0d0ff39f."
+          "evidence": "Re-measured on agents 2026-10-24T06:54:27Z: du -sh /root/.opencrabs = 17G, du -sh /root/.opencrabs/profiles/ops = 12G; other profiles family 841M, oc348probe 18M, miidas 1008K; df -h / -> root filesystem 58G total, 47G used, 11G free, 82%. Prior reads for the trend: 20G/15G at 2026-10-23T06:54:37Z, 18G/13G at 2026-10-22T06:30Z, 16G/11G at 2026-10-21. ops composition, du -sh: memory 5.1G, opencrabs.db 3.4G, opencrabs-dev 2.2G, logs 480M, tmp 265M, skills 200M, bin 88M, projects 36M. SQLite pragmas read read-only (file:...?mode=ro): memory/memory.db file size 5,088,874,496 B, page_count 1,242,401, page_size 4,096, freelist_count 1,013,444 = 4,151,066,624 B free = 3.87 GiB of 4.74 GiB = 81.6%; opencrabs.db file size 3,598,938,112 B, page_count 878,672, freelist_count 41 = 0.16 MiB free. Reaper reach proven in bytes: tools/hygiene.py lines 117-125 build /tmp/{namespace}-* and line 179 rejects any path not under /tmp/; `grep SCRATCH_ROOT tools/hygiene.py` returns no match, so that identifier is gone from the file this entry used to cite. No cause for the 3G fall is claimed: nothing was found that could reap a profile home, and the fall is recorded as an unexplained observation."
         },
         {
           "id": "agents-cpu-uncapped-under-factory-load",
@@ -2541,8 +2541,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-24T06:45:00+00:00",
-      "last_run_at": "2026-10-24T06:15:40Z",
+      "next_run_at": "2026-10-24T07:15:00+00:00",
+      "last_run_at": "2026-10-24T06:48:37Z",
       "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "profile": "ops",
@@ -2669,8 +2669,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-24T06:40:00+00:00",
-      "last_run_at": "2026-10-24T00:40:58Z",
+      "next_run_at": "2026-10-24T12:40:00+00:00",
+      "last_run_at": "2026-10-24T06:42:23Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2813,8 +2813,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-24T06:40:00+00:00",
-      "last_run_at": "2026-10-23T06:40:34Z",
+      "next_run_at": "2026-10-25T06:40:00+00:00",
+      "last_run_at": "2026-10-24T06:42:53Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -2973,8 +2973,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-10-24T06:50:00+00:00",
-      "last_run_at": "2026-10-24T00:50:00Z",
+      "next_run_at": "2026-10-24T12:50:00+00:00",
+      "last_run_at": "2026-10-24T06:50:38Z",
       "deliver_to": "session:2646d31a-71ee-49f0-be81-9c8dc32d32fa",
       "trigger_cmd": null,
       "profile": "ops",
