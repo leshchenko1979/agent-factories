@@ -12071,6 +12071,39 @@ def test_an_ABSENT_batch_declaration_RESOLVES_NOTHING_and_SAYS_SO() -> None:
     assert resolved["coverage"]["items_owed_dispatch"] == 0, resolved["coverage"]
     assert resolved["coverage"]["items_resolved_by_batch"] == 1, resolved["coverage"]
 
+def test_the_undispatched_ruling_leg_REFUSES_a_call_that_omits_the_declaration() -> None:
+    """#557 acceptance (1) / ruling n=4197: omitting `batches` is a TypeError at the call
+    site, never a silent "no batches exist".
+
+    The `= None` default this replaces was indistinguishable from a readable declaration
+    that declares no batches, so a caller who forgot the argument had the excuse dropped in
+    SILENCE and the entire declared population reported as OWED -- an absence that cannot be
+    told from a clean read, which is the exact class this leg exists to police (#271). It is
+    also why the fix is the signature: the docstring already promised `batch_refusal` made
+    such a population visible, and the defaulted path emitted an empty reason anyway.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(951, "OPEN")]
+    rows = [_stall_row(51, "ruling", "#951", 2, now=now)]
+
+    with pytest.raises(TypeError) as excinfo:
+        RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at)  # type: ignore[call-arg]
+    assert "batches" in str(excinfo.value), (
+        f"the refusal must NAME the omitted argument, or the reader cannot tell which "
+        f"declaration to inject\n{excinfo.value}"
+    )
+
+    # ... and the discriminating control: the SAME call, one keyword supplied, returns a
+    # leg. If this arm read the same as the one above, the TypeError would prove nothing
+    # about the argument -- it would only prove the call is broken.
+    control = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches={})
+    assert control["status"] == "ASSERTED", control
+    assert control["coverage"]["items_owed_dispatch"] == 1, (
+        f"an absent declaration resolves NOTHING, so the one ruled unit is OWED\n"
+        f"{control['coverage']}"
+    )
+
 def test_the_undispatched_ruling_leg_is_WIRED_and_PRINTS_every_bucket() -> None:
     """#519 acceptance (3) and #163 half 2 (b): the leg reaches the report through the REAL
     `main()`, REDs on an owed unit, and prints each bucket WITH its predicate — so `0 owed`

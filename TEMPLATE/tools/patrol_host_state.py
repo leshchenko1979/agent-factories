@@ -8700,7 +8700,7 @@ def undispatched_batches_fn(repo: Path | None = None) -> dict:
     return {"batches": batches, "batch_refusal": ""}
 
 def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
-                            predicate=None, batches: dict | None = None,
+                            predicate=None, batches: dict,
                             batch_refusal: str = "") -> dict:
     """OPEN board items carrying a `ruling` row and NO `dispatch` row naming them (#519).
 
@@ -8721,6 +8721,17 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
     `batches` is injected so a probe never reads the live declaration, and `batch_refusal`
     carries an unreadable-or-absent declaration's own reason so a population resolved on no
     declaration is VISIBLE as such rather than silently treated as "no batches exist".
+
+    `batches` is therefore REQUIRED, not defaulted (#557, ruling n=4197). It carried a
+    `= None` default whose state is indistinguishable from a readable declaration that
+    declares no batches, so a caller that simply omitted it had the excuse dropped in
+    silence and the whole declared population reported as OWED. Measured on the live tree
+    (4,198 rows / 556 board items, read 2026-10-24T01:29:57Z): the default call read
+    **14 owed / 0 resolved_by_batch** while the same call with the declaration injected read
+    **0 owed / 64 resolved_by_batch** -- over an IDENTICAL population of 71. The sentence
+    above was already written when that happened, which is why the fix is the signature and
+    not another sentence. Omission is now a TypeError at the call site; `batch_refusal`
+    keeps its default because it is only meaningful beside a declaration somebody passed.
     """
     predicate = predicate or load_predicate()
     open_numbers = predicate.open_issue_numbers(issues)
