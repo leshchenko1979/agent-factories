@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-10-24T07:04:26Z",
+  "resolved_at": "2026-10-24T08:03:15Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -11,6 +11,40 @@
     "unattributed_jobs": 7
   },
   "announcements": [
+    {
+      "id": "inferhub-autoswitcher-retired",
+      "severity": "warning",
+      "scope": null,
+      "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). Enforcement is an OPT-IN gate, not a flag: scripts/sync_usage_logs.py runs the switcher leg only under an explicit --run-switch (`if args.run_switch:`, line 904), so --skip-switch is a DEPRECATED NO-OP that suppresses nothing (#152). The one production caller, tools/usage_logs_turn.sh:37, passes --skip-switch --skip-data --skip-scoreboard and no --run-switch, and --run-switch appears nowhere outside tests/test_sync_switch_optin.py. A bare run therefore cannot reach the switch; do not re-arm either path.",
+      "since": "2026-10-24T06:14:12Z",
+      "review_by": null,
+      "check": null,
+      "evidence": "Cron row `inferhub-auto-switcher` (id `fef19c4f-ab16-442e-8ee9-e041d3d0919b`) reads `enabled=0`, `updated_at 2026-09-18T22:51:42Z`, last run `2026-09-12T07:13:58Z`. The switch leg is unreachable by default: `scripts/sync_usage_logs.py:665` `--skip-switch` is a DEPRECATED NO-OP, `:670` `--run-switch` is the explicit opt-in, and the sole `run_auto_route_switch` call is gated by `if args.run_switch:` at `:904` (issue #152). Re-arming needs an owner ruling.",
+      "affects": [
+        "infra-factory"
+      ],
+      "origins": [
+        "inferhub-watch"
+      ],
+      "conflict": []
+    },
+    {
+      "id": "ops-fallback-chain-reordered",
+      "severity": "warning",
+      "scope": "profile",
+      "text": "The ops-profile client fallback chain is inferhub, openrouter — two hops, best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub (three hops at or below 27.8 percent ahead of one at 99.1 percent); the chain is now the two strongest. Any lane running on the ops profile reaches a provider through this order. I cannot evidence the instant the four-hop chain was shortened to two — record the answering instant, do not take a guessed one from me.",
+      "since": "2026-10-24T06:14:12Z",
+      "review_by": null,
+      "check": null,
+      "evidence": "Live 2026-10-24: `/root/.opencrabs/config.toml:203`, `/root/.opencrabs/profiles/ops/config.toml:138` and `/root/.opencrabs/profiles/family/config.toml:136` each read `providers = [\"inferhub\", \"openrouter\"]` under `[providers.fallback]`. `vision` differs by profile by design: root `[\"inferhub\"]`, ops `[\"minimax\"]`, family `[\"inferhub\"]`.",
+      "affects": [
+        "profile"
+      ],
+      "origins": [
+        "inferhub-watch"
+      ],
+      "conflict": []
+    },
     {
       "id": "agents-cpu-uncapped-under-factory-load",
       "severity": "warning",
@@ -70,7 +104,7 @@
       "since": "2026-10-13",
       "review_by": null,
       "check": null,
-      "evidence": "leshchenko1979/miidas#114 closed 2026-10-14; manager/slot_heal.py:58 MIN_HEADROOM_BYTES; manager/health.py:149 _self_heal_dead_slots -> :169 heal_dead_slots; docs/adr/0021-dead-slot-liveness-and-bounded-self-heal.md.",
+      "evidence": "leshchenko1979/miidas#114 closed 2026-10-14; manager/slot_heal.py:58 MIN_HEADROOM_BYTES (512 MiB floor); manager/health.py:213 `_self_heal_dead_slots`, which calls heal_dead_slots at :233 (imported at :14); docs/adr/0021-dead-slot-liveness-and-bounded-self-heal.md. The old citation `health.py:149 -> :169` predates #119, whose transition-based duty notification added code above those functions. The 512 MiB floor, the 2-attempts-per-6h bound and the process-tree read discipline are all still exactly as the notice states.",
       "affects": [
         "miidas"
       ],
@@ -225,7 +259,7 @@
       "since": "2026-09-27T11:39:51Z",
       "review_by": null,
       "check": null,
-      "evidence": "agent/runtime/lib/merge.sh:110 writes TEMPLATE_REPO_URL into the slot's own .git/config on every template sync. Measured 2026-09-27T11:44Z on apps, shape only, no value printed or argv-passed: volume miidas_maple-c23a-data holds .git/config at mode 644 root:root with 1 inline-credential line (host github.com); the miidas-agent:latest IMAGE LAYER holds the same file at mode 644 uid 0 with 1 inline-credential line, dated Sep 25 17:36 - so the exposure is wider than a volume, it propagates to every container built from that image. The two running client-slot containers (miidas-maple-c23a, miidas-trial) returned no .git/config under /home on a maxdepth-5 find, which is INCONCLUSIVE rather than absent: the slot mount path was not established, and their count was not reproduced (see the writer's reply).",
+      "evidence": "agent/runtime/lib/merge.sh:130 gates on TEMPLATE_REPO_URL, writes the slot's own .git/config via `git remote set-url origin` at :141 and `git remote add origin` at :144 (the :144 leg is the #120 fix - a slot that had LOST its remote could previously never regain it, because set-url refuses a missing remote and the `|| true` swallowed the refusal). Substance of the notice stands: the slot volume's .git/config is still written on every template sync and is still secret-bearing. The old citation `merge.sh:110` predates #120 and no longer resolves to that write.",
       "affects": [
         "profile"
       ],
@@ -320,27 +354,10 @@
       "conflict": []
     },
     {
-      "id": "ops-fallback-chain-reordered",
-      "severity": "warning",
-      "scope": "profile",
-      "text": "The ops-profile client fallback chain is inferhub, openrouter — two hops, best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub (three hops at or below 27.8 percent ahead of one at 99.1 percent); the chain is now the two strongest. Any lane running on the ops profile reaches a provider through this order. I cannot evidence the instant the four-hop chain was shortened to two — record the answering instant, do not take a guessed one from me.",
-      "since": "2026-09-19T12:21:40Z",
-      "review_by": null,
-      "check": null,
-      "evidence": "`[providers.fallback] providers = [\"inferhub\", \"openrouter\"]` — /root/.opencrabs/profiles/ops/config.toml:136, /root/.opencrabs/config.toml:203, /root/.opencrabs/profiles/family/config.toml:136 (all read 2026-10-07); ops daemon ps lstart = Thu Oct 15 21:40:33 2026",
-      "affects": [
-        "profile"
-      ],
-      "origins": [
-        "inferhub-watch"
-      ],
-      "conflict": []
-    },
-    {
       "id": "pacemaker-triggers-still-pass-mode-quiet",
       "severity": "warning",
       "scope": "profile",
-      "text": "Pacemaker cron triggers on this box still pass `--mode quiet` for a set of jobs, NONE of them meta-factory's. Owner re-ruling 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each quiet row defers instead of waking an idle lane immediately.\n\nPOPULATION 2026-10-22T06:35Z, ops home: 16 quiet rows of 69, 14 enabled — 14 `ai-antispam-*` rows (2 disabled: `ai-antispam-118-probe` and `oc-triage-owner-digest`), plus `inferhub-daily-report`, a SECOND factory's job. Unchanged across four readings (10-18, 10-19, 10-20, 10-22): the quiet population has not moved. The row count around it moved +1 (68 -> 69) from a job created 2026-10-21T22:26Z, and that job is not quiet.\n\nMETA-FACTORY'S OWN: TEN `factory-*` jobs, all enabled, NONE quiet — FIVE carry explicit `--mode turn-end` (`factory-measurement-daily`, `factory-triage-patrol`, `factory-insights-weekly`, `factory-template-weekly`, `factory-growth-map-biweekly`) and FIVE carry no `--mode` at all (`factory-hq-pacemaker`, `factory-publish`, `factory-questions-redeliver`, `factory-registry-attest`, `factory-binding-sync`).\n\nCAUTION FOR WHOEVER FIXES THE REMAINING ONES — the cap flag cannot be dropped alone: each carries `--mode quiet --quiet-for-secs 20 --max-delay-secs 30`, and its prompt documents WHY the cap is there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries.\n\nCENSUS TRAP, measured by this lane 2026-10-17: `--mode` lives in the `prompt` column, NOT in `trigger_cmd`. A census that scans `trigger_cmd` alone returns ZERO quiet rows on this box — my first scan did exactly that and produced a false zero against a 16-row population. Re-measured 2026-10-22T06:35Z: quiet in `trigger_cmd` alone = 0. Read `prompt` (and `trigger_cmd`).\n\nSCOPE CORRECTION, load-bearing: this series is an OPS-HOME read while the opening sentence is a BOX claim, and the box is larger — at 2026-10-22T06:35Z three homes hold a `cron_jobs` table: default 11 rows (7 enabled), family 2 (1 enabled), ops 69 (35 enabled) = 82 rows, 43 enabled. The 16/14 figure is the ops-home one comparable across readings; 82 is the box. Neither is derived from the other. Readings before 2026-10-22 live in this fragment's git history; the series is appended, never overwritten.",
+      "text": "Pacemaker cron triggers on this box still pass `--mode quiet` for a set of jobs, NONE of them meta-factory's. Owner re-ruling 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each quiet row defers instead of waking an idle lane immediately.\n\nPOPULATION 2026-10-24T06:09Z, ops home: 16 quiet rows of 69, 14 enabled — 14 `ai-antispam-*` rows (2 disabled: `ai-antispam-118-probe` and `oc-triage-owner-digest`), plus `inferhub-daily-report`, a SECOND factory's job. Unchanged across FIVE readings (10-18, 10-19, 10-20, 10-22, 10-24): the quiet population has not moved. The count AROUND it moved: box enabled fell 43 -> 42 because `infra-audit-stamp-first-fire-check` (owner `infra-factory`, one-shot `30 7 22 10 *`) fired 2026-10-22T07:32:45Z and is now disabled with next_run 2027-10-22. That row is neither quiet nor meta-factory's.\n\nMETA-FACTORY'S OWN: TEN `factory-*` jobs, all enabled, NONE quiet — FIVE carry explicit `--mode turn-end` (`factory-measurement-daily`, `factory-triage-patrol`, `factory-insights-weekly`, `factory-template-weekly`, `factory-growth-map-biweekly`) and FIVE carry no `--mode` at all (`factory-hq-pacemaker`, `factory-publish`, `factory-questions-redeliver`, `factory-registry-attest`, `factory-binding-sync`).\n\nCAUTION FOR WHOEVER FIXES THE REMAINING ONES — the cap flag cannot be dropped alone: each carries `--mode quiet --quiet-for-secs 20 --max-delay-secs 30`, and its prompt documents WHY the cap is there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries.\n\nCENSUS TRAP, measured by this lane 2026-10-17: `--mode` lives in the `prompt` column, NOT in `trigger_cmd`. A census that scans `trigger_cmd` alone returns ZERO quiet rows on this box — my first scan did exactly that and produced a false zero against a 16-row population. Re-measured 2026-10-24T06:09Z: quiet in `trigger_cmd` alone = 0. Read `prompt` (and `trigger_cmd`).\n\nSCOPE CORRECTION, load-bearing: this series is an OPS-HOME read while the opening sentence is a BOX claim, and the box is larger — at 2026-10-24T06:09Z three homes hold a `cron_jobs` table: default 11 rows (7 enabled), family 2 (1 enabled), ops 69 (34 enabled) = 82 rows, 42 enabled. The 16/14 figure is the ops-home one comparable across readings; 82 is the box. Neither is derived from the other.\n\nSECOND POPULATION GAP, measured 2026-10-24, and it is the trap your brief names: `registry/index.json` `counts.jobs` reads 71 = family 2 + ops 69. The DEFAULT home's 11 rows appear in the rendered `jobs` array NOT AT ALL, and no index name is missing from the box (checked both directions). So `counts.unattributed_jobs` is a WITHIN-POPULATION figure and never a box figure. Readings before 2026-10-24 live in this fragment's git history; the series is appended, never overwritten.",
       "since": "2026-09-19T03:36:54Z",
       "review_by": null,
       "check": null,
@@ -378,29 +395,12 @@
       "since": "2026-09-19",
       "review_by": "2026-12-19",
       "check": null,
-      "evidence": "RE-VERIFIED 2026-10-20 against the LIVE deployed sha d4bb3e13 (binary swapped 2026-10-19T16:49:32Z, run 39286953655; e8f2e03d is now prev_sha): notify_policy.rs carries enum {TurnEnd :31, Interrupt :41, Quiet :44}, `Some(\"now\") => Err(` at :206, and src/tests/subagent_notify_test.rs:78-87 asserts resolve_mode_retired_now_is_rejected; d4bb3e13 IS an ancestor of origin/main (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-19 re-verification against e8f2e03d.",
+      "evidence": "`src/brain/agent/service/notify_policy.rs:206` reads `Some(\"now\") => Err(`; `src/tests/subagent_notify_test.rs:79,86,87` assert `resolve_mode(Some(\"now\"), ...)` is `Err`. Re-verified 2026-10-24 against origin/main 8df0dad8.",
       "affects": [
         "profile"
       ],
       "origins": [
         "opencrabs-dev"
-      ],
-      "conflict": []
-    },
-    {
-      "id": "inferhub-autoswitcher-retired",
-      "severity": "warning",
-      "scope": null,
-      "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). Enforcement is an OPT-IN gate, not a flag: scripts/sync_usage_logs.py runs the switcher leg only under an explicit --run-switch (`if args.run_switch:`, line 904), so --skip-switch is a DEPRECATED NO-OP that suppresses nothing (#152). The one production caller, tools/usage_logs_turn.sh:37, passes --skip-switch --skip-data --skip-scoreboard and no --run-switch, and --run-switch appears nowhere outside tests/test_sync_switch_optin.py. A bare run therefore cannot reach the switch; do not re-arm either path.",
-      "since": "2026-09-18T22:51:42Z",
-      "review_by": null,
-      "check": null,
-      "evidence": "Measured 2026-10-21: cron row fef19c4f enabled=0, updated_at 2026-09-18T22:51:42Z (ops profile). sync_usage_logs.py:904 gates on `if args.run_switch:`; :665 documents --skip-switch as a DEPRECATED NO-OP. tools/usage_logs_turn.sh:37 passes --skip-switch --skip-data --skip-scoreboard with no --run-switch; --run-switch occurs only in tests/test_sync_switch_optin.py:104/126. skills/inferhub/SKILL.md 1.0.186 carries the retirement law.",
-      "affects": [
-        "infra-factory"
-      ],
-      "origins": [
-        "inferhub-watch"
       ],
       "conflict": []
     },
@@ -510,7 +510,7 @@
       "id": "brain-metrics-baseline-measured",
       "severity": "info",
       "scope": "profile",
-      "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir / --window) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument.\n\nLEG C — CORRECTED 2026-10-01; the earlier wording is SUPERSEDED, not repeated. The earlier text claimed the automatic threshold trigger was DORMANT, having \"fired 0 times since the 1M window\". That is FALSE on this box today, measured two ways in one turn: (a) the trigger line itself — \"Context at NN% (>65%) — triggering LLM compaction\", emitted at src/brain/agent/service/compaction.rs:445/460 (the earlier text cited :418; the line moved) — fired 525 times across 20 distinct sessions in the 2026-10-01 log, this lane's session among them, and this lane was compacted mid-loop today; (b) the instrument's LEG C, which parses the DIFFERENT summarizer line at context.rs, read n=159 events in its 24h window — mean 73022 tok = 36.5% of a 200000-token window, median 79677, p90 114738, max 156319. The trigger line's denominator is NOT the provider window: it is effective tokens over effective max (the window minus reserves), so the earlier notice's equation \"the 65-percent gate = 650000 tokens\" conflates two denominators, which the instrument's own BOUNDS section 1 forbids. Never read a trigger-line percentage as a fraction of the provider window.\n\nCONSEQUENCES the earlier text got backwards: (a) the note pipeline is NOT starved — save_compaction_summary_to_memory is the sole writer of memory/<date>.md, and with 159 summarizer sends in 24h a note exists for any day lanes are active, so memory_search's default scope is supplied rather than blind; (b) a count of compaction events tracks how many lanes were awake and how many turns they ran, never the weight of the law.\n\nTWO CORRECTIONS worth keeping from the earlier text, both category errors: (a) the \"110423 / 1000000 input tokens\" line reports the SUMMARIZER'S PAYLOAD against its own input budget (context.rs), which is NOT the trigger's reading; (b) FullWindow is a CompactionScope (WHAT gets compacted), not a trigger KIND.\n\nLATEST READING 2026-10-22T06:35:27Z — this block SUPERSEDES the 2026-10-18 reading that stood here, and the earlier one is not repeated: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; in no repository, so a leg-A reading has an INSTANT for its identity and no revision) 208 lines / 52513 B / ~15004 tok (proxy) = 7.50% of a 200000-token window — UP from 189 / 48014 / ~13717 tok = 6.86% at 2026-10-18, the growth sitting in AGENTS.md. LEG B, skills/*/SKILL.md (depth 1): 583 lines / 48144 B / ~13755 tok (proxy) = 6.88% over ONE file, and that file `skills/meta-factory/SKILL.md` is OVER the 500-line marker by 83 (printed, never gated) — it read 570 / over by 70 at 2026-10-18. COMBINED = ~28759 tok (proxy) = 14.38% of a 200000-token window, against 13.58% at 2026-10-18 and 16.88% at 2026-10-01. LEG C as of this reading: n=640 events in the 24h window, mean 6535 tok = 3.3%, median 1655 = 0.8%, p90 6795 = 3.4%, min 413, max 118928 — and the count is a property of its window (how many lanes were awake), never of the law's weight; the instrument's own all-time line reads 4882 events over 9 log files, so a zero here would be visibly different from a predicate matching nothing.",
+      "text": "Brain metrics are a STANDING reading with an instrument: `tools/brain_metrics.py` (no args needed; `--home` / `--hours` / `--log-dir` / `--window`) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is `docs/measurement-procedure.md` section 5; its gate is `tests/test_brain_metrics.py`. A figure in this notice is a DATED READING and never current — run the instrument.\n\nLEG C — CORRECTED 2026-10-01; the earlier wording is SUPERSEDED, not repeated. The earlier text claimed the automatic threshold trigger was DORMANT, having \"fired 0 times since the 1M window\". That is FALSE on this box, measured two ways in one turn: (a) the trigger line itself — \"Context at NN% (>65%) — triggering LLM compaction\", emitted at `src/brain/agent/service/compaction.rs:445/460` (the earlier text cited :418; the line moved) — fired 525 times across 20 distinct sessions in the 2026-10-01 log, this lane's session among them, and this lane was compacted mid-loop that day; (b) the instrument's LEG C, which parses the DIFFERENT summarizer line at `context.rs`, read n=159 events in its 24h window. The trigger line's denominator is NOT the provider window: it is effective tokens over effective max (the window minus reserves), so the earlier notice's equation \"the 65-percent gate = 650000 tokens\" conflates two denominators, which the instrument's own BOUNDS section 1 forbids. Never read a trigger-line percentage as a fraction of the provider window.\n\nCONSEQUENCES the earlier text got backwards: (a) the note pipeline is NOT starved — `save_compaction_summary_to_memory` is the sole writer of `memory/<date>.md`, and with a steady summarizer-send population a note exists for any day lanes are active, so memory_search's default scope is supplied rather than blind; (b) a count of compaction events tracks how many lanes were awake and how many turns they ran, never the weight of the law.\n\nTWO CORRECTIONS worth keeping from the earlier text, both category errors: (a) the \"110423 / 1000000 input tokens\" line reports the SUMMARIZER'S PAYLOAD against its own input budget (`context.rs`), which is NOT the trigger's reading; (b) FullWindow is a CompactionScope (WHAT gets compacted), not a trigger KIND.\n\nLATEST READING 2026-10-24T06:09:25Z — this block SUPERSEDES the 2026-10-22 reading that stood here, and the earlier one is not repeated: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; in no repository, so a leg-A reading has an INSTANT for its identity and no revision) 210 lines / 53360 B / ~15245 tok (proxy) = 7.62% of a 200000-token window — UP from 208 / 52513 / ~15004 tok = 7.50% at 2026-10-22, the growth sitting in AGENTS.md (134 lines / 46512 B). LEG B, `skills/*/SKILL.md` (depth 1): 583 lines / 48144 B / ~13755 tok (proxy) = 6.88% over ONE file, and that file `skills/meta-factory/SKILL.md` is OVER the 500-line marker by 83 (printed, never gated) — unchanged from 2026-10-22. COMBINED = ~29000 tok (proxy) = 14.50% of a 200000-token window, against 14.38% at 2026-10-22 and 16.88% at 2026-10-01. LEG C as of this reading: n=191 events in the 24h window, mean 13038 tok = 6.5%, median 2651 = 1.3%, p90 49529 = 24.8%, min 554, max 89889 — and the count is a property of its window (how many lanes were awake), never of the law's weight; the instrument's own all-time line reads 3824 events over 8 log files, so a zero here would be visibly different from a predicate matching nothing.",
       "since": "2026-09-28T12:19:23Z",
       "review_by": null,
       "check": null,
@@ -614,7 +614,7 @@
       "factory": "ai-antispam",
       "display_name": "ai-antispam",
       "status": "attested",
-      "attested_at": "2026-10-23T06:02:49Z",
+      "attested_at": "2026-10-24T06:28:42Z",
       "profile": "ops",
       "repo": "/root/ai-antispam",
       "skill": "/root/ai-antispam/SKILL.md",
@@ -868,7 +868,7 @@
       "factory": "inferhub-watch",
       "display_name": "Inferhub watch",
       "status": "attested",
-      "attested_at": "2026-10-23T06:05:28Z",
+      "attested_at": "2026-10-24T06:14:12Z",
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
@@ -994,26 +994,26 @@
           "severity": "warning",
           "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). Enforcement is an OPT-IN gate, not a flag: scripts/sync_usage_logs.py runs the switcher leg only under an explicit --run-switch (`if args.run_switch:`, line 904), so --skip-switch is a DEPRECATED NO-OP that suppresses nothing (#152). The one production caller, tools/usage_logs_turn.sh:37, passes --skip-switch --skip-data --skip-scoreboard and no --run-switch, and --run-switch appears nowhere outside tests/test_sync_switch_optin.py. A bare run therefore cannot reach the switch; do not re-arm either path.",
           "scope": null,
-          "since": "2026-09-18T22:51:42Z",
+          "since": "2026-10-24T06:14:12Z",
           "review_by": null,
           "check": null,
           "affects": [
             "infra-factory"
           ],
-          "evidence": "Measured 2026-10-21: cron row fef19c4f enabled=0, updated_at 2026-09-18T22:51:42Z (ops profile). sync_usage_logs.py:904 gates on `if args.run_switch:`; :665 documents --skip-switch as a DEPRECATED NO-OP. tools/usage_logs_turn.sh:37 passes --skip-switch --skip-data --skip-scoreboard with no --run-switch; --run-switch occurs only in tests/test_sync_switch_optin.py:104/126. skills/inferhub/SKILL.md 1.0.186 carries the retirement law."
+          "evidence": "Cron row `inferhub-auto-switcher` (id `fef19c4f-ab16-442e-8ee9-e041d3d0919b`) reads `enabled=0`, `updated_at 2026-09-18T22:51:42Z`, last run `2026-09-12T07:13:58Z`. The switch leg is unreachable by default: `scripts/sync_usage_logs.py:665` `--skip-switch` is a DEPRECATED NO-OP, `:670` `--run-switch` is the explicit opt-in, and the sole `run_auto_route_switch` call is gated by `if args.run_switch:` at `:904` (issue #152). Re-arming needs an owner ruling."
         },
         {
           "id": "ops-fallback-chain-reordered",
           "severity": "warning",
           "text": "The ops-profile client fallback chain is inferhub, openrouter — two hops, best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub (three hops at or below 27.8 percent ahead of one at 99.1 percent); the chain is now the two strongest. Any lane running on the ops profile reaches a provider through this order. I cannot evidence the instant the four-hop chain was shortened to two — record the answering instant, do not take a guessed one from me.",
           "scope": "profile",
-          "since": "2026-09-19T12:21:40Z",
+          "since": "2026-10-24T06:14:12Z",
           "review_by": null,
           "check": null,
           "affects": [
             "profile"
           ],
-          "evidence": "`[providers.fallback] providers = [\"inferhub\", \"openrouter\"]` — /root/.opencrabs/profiles/ops/config.toml:136, /root/.opencrabs/config.toml:203, /root/.opencrabs/profiles/family/config.toml:136 (all read 2026-10-07); ops daemon ps lstart = Thu Oct 15 21:40:33 2026"
+          "evidence": "Live 2026-10-24: `/root/.opencrabs/config.toml:203`, `/root/.opencrabs/profiles/ops/config.toml:138` and `/root/.opencrabs/profiles/family/config.toml:136` each read `providers = [\"inferhub\", \"openrouter\"]` under `[providers.fallback]`. `vision` differs by profile by design: root `[\"inferhub\"]`, ops `[\"minimax\"]`, family `[\"inferhub\"]`."
         },
         {
           "id": "inferhub-root-credential-in-shared-compose",
@@ -1340,7 +1340,7 @@
       "factory": "meta-factory",
       "display_name": "Factories",
       "status": "attested",
-      "attested_at": "2026-10-23T06:06:44Z",
+      "attested_at": "2026-10-24T06:14:18Z",
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
@@ -1604,7 +1604,7 @@
         {
           "id": "pacemaker-triggers-still-pass-mode-quiet",
           "severity": "warning",
-          "text": "Pacemaker cron triggers on this box still pass `--mode quiet` for a set of jobs, NONE of them meta-factory's. Owner re-ruling 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each quiet row defers instead of waking an idle lane immediately.\n\nPOPULATION 2026-10-22T06:35Z, ops home: 16 quiet rows of 69, 14 enabled — 14 `ai-antispam-*` rows (2 disabled: `ai-antispam-118-probe` and `oc-triage-owner-digest`), plus `inferhub-daily-report`, a SECOND factory's job. Unchanged across four readings (10-18, 10-19, 10-20, 10-22): the quiet population has not moved. The row count around it moved +1 (68 -> 69) from a job created 2026-10-21T22:26Z, and that job is not quiet.\n\nMETA-FACTORY'S OWN: TEN `factory-*` jobs, all enabled, NONE quiet — FIVE carry explicit `--mode turn-end` (`factory-measurement-daily`, `factory-triage-patrol`, `factory-insights-weekly`, `factory-template-weekly`, `factory-growth-map-biweekly`) and FIVE carry no `--mode` at all (`factory-hq-pacemaker`, `factory-publish`, `factory-questions-redeliver`, `factory-registry-attest`, `factory-binding-sync`).\n\nCAUTION FOR WHOEVER FIXES THE REMAINING ONES — the cap flag cannot be dropped alone: each carries `--mode quiet --quiet-for-secs 20 --max-delay-secs 30`, and its prompt documents WHY the cap is there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries.\n\nCENSUS TRAP, measured by this lane 2026-10-17: `--mode` lives in the `prompt` column, NOT in `trigger_cmd`. A census that scans `trigger_cmd` alone returns ZERO quiet rows on this box — my first scan did exactly that and produced a false zero against a 16-row population. Re-measured 2026-10-22T06:35Z: quiet in `trigger_cmd` alone = 0. Read `prompt` (and `trigger_cmd`).\n\nSCOPE CORRECTION, load-bearing: this series is an OPS-HOME read while the opening sentence is a BOX claim, and the box is larger — at 2026-10-22T06:35Z three homes hold a `cron_jobs` table: default 11 rows (7 enabled), family 2 (1 enabled), ops 69 (35 enabled) = 82 rows, 43 enabled. The 16/14 figure is the ops-home one comparable across readings; 82 is the box. Neither is derived from the other. Readings before 2026-10-22 live in this fragment's git history; the series is appended, never overwritten.",
+          "text": "Pacemaker cron triggers on this box still pass `--mode quiet` for a set of jobs, NONE of them meta-factory's. Owner re-ruling 2026-09-19T03:34:30Z / 03:36:54Z made turn-end THE default for all lane traffic and retained quiet only for batch/fan-out notices whose ack contract is the ledger; a single-lane pacemaker is not batch/fan-out, so each quiet row defers instead of waking an idle lane immediately.\n\nPOPULATION 2026-10-24T06:09Z, ops home: 16 quiet rows of 69, 14 enabled — 14 `ai-antispam-*` rows (2 disabled: `ai-antispam-118-probe` and `oc-triage-owner-digest`), plus `inferhub-daily-report`, a SECOND factory's job. Unchanged across FIVE readings (10-18, 10-19, 10-20, 10-22, 10-24): the quiet population has not moved. The count AROUND it moved: box enabled fell 43 -> 42 because `infra-audit-stamp-first-fire-check` (owner `infra-factory`, one-shot `30 7 22 10 *`) fired 2026-10-22T07:32:45Z and is now disabled with next_run 2027-10-22. That row is neither quiet nor meta-factory's.\n\nMETA-FACTORY'S OWN: TEN `factory-*` jobs, all enabled, NONE quiet — FIVE carry explicit `--mode turn-end` (`factory-measurement-daily`, `factory-triage-patrol`, `factory-insights-weekly`, `factory-template-weekly`, `factory-growth-map-biweekly`) and FIVE carry no `--mode` at all (`factory-hq-pacemaker`, `factory-publish`, `factory-questions-redeliver`, `factory-registry-attest`, `factory-binding-sync`).\n\nCAUTION FOR WHOEVER FIXES THE REMAINING ONES — the cap flag cannot be dropped alone: each carries `--mode quiet --quiet-for-secs 20 --max-delay-secs 30`, and its prompt documents WHY the cap is there, namely that quiet's DEFAULT starvation cap of 1800s blocks past the tool's 120s budget and kills the trigger. That hazard is quiet-specific and vanishes under turn-end, so the mode and the cap move TOGETHER and the sentence justifying the cap must be rewritten with them, or the prompt ends up arguing for a flag it no longer carries.\n\nCENSUS TRAP, measured by this lane 2026-10-17: `--mode` lives in the `prompt` column, NOT in `trigger_cmd`. A census that scans `trigger_cmd` alone returns ZERO quiet rows on this box — my first scan did exactly that and produced a false zero against a 16-row population. Re-measured 2026-10-24T06:09Z: quiet in `trigger_cmd` alone = 0. Read `prompt` (and `trigger_cmd`).\n\nSCOPE CORRECTION, load-bearing: this series is an OPS-HOME read while the opening sentence is a BOX claim, and the box is larger — at 2026-10-24T06:09Z three homes hold a `cron_jobs` table: default 11 rows (7 enabled), family 2 (1 enabled), ops 69 (34 enabled) = 82 rows, 42 enabled. The 16/14 figure is the ops-home one comparable across readings; 82 is the box. Neither is derived from the other.\n\nSECOND POPULATION GAP, measured 2026-10-24, and it is the trap your brief names: `registry/index.json` `counts.jobs` reads 71 = family 2 + ops 69. The DEFAULT home's 11 rows appear in the rendered `jobs` array NOT AT ALL, and no index name is missing from the box (checked both directions). So `counts.unattributed_jobs` is a WITHIN-POPULATION figure and never a box figure. Readings before 2026-10-24 live in this fragment's git history; the series is appended, never overwritten.",
           "scope": "profile",
           "since": "2026-09-19T03:36:54Z",
           "review_by": null,
@@ -1617,7 +1617,7 @@
         {
           "id": "brain-metrics-baseline-measured",
           "severity": "info",
-          "text": "Brain metrics are a STANDING reading with an instrument: tools/brain_metrics.py (no args needed; --home / --hours / --log-dir / --window) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is docs/measurement-procedure.md section 5; its gate is tests/test_brain_metrics.py. A figure in this notice is a DATED READING and never current — run the instrument.\n\nLEG C — CORRECTED 2026-10-01; the earlier wording is SUPERSEDED, not repeated. The earlier text claimed the automatic threshold trigger was DORMANT, having \"fired 0 times since the 1M window\". That is FALSE on this box today, measured two ways in one turn: (a) the trigger line itself — \"Context at NN% (>65%) — triggering LLM compaction\", emitted at src/brain/agent/service/compaction.rs:445/460 (the earlier text cited :418; the line moved) — fired 525 times across 20 distinct sessions in the 2026-10-01 log, this lane's session among them, and this lane was compacted mid-loop today; (b) the instrument's LEG C, which parses the DIFFERENT summarizer line at context.rs, read n=159 events in its 24h window — mean 73022 tok = 36.5% of a 200000-token window, median 79677, p90 114738, max 156319. The trigger line's denominator is NOT the provider window: it is effective tokens over effective max (the window minus reserves), so the earlier notice's equation \"the 65-percent gate = 650000 tokens\" conflates two denominators, which the instrument's own BOUNDS section 1 forbids. Never read a trigger-line percentage as a fraction of the provider window.\n\nCONSEQUENCES the earlier text got backwards: (a) the note pipeline is NOT starved — save_compaction_summary_to_memory is the sole writer of memory/<date>.md, and with 159 summarizer sends in 24h a note exists for any day lanes are active, so memory_search's default scope is supplied rather than blind; (b) a count of compaction events tracks how many lanes were awake and how many turns they ran, never the weight of the law.\n\nTWO CORRECTIONS worth keeping from the earlier text, both category errors: (a) the \"110423 / 1000000 input tokens\" line reports the SUMMARIZER'S PAYLOAD against its own input budget (context.rs), which is NOT the trigger's reading; (b) FullWindow is a CompactionScope (WHAT gets compacted), not a trigger KIND.\n\nLATEST READING 2026-10-22T06:35:27Z — this block SUPERSEDES the 2026-10-18 reading that stood here, and the earlier one is not repeated: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; in no repository, so a leg-A reading has an INSTANT for its identity and no revision) 208 lines / 52513 B / ~15004 tok (proxy) = 7.50% of a 200000-token window — UP from 189 / 48014 / ~13717 tok = 6.86% at 2026-10-18, the growth sitting in AGENTS.md. LEG B, skills/*/SKILL.md (depth 1): 583 lines / 48144 B / ~13755 tok (proxy) = 6.88% over ONE file, and that file `skills/meta-factory/SKILL.md` is OVER the 500-line marker by 83 (printed, never gated) — it read 570 / over by 70 at 2026-10-18. COMBINED = ~28759 tok (proxy) = 14.38% of a 200000-token window, against 13.58% at 2026-10-18 and 16.88% at 2026-10-01. LEG C as of this reading: n=640 events in the 24h window, mean 6535 tok = 3.3%, median 1655 = 0.8%, p90 6795 = 3.4%, min 413, max 118928 — and the count is a property of its window (how many lanes were awake), never of the law's weight; the instrument's own all-time line reads 4882 events over 9 log files, so a zero here would be visibly different from a predicate matching nothing.",
+          "text": "Brain metrics are a STANDING reading with an instrument: `tools/brain_metrics.py` (no args needed; `--home` / `--hours` / `--log-dir` / `--window`) prints all three legs with their predicate, population and instant, and gates none of them. The clause that binds it is `docs/measurement-procedure.md` section 5; its gate is `tests/test_brain_metrics.py`. A figure in this notice is a DATED READING and never current — run the instrument.\n\nLEG C — CORRECTED 2026-10-01; the earlier wording is SUPERSEDED, not repeated. The earlier text claimed the automatic threshold trigger was DORMANT, having \"fired 0 times since the 1M window\". That is FALSE on this box, measured two ways in one turn: (a) the trigger line itself — \"Context at NN% (>65%) — triggering LLM compaction\", emitted at `src/brain/agent/service/compaction.rs:445/460` (the earlier text cited :418; the line moved) — fired 525 times across 20 distinct sessions in the 2026-10-01 log, this lane's session among them, and this lane was compacted mid-loop that day; (b) the instrument's LEG C, which parses the DIFFERENT summarizer line at `context.rs`, read n=159 events in its 24h window. The trigger line's denominator is NOT the provider window: it is effective tokens over effective max (the window minus reserves), so the earlier notice's equation \"the 65-percent gate = 650000 tokens\" conflates two denominators, which the instrument's own BOUNDS section 1 forbids. Never read a trigger-line percentage as a fraction of the provider window.\n\nCONSEQUENCES the earlier text got backwards: (a) the note pipeline is NOT starved — `save_compaction_summary_to_memory` is the sole writer of `memory/<date>.md`, and with a steady summarizer-send population a note exists for any day lanes are active, so memory_search's default scope is supplied rather than blind; (b) a count of compaction events tracks how many lanes were awake and how many turns they ran, never the weight of the law.\n\nTWO CORRECTIONS worth keeping from the earlier text, both category errors: (a) the \"110423 / 1000000 input tokens\" line reports the SUMMARIZER'S PAYLOAD against its own input budget (`context.rs`), which is NOT the trigger's reading; (b) FullWindow is a CompactionScope (WHAT gets compacted), not a trigger KIND.\n\nLATEST READING 2026-10-24T06:09:25Z — this block SUPERSEDES the 2026-10-22 reading that stood here, and the earlier one is not repeated: LEG A, the always-injected Tier 0 triple (SOUL.md, USER.md, AGENTS.md; in no repository, so a leg-A reading has an INSTANT for its identity and no revision) 210 lines / 53360 B / ~15245 tok (proxy) = 7.62% of a 200000-token window — UP from 208 / 52513 / ~15004 tok = 7.50% at 2026-10-22, the growth sitting in AGENTS.md (134 lines / 46512 B). LEG B, `skills/*/SKILL.md` (depth 1): 583 lines / 48144 B / ~13755 tok (proxy) = 6.88% over ONE file, and that file `skills/meta-factory/SKILL.md` is OVER the 500-line marker by 83 (printed, never gated) — unchanged from 2026-10-22. COMBINED = ~29000 tok (proxy) = 14.50% of a 200000-token window, against 14.38% at 2026-10-22 and 16.88% at 2026-10-01. LEG C as of this reading: n=191 events in the 24h window, mean 13038 tok = 6.5%, median 2651 = 1.3%, p90 49529 = 24.8%, min 554, max 89889 — and the count is a property of its window (how many lanes were awake), never of the law's weight; the instrument's own all-time line reads 3824 events over 8 log files, so a zero here would be visibly different from a predicate matching nothing.",
           "scope": "profile",
           "since": "2026-09-28T12:19:23Z",
           "review_by": null,
@@ -1633,7 +1633,7 @@
       "factory": "miidas",
       "display_name": "Miidas Factory",
       "status": "attested",
-      "attested_at": "2026-10-23T06:05:08Z",
+      "attested_at": "2026-10-24T06:15:40Z",
       "profile": "ops",
       "repo": "/root/miidas",
       "skill": "/root/miidas/SKILL.md",
@@ -1842,7 +1842,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "agent/runtime/lib/merge.sh:110 writes TEMPLATE_REPO_URL into the slot's own .git/config on every template sync. Measured 2026-09-27T11:44Z on apps, shape only, no value printed or argv-passed: volume miidas_maple-c23a-data holds .git/config at mode 644 root:root with 1 inline-credential line (host github.com); the miidas-agent:latest IMAGE LAYER holds the same file at mode 644 uid 0 with 1 inline-credential line, dated Sep 25 17:36 - so the exposure is wider than a volume, it propagates to every container built from that image. The two running client-slot containers (miidas-maple-c23a, miidas-trial) returned no .git/config under /home on a maxdepth-5 find, which is INCONCLUSIVE rather than absent: the slot mount path was not established, and their count was not reproduced (see the writer's reply)."
+          "evidence": "agent/runtime/lib/merge.sh:130 gates on TEMPLATE_REPO_URL, writes the slot's own .git/config via `git remote set-url origin` at :141 and `git remote add origin` at :144 (the :144 leg is the #120 fix - a slot that had LOST its remote could previously never regain it, because set-url refuses a missing remote and the `|| true` swallowed the refusal). Substance of the notice stands: the slot volume's .git/config is still written on every template sync and is still secret-bearing. The old citation `merge.sh:110` predates #120 and no longer resolves to that write."
         },
         {
           "id": "miidas-platform-moved-to-agents-old",
@@ -1896,7 +1896,7 @@
           "affects": [
             "miidas"
           ],
-          "evidence": "leshchenko1979/miidas#114 closed 2026-10-14; manager/slot_heal.py:58 MIN_HEADROOM_BYTES; manager/health.py:149 _self_heal_dead_slots -> :169 heal_dead_slots; docs/adr/0021-dead-slot-liveness-and-bounded-self-heal.md."
+          "evidence": "leshchenko1979/miidas#114 closed 2026-10-14; manager/slot_heal.py:58 MIN_HEADROOM_BYTES (512 MiB floor); manager/health.py:213 `_self_heal_dead_slots`, which calls heal_dead_slots at :233 (imported at :14); docs/adr/0021-dead-slot-liveness-and-bounded-self-heal.md. The old citation `health.py:149 -> :169` predates #119, whose transition-based duty notification added code above those functions. The 512 MiB floor, the 2-attempts-per-6h bound and the process-tree read discipline are all still exactly as the notice states."
         },
         {
           "id": "opencrabs-config-alerts-reach-client-chats",
@@ -1917,7 +1917,7 @@
       "factory": "opencrabs-dev",
       "display_name": "Opencrabs Dev Factory",
       "status": "attested",
-      "attested_at": "2026-10-23T06:05:19Z",
+      "attested_at": "2026-10-24T06:29:01Z",
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
@@ -2427,7 +2427,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "RE-VERIFIED 2026-10-20 against the LIVE deployed sha d4bb3e13 (binary swapped 2026-10-19T16:49:32Z, run 39286953655; e8f2e03d is now prev_sha): notify_policy.rs carries enum {TurnEnd :31, Interrupt :41, Quiet :44}, `Some(\"now\") => Err(` at :206, and src/tests/subagent_notify_test.rs:78-87 asserts resolve_mode_retired_now_is_rejected; d4bb3e13 IS an ancestor of origin/main (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-19 re-verification against e8f2e03d."
+          "evidence": "`src/brain/agent/service/notify_policy.rs:206` reads `Some(\"now\") => Err(`; `src/tests/subagent_notify_test.rs:79,86,87` assert `resolve_mode(Some(\"now\"), ...)` is `Err`. Re-verified 2026-10-24 against origin/main 8df0dad8."
         },
         {
           "id": "commit-signing-live-identity-retired",
@@ -2541,8 +2541,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-10-24T07:15:00+00:00",
-      "last_run_at": "2026-10-24T06:48:37Z",
+      "next_run_at": "2026-10-24T08:15:00+00:00",
+      "last_run_at": "2026-10-24T07:45:17Z",
       "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "profile": "ops",
