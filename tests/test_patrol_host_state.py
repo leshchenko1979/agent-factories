@@ -11984,11 +11984,14 @@ def test_the_undispatched_ruling_leg_BITES_and_discriminates_on_every_bucket() -
     neighbour that looks like it stays quiet.
 
     The neighbours are the live false positives: an item with a dispatch row naming it in
-    its SUBJECT is dispatched (the ruling's own #433 arm); an item named only in a dispatch
-    row's BODY is a MENTION, not a dispatch (#467); an item resolved by a DECLARED batch act
-    was dispatched by a batch and owes no per-item row (NO BACKFILL, n=1596); a CLAIMED item
-    is started; a CLOSED item is done; an item with no `ruling` row belongs to
+    its SUBJECT is dispatched (the ruling's own #433 arm); an item resolved by a DECLARED
+    batch act was dispatched by a batch and owes no per-item row (NO BACKFILL, n=1596); a
+    CLAIMED item is started; a CLOSED item is done; an item with no `ruling` row belongs to
     `board_unruled_leg`.
+
+    #933 is a MENTION and it is OWED (#556, ruling n=4194): a dispatch row's BODY carrying
+    the token is not a dispatch, so it clears nothing. It is counted as its own class and
+    printed beside the owed entry -- never as an excuse.
     """
     now = dt.datetime.now(dt.timezone.utc)
     read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -12023,15 +12026,18 @@ def test_the_undispatched_ruling_leg_BITES_and_discriminates_on_every_bucket() -
     leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches=batches)
     named = "\n".join(leg["problems"])
     assert "#931" in named, f"the ruled-but-undispatched item must be NAMED\n{named}"
-    for quiet in ("#932", "#933", "#934", "#935", "#936", "#937"):
+    for quiet in ("#932", "#934", "#935", "#936", "#937"):
         assert quiet not in named, (
-            f"{quiet} must NOT be reported: a subject match IS a dispatch, a body mention "
-            f"is not one and is not this leg's debt, a declared batch resolves, a claimed "
-            f"item is started, a closed item is done, and an item with no ruling row "
-            f"belongs to board-unruled\n{named}"
+            f"{quiet} must NOT be reported: a subject match IS a dispatch, a declared batch "
+            f"resolves, a claimed item is started, a closed item is done, and an item with "
+            f"no ruling row belongs to board-unruled\n{named}"
         )
+    assert "#933 is OPEN" in named, (
+        f"#933 is named only in a dispatch row's BODY, which is a MENTION and NOT a "
+        f"dispatch: it clears nothing, so the item is OWED (#556)\n{named}"
+    )
     cov = leg["coverage"]
-    assert cov["items_owed_dispatch"] == 1, cov
+    assert cov["items_owed_dispatch"] == 2, cov
     # THREE, not five: a subject-dispatched item (#932) is out of the population BY
     # CONSTRUCTION rather than by a later bucket, and a claimed (#935) or closed (#936) one
     # is out the same way. The population is "ruled and not started", so the buckets that
@@ -12039,6 +12045,110 @@ def test_the_undispatched_ruling_leg_BITES_and_discriminates_on_every_bucket() -
     assert cov["population_undispatched"] == 3, cov
     assert cov["items_resolved_by_batch"] == 1, cov
     assert cov["items_named_in_body_only"] == 1, cov
+
+_LIVE_MENTION_COINCIDENCES = {
+    # unit -> (dispatch subject, dispatch detail). The SHAPES are verbatim from the live rows
+    # the #556 ruling measured (read_at 2026-10-24T06:52-06:59Z, 4,207 rows, 556 board
+    # items): a `file:line`, a `max ... h` duration, an `n=<row>` and a bare `:<line>`.
+    548: ("kit-defect-cluster-2026-10-20T15",
+          "the cluster is recorded at docs/instruments/kit.md:548 in the tree"),
+    549: ("#529", "the four lanes named #549 as the unit to route next"),
+    550: ("#324", "row #550 carries the same shape as #324"),
+    553: ("#527", "the window measured max 553.73 h across the fleet"),
+    554: ("#87", "ruling n=554 set the pace for the round"),
+    555: ("#336", "the Owns: header round (#555) closed at 06:25Z"),
+    556: ("#189", "the flag reads _LOG_ENABLED = False at :556"),
+}
+
+def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> None:
+    """#556 acceptance (1)-(3) / ruling n=4194: a bare-digit coincidence is OWED, and the
+    coincidence is PRINTED with its matched text and character offset.
+
+    THE POSITIVE CONTROL IS THIS TREE'S OWN SEVEN (#556's dispatch). Each fixture row below
+    reproduces one of the coincidences the live leg was excusing -- a `file:line`, a
+    `max 553.73 h`, an `n=554`, a `:556` -- and a run reporting `owed` empty over this
+    fixture is RED, because these seven provably carry no dispatch row. Before the fix the
+    leg reported `items_owed_dispatch: 0` over exactly this population while calling itself
+    ASSERTED: the #271 shape, a zero that cannot be told from a clean read.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    numbers = sorted(_LIVE_MENTION_COINCIDENCES)
+    issues = [_issue(n, "OPEN") for n in numbers]
+    issues.append(_issue(557, "OPEN"))   # dispatched in its SUBJECT -> out of the population
+    issues.append(_issue(558, "OPEN"))   # resolved by a declared batch -> excused
+    rows = []
+    n = 600
+    for number in numbers:
+        subject, detail = _LIVE_MENTION_COINCIDENCES[number]
+        rows.append(_stall_row(n, "ruling", f"#{number}", 2, now=now))
+        rows.append(_stall_row(n + 1, "dispatch", subject, 1.9, now=now, detail=detail))
+        n += 2
+    rows.append(_stall_row(n, "ruling", "#557", 2, now=now))
+    rows.append(_stall_row(n + 1, "dispatch", "#557", 1.9, now=now))
+    rows.append(_stall_row(n + 2, "ruling", "#558", 2, now=now))
+    batches = {"probe-batch-2026-10-24": {
+        "row": n + 3, "units": [558], "recorded_at": "2026-10-24T00:00:00Z",
+        "basis": "probe: a batch act dispatched this unit, so no per-item row is owed",
+    }}
+
+    leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches=batches)
+    cov = leg["coverage"]
+    assert cov["items_owed_dispatch"] == len(numbers), (
+        f"all seven coincidences are OWED: a mention clears nothing\n{cov}"
+    )
+    assert cov["owed"] == numbers, cov
+    assert cov["items_named_in_body_only"] == len(numbers), cov
+    assert "#557" not in cov["owed"], "a subject match IS a dispatch, not a debt"
+    assert "#558" not in cov["owed"], "a declared batch act resolves, and clears the debt"
+    assert cov["items_resolved_by_batch"] == 1, cov
+
+    named = "\n".join(leg["problems"])
+    for number in numbers:
+        assert f"#{number} is OPEN" in named, f"#{number} must be OWED\n{named}"
+
+    # WHAT IT MATCHED, VERBATIM, AND WHERE (#556 step 3). The offset is recomputed here from
+    # the fixture's own bytes, so an offset the leg invented cannot pass.
+    for number in (548, 553, 554, 556):
+        _subject, detail = _LIVE_MENTION_COINCIDENCES[number]
+        mention = next(e["mention"] for e in cov["owed_detail"] if e["issue"] == number)
+        token = RUNNER.subject_token_re(f"#{number}").search(detail)
+        assert token is not None, f"the fixture itself must carry the token for #{number}"
+        assert mention["matched_text"] == token.group(0), mention
+        assert mention["char_offset"] == token.start(), (
+            f"#{number}'s offset must point at the occurrence that MATCHED, not at another "
+            f"one in the same row\n{mention}"
+        )
+        assert mention["context"] and mention["context"] in named, (
+            f"#{number}'s context must be PRINTED, so a coincidence is visible without "
+            f"grepping the row\n{named}"
+        )
+
+    for verbatim in ("docs/instruments/kit.md:548", "max 553.73 h", "n=554",
+                     "_LOG_ENABLED = False at :556"):
+        assert verbatim in named, (
+            f"the coincidence {verbatim!r} must appear VERBATIM, or a reader cannot see that "
+            f"the match is not a dispatch\n{named}"
+        )
+
+    # ... and the discriminating control: the SAME seven, with dispatch rows whose details do
+    # NOT carry the token. The debt is identical, because a mention never decided it in
+    # either direction -- before the fix it decided it, which was the defect; after the fix
+    # it may not decide it the other way either.
+    quiet_rows = []
+    n = 700
+    for number in numbers:
+        quiet_rows.append(_stall_row(n, "ruling", f"#{number}", 2, now=now))
+        quiet_rows.append(_stall_row(n + 1, "dispatch", "consolidated-brief", 1.9, now=now,
+                                     detail="covering other units entirely"))
+        n += 2
+    quiet = RUNNER.undispatched_ruling_leg(
+        [_issue(x, "OPEN") for x in numbers], quiet_rows, read_at=read_at, batches={})
+    assert quiet["coverage"]["owed"] == numbers, (
+        f"the debt must not depend on the mention: the same seven are owed with no mention "
+        f"present at all\n{quiet['coverage']}"
+    )
+    assert quiet["coverage"]["items_named_in_body_only"] == 0, quiet["coverage"]
 
 def test_an_ABSENT_batch_declaration_RESOLVES_NOTHING_and_SAYS_SO() -> None:
     """#519 acceptance (2) and #271: a tree that has declared no batch act must report its

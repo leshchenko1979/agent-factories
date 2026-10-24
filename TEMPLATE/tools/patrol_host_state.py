@@ -8699,6 +8699,46 @@ def undispatched_batches_fn(repo: Path | None = None) -> dict:
         return {"batches": {}, "batch_refusal": f"UNREADABLE: {exc}"}
     return {"batches": batches, "batch_refusal": ""}
 
+MENTION_CONTEXT_CHARS = 40
+
+def mention_evidence(detail: str, number: int) -> dict | None:
+    """WHERE a dispatch row's body carries unit `number`: matched text, offset, line, context.
+
+    Built from the SAME token as the match that admitted the row (#433's discipline, applied
+    to the mention class by #556 step 3): a locator computed from a wider or narrower token
+    would point the reader at an occurrence other than the one that was judged. `context` is
+    a bounded window around the hit, whitespace-collapsed, because the COINCIDENCE is what a
+    reader has to see -- `max 553.73 h` is the finding, and the bare `553` is only its
+    symptom. Measured on the live tree (4,207 rows, 2026-10-24): the seven items the leg had
+    been excusing matched `docs/instruments/kit.md:548`, `max 553.73 h`, `n=554` and
+    `_LOG_ENABLED = False at :556` -- four artefacts that have nothing to do with the units
+    whose numbers they happen to contain.
+    """
+    body = str(detail or "")
+    token = subject_token_re(f"#{number}")
+    if token is None:
+        return None
+    found = token.search(body)
+    if found is None:
+        return None
+    start = found.start()
+    lo = max(0, start - MENTION_CONTEXT_CHARS)
+    hi = min(len(body), found.end() + MENTION_CONTEXT_CHARS)
+    return {
+        "matched_text": found.group(0),
+        "char_offset": start,
+        "line": body.count("\n", 0, start) + 1,
+        "context": " ".join(body[lo:hi].split()),
+    }
+
+def mention_evidence_text(mention: dict) -> str:
+    """The ONE rendering of a mention's evidence, so the three print sites cannot drift."""
+    return (
+        f"{mention.get('matched_text')!r} at offset {mention.get('char_offset')} "
+        f"(line {mention.get('line')}) of dispatch n={mention.get('dispatch_n')} "
+        f"({mention.get('dispatch_subject')!r}): {mention.get('context')!r}"
+    )
+
 def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
                             predicate=None, batches: dict,
                             batch_refusal: str = "") -> dict:
@@ -8711,12 +8751,21 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
 
       * `named_in_subject` — a dispatch row's SUBJECT resolves to it: dispatched, and
         outside the reported population entirely.
-      * `named_in_body_only` — a dispatch row's BODY carries the token while no subject
-        does. Printed as the #467 mention class with its own predicate; a mention is not a
-        dispatch, and it is not this leg's debt either.
       * `resolved_by_batch` — a declared batch record names it: EXCUSED, with the batch row
         and the declaration instant printed, because a batch act is a dispatch that happened.
       * `owed_dispatch` — named by nothing and declared by no batch: the PROBLEM.
+
+    A dispatch row's BODY carrying the token is NOT a bucket and NOT an excuse (#556, ruling
+    n=4194). It is an ANNOTATION on the owed entry: `named_in_body_only` counts the mentions
+    in the population and every one is printed BESIDE the item it failed to excuse, with its
+    matched text, character offset and a context window. Until #556 the mention REMOVED the
+    item from `owed`, so this very paragraph's claim -- "a mention is not a dispatch, and it
+    is not this leg's debt either" -- was false in the direction that matters: a bare-digit
+    coincidence (a `file:line`, a `max 553.73 h`, an `n=554`, a `:556`) silently cleared a
+    real debt, and the seven items the live tree carried rendered as `0 owed`. Excusing a
+    debt requires a dispatch row; nothing else does. Requiring the `#NNN` form was REJECTED
+    as the primary remedy: it decides the debt question by token shape, and the next
+    coincidence simply wears a hash.
 
     `batches` is injected so a probe never reads the live declaration, and `batch_refusal`
     carries an unreadable-or-absent declaration's own reason so a population resolved on no
@@ -8780,10 +8829,18 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
             if number in in_subject:
                 continue
             if delivery_subject_matches(detail, f"#{number}"):
+                # The locator is computed from the SAME token that admitted the row, and it
+                # travels with the record: an exemption that cannot show WHAT it matched is
+                # a coincidence the reader can only find by grepping the row afterwards.
+                evidence = mention_evidence(detail, number) or {}
                 in_body_only.setdefault(number, {
                     "issue": number,
                     "dispatch_n": row.get("n"),
                     "dispatch_subject": str(row.get("subject") or ""),
+                    "matched_text": evidence.get("matched_text", ""),
+                    "char_offset": evidence.get("char_offset", -1),
+                    "line": evidence.get("line", -1),
+                    "context": evidence.get("context", ""),
                 })
 
     declared: dict[int, dict] = {}
@@ -8805,35 +8862,55 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
     mentioned: list[dict] = []
     for number in population:
         if number in declared:
-            excused_batch.append(declared[number])
-        elif number in in_body_only:
-            mentioned.append(in_body_only[number])
+            entry = dict(declared[number])
+            if number in in_body_only:
+                # A declared batch is an excuse; the mention riding on it is still printed,
+                # because every exemption shows what it matched (#556 step 3).
+                entry["mention"] = in_body_only[number]
+            excused_batch.append(entry)
         else:
-            owed.append({"issue": number})
+            # A MENTION DOES NOT EXCUSE (#556 step 1): the item is OWED, and the mention
+            # rides BESIDE it as its own class (#556 step 2), so a reader sees "owed, and a
+            # prose mention exists" instead of a zero.
+            owed.append({"issue": number, "mention": in_body_only.get(number)})
+
+    # DERIVED from the owed set, never computed beside it: a mention that is not printed
+    # beside an owed entry cannot exist, so the count and the entries cannot disagree.
+    mentioned = [entry["mention"] for entry in owed if entry.get("mention")]
 
     problems: list[str] = []
     for entry in owed:
-        problems.append(
+        line = (
             f"#{entry['issue']} is OPEN on the board and carries a `ruling` row, and no "
             f"`dispatch` row names it in its subject, and no declared batch resolves it "
-            f"(board read at {read_at}) — the ruling asserts a routing that no row "
-            f"corroborates. Dispatch it, or close it as superseded WITH the evidence"
+            f"(board read at {read_at})"
+        )
+        if entry.get("mention"):
+            line += (
+                f" — and a prose MENTION exists: {mention_evidence_text(entry['mention'])}. "
+                f"A mention is not a dispatch (#467), so it does not clear this debt"
+            )
+        problems.append(
+            f"{line} — the ruling asserts a routing that no row corroborates. Dispatch it, "
+            f"or close it as superseded WITH the evidence"
         )
 
     excused: list[str] = []
     for entry in excused_batch:
-        excused.append(
+        line = (
             f"#{entry['issue']}: resolved by declared batch `{entry['batch']}` "
             f"(ledger n={entry['batch_row']}, declared {entry['declared_at'] or 'undated'}) "
             f"— a batch act is a dispatch that happened, and NO BACKFILL bars the per-item "
             f"row"
         )
-    for entry in mentioned:
-        excused.append(
-            f"#{entry['issue']}: named only inside dispatch n={entry['dispatch_n']}'s BODY "
-            f"({entry['dispatch_subject']!r}) — a MENTION is not a dispatch (#467), and it "
-            f"is not this leg's debt either"
-        )
+        if entry.get("mention"):
+            line += (
+                f" [a prose mention also exists: {mention_evidence_text(entry['mention'])} "
+                f"— it excused nothing, the declaration did]"
+            )
+        excused.append(line)
+    # The mention class no longer appears HERE: a mention is an annotation on an OWED entry
+    # (#556), and printing it as an excuse was the defect.
 
     return {
         "name": "undispatched-ruling",
@@ -8854,6 +8931,7 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
             "population_undispatched": len(population),
             "items_owed_dispatch": len(owed),
             "owed": [entry["issue"] for entry in owed],
+            "owed_detail": owed,
             "items_named_in_body_only": len(mentioned),
             "named_in_body_only": mentioned,
             "items_resolved_by_batch": len(excused_batch),
@@ -8865,7 +8943,9 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
             ),
             "mention_predicate": (
                 "the unit's token appears in a dispatch row's DETAIL while no dispatch row's "
-                "SUBJECT resolves to it — printed, never counted as a dispatch (#467)"
+                "SUBJECT resolves to it — printed BESIDE the owed entry with its matched text "
+                "and character offset, and it EXCUSES NOTHING (#467, #556): only a dispatch "
+                "row clears a debt"
             ),
             "batch_predicate": (
                 "the unit is named in `dispatch_batches` in docs/ledger-invariants.json, the "
@@ -12393,12 +12473,18 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['population_undispatched']} item(s) -- "
                 f"{cov['items_owed_dispatch']} owed a dispatch"
             )
-            for entry in cov.get("owed", []):
-                lines.append(f"    OWED #{entry}")
+            for entry in cov.get("owed_detail") or [{"issue": n} for n in cov.get("owed", [])]:
+                if entry.get("mention"):
+                    lines.append(
+                        f"    OWED #{entry['issue']} — MENTION ONLY: "
+                        f"{mention_evidence_text(entry['mention'])}"
+                    )
+                else:
+                    lines.append(f"    OWED #{entry['issue']}")
             lines.append(
                 f"  named only in a dispatch row's BODY (#467): "
                 f"{cov['items_named_in_body_only']} item(s) -- a mention is not a dispatch, "
-                f"and not this leg's debt either"
+                f"and it EXCUSES NOTHING: every one of them is OWED above"
             )
             lines.append(
                 f"  resolved by a DECLARED batch act: "
