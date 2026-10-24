@@ -396,13 +396,13 @@
     "tests/test_shipped_audit_runs.py": {
       "budget_sec": 1008.75,
       "measured_sec": 252.0,
-      "measured_at": "2026-09-28T00:35Z",
+      "measured_at": "fc957289c6b587b5e65b6742655163b5e6600e2a",
       "margin_x": 4.003
     },
     "tests/test_shipped_mechanism_law.py": {
       "budget_sec": 1.44,
       "measured_sec": 0.18,
-      "measured_at": "2026-09-28T03:20Z",
+      "measured_at": "fc957289c6b587b5e65b6742655163b5e6600e2a",
       "margin_x": 8.0
     },
     "tests/test_questions.py": {
