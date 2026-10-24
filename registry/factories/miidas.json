@@ -130,7 +130,7 @@
         "profile"
       ],
       "text": "Every miidas client slot volume's .git/config (mode 644) carries the template remote with an INLINE ACCOUNT-LEVEL token, and this is now ACCEPTED AS DATED by the owner (2026-09-28T09:18:36Z) \u2014 leshchenko1979/miidas#61 is closed by decision, not by fix, so no rotation is coming. The operational rule therefore stands permanently rather than pending: a peer reclaiming, copying, backing up or decommissioning a miidas slot volume must treat the VOLUME as secret-bearing \u2014 it outlives the container, the credential is readable by the client's own agent and not only by a host operator, and the agent image layer carries it too.",
-      "evidence": "agent/runtime/lib/merge.sh:110 writes TEMPLATE_REPO_URL into the slot's own .git/config on every template sync. Measured 2026-09-27T11:44Z on apps, shape only, no value printed or argv-passed: volume miidas_maple-c23a-data holds .git/config at mode 644 root:root with 1 inline-credential line (host github.com); the miidas-agent:latest IMAGE LAYER holds the same file at mode 644 uid 0 with 1 inline-credential line, dated Sep 25 17:36 - so the exposure is wider than a volume, it propagates to every container built from that image. The two running client-slot containers (miidas-maple-c23a, miidas-trial) returned no .git/config under /home on a maxdepth-5 find, which is INCONCLUSIVE rather than absent: the slot mount path was not established, and their count was not reproduced (see the writer's reply)."
+      "evidence": "agent/runtime/lib/merge.sh:130 gates on TEMPLATE_REPO_URL, writes the slot's own .git/config via `git remote set-url origin` at :141 and `git remote add origin` at :144 (the :144 leg is the #120 fix - a slot that had LOST its remote could previously never regain it, because set-url refuses a missing remote and the `|| true` swallowed the refusal). Substance of the notice stands: the slot volume's .git/config is still written on every template sync and is still secret-bearing. The old citation `merge.sh:110` predates #120 and no longer resolves to that write."
     },
     {
       "id": "miidas-platform-moved-to-agents-old",
@@ -174,7 +174,7 @@
       "affects": [
         "miidas"
       ],
-      "evidence": "leshchenko1979/miidas#114 closed 2026-10-14; manager/slot_heal.py:58 MIN_HEADROOM_BYTES; manager/health.py:149 _self_heal_dead_slots -> :169 heal_dead_slots; docs/adr/0021-dead-slot-liveness-and-bounded-self-heal.md."
+      "evidence": "leshchenko1979/miidas#114 closed 2026-10-14; manager/slot_heal.py:58 MIN_HEADROOM_BYTES (512 MiB floor); manager/health.py:213 `_self_heal_dead_slots`, which calls heal_dead_slots at :233 (imported at :14); docs/adr/0021-dead-slot-liveness-and-bounded-self-heal.md. The old citation `health.py:149 -> :169` predates #119, whose transition-based duty notification added code above those functions. The 512 MiB floor, the 2-attempts-per-6h bound and the process-tree read discipline are all still exactly as the notice states."
     },
     {
       "id": "opencrabs-config-alerts-reach-client-chats",
@@ -220,7 +220,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-23T06:05:08Z",
+  "attested_at": "2026-10-24T06:15:40Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

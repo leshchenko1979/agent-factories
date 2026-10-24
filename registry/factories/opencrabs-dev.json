@@ -74,7 +74,7 @@
       ],
       "since": "2026-09-19",
       "review_by": "2026-12-19",
-      "evidence": "RE-VERIFIED 2026-10-20 against the LIVE deployed sha d4bb3e13 (binary swapped 2026-10-19T16:49:32Z, run 39286953655; e8f2e03d is now prev_sha): notify_policy.rs carries enum {TurnEnd :31, Interrupt :41, Quiet :44}, `Some(\"now\") => Err(` at :206, and src/tests/subagent_notify_test.rs:78-87 asserts resolve_mode_retired_now_is_rejected; d4bb3e13 IS an ancestor of origin/main (git merge-base --is-ancestor rc=0). Supersedes the 2026-10-19 re-verification against e8f2e03d."
+      "evidence": "`src/brain/agent/service/notify_policy.rs:206` reads `Some(\"now\") => Err(`; `src/tests/subagent_notify_test.rs:79,86,87` assert `resolve_mode(Some(\"now\"), ...)` is `Err`. Re-verified 2026-10-24 against origin/main 8df0dad8."
     },
     {
       "id": "commit-signing-live-identity-retired",
@@ -337,7 +337,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-23T06:05:19Z",
+  "attested_at": "2026-10-24T06:29:01Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",

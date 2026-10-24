@@ -74,22 +74,22 @@
       "id": "inferhub-autoswitcher-retired",
       "text": "The auto-switcher is RETIRED and no automation executes a route switch (owner order 2026-09-18). Enforcement is an OPT-IN gate, not a flag: scripts/sync_usage_logs.py runs the switcher leg only under an explicit --run-switch (`if args.run_switch:`, line 904), so --skip-switch is a DEPRECATED NO-OP that suppresses nothing (#152). The one production caller, tools/usage_logs_turn.sh:37, passes --skip-switch --skip-data --skip-scoreboard and no --run-switch, and --run-switch appears nowhere outside tests/test_sync_switch_optin.py. A bare run therefore cannot reach the switch; do not re-arm either path.",
       "severity": "warning",
-      "since": "2026-09-18T22:51:42Z",
+      "since": "2026-10-24T06:14:12Z",
       "affects": [
         "infra-factory"
       ],
-      "evidence": "Measured 2026-10-21: cron row fef19c4f enabled=0, updated_at 2026-09-18T22:51:42Z (ops profile). sync_usage_logs.py:904 gates on `if args.run_switch:`; :665 documents --skip-switch as a DEPRECATED NO-OP. tools/usage_logs_turn.sh:37 passes --skip-switch --skip-data --skip-scoreboard with no --run-switch; --run-switch occurs only in tests/test_sync_switch_optin.py:104/126. skills/inferhub/SKILL.md 1.0.186 carries the retirement law."
+      "evidence": "Cron row `inferhub-auto-switcher` (id `fef19c4f-ab16-442e-8ee9-e041d3d0919b`) reads `enabled=0`, `updated_at 2026-09-18T22:51:42Z`, last run `2026-09-12T07:13:58Z`. The switch leg is unreachable by default: `scripts/sync_usage_logs.py:665` `--skip-switch` is a DEPRECATED NO-OP, `:670` `--run-switch` is the explicit opt-in, and the sole `run_auto_route_switch` call is gated by `if args.run_switch:` at `:904` (issue #152). Re-arming needs an owner ruling."
     },
     {
       "id": "ops-fallback-chain-reordered",
       "text": "The ops-profile client fallback chain is inferhub, openrouter \u2014 two hops, best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub (three hops at or below 27.8 percent ahead of one at 99.1 percent); the chain is now the two strongest. Any lane running on the ops profile reaches a provider through this order. I cannot evidence the instant the four-hop chain was shortened to two \u2014 record the answering instant, do not take a guessed one from me.",
       "severity": "warning",
       "scope": "profile",
-      "since": "2026-09-19T12:21:40Z",
+      "since": "2026-10-24T06:14:12Z",
       "affects": [
         "profile"
       ],
-      "evidence": "`[providers.fallback] providers = [\"inferhub\", \"openrouter\"]` \u2014 /root/.opencrabs/profiles/ops/config.toml:136, /root/.opencrabs/config.toml:203, /root/.opencrabs/profiles/family/config.toml:136 (all read 2026-10-07); ops daemon ps lstart = Thu Oct 15 21:40:33 2026"
+      "evidence": "Live 2026-10-24: `/root/.opencrabs/config.toml:203`, `/root/.opencrabs/profiles/ops/config.toml:138` and `/root/.opencrabs/profiles/family/config.toml:136` each read `providers = [\"inferhub\", \"openrouter\"]` under `[providers.fallback]`. `vision` differs by profile by design: root `[\"inferhub\"]`, ops `[\"minimax\"]`, family `[\"inferhub\"]`."
     },
     {
       "id": "inferhub-root-credential-in-shared-compose",
@@ -129,7 +129,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-23T06:05:28Z",
+  "attested_at": "2026-10-24T06:14:12Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
