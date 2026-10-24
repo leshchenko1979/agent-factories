@@ -2304,6 +2304,98 @@ def _leg_proc(*args: str) -> subprocess.CompletedProcess:
         capture_output=True, text=True, timeout=300,
     )
 
+# #558 (ruling n=4224) — A BASIS SAMPLE MUST BE COMPLETED **AND PASSING**.
+#
+# `_audit_samples` admitted a sample on ONE test: `unknown` falsy. There was no test on
+# `passed`, so a gate that refused structurally -- the `.audit.lock` held, a missing
+# prerequisite, an import error -- completed in a few seconds with `passed: False,
+# unknown: False` and became the BASIS when it was the only sample the report held.
+# `margin_for(4.11) x 4.11 = 17.19 s` against a declared 1008.75 s is a 58.68x collapse,
+# and `tests/test_shipped_audit_runs.py:541-543` runs the shipped audit with
+# `timeout=wall_sec` read from that same entry -- so the collapsed wall would kill the
+# gate's own child every round, permanently, with the derivation law's blessing behind it.
+#
+# THE SECOND ARM IS MANDATORY, and it is the arm that makes this a gate rather than a
+# slogan: a check that only proves the refusal is EXCLUDED cannot tell the fix from a tool
+# that derives nothing ever. So the same gate, given one PASSING sample, must derive
+# normally from it -- and the derived wall must be the sample's, not the refusal's.
+
+def probe_a_refused_sample_is_not_a_basis_and_a_passing_one_still_derives() -> None:
+    """Two arms over one synthetic history: refusal -> NOT DERIVABLE, pass -> derives."""
+    leg = REPO / "tools" / "gate_budget_rederive.py"
+    if not leg.is_file():
+        print("  SKIP  no tools/gate_budget_rederive.py in this tree — the re-derivation leg "
+              "is this factory's standing duty, not yet part of the shipped kit")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, head = _two_commit_repo(root)
+        if base is None or head is None:
+            check("the #558 probe repository could be built and committed", False,
+                  f"base={base} head={head} — this leg could not judge")
+            return
+        # The basis is taken at `base` while HEAD has moved on, so the entry is STALE and
+        # therefore IN the containment population -- the only place a derivation happens.
+        manifest = _manifest(root, {"tests/test_moved.py": _basis(base)})
+
+        def report(*, passed: bool, unknown: bool, duration: float) -> Path:
+            path = root / f"audit-{'pass' if passed else 'refused'}.json"
+            path.write_text(json.dumps({"gates": [{
+                "gate_key": "tests/test_moved.py", "cmd": "synthetic",
+                "passed": passed, "unknown": unknown, "duration_sec": duration,
+                "exit_code": 0 if passed else 1,
+            }]}), encoding="utf-8")
+            return path
+
+        # ARM 1 — the refusal. `passed: False, unknown: False` is the structural-refusal
+        # shape: it completed, so it is not UNKNOWN, and it must still not be a sample.
+        refused = report(passed=False, unknown=False, duration=4.11)
+        done = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                         "--audit-report", str(refused))
+        check("a refused sample leaves the leg exiting 0 (NOT DERIVABLE is a verdict)",
+              done.returncode == 0, f"rc={done.returncode}: {done.stdout[-300:]}")
+        check("the refused gate is NAMED not-derivable, not silently skipped",
+              "[NOT DERIVABLE] tests/test_moved.py" in done.stdout, done.stdout[:600])
+        # The population count is what a reader trusts, so the arm asserts the COUNT: a
+        # refusal that reached `samples` would read "1 passing sample(s)", and the number
+        # would then become the wall through `margin_for(4.11) x 4.11`.
+        check("the refused run is counted as ZERO samples, and the failure is NAMED in the count",
+              "0 passing sample(s)" in done.stdout
+              and "1 gate(s) completed and FAILED" in done.stdout, done.stdout[:600])
+
+        # ... and the same refusal through `--apply` must be HELD, never written.
+        applied = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                            "--audit-report", str(refused), "--apply")
+        check("--apply over a refused-only sample derives NOTHING",
+              "[HELD] tests/test_moved.py" in applied.stdout, applied.stdout[:600])
+        written = json.loads(manifest.read_text(encoding="utf-8"))["gates"]["tests/test_moved.py"]
+        check("the manifest is UNCHANGED by a refused-only apply — the 58.68x collapse is blocked",
+              written["budget_sec"] == 4.0 and written["measured_sec"] == 1.0,
+              json.dumps(written))
+
+        # ARM 2 — THE CONTROL THAT MAKES IT A GATE: one PASSING sample still derives.
+        passing = report(passed=True, unknown=False, duration=30.0)
+        derived = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                            "--audit-report", str(passing), "--apply")
+        check("a PASSING sample still derives — the fix is not a tool that derives nothing",
+              "APPLIED 1" in derived.stdout, derived.stdout[:600])
+        written = json.loads(manifest.read_text(encoding="utf-8"))["gates"]["tests/test_moved.py"]
+        check("the derived wall comes from the PASSING sample, not the refusal",
+              written["measured_sec"] == 30.0 and written["budget_sec"] > 30.0,
+              json.dumps(written))
+        check("the derivation records the revision it was measured at",
+              written["measured_at"] == head, json.dumps(written))
+
+        # THE TRIGGER IS UNTOUCHED (#307): an UNKNOWN gate is still not a sample, and is
+        # still the exhausted-budget trigger. A fix that collapsed the two would regress it.
+        unknown = report(passed=False, unknown=True, duration=1008.75)
+        kept = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                         "--audit-report", str(unknown))
+        check("an UNKNOWN gate still reads EXHAUSTED and never becomes a sample",
+              "[EXHAUSTED] tests/test_moved.py" in kept.stdout
+              and "[NOT DERIVABLE] tests/test_moved.py" not in kept.stdout,
+              kept.stdout[:600])
+
 def probe_the_rederivation_leg_prints_and_bites() -> None:
     """Two-sided over one synthetic history: the moved base is reported, the held one is not."""
     leg = REPO / "tools" / "gate_budget_rederive.py"
@@ -3040,6 +3132,7 @@ def main() -> int:
     probe_the_live_default_states_a_derivation_that_holds()
 
     print("  synthetic probes — #269: the re-derivation leg bites, and its population is printed")
+    probe_a_refused_sample_is_not_a_basis_and_a_passing_one_still_derives()
     probe_the_rederivation_leg_prints_and_bites()
     probe_the_live_rederivation_leg_is_non_vacuous()
     print("  synthetic probes — #442: the not-examined population is rendered once")

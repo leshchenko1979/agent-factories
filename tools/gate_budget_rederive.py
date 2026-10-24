@@ -97,8 +97,9 @@ class Population:
         return tuple(sorted({s.key for s in self.stale} | set(self.exhausted)))
 
 
-def _audit_samples(report_path: Path) -> tuple[dict, tuple, str]:
-    """The report's COMPLETED samples, the keys it reported UNKNOWN, and the report's note.
+def _audit_samples(report_path: Path) -> tuple[dict, tuple, tuple, str]:
+    """The report's PASSING samples, the keys it reported UNKNOWN, the keys whose every
+    completed sample FAILED, and the report's note.
 
     TWO populations, returned SEPARATELY, and the separation is the whole point (#307). A
     COMPLETED sample is the only thing a basis may be derived from: it is a MEASUREMENT. An
@@ -112,15 +113,31 @@ def _audit_samples(report_path: Path) -> tuple[dict, tuple, str]:
     exactly the #307 defect: the trigger was computed from the surviving samples, so the only
     gates that could satisfy it had already been filtered out and the population was empty
     for every input, forever.
+
+    A COMPLETED SAMPLE MUST ALSO HAVE PASSED (#558, ruling n=4224). `unknown` alone is not
+    enough: a gate that refuses structurally -- the `.audit.lock` held, a missing
+    prerequisite, an import error -- COMPLETES, in a few seconds, with `passed: False` and
+    `unknown: False`. Its duration measures how fast the gate REFUSED, never how long the
+    work takes, and admitting it as a basis is how `margin_for(4.11) x 4.11 = 17.19 s`
+    becomes the wall of a gate that needs 1008.75 s -- a 58.68x collapse that then kills the
+    gate's own child every round, permanently. The field was present and unread: the same
+    shape as #553, one instrument over.
+
+    A failed-only gate is handed on SEPARATELY rather than dropped, so the leg can name it
+    NOT DERIVABLE. A silent skip and a refusal look identical in a population count, and
+    the count is what a reader trusts.
     """
     if not report_path.is_file():
-        return {}, (), f"no audit report at {report_path} — no fresh samples, so nothing can be applied"
+        return ({}, (), (),
+                f"no audit report at {report_path} — no fresh samples, so nothing can be applied")
     try:
         payload = json.loads(report_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        return {}, (), f"audit report at {report_path} is unreadable ({exc}) — UNKNOWN, never clean"
+        return ({}, (), (),
+                f"audit report at {report_path} is unreadable ({exc}) — UNKNOWN, never clean")
     samples: dict[str, float] = {}
     exhausted: list[str] = []
+    failed: list[str] = []
     for gate in payload.get("gates") or []:
         key = gate.get("gate_key")
         duration = gate.get("duration_sec")
@@ -131,11 +148,19 @@ def _audit_samples(report_path: Path) -> tuple[dict, tuple, str]:
             # gate's declared budget was EXHAUSTED, which is the third trigger.
             exhausted.append(key)
             continue
+        if not gate.get("passed"):
+            # COMPLETED BUT FAILED: a structural refusal, and its duration is the REFUSAL's
+            # (#558). Never a basis -- named separately so the leg can print it.
+            failed.append(key)
+            continue
         samples[key] = max(samples.get(key, 0.0), float(duration))
     return (
         samples,
         tuple(sorted(set(exhausted))),
-        f"{len(samples)} completed sample(s) read from {report_path.name}",
+        tuple(sorted(set(failed))),
+        f"{len(samples)} passing sample(s) read from {report_path.name}"
+        + (f"; {len(set(failed))} gate(s) completed and FAILED, so they carry no basis"
+           if failed else ""),
     )
 
 
@@ -184,10 +209,19 @@ def containment_population(
     examined = len(entries) - len(not_examined)
 
     exhausted: tuple = ()
+    failed_only: tuple = ()
     samples: dict = {}
     sample_note = "no audit report given — the exhausted-budget trigger was not read"
     if audit_report is not None:
-        samples, exhausted_keys, sample_note = _audit_samples(Path(audit_report))
+        samples, exhausted_keys, failed_keys, sample_note = _audit_samples(Path(audit_report))
+        # A gate whose only completed samples FAILED is NOT DERIVABLE, and it is named by
+        # key rather than skipped (#558). Restricted to the POPULATION: a report carries a
+        # record for every gate it ran, so naming every red gate in the suite would bury the
+        # one entry this leg was asked about.
+        failed_only = tuple(
+            key for key in failed_keys
+            if key in entries and key in {s.key for s in stale}
+        )
         # The trigger is the audit's OWN declaration that a declared entry exhausted its
         # budget -- the `unknown` flag -- never a comparison against the cap. It is read from
         # the UNKNOWN population, not from the completed samples: a completed sample finished
@@ -210,7 +244,8 @@ def containment_population(
         exhausted=exhausted,
         not_examined=not_examined,
         note=note,
-        extras={"samples": samples, "sample_note": sample_note, "manifest": str(path)},
+        extras={"samples": samples, "sample_note": sample_note, "manifest": str(path),
+                "failed_only": failed_only},
     )
 
 
@@ -273,7 +308,14 @@ def apply_rederivation(
     for key in pop.keys:
         sample = samples.get(key)
         if not isinstance(sample, (int, float)) or sample <= 0:
-            if key in pop.exhausted:
+            if key in (pop.extras.get("failed_only") or ()):
+                # Every completed sample FAILED, so nothing here is a measurement of the
+                # work: the durations measure how fast the gate refused (#558).
+                held.append(
+                    (key, "NOT DERIVABLE — every completed sample FAILED, and a refused run "
+                          "measures how fast the gate refused, never how long the work takes")
+                )
+            elif key in pop.exhausted:
                 # The trigger fired: this gate's declared budget was exhausted, so the
                 # audit's duration is a LOWER BOUND and may never seed a re-derivation.
                 # It is HELD and NAMED -- the leg refuses rather than carry a clipped number.
@@ -356,6 +398,14 @@ def render(pop: Population) -> str:
     # (#442). The FIELD `pop.not_examined` still carries it for machine readers.
     if pop.applied:
         lines.append(f"  APPLIED {len(pop.applied)}: {', '.join(pop.applied)}")
+    held_keys = {key for key, _why in pop.held}
+    for key in pop.extras.get("failed_only") or ():
+        if key in held_keys:
+            continue  # `--apply` already printed this key with its reason
+        lines.append(
+            f"    [NOT DERIVABLE] {key} — every completed sample FAILED, and a refused run "
+            f"measures how fast the gate refused, never how long the work takes"
+        )
     for key, why in pop.held:
         lines.append(f"    [HELD] {key} — {why}")
     if pop.extras.get("sample_note"):
@@ -401,6 +451,7 @@ def main(argv: list[str] | None = None) -> int:
                     "stale": [{"key": s.key, "legs": list(s.legs), "detail": s.detail} for s in pop.stale],
                     "exhausted": list(pop.exhausted),
                     "not_examined": list(pop.not_examined),
+                    "failed_only": list(pop.extras.get("failed_only") or ()),
                     "applied": list(pop.applied),
                     "held": [{"key": k, "why": w} for k, w in pop.held],
                     "note": pop.note,
