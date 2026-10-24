@@ -89,79 +89,118 @@ LOCAL_FIXES: tuple[tuple[str, str], ...] = (
         "the instrument's-home comment -- the shipped copy de-names the donor tool, whose "
         "home this factory does not carry (#85)",
     ),
+    (
+        r"^import shutil$",
+        "the shutil import -- needed only by the executing copy's own `8b3` selftest, which "
+        "removes its temp build dir; the shipped home carries no such test (block 4)",
+    ),
 )
 
 DECLARED: tuple[tuple[str, str], ...] = PARAMETER_LAYER + LOCAL_FIXES
 
 # ---------------------------------------------------------------------------
-# THE DECLARED BLOCKS -- an adoption OWED, expressed as a REPLACEMENT hunk.
+# THE DECLARED BLOCKS -- deliberate VARIANT regions, one pair of anchors per SIDE.
 #
-# A per-line regex CANNOT declare this honestly, and saying so is the point: a
-# replacement hunk carries generic lines (`try:`, `return None, reason`, the
-# `with open(target, ...)` pair) whose text also appears elsewhere in BOTH homes, so
-# a regex matching them would wave through real drift anywhere in a 6,500-line file.
-# MEASURED 2026-10-22: the #520 closure's residual lines need one declaration each,
-# and a third of them are generic -- the declaration would have been wider than the
-# defect it was meant to bound.
+# A per-line regex CANNOT declare these honestly, and saying so is the point: a
+# replacement hunk carries generic lines (`try:`, `else:`, `continue:`, `import shutil`,
+# a bare blank) whose text also appears elsewhere in BOTH homes, so a regex matching
+# them would wave through real drift anywhere in a 6,500-line file. MEASURED 2026-10-22
+# and again 2026-10-24: the residual needs a REGION per divergence, and a third of its
+# lines are generic -- the declaration would have been wider than the defect it bounds.
 #
-# A block is named by TWO anchors that must BOTH be present, one pair per SIDE,
-# because a replacement REMOVES lines from one home while ADDING lines to the other
-# and both halves are residual. Only residual lines INSIDE a resolved region are
-# declared: a line outside every region is still drift, and a block whose anchors
-# have moved resolves to nothing -- so the declaration stops applying and the gate
-# reds rather than silently widening. `controls()` proves the outside-the-block case
-# on every run.
+# A block is named by TWO anchors that must BOTH be present, one pair per SIDE, because
+# a replacement REMOVES lines from one home while ADDING lines to the other and both
+# halves are residual. Only residual lines INSIDE a resolved region are declared: a line
+# outside every region is still drift, and a block whose anchors have moved resolves to
+# nothing -- so the declaration stops applying and the gate reds rather than silently
+# widening. `controls()` proves the outside-the-block case on every run.
 #
-# A block is a REGISTER OF A GAP, never a licence to keep it: each entry states what
-# is owed and where. The label is printed with the verdict so the debt is readable
-# from the gate's own output, not only from this source.
+# WHAT A BLOCK IS *NOT*: it is not a register of a debt. These blocks were written on
+# 2026-10-22 as "#520 ... ADOPTION OWED on #188" while the executing copy had, in fact,
+# already adopted all three legs -- 67 minutes after the declaring commit, as its own
+# variant. The debt was PAID and the declarations still asserted it, which is the same
+# class of defect as the gate going red: a claim nobody re-read. Each entry below now
+# states what the divergence IS, dated and measured, so a reader cannot mistake a paid
+# adoption for an owed one.
 # ---------------------------------------------------------------------------
 LOCAL_BLOCKS: tuple[dict, ...] = (
     {
         "label": (
-            "#520's dependency-manifest closure, landed on the TEMPLATE home only -- the "
-            "executing copy (opencrabs-skill) does not carry it yet, so a member running "
-            "THAT copy still gets no package.json and the pre-#520 bare "
-            "ERR_MODULE_NOT_FOUND. ADOPTION OWED on #188; this entry registers the gap, "
-            "it does not excuse it."
+            "#520's dependency-manifest CONSTANT -- ADOPTED IN A VARIANT on the executing "
+            "copy (measured 2026-10-24). Both homes carry the constant beside the renderer; "
+            "the executing copy spells the filename PROG-derived (`PROG + "
+            "'-render.package.json'`) where the template spells it literally, and its "
+            "rationale says 'adopted here under #50'. Declared so the wording difference "
+            "is bounded, not so a missing constant would pass."
         ),
-        # The constant and its rationale: ADDED on the template side, absent entirely on
-        # the executing side, so that half declares no region.
         "template": (
             r"^# The renderer's DEPENDENCY MANIFEST, shipped BESIDE it",
             r'^\s+"questions-render\.package\.json"\)$',
         ),
-        "executing": None,
+        "executing": (
+            r"^# The renderer's DEPENDENCY MANIFEST, shipped BESIDE it",
+            r'^\s+PROG \+ "-render\.package\.json"\)$',
+        ),
     },
     {
         "label": (
-            "#520's render_page() closure -- the renderer copy became a two-source loop so "
-            "the manifest lands beside it. REPLACEMENT: the executing copy still carries the "
-            "single-source block. ADOPTION OWED on #188."
+            "#520's TWO-SOURCE placement loop -- ADOPTED IN A VARIANT. Both homes loop over "
+            "(renderer, manifest) and place both beside each other; the executing copy "
+            "re-wrapped the rationale comment to its own width. Its loop also subsumes the "
+            "template's pre-loop `if not os.path.isfile(RENDER_SRC)` guard, which is why "
+            "that guard is residual on the template side alone (block 5)."
         ),
         "template": (
             r"^\s+# The renderer AND its dependency manifest land beside each other",
             r'^\s+return None, "%s \(%s\)" % \(failed, exc\.__class__\.__name__\)$',
         ),
         "executing": (
-            r'^\s+target = os\.path\.join\(directory, "render\.mjs"\)$',
-            r'^\s+return None, "renderer copy failed \(%s\)" % exc\.__class__\.__name__$',
+            r"^\s+# The renderer AND its dependency manifest land beside each other \(#520\):$",
+            r'^\s+return None, "%s \(%s\)" % \(failed, exc\.__class__\.__name__\)$',
         ),
     },
     {
         "label": (
-            "#520's discoverable remedy -- a renderer fault caused by ERR_MODULE_NOT_FOUND "
-            "now names the directory to run `npm install` in. REPLACEMENT: the executing copy "
-            "returns the bare rc string. ADOPTION OWED on #188."
+            "#520's DISCOVERABLE REMEDY -- ADOPTED IN A VARIANT. Both sides append an "
+            "`npm install in <build dir>` remedy to an ERR_MODULE_NOT_FOUND reason; the "
+            "executing copy re-wrapped the comment and says READER where the template says "
+            "MEMBER. The remedy itself is identical on both homes."
         ),
         "template": (
-            r'^\s+reason = "renderer rc=%d%s" % \(proc\.returncode,$',
+            r"^\s+# A DECLARATION A MEMBER CANNOT DISCOVER IS HALF A REMEDY",
             r"^\s+return None, reason$",
         ),
         "executing": (
-            r'^\s+return None, "renderer rc=%d%s" % \(proc\.returncode,$',
-            r'^\s+\(": " \+ cause\.strip\(\)\) if cause else ""\)$',
+            r"^\s+# A DECLARATION A READER CANNOT DISCOVER IS HALF A REMEDY",
+            r"^\s+return None, reason$",
         ),
+    },
+    {
+        "label": (
+            "the executing copy's OWN `8b3` SELFTEST -- 100 lines the shipped home does not "
+            "carry at all: four legs over the dependency manifest, each naming the mutant it "
+            "kills. An ADDITION on one side only. Declared so the gate can tell a deliberate "
+            "executing-only test battery from drift; the region ends at the `8c` heading "
+            "that both homes share, so it cannot grow without a new declaration."
+        ),
+        "template": None,
+        "executing": (
+            r"^\s+# -- 8b3\. THE RENDERER'S DEPENDENCY MANIFEST",
+            r"^\s+# -- 8c\. C5: amend",
+        ),
+    },
+    {
+        "label": (
+            "the template's pre-#520 SINGLE-SOURCE guard -- a one-sided residual on the "
+            "TEMPLATE side: it tests RENDER_SRC before the copy loop, a check the executing "
+            "copy's two-source loop now performs per source. Declared as the deletion the "
+            "adoption made, not as drift."
+        ),
+        "template": (
+            r"^\s+if not os\.path\.isfile\(RENDER_SRC\):$",
+            r'^\s+return None, "renderer source missing"$',
+        ),
+        "executing": None,
     },
 )
 
@@ -374,10 +413,10 @@ def main() -> int:
         f"({len(PARAMETER_LAYER)} parameter entries + {len(LOCAL_FIXES)} named local fix"
         f" + {len(LOCAL_BLOCKS)} declared block(s))"
     )
-    # The debt is printed, not merely excused: a block that reads clean and says
-    # nothing is how an owed adoption becomes invisible.
+    # Each region is printed, not merely excused: a block that reads clean and says
+    # nothing is how a real divergence becomes invisible.
     for entry in LOCAL_BLOCKS:
-        print(f"     DECLARED BLOCK, adoption owed: {entry['label']}")
+        print(f"     DECLARED BLOCK (variant region): {entry['label']}")
     if not diff:
         print("     (the homes are byte-identical -- an empty difference is a subset)")
     return 0

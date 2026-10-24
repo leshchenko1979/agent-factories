@@ -12106,6 +12106,44 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     lines.append(f"  {leg['reason']}")
             lines.append(f"  read at {cov.get('read_at')}")
 
+        elif leg["name"] == "questions-homes":
+            # `.get` throughout, for the reason the kit-drift branch below states: a leg whose
+            # coverage is PARTIAL -- a NOT RUN, or a leg injected for a probe -- must render as
+            # NOT RUN rather than crash the renderer on the very path that exists to REPORT the
+            # absence. An absence is a NOT RUN, never a traceback.
+            if cov.get("in_step"):
+                lines.append(
+                    f"  in step: {cov.get('executing_home') or 'the executing home'} "
+                    f"({cov.get('executing_bytes')} B) matches "
+                    f"{cov.get('template_home') or 'the template home'} "
+                    f"({cov.get('template_bytes')} B) over {cov.get('population')} differing "
+                    f"line(s), confined to the declared layer "
+                    f"({cov.get('declared_blocks')} declared block(s) + the parameter layer)"
+                )
+            elif cov.get("stale"):
+                lines.append(
+                    f"  STALE EXECUTING HOME: {cov.get('executing_home') or 'the executing copy'}"
+                    f" has diverged OUTSIDE the declared layer from "
+                    f"{cov.get('template_home') or 'the template home'} -- a template-only "
+                    f"landing left it behind, and nothing else was watching (#530)"
+                )
+                for problem in cov.get("diagnosis") or []:
+                    lines.append(f"    {problem}")
+                lines.append(
+                    "  reported, not enforced: the executing copy is a BOX surface, so the lane "
+                    "that lands the change adopts it, and this leg's job is to make a silent "
+                    "miss visible rather than to refuse the commit that fixes it"
+                )
+            elif cov.get("not_resolvable"):
+                lines.append(
+                    f"  NOT RUN: the executing copy is not resolvable on this host "
+                    f"({cov.get('reason') or 'no reason given'}) -- the template home was never "
+                    f"compared against an adoption, which is not a clean verdict"
+                )
+            else:
+                lines.append(f"  NOT RUN: {cov.get('reason', 'no reason recorded')}")
+            lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
+
         elif leg["name"] == "kit-drift":
             # A leg that did NOT RUN carries a coverage of {reason, read_at} and no
             # totals or members. Reading those unconditionally crashes the renderer on
@@ -12968,6 +13006,199 @@ def live_pacemaker_presence_leg(rows: list[dict], homes_read: list[str],
         prefixes=prefixes, homes_read=homes_read, unreached=unreached,
     )
 
+# ---- the questions-homes leg (#530) --------------------------------------------------
+QUESTIONS_HOMES_GATE = "tests/test_kit_questions_homes.py"
+QUESTIONS_HOMES_TIMEOUT_SEC = 900
+
+_QUESTIONS_POPULATION_RE = re.compile(r"population\s*:\s*(\d+)\s+differing line")
+_QUESTIONS_TEMPLATE_RE = re.compile(r"template home\s*:\s*(\S+)\s+\((\d+)\s+B\)")
+_QUESTIONS_EXECUTING_RE = re.compile(r"executing home\s*:\s*(.+?)\s+\((\d+)\s+B\)")
+_QUESTIONS_NOT_RUN_RE = re.compile(r"NOT RUN -- the executing copy is not resolvable")
+_QUESTIONS_OK_RE = re.compile(r"^OK: the difference is confined to the declared layer", re.MULTILINE)
+_QUESTIONS_DECLARED_RE = re.compile(r"(\d+)\s+declared block\(s\)")
+_QUESTIONS_DIAGNOSIS_RE = re.compile(r"^(?:FAIL|questions-homes gate ERROR):")
+
+
+def _questions_homes_facts(stdout: str, rc: int) -> tuple[str, dict]:
+    """Classify the gate's own output. `(verdict, facts)`, and `rc` alone is NEVER the verdict.
+
+    THE ZERO THAT IS NOT A PASS IS THE WHOLE POINT OF THIS LEG (#530). The gate exits **0**
+    on TWO different outcomes: the difference is confined to the declared layer (a real
+    measurement), and `NOT RUN -- the executing copy is not resolvable` (nothing examined,
+    which it says in so many words is "not a clean verdict"). A leg that read `rc == 0` as
+    "in step" would report a clean sweep over no population -- the confident zero inverted,
+    which is the defect this leg exists to catch one surface over. So the verdict is READ
+    from the gate's own words and an output that carries NEITHER marker is UNREADABLE rather
+    than clean: a gate whose output shape changed must red this leg, never silently pass it.
+    """
+    facts: dict = {}
+    population = _QUESTIONS_POPULATION_RE.search(stdout)
+    if population:
+        facts["population"] = int(population.group(1))
+    template = _QUESTIONS_TEMPLATE_RE.search(stdout)
+    if template:
+        facts["template_home"] = template.group(1)
+        facts["template_bytes"] = int(template.group(2))
+    executing = _QUESTIONS_EXECUTING_RE.search(stdout)
+    if executing:
+        facts["executing_home"] = executing.group(1)
+        facts["executing_bytes"] = int(executing.group(2))
+    declared = _QUESTIONS_DECLARED_RE.search(stdout)
+    if declared:
+        facts["declared_blocks"] = int(declared.group(1))
+    if _QUESTIONS_NOT_RUN_RE.search(stdout):
+        for line in stdout.splitlines():
+            if "examined NOTHING:" in line:
+                facts["reason"] = line.split("examined NOTHING:", 1)[1].strip()
+                break
+        return "NOT RUN", facts
+    if rc != 0:
+        facts["diagnosis"] = [
+            line.strip() for line in stdout.splitlines() if _QUESTIONS_DIAGNOSIS_RE.match(line)
+        ][:3]
+        return "STALE", facts
+    if _QUESTIONS_OK_RE.search(stdout) and "population" in facts:
+        return "IN STEP", facts
+    return "UNREADABLE", facts
+
+
+def questions_homes_leg(
+    *,
+    repo: Path = REPO,
+    gate: str = QUESTIONS_HOMES_GATE,
+    timeout_sec: int = QUESTIONS_HOMES_TIMEOUT_SEC,
+    read_at: str = "",
+) -> dict:
+    """Whether the EXECUTING questions home is in step with the SHIPPED template home (#530).
+
+    A REPORT, not a verdict on the executing copy, and the distinction is the ruling. #530
+    was filed because NOTHING ran `tests/test_kit_questions_homes.py` at landing time, so a
+    lane that landed a template-only change left the executing home behind SILENTLY -- the
+    adoption is a separate act, and no surface owned noticing that it never happened. The
+    remedy HQ ruled is this leg, NOT a floor gate: a gate that reads another home's surface
+    cannot be repaired by the lane it refuses, so putting it on the floor turns a finding
+    into a lockout for the very commit that would fix it.
+
+    So a STALE executing home is a FINDING in `coverage`, printed with the gate's own
+    diagnosis, and it does NOT move this factory's exit code -- exactly the `kit-drift`
+    contract one leg up, and for the same reason: our verdict must not be a function of a
+    surface another lane owns the repair of.
+
+    `problems` carries ONLY the examined-nothing cases, which are THIS factory's defects:
+    the gate cannot be found WHERE ITS SUBJECT EXISTS, cannot be run, times out, or answers
+    in a shape this leg cannot read. A home carrying no `TEMPLATE/tools/questions` has no
+    subject at all, so a missing gate there is NOT APPLICABLE -- a NOT RUN carrying its
+    reason and NO problem -- because this leg ships through the twin law into factories the
+    gate itself was never shipped to, and redding them for it would be the lockout the
+    ruling withdrew. And an unresolvable executing copy is a problem too, because on THIS box
+    the census resolving nothing means the comparison never happened -- a member factory
+    that genuinely has no executing tree reads the gate's own NOT RUN, printed with its
+    reason, and never as "in step".
+
+    The gate is RUN rather than re-implemented: it is the one instrument that knows what a
+    declared block is, and a second copy of that predicate here would be a second thing to
+    keep true. Its `--help`-less contract is therefore the parsed lines above, and a change
+    to that output shape reds this leg as UNREADABLE rather than passing it.
+    """
+    target = repo / gate
+    problems: list[str] = []
+    coverage: dict = {
+        "gate": gate,
+        "repo": str(repo),
+        "read_at": read_at,
+        "timeout_sec": timeout_sec,
+    }
+    shipped_home = repo / "TEMPLATE" / "tools" / "questions"
+    if not target.is_file():
+        if not shipped_home.is_dir():
+            # NOT APPLICABLE, NOT A DEFECT (#530, measured 2026-10-24). This leg SHIPS to every
+            # bootstrapped factory through the twin law; its gate does not. The gate compares a
+            # SHIPPED template home against the executing adoption, so a tree that carries no
+            # `TEMPLATE/tools/questions` has nothing to compare. Redding such a tree would be the
+            # lockout the ruling withdrew -- a leg refusing a home for an instrument the home was
+            # never shipped and cannot repair by any act of its own. Applicability is therefore
+            # read from the gate's OWN SUBJECT, never assumed from the leg's own presence.
+            coverage.update({
+                "reason": (
+                    f"this home carries no shipped template home ({shipped_home} is absent), so "
+                    f"{gate} has no subject here -- a meta-factory instrument that was never "
+                    f"shipped to this tree, and its absence is not a defect this home can repair"
+                ),
+                "in_step": False,
+                "not_applicable": True,
+            })
+            return {"name": "questions-homes", "status": "NOT RUN", "problems": [],
+                    "excused": [], "coverage": coverage}
+        problems.append(
+            f"the questions-homes gate {gate} is missing from {repo} while {shipped_home} IS "
+            f"present -- the subject exists and nothing is watching it, so this leg's verdict "
+            f"is UNKNOWN and NOT clean"
+        )
+        coverage.update({"reason": f"{gate} is not a file in {repo}", "in_step": False})
+        return {"name": "questions-homes", "status": "FAILED", "problems": problems,
+                "excused": [], "coverage": coverage}
+
+    started = dt.datetime.now(dt.timezone.utc)
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(target)],
+            cwd=str(repo), capture_output=True, text=True, timeout=timeout_sec,
+        )
+    except subprocess.TimeoutExpired:
+        problems.append(
+            f"the questions-homes gate did not finish inside {timeout_sec}s -- the executing "
+            f"home was never compared, so this leg examined NOTHING and says so rather than "
+            f"reporting the absence of a finding as a clean sweep"
+        )
+        coverage.update({"reason": f"timed out after {timeout_sec}s", "in_step": False})
+        return {"name": "questions-homes", "status": "NOT RUN", "problems": problems,
+                "excused": [], "coverage": coverage}
+    except (OSError, subprocess.SubprocessError) as exc:
+        problems.append(
+            f"the questions-homes gate could not be run: {type(exc).__name__}: {exc} -- the "
+            f"executing home was never examined"
+        )
+        coverage.update({"reason": f"{type(exc).__name__}: {exc}", "in_step": False})
+        return {"name": "questions-homes", "status": "FAILED", "problems": problems,
+                "excused": [], "coverage": coverage}
+
+    elapsed = (dt.datetime.now(dt.timezone.utc) - started).total_seconds()
+    stdout = proc.stdout or ""
+    verdict, facts = _questions_homes_facts(stdout, proc.returncode)
+    coverage.update(facts)
+    coverage["gate_rc"] = proc.returncode
+    coverage["duration_sec"] = round(elapsed, 2)
+    coverage["verdict"] = verdict
+
+    if verdict == "UNREADABLE":
+        tail = " | ".join((stdout or (proc.stderr or "")).strip().splitlines()[-2:])
+        problems.append(
+            f"the questions-homes gate exited {proc.returncode} without printing either an "
+            f"'OK:' verdict or a 'NOT RUN' marker, so this leg cannot tell a clean comparison "
+            f"from an unmeasured one -- treated as UNKNOWN, never as in step. Last output: "
+            f"{tail or '<empty>'}"
+        )
+        coverage["in_step"] = False
+        return {"name": "questions-homes", "status": "FAILED", "problems": problems,
+                "excused": [], "coverage": coverage}
+
+    if verdict == "NOT RUN":
+        problems.append(
+            "the questions-homes gate examined NOTHING: the executing copy is not resolvable "
+            f"on this host ({coverage.get('reason') or 'no reason given'}), so the template "
+            "home was never compared against an adoption"
+        )
+        coverage["in_step"] = False
+        coverage["not_resolvable"] = True
+        return {"name": "questions-homes", "status": "NOT RUN", "problems": problems,
+                "excused": [], "coverage": coverage}
+
+    coverage["in_step"] = verdict == "IN STEP"
+    coverage["stale"] = verdict == "STALE"
+    return {"name": "questions-homes", "status": "ASSERTED", "problems": [],
+            "excused": [], "coverage": coverage}
+
+
 def leg_guard(name: str, build, read_at: str) -> dict:
     """Build ONE leg, and CONTAIN a raise so it cannot take the round down (#501).
 
@@ -13066,6 +13297,12 @@ def main(
     driverless_activity_fn=None,
     lane_names_fn=None,
     shared_tree_fn=None,
+    # #530: the questions-homes leg's gate, repo and timeout, injected for the tenth time and
+    # the same reason -- a probe must be able to drive an IN-STEP and a STALE answer from a
+    # hermetic stub gate, because a probe whose verdict came from this box's live executing
+    # home would be measuring whichever adoption happened to have been made, and could not
+    # prove the STALE arm fires at all.
+    questions_homes_fn=None,
     out=print,
     err=print,
 ) -> int:
@@ -13326,6 +13563,14 @@ def main(
         ), read_at),
         leg_guard("kit-drift", lambda: kit_drift_leg(manifest_path=kit_manifest, fleet_path=fleet_manifest,
                       read_at=read_at), read_at),
+        # A REPORT, deliberately: the executing home is a BOX surface, so a stale one is a
+        # finding in `coverage`, never this factory's exit code (#530, ruled -- patrol, not
+        # floor). The gate is run rather than re-implemented, and its own "NOT RUN" arm is
+        # read as examined-nothing rather than as a clean comparison.
+        leg_guard("questions-homes", lambda: questions_homes_leg(
+            read_at=read_at,
+            **(questions_homes_fn or (lambda: {}))(),
+        ), read_at),
         leg_guard("publish-freshness", lambda: (publish_fn or publish_freshness_leg)(read_at=read_at), read_at),
         leg_guard("worktree", lambda: (worktree_fn or worktree_leg)(read_at=read_at), read_at),
         leg_guard("pacemaker-presence", lambda: (presence_fn or live_pacemaker_presence_leg)(

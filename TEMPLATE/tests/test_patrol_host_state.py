@@ -102,6 +102,23 @@ _EMPTY_LOG_DIR = Path(tempfile.mkdtemp(prefix="patrol-empty-log-"))
 # reason, which leaves every pre-#67 probe with the meaning it was written with.
 _EMPTY_SCORES_DIR = Path(tempfile.mkdtemp(prefix="patrol-empty-scores-"))
 
+# A hermetic tree whose questions-homes gate reports a CLEAN comparison, for the same reason
+# every other injected surface above is hermetic (#530): the leg RUNS a gate against a tree,
+# and a probe that pointed at the real one would have its verdict decided by whichever
+# adoption this box's executing home happens to carry -- the live surface the leg exists to
+# watch. A stub that answers "in step" leaves every pre-#530 probe reading as it did.
+_IN_STEP_HOMES_REPO = Path(tempfile.mkdtemp(prefix="patrol-in-step-homes-"))
+(_IN_STEP_HOMES_REPO / "tests").mkdir(parents=True, exist_ok=True)
+(_IN_STEP_HOMES_REPO / "tests" / "test_kit_questions_homes.py").write_text(
+    'print("template home : TEMPLATE/tools/questions (100 B)")\n'
+    'print("executing home: /tmp/probe-exec-questions (120 B)")\n'
+    'print("population    : 0 differing line(s) examined")\n'
+    'print("OK: the difference is confined to the declared layer '
+    '(0 parameter entries + 0 named local fix + 0 declared block(s))")\n'
+    'raise SystemExit(0)\n',
+    encoding="utf-8",
+)
+
 # A path under a fresh temp dir that is deliberately NEVER created: the board-ruling leg's
 # exemption table defaults to it, so a probe that does not pass a table of its own cannot
 # have its verdict decided by the exemptions the LIVE factory happens to hold (issue #334).
@@ -282,7 +299,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          shared_tree_fn=None, duty_scope=None, publish_fn=None, worktree_fn=None,
          duty_exemptions=None, ref_role_exemptions_path=None,
          criterion_exemptions_path=None, driverless_goals=None,
-         driverless_turn_open=None, dispatch_batches=None):
+         driverless_turn_open=None, dispatch_batches=None, questions_homes=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -461,6 +478,15 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
             (lambda: {"batches": {}, "batch_refusal": "ABSENT: probe: no batch declared"})
             if dispatch_batches is None
             else (lambda: {"batches": dispatch_batches, "batch_refusal": ""})
+        ),
+
+        # #530: the questions-homes leg RUNS a gate against a tree, so a probe must
+        # never have its verdict decided by this box's live executing home. The default
+        # is a hermetic stub gate that reports a clean comparison over 0 lines, which
+        # leaves every pre-#530 probe with the meaning it was written with.
+        questions_homes_fn=lambda: (
+            questions_homes if questions_homes is not None
+            else {"repo": _IN_STEP_HOMES_REPO}
         ),
         # The shared-tree rider (#241) shells out three times against the tree the patrol
         # is running in, so it is stubbed by default for the same reason the publish and
@@ -8073,6 +8099,158 @@ def test_the_board_unruled_leg_resolves_the_RULING_namespace_and_PRINTS_an_unpla
     assert "unbridgeable" in out, out
     assert "bridged 1" in out, out
 
+
+
+def _questions_homes_repo(root: Path, kind: str) -> Path:
+    """A hermetic tree whose `tests/test_kit_questions_homes.py` answers with `kind`'s shape.
+
+    THE STUB IS THE POINT, not a shortcut (#530). The leg under test is a RUNNER of the real
+    gate, so the behaviour it adds is the CLASSIFICATION of that gate's answer -- and a probe
+    that pointed at the real gate would have its verdict decided by whichever adoption this
+    box's executing home happens to carry, which is precisely the live surface the leg exists
+    to watch. A stub lets both arms be BUILT, so the STALE arm is proved to fire rather than
+    assumed to.
+    """
+    tests = root / "tests"
+    tests.mkdir(parents=True, exist_ok=True)
+    bodies = {
+        "in-step": (
+            'print("template home : TEMPLATE/tools/questions (100 B)")\n'
+            'print("executing home: /tmp/probe-exec-questions (120 B)")\n'
+            'print("population    : 7 differing line(s) examined")\n'
+            'print("OK: the difference is confined to the declared layer "\n'
+            '      "(2 parameter entries + 1 named local fix + 3 declared block(s))")\n'
+            'raise SystemExit(0)\n'
+        ),
+        "stale": (
+            'print("template home : TEMPLATE/tools/questions (100 B)")\n'
+            'print("executing home: /tmp/probe-exec-questions (120 B)")\n'
+            'print("population    : 9 differing line(s) examined")\n'
+            'print("")\n'
+            'print("FAIL: 2 line(s) diverge OUTSIDE the declared parameter layer:")\n'
+            'print("  \'the template-only landing\'")\n'
+            'raise SystemExit(1)\n'
+        ),
+        "not-run": (
+            'print("NOT RUN -- the executing copy is not resolvable on this host, so this leg")\n'
+            'print("  examined NOTHING: no candidate matched the backend glob")\n'
+            'print("  (a member factory has no executing tree; this is not a clean verdict)")\n'
+            'raise SystemExit(0)\n'
+        ),
+        "shape-changed": (
+            'print("something else entirely")\n'
+            'raise SystemExit(0)\n'
+        ),
+    }
+    (tests / "test_kit_questions_homes.py").write_text(bodies[kind], encoding="utf-8")
+    return root
+
+
+def test_the_questions_homes_leg_REPORTS_a_stale_home_and_NEVER_reads_rc_alone() -> None:
+    """#530: the executing home is watched, and `rc == 0` is never the verdict by itself.
+
+    THE ZERO THAT IS NOT A PASS IS THE ARM THAT MATTERS. The gate exits 0 both when the
+    difference is confined to the declared layer AND when the executing copy is not
+    resolvable -- and its own words say the second is "not a clean verdict". A leg that read
+    `rc == 0` as "in step" would print a clean sweep over no population, which is the defect
+    class this leg was ordered to catch, one surface over.
+
+    AND A STALE HOME IS A REPORT, NOT THIS FACTORY'S EXIT CODE (HQ's ruling: patrol, not
+    floor). The executing copy is a BOX surface another lane adopts; a leg that reddened this
+    factory for it would make our verdict a function of that lane's backlog -- and, worse, a
+    FLOOR gate reading another home could not be repaired by the lane it refuses, which is
+    exactly the lockout the ruling withdrew.
+    """
+    import tempfile
+
+    tmp = Path(tempfile.mkdtemp(prefix="probe-530-"))
+
+    # ARM 1 -- a real comparison reads IN STEP, and its population is CARRIED, not dropped.
+    in_step = RUNNER.questions_homes_leg(repo=_questions_homes_repo(tmp / "a", "in-step"),
+                                         read_at="2026-10-24T12:00:00Z")
+    assert in_step["status"] == "ASSERTED", f"arm1 status {in_step['status']!r}"
+    assert in_step["coverage"]["in_step"] is True, f"arm1 in_step {in_step['coverage']}"
+    assert in_step["coverage"]["stale"] is False, "arm1 stale"
+    assert in_step["problems"] == [], f"arm1 problems {in_step['problems']}"
+    assert in_step["coverage"]["population"] == 7, f"arm1 population {in_step['coverage']}"
+    assert in_step["coverage"]["declared_blocks"] == 3, f"arm1 declared_blocks {in_step['coverage']}"
+
+    # ARM 2 -- a STALE home is ASSERTED (it examined a population) and carries the gate's own
+    # diagnosis, and it raises NO problem: report, not enforce.
+    stale = RUNNER.questions_homes_leg(repo=_questions_homes_repo(tmp / "b", "stale"),
+                                       read_at="2026-10-24T12:00:00Z")
+    assert stale["status"] == "ASSERTED", f"arm2 status {stale['status']!r}"
+    assert stale["coverage"]["stale"] is True, f"arm2 stale {stale['coverage']}"
+    assert stale["coverage"]["in_step"] is False, "arm2 in_step must be False"
+    assert stale["problems"] == [], f"arm2 a stale executing home must NOT move this factory's exit code: {stale['problems']}"
+    assert any("OUTSIDE the declared parameter layer" in line
+              for line in stale["coverage"].get("diagnosis") or []), f"arm2 diagnosis lost the gate's own word: {stale['coverage'].get('diagnosis')}"
+
+    # ARM 3 -- THE ZERO THAT IS NOT A PASS: rc 0 with the gate's own NOT RUN marker must be
+    # examined-nothing, never "in step". This is the arm a naive `rc == 0` reading fails.
+    not_run = RUNNER.questions_homes_leg(repo=_questions_homes_repo(tmp / "c", "not-run"),
+                                         read_at="2026-10-24T12:00:00Z")
+    assert not_run["status"] == "NOT RUN", f"arm3 status {not_run['status']!r}"
+    assert not_run["coverage"]["in_step"] is False, f"arm3 rc=0 was read as in-step: {not_run['coverage']}"
+    assert not_run["problems"], "arm3 an unresolvable executing copy examined NOTHING and must say so"
+    assert "not resolvable" in not_run["problems"][0], f"arm3 problem {not_run['problems'][0]!r}"
+    assert "no candidate matched the backend glob" in (not_run["coverage"].get("reason") or ""), f"arm3 the gate's own reason was lost: {not_run['coverage'].get('reason')!r}"
+
+    # ARM 4 -- a gate whose OUTPUT SHAPE changed must red as UNREADABLE, never pass as clean.
+    changed = RUNNER.questions_homes_leg(repo=_questions_homes_repo(tmp / "d", "shape-changed"),
+                                         read_at="2026-10-24T12:00:00Z")
+    assert changed["status"] == "FAILED", f"arm4 status {changed['status']!r}"
+    assert changed["problems"], "arm4 an unreadable verdict must be UNKNOWN, not in step"
+    assert "without printing either" in changed["problems"][0], f"arm4 problem {changed['problems'][0]!r}"
+
+    # ARM 5 -- a home that CARRIES the gate's subject but not the gate is this factory's own
+    # defect: something exists to watch and nothing is watching it.
+    subject_only = tmp / "subject-only"
+    (subject_only / "TEMPLATE" / "tools" / "questions").mkdir(parents=True, exist_ok=True)
+    absent = RUNNER.questions_homes_leg(repo=subject_only, read_at="2026-10-24T12:00:00Z")
+    assert absent["status"] == "FAILED", f"arm5 status {absent['status']!r}"
+    assert absent["problems"] and "missing" in absent["problems"][0], f"arm5 problem {absent['problems']}"
+
+    # ARM 5b -- THE LOCKOUT ARM. A home with NO template home carries no subject, and this leg
+    # SHIPS into such homes through the twin law, so a missing gate there must read NOT
+    # APPLICABLE with its reason and raise NO problem -- otherwise every bootstrapped factory
+    # inherits a RED it cannot repair. Measured 2026-10-24: the TEMPLATE copy of this very suite
+    # redded on exactly this, the leg refusing the tree the twin law ships it into.
+    no_subject = RUNNER.questions_homes_leg(repo=tmp / "nope", read_at="2026-10-24T12:00:00Z")
+    assert no_subject["status"] == "NOT RUN", f"arm5b status {no_subject['status']!r}"
+    assert no_subject["problems"] == [], (
+        f"arm5b a home with no subject must raise NO problem: {no_subject['problems']}")
+    assert no_subject["coverage"]["not_applicable"] is True, f"arm5b coverage {no_subject['coverage']}"
+    assert "no subject here" in (no_subject["coverage"].get("reason") or ""), (
+        f"arm5b reason {no_subject['coverage'].get('reason')!r}")
+
+    # ARM 6 -- the round RENDERS the finding and its exit code is UNCHANGED by it: the leg
+    # reports a stale home while the round stays green on everything else.
+    rc, out, _err = _run([], [], questions_homes={
+        "repo": _questions_homes_repo(tmp / "e", "stale"),
+    })
+    assert "STALE EXECUTING HOME" in out, f"arm6 the stale home was not printed:\n{out[-2000:]}"
+    assert "probe-exec-questions" in out, "arm6 the stale home's path was not named"
+    assert "reported, not enforced" in out, "arm6 the print must say it is a report"
+    assert rc == 0, f"arm6 a stale executing home moved the round's exit code: rc={rc}"
+
+    # ... and the IN-STEP arm renders as a measurement, so the two never share a phrasing.
+    rc2, out2, _err2 = _run([], [], questions_homes={
+        "repo": _questions_homes_repo(tmp / "f", "in-step"),
+    })
+    assert "in step:" in out2, f"arm6b the in-step reading was not printed:\n{out2[-2000:]}"
+    assert "STALE EXECUTING HOME" not in out2, "arm6b an in-step round printed STALE"
+    assert rc2 == 0, f"arm6b rc={rc2}"
+
+    # ARM 7 -- the NOT-APPLICABLE round RENDERS its reason and stays GREEN: the exact shape that
+    # redded the TEMPLATE twin's own suite.
+    rc3, out3, _err3 = _run([], [], questions_homes={"repo": tmp / "nope"})
+    assert "NOT RUN:" in out3, f"arm7 the N/A leg did not render a NOT RUN:\n{out3[-2000:]}"
+    assert "no subject here" in out3, "arm7 the N/A reason was lost in the render"
+    assert rc3 == 0, f"arm7 rc={rc3}"
+
+    print("questions-homes leg: 8 arms bit (in-step, stale, rc-0-not-run, shape-changed, "
+          "absent-with-subject, absent-without-subject, render, render-not-applicable)")
 
 
 def test_the_intake_partition_is_NAMED_and_CLOSES_and_NAMES_every_orphan() -> None:
