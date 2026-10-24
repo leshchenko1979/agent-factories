@@ -12150,6 +12150,19 @@ def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> 
     )
     assert quiet["coverage"]["items_named_in_body_only"] == 0, quiet["coverage"]
 
+    # AND THE RENDERED REPORT SAYS IT (#556 step 2): the coverage dict is not what a lane
+    # reads -- the patrol's own print path is. A leg whose numbers are right and whose
+    # output still reads `0 owed` would have fixed nothing a reader can see, so the print
+    # block is asserted through the REAL `main()` rather than inspected.
+    _rc, out, _err = _run(issues, rows, dispatch_batches=batches)
+    assert "OWED #548 — MENTION ONLY: '548' at offset" in out, (
+        f"the owed line must carry the mention BESIDE it, with its offset\n{out}"
+    )
+    assert "docs/instruments/kit.md:548" in out, out
+    assert "it EXCUSES NOTHING: every one of them is OWED above" in out, (
+        f"the mention class must declare that it excuses nothing\n{out}"
+    )
+
 def test_an_ABSENT_batch_declaration_RESOLVES_NOTHING_and_SAYS_SO() -> None:
     """#519 acceptance (2) and #271: a tree that has declared no batch act must report its
     population as OWED, and the absence must be VISIBLE — an absent declaration and a
