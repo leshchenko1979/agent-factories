@@ -8073,6 +8073,83 @@ def test_the_board_unruled_leg_resolves_the_RULING_namespace_and_PRINTS_an_unpla
     assert "unbridgeable" in out, out
     assert "bridged 1" in out, out
 
+
+
+def test_the_intake_partition_is_NAMED_and_CLOSES_and_NAMES_every_orphan() -> None:
+    """#548 (ruling n=4146): the intake side must name ALL THREE buckets and assert its own
+    sum, because the shape it replaced -- `549 rows (540 naming an issue)` -- invited the
+    reader to infer "9 intake rows name no issue" and that inference was wrong twice over.
+
+    Measured on this ledger 2026-10-24: 559 intake rows, 550 DISTINCT issues, 5 REPEATED
+    rows, 4 genuinely orphaned. The old printout collapsed three buckets into one number
+    and the four orphans were invisible on the intake side while the ruling side printed
+    its own unbridgeable list -- one leg, two halves, one of them silent.
+
+    The fixture is hermetic and the live ledger is CORROBORATION only: a control that reads
+    live state stops being a control the moment the population moves, and a clean
+    `unbridgeable == 0` is exactly the reading the ruling forbids trusting (#548 binding 3).
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(941, "OPEN"), _issue(942, "OPEN")]
+    # n=46 is the ORPHAN: an intake row whose subject names no issue and which carries no
+    # typed `ref row:` pointer, so no arm can resolve it.
+    rows = [
+        _stall_row(41, "intake", "#941", 3, now=now),
+        _stall_row(42, "ruling", "#941", 2.9, now=now),
+        _stall_row(43, "intake", "#942", 3, now=now),
+        # the REPEAT: a second intake row for an issue already intaken. The ledger keeps
+        # both, the predicate keeps the first, so the extra row must be NAMED as a repeat
+        # rather than left to look like an orphan.
+        _stall_row(44, "intake", "#942", 2.95, now=now),
+        _stall_row(45, "ruling", "#942", 2.9, now=now),
+        _stall_row(46, "intake", "orphan-slug-probe", 3, now=now,
+                   detail="no pointer to any row here"),
+    ]
+
+    leg = RUNNER.board_unruled_leg(issues, rows, read_at=read_at)
+    cov = leg["coverage"]
+    # THE PARTITION CLOSES: every intake row lands in exactly one bucket.
+    assert cov["intake_rows_read"] == 4, cov
+    assert cov["intake_rows_resolved"] == 2, cov           # DISTINCT issues
+    assert cov["intake_rows_resolved_rows"] == 3, cov      # ROWS that resolved
+    assert cov["intake_repeated"] == 1, cov
+    assert cov["intake_unbridgeable_rows"] == 1, cov
+    assert cov["intake_partition_closes"] is True, cov
+    assert cov["intake_numbers_agree"] is True, cov
+    assert 2 + 1 + 1 == cov["intake_rows_read"], cov
+    # The orphan is NAMED with its row number and its own subject, not merely counted.
+    assert [e["n"] for e in cov["intake_unbridgeable"]] == [46], cov
+    assert cov["intake_unbridgeable"][0]["subject"] == "orphan-slug-probe", cov
+    # ... and a partition that closes raises NO problem: the sum is a gate, not decoration.
+    assert not leg["problems"], leg["problems"]
+
+    rc, out, _ = _run(issues, rows)
+    assert "REPEATED" in out, out
+    # the fixture carries ONE orphan, and the count must be the fixture's own -- not the
+    # live ledger's 4, which is corroboration and never the control.
+    assert "1 unbridgeable" in out, out
+    assert "UNBRIDGEABLE intake row n=46 ('orphan-slug-probe')" in out, out
+    # The ruling half must still print: repairing the intake half by orphaning the ruling
+    # half would swap one silent bucket for another.
+    assert "ruling rows read:" in out, out
+
+    # NO-ORPHAN CONTROL: the same fixture minus the orphan still closes, and prints no
+    # UNBRIDGEABLE line. Without this arm a leg that printed an orphan unconditionally
+    # would pass the positive probe.
+    clean = [r for r in rows if r["n"] != 46]
+    leg_clean = RUNNER.board_unruled_leg(issues, clean, read_at=read_at)
+    cov_clean = leg_clean["coverage"]
+    assert cov_clean["intake_rows_read"] == 3, cov_clean
+    assert cov_clean["intake_repeated"] == 1, cov_clean
+    assert cov_clean["intake_unbridgeable_rows"] == 0, cov_clean
+    assert cov_clean["intake_partition_closes"] is True, cov_clean
+    assert not leg_clean["problems"], leg_clean["problems"]
+    _rc, out_clean, _ = _run(issues, clean)
+    assert "UNBRIDGEABLE intake row" not in out_clean, out_clean
+    assert "0 unbridgeable" in out_clean, out_clean
+
+
 def _delivery(instant: dt.datetime, text: str, *, state: str = "landed",
               session: str = "probe-session") -> dict:
     """A delivered-notify row as `box_deliveries` emits it.

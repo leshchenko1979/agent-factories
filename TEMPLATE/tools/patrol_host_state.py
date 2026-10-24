@@ -8551,9 +8551,53 @@ def board_unruled_leg(
                     }
                 )
 
-    intake_rows_read = sum(
-        1 for row in rows if str(row.get("event") or "") == "intake"
+    # THE INTAKE PARTITION (#548, ruling n=4146). `intake_rows_read` counts ROWS; the
+    # predicate's `intaken_numbers` counts DISTINCT issue numbers. Printing the two side by
+    # side as "549 (540 naming an issue)" reads as *9 intake rows name no issue*, which is
+    # false: the 9 were REPEATED rows, and the genuinely orphaned ones were invisible
+    # because this side had no unbridgeable surface at all while the ruling side printed
+    # its own. The partition is now NAMED and it is asserted to close: distinct + repeated
+    # + unbridgeable == rows read. A partition that does not close is a problem, never a
+    # printout the reader must re-do the arithmetic on.
+    intake_rows_read = 0
+    intake_resolved_rows = 0
+    intake_numbers: set[int] = set()
+    intake_arms = {"strict": 0, "declared": 0, "bridged": 0}
+    intake_unbridgeable: list[dict] = []
+    # Named, never merely counted -- the same attribution the ruling side carries, so the
+    # two halves of one leg cannot disagree about how a bridge was sourced (#551).
+    intake_bridges: list[dict] = []
+    for row in rows:
+        if str(row.get("event") or "") != "intake":
+            continue
+        intake_rows_read += 1
+        number, arm, bridge = resolve_ruling_issue(row, rows, predicate)
+        if number is None:
+            intake_unbridgeable.append(
+                {"n": row.get("n"), "subject": str(row.get("subject") or "")}
+            )
+            continue
+        intake_resolved_rows += 1
+        intake_numbers.add(number)
+        intake_arms[arm] = intake_arms.get(arm, 0) + 1
+        if bridge is not None:
+            intake_bridges.append(
+                {
+                    "issue": number,
+                    "intake_n": row.get("n"),
+                    "via_n": bridge.get("n"),
+                    "via_event": bridge.get("event"),
+                }
+            )
+    intake_repeated = intake_resolved_rows - len(intake_numbers)
+    intake_partition_closes = (
+        len(intaken) + intake_repeated + len(intake_unbridgeable) == intake_rows_read
     )
+    # TWO INSTRUMENTS, ONE QUESTION: the resolve walks every intake row, the predicate
+    # keeps the FIRST row per number. They must agree about WHICH issues were intaken; a
+    # divergence means one of them is wrong, and the partition would close over the wrong
+    # population.
+    intake_numbers_agree = intake_numbers == set(intaken)
 
     excused: list[str] = []
     population: list[dict] = []
@@ -8588,6 +8632,30 @@ def board_unruled_leg(
     owed.sort(key=lambda entry: -entry["age_hours"])
 
     problems: list[str] = []
+    # THE PARTITION MUST CLOSE ON ITS OWN FACE (#548, ruling n=4146). The whole defect was a
+    # reader handed two numbers and left to infer a third: `549 rows (540 naming an issue)`
+    # invites "so 9 name nothing", and that inference was wrong twice over. A partition that
+    # does not sum is now a PROBLEM, not a printout the reader must re-do arithmetic on.
+    if not intake_partition_closes:
+        problems.append(
+            f"THE INTAKE PARTITION DOES NOT CLOSE: {intake_rows_read} intake row(s) read, "
+            f"but {len(intaken)} DISTINCT issue(s) + {intake_repeated} REPEATED row(s) + "
+            f"{len(intake_unbridgeable)} unbridgeable row(s) = "
+            f"{len(intaken) + intake_repeated + len(intake_unbridgeable)}. Every intake row "
+            f"must land in exactly one bucket, so a gap means the resolve and the predicate "
+            f"disagree about the population -- read `intake_unbridgeable` before trusting "
+            f"either count"
+        )
+    if not intake_numbers_agree:
+        problems.append(
+            f"THE INTAKE RESOLVE AND THE PREDICATE DISAGREE about which issues were "
+            f"intaken: the per-row resolve yields {len(intake_numbers)} DISTINCT issue(s), "
+            f"the predicate's `intaken_numbers` yields {len(intaken)}. Only in the "
+            f"predicate: {sorted(set(intaken) - intake_numbers)}; only in the resolve: "
+            f"{sorted(intake_numbers - set(intaken))}. The population below is built from "
+            f"the PREDICATE, so a divergence means this leg judges a different set than it "
+            f"reports"
+        )
     for entry in owed:
         problems.append(
             f"#{entry['issue']} is OPEN on the board and carries intake "
@@ -8608,6 +8676,19 @@ def board_unruled_leg(
             "open_items_examined": len(open_numbers),
             "intake_rows_read": intake_rows_read,
             "intake_rows_resolved": len(intaken),
+            # The intake side now carries the SAME three-bucket shape the ruling side does
+            # (#548, ruling n=4146). `intake_rows_resolved` above counts DISTINCT issues and
+            # is what the population predicate keys on; the three keys below name what the
+            # row count is actually made of, so the reader is never handed two numbers and
+            # left to infer the third.
+            "intake_rows_resolved_rows": intake_resolved_rows,
+            "intake_repeated": intake_repeated,
+            "intake_unbridgeable_rows": len(intake_unbridgeable),
+            "intake_unbridgeable": intake_unbridgeable,
+            "intake_resolution_arms": intake_arms,
+            "intake_bridged_via": intake_bridges,
+            "intake_partition_closes": intake_partition_closes,
+            "intake_numbers_agree": intake_numbers_agree,
             "ruling_rows_read": ruling_rows,
             "rulings_resolved_rows": resolved_rows,
             "rulings_repeated": resolved_rows - len(ruled),
@@ -12427,8 +12508,30 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             lines.append(
                 f"  board: {cov['board_items_read']} item(s) read, "
                 f"{cov['open_items_examined']} OPEN; intake rows read: "
-                f"{cov['intake_rows_read']} ({cov['intake_rows_resolved']} naming an "
-                f"issue); ruling rows read: {cov['ruling_rows_read']} "
+                f"{cov['intake_rows_read']} ({cov['intake_rows_resolved_rows']} resolved "
+                f"to an issue, over {cov['intake_rows_resolved']} DISTINCT issue(s) "
+                f"[strict {cov['intake_resolution_arms']['strict']}, declared "
+                f"{cov['intake_resolution_arms']['declared']}, bridged "
+                f"{cov['intake_resolution_arms']['bridged']}]; {cov['intake_repeated']} are "
+                f"REPEATED intake rows for an issue already intaken, which the append-only "
+                f"ledger keeps and this leg does NOT de-duplicate; "
+                f"{cov['intake_unbridgeable_rows']} unbridgeable)"
+            )
+            # A ROW THAT RESOLVES TO NO ISSUE IS NAMED, not merely counted (#548, ruling
+            # n=4146): the count alone is what let three genuinely orphaned intake rows sit
+            # invisible behind a number that read as repeats.
+            for entry in cov.get("intake_unbridgeable", []):
+                lines.append(
+                    f"    UNBRIDGEABLE intake row n={entry['n']} "
+                    f"({entry['subject']!r}) names no issue and no row supplies one"
+                )
+            for entry in cov.get("intake_bridged_via", []):
+                lines.append(
+                    f"    BRIDGED #{entry['issue']} via intake row n={entry['intake_n']} "
+                    f"-- supplied by row n={entry['via_n']} ({entry['via_event']})"
+                )
+            lines.append(
+                f"  ruling rows read: {cov['ruling_rows_read']} "
                 f"({cov['rulings_resolved_rows']} resolved to an issue, over "
                 f"{cov['rulings_resolved']} DISTINCT issue(s) "
                 f"[strict {cov['resolution_arms']['strict']}, declared "
