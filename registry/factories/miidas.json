@@ -145,7 +145,7 @@
     },
     {
       "id": "miidas-boot-overlay-rewrites-providers",
-      "text": "The MIIDAS agent boot overlay replaces the ENTIRE [providers.*] block of the client config.toml on every boot and 6 h refresh, so whatever it emits IS the provider chain: a provider or fallback a peer adds to the template's provider block is silently deleted. Edit the overlay, never the template block.",
+      "text": "The MIIDAS agent boot overlay replaces the ENTIRE [providers.*] block of the client config.toml on every boot and 6 h refresh, so whatever it emits IS the provider chain: a provider or fallback a peer adds to the template's provider block is silently deleted. Edit the overlay, never the template block. CITATION CORRECTED 2026-10-25: the overlay now lives at agent/runtime/lib/miidas_boot/config.py \u2014 the [providers. find is at :148-152 and the splice returns at :186 (openrouter overlay) and :246 (gateway overlay); the entry's previous `config.py:204-208` / `:249` no longer resolves to those lines. Substance unchanged and re-read today.",
       "severity": "warning",
       "affects": [
         "miidas",
@@ -220,7 +220,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-24T06:15:40Z",
+  "attested_at": "2026-10-25T18:35:44Z",
   "instruments": {
     "ledger": {
       "state": "deferred",

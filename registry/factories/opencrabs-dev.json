@@ -116,6 +116,16 @@
         "opencrabs-dev"
       ],
       "evidence": "Fork run 38799188468 (sha c350d66c6, 2026-10-15): cancelled at 2722 s against the workflow's timeout-minutes 45 (2700 s), four `has been running for over 60 seconds` lines, stuck set hot_write_paths_retry_test x1 + loop_break_test x2 + memory_archive_index_test x1 \u2014 character-identical to the 2026-10-04 run quoted inside #1936's own body; fmt+clippy both success, so the wedge is not the diff. Re-dispatch of the same gate input with --test-threads 2 (fork run 38806046232) = success in 1884 s. Law: editor.md:401/:404, commit 7723a1a4. The recurrence was measured 2026-10-15; `since` records the answering instant (2026-10-16), not a fact-origin date I cannot evidence."
+    },
+    {
+      "id": "harvesting-paused-sync-first",
+      "text": "Harvesting upstream is PAUSED by owner directive (2026-10-25): no porting work is planned soon. The standing priority is the opposite direction \u2014 pulling upstream's new commits INTO the fork leshchenko1979/opencrabs, with the fork's own delta protected across that merge. Do not open upstream PRs or begin a harvest sweep on the assumption that the harvest lane is running; the #761 boundary register and the census FORK_ONLY_SURFACE predicate remain the instruments that decide whether a COMMIT is portable, and they now govern a paused activity.",
+      "severity": "warning",
+      "since": "2026-10-25",
+      "affects": [
+        "opencrabs-dev"
+      ],
+      "evidence": "Owner directive to this factory's HQ lane, 2026-10-25: 'I m not going to make any harvesting soon ... I'm interested in downloading to my fork whatever the new there is in the upstream repository.' The sync process is under design and not yet approved, so this entry states the DIRECTIVE only, not the mechanism."
     }
   ],
   "lanes": [
@@ -337,7 +347,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-24T06:29:01Z",
+  "attested_at": "2026-10-25T18:38:53Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",
