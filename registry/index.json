@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-10-25T18:49:42Z",
+  "resolved_at": "2026-10-25T19:15:29Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -799,7 +799,7 @@
           "session_id": "cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-25T18:40:20Z",
+          "bound_at": "2026-10-25T19:06:15Z",
           "announcements": []
         },
         {
@@ -1357,7 +1357,7 @@
       "factory": "meta-factory",
       "display_name": "Factories",
       "status": "attested",
-      "attested_at": "2026-10-24T06:14:18Z",
+      "attested_at": "2026-10-25T19:15:05Z",
       "profile": "ops",
       "repo": "/root/agent-factories",
       "skill": "/root/agent-factories/skills/meta-factory/SKILL.md",
@@ -1742,7 +1742,7 @@
           "session_id": "5a5335ee-db68-46fe-b13e-a082b2beadb5",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-10-25T18:16:55Z",
+          "bound_at": "2026-10-25T19:00:51Z",
           "announcements": []
         },
         {
@@ -3003,8 +3003,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-10-25T18:50:00+00:00",
-      "last_run_at": "2026-10-25T18:09:08Z",
+      "next_run_at": "2026-10-26T00:50:00+00:00",
+      "last_run_at": "2026-10-25T18:50:35Z",
       "deliver_to": "session:2646d31a-71ee-49f0-be81-9c8dc32d32fa",
       "trigger_cmd": null,
       "profile": "ops",
