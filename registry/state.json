@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-25T18:49:42Z",
+  "resolved_at": "2026-10-25T19:15:29Z",
   "fragments": [
     {
       "path": "/tmp/wt-attest-20261025/registry/factories/ai-antispam.json",
@@ -886,7 +886,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-24T06:14:18Z",
+        "attested_at": "2026-10-25T19:15:05Z",
         "instruments": {
           "ledger": {
             "state": "adopted",
@@ -2410,7 +2410,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1792953854,
+      "session_updated_at": 1792955705,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2540,7 +2540,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Surveys [chat:-1004497192134:topic:19]",
-      "session_updated_at": 1792953623,
+      "session_updated_at": 1792955071,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2605,7 +2605,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1792953692,
+      "session_updated_at": 1792955621,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2644,7 +2644,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1792953844,
+      "session_updated_at": 1792955378,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2982,7 +2982,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1792951195,
+      "session_updated_at": 1792955315,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3008,7 +3008,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1792953700,
+      "session_updated_at": 1792955649,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3099,7 +3099,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1792954043,
+      "session_updated_at": 1792954592,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3113,19 +3113,6 @@
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
       "session_updated_at": 1792952688,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "5dc2d1bb-23e1-4902-b5e9-bcbc89db5eae",
-      "channel": "telegram",
-      "chat_id": "133526395",
-      "thread_id": null,
-      "updated_at": 1792885104,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Agent Root Directory Creation Policy [chat:133526395]",
-      "session_updated_at": 1792885115,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3151,20 +3138,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1792953624,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "5a5335ee-db68-46fe-b13e-a082b2beadb5",
-      "channel": "telegram",
-      "chat_id": "-1003996392908",
-      "thread_id": 6,
-      "updated_at": 1792952215,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Miidas Factory / Agent runtime [chat:-1003996392908:topic:6]",
-      "session_updated_at": 1792952892,
+      "session_updated_at": 1792955250,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3177,20 +3151,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1792954171,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
-      "channel": "telegram",
-      "chat_id": "-1003993000918",
-      "thread_id": 10782,
-      "updated_at": 1792953620,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1792953830,
+      "session_updated_at": 1792954410,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3203,7 +3164,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Subagents [chat:-1003936827469:topic:30517]",
-      "session_updated_at": 1792954174,
+      "session_updated_at": 1792954889,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3216,7 +3177,46 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Fix #1938/#1939/#1940 — marker & link seam",
-      "session_updated_at": 1792954164,
+      "session_updated_at": 1792954892,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "5a5335ee-db68-46fe-b13e-a082b2beadb5",
+      "channel": "telegram",
+      "chat_id": "-1003996392908",
+      "thread_id": 6,
+      "updated_at": 1792954851,
+      "last_origin": "callback",
+      "turn_open_at": null,
+      "session_title": "Telegram: Miidas Factory / Agent runtime [chat:-1003996392908:topic:6]",
+      "session_updated_at": 1792955197,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "5dc2d1bb-23e1-4902-b5e9-bcbc89db5eae",
+      "channel": "telegram",
+      "chat_id": "133526395",
+      "thread_id": null,
+      "updated_at": 1792954948,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Agent Root Directory Creation Policy [chat:133526395]",
+      "session_updated_at": 1792955447,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "cb06a94a-be02-4e8c-b6c6-c8c9f09922f4",
+      "channel": "telegram",
+      "chat_id": "-1003993000918",
+      "thread_id": 10782,
+      "updated_at": 1792955175,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
+      "session_updated_at": 1792955228,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
@@ -3585,8 +3585,8 @@
       "enabled": 1,
       "set_goal": 1,
       "goal_template": "Meta-factory HQ cycle due (#253, owner ruled shape (1) at q20). Sweep the board (leshchenko1979/agent-factories issues) for items carrying an intake ledger row and no ruling row, and rule on each — then report the cycle to the HQ lane. Do NOT open a plan: an unattended lane has no approve surface, so a plan here strands itself (SKILL.md §9). LAND IT: the duty receipt is not landed until it is on origin/main. Fetch the pusher from origin/main and run it -- never a raw git push, and never a script out of the shared tree: git -C /root/agent-factories show origin/main:tools/publish.py > /tmp/oc-publish.py && python3 /tmp/oc-publish.py --repo /root/agent-factories --wait --timeout 1400. --repo is REQUIRED: the fetched copy lives in /tmp, so its default repo resolves to / and the round dies no-remote. status=held inside its 900 s window is the pusher WORKING: re-run it, never push by hand.",
-      "next_run_at": "2026-10-25T18:50:00+00:00",
-      "last_run_at": "2026-10-25T18:09:08Z",
+      "next_run_at": "2026-10-26T00:50:00+00:00",
+      "last_run_at": "2026-10-25T18:50:35Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
