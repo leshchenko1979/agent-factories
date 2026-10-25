@@ -111,11 +111,11 @@
       "measured_sec": 0.29
     },
     "tests/test_gate_entry_point_equivalence.py": {
-      "budget_sec": 337.15,
-      "margin_x": 4.009,
-      "measured_at": "e8f0bb989697ad9a0b7e71a5b574a3d728e08808",
-      "measured_sec": 84.1,
-      "load_at_measure": 1.92
+      "budget_sec": 434.23,
+      "margin_x": 4.007,
+      "measured_at": "3af21226a0d25f4b44d50b9cd0d1019f424faaef",
+      "measured_sec": 108.37,
+      "load_at_measure": 9.01
     },
     "tests/test_gate_fixtures_closure.py": {
       "budget_sec": 38.15,
@@ -124,11 +124,11 @@
       "measured_sec": 9.35
     },
     "tests/test_gate_registration.py": {
-      "budget_sec": 58.91,
-      "margin_x": 4.052,
-      "measured_at": "8df0dad8311d33df01ca703bc01837cba33202e8",
-      "measured_sec": 14.54,
-      "load_at_measure": 8.38
+      "budget_sec": 41.19,
+      "margin_x": 4.074,
+      "measured_at": "3af21226a0d25f4b44d50b9cd0d1019f424faaef",
+      "measured_sec": 10.11,
+      "load_at_measure": 9.01
     },
     "tests/test_hq_delegation.py": {
       "budget_sec": 17.87,
@@ -255,11 +255,11 @@
       "load_at_measure": 2.0
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 402.87,
-      "load_at_measure": 7.04,
-      "margin_x": 4.007,
-      "measured_at": "350a7af134ac514f4452750867ef21e829397a5d",
-      "measured_sec": 100.53
+      "budget_sec": 907.11,
+      "load_at_measure": 9.01,
+      "margin_x": 4.003,
+      "measured_at": "3af21226a0d25f4b44d50b9cd0d1019f424faaef",
+      "measured_sec": 226.59
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 22.43,
