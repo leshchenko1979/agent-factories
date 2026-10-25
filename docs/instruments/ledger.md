@@ -980,6 +980,19 @@ exactly the rows a rewrite did not touch. And **a leg that cannot judge SAYS SO*
 no object database it reports a STATED inability and prints `NOT RUN` with its reason, never the
 verdict of a leg that examined the population and found it clean.
 
+**A row that WITHDRAWS a role+number pointer breaks the assertion adjacency.** The ref-role leg
+(`tools/patrol_host_state.py::ledger_ref_roles_leg`, #330) reads every receipt whose `detail`
+asserts a ROLE for a named row — `intake row n=X`, `dispatch row n=Y`, `close row n=Z` — and
+requires that row's event to BE that role. The population is keyed on ADJACENCY, so a withdrawal
+written in that same form enters the population and is read as a fresh assertion of the very role it
+is retracting. A ledger row that QUOTES a role+number pointer it is withdrawing therefore breaks the
+adjacency — `dispatch row, n=4234` or `the claimed dispatch (n=4234)` — so a withdrawn pointer never
+enters the ref-role population. The rationale is the key itself: the population is keyed on
+adjacency, so the writer's cheapest escape is the one that respects the key. The escape is a WRITE
+discipline and not a predicate change — widening `REF_ROLE_ASSERTION` or the leg is refused (ruling
+`n=4247`) — and an adjudicated residual still travels through
+`docs/ledger-ref-roles-exemptions.json`, never through this clause.
+
 ### 9.7 An ad-hoc probe never appends to live state
 
 A scratch script, throwaway harness or one-off probe that appends to a durable surface is a SECOND
