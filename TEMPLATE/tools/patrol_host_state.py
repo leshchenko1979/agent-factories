@@ -4960,6 +4960,51 @@ def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: l
         "over_cadence": cadence is not None and residual >= cadence,
     }
 
+
+def duty_cadence_ratio(residual: dict) -> float | None:
+    """How many times its own observed cadence a job's derived residual covers."""
+    cadence = residual.get("cadence_secs")
+    if not cadence:
+        return None
+    return float(residual["residual_secs"]) / float(cadence)
+
+
+def over_cadence_problem(name: str, job_id: str, residual: dict) -> str:
+    """The PROBLEM for a residual that reaches its own cadence (ruling n=4153).
+
+    A window wider than the gap between two fires cannot discriminate: every round the leg
+    excuses as IN FLIGHT could equally be a duty never done, and the leg holds no second
+    observation that would tell them apart (n=1518 FINDING 3). It was PRINTED and never
+    judged for two rounds, so four of eight duties on this box read `OVER CADENCE` beside
+    `problems: 0` -- a finding wearing the shape of a clean run.
+
+    THE WINDOW IS STILL APPLIED AND THE ROUND IS STILL JUDGED. This names a defect in the
+    DERIVATION, never a refusal of the duty: clamping the residual to the cadence would
+    hide the mutually-unsatisfiable pair behind a number that reads satisfied, which is why
+    the remedy reports the ratio instead of the clamp.
+    """
+    ratio = duty_cadence_ratio(residual)
+    cadence = residual.get("cadence_secs")
+    if ratio is None:
+        return (
+            f"{name} (cron id {job_id}): the derived forward residual "
+            f"{duty_age_text(residual['residual_secs'])} reaches the job's own observed "
+            f"cadence, so the window cannot DISCRIMINATE -- a round it excuses as IN FLIGHT "
+            f"is indistinguishable from a duty never done. REPORTED, never clamped (ruling "
+            f"n=4153)"
+        )
+    return (
+        f"{name} (cron id {job_id}): the derived forward residual "
+        f"{duty_age_text(residual['residual_secs'])} covers {ratio:.2f}x the job's own "
+        f"observed cadence {duty_age_text(cadence)} -- the duty is still JUDGEABLE with "
+        f"this window (its round is judged, never refused), but the window cannot "
+        f"DISCRIMINATE: a round it excuses as IN FLIGHT is indistinguishable from a duty "
+        f"never done, because the residual outlives the next fire. REPORTED, never "
+        f"clamped: a clamp would hide the mutually-unsatisfiable pair behind a number that "
+        f"reads satisfied (ruling n=4153)"
+    )
+
+
 def dispatch_delivery_scope(repo: Path = REPO) -> tuple[dt.datetime | None, str, str]:
     """The bound this leg judges against, as `(instant, text, refusal)`.
 
@@ -5954,6 +5999,11 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
         residuals.append(residual)
         if residual["over_cadence"]:
             rounds_over_cadence += 1
+            # RULING n=4153. The residual is still APPLIED and the round still judged --
+            # this names a defect in the DERIVATION, never a refusal of the duty. Printed
+            # alone, the finding sat beside `problems: 0` on four of eight duties, which is
+            # the #160 class this leg exists to catch wearing the leg's own output.
+            problems.append(over_cadence_problem(name, job_id, residual))
         residual_secs = residual["residual_secs"]
         round_date = receipt_round(fired)
         if round_date is None:
@@ -11873,13 +11923,16 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     )
                     if res.get("over_cadence"):
                         cadence = res.get("cadence_secs")
+                        ratio = duty_cadence_ratio(res)
+                        ratio_text = f" ({ratio:.2f}x)" if ratio is not None else ""
                         lines.append(
                             f"      OVER CADENCE: this residual reaches the job's own "
                             f"observed cadence "
-                            f"{duty_age_text(cadence) if cadence else 'UNDECLARED'} — it "
-                            f"cannot discriminate for this duty (a residual covering the "
-                            f"observed max outlives the next fire). PRINTED, never refused, "
-                            f"and never clamped to the cadence: clamping would hide the "
+                            f"{duty_age_text(cadence) if cadence else 'UNDECLARED'}"
+                            f"{ratio_text} — it cannot discriminate for this duty (a "
+                            f"residual covering the observed max outlives the next fire). "
+                            f"REPORTED as a PROBLEM (ruling n=4153), never refused and never "
+                            f"clamped to the cadence: clamping would hide the "
                             f"mutually-unsatisfiable pair rather than report it"
                         )
                 lines.append(

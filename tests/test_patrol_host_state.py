@@ -3260,14 +3260,17 @@ def test_the_residual_is_DERIVED_from_the_jobs_OWN_measured_max() -> None:
     assert leg["coverage"]["rounds_excused_by_residual"] == 1, leg["coverage"]
     assert leg["problems"] == [], leg["problems"]
 
-def test_an_OVER_CADENCE_residual_is_PRINTED_never_refused() -> None:
-    """#449 criterion 2: a mutually-unsatisfiable window is REPORTED, not hidden.
+def test_an_OVER_CADENCE_residual_is_a_PROBLEM_carrying_its_RATIO() -> None:
+    """Ruling n=4153 (board #549): a window that cannot discriminate is a FINDING.
 
-    Four fires a day apart with a 7 h measured max give a derived residual of ~28 h -- past
-    the job's own 24 h cadence. The two requirements cannot both hold (n=1518 FINDING 3),
-    and the honest output is the number AND the statement. So the leg must still judge --
-    never refuse, never turn the job's own timing into a problem -- and the rendered report
-    must carry the OVER CADENCE line beside the value.
+    Measured on this box at 2026-10-25T18:20Z: four of eight declared duties read
+    `OVER CADENCE` in the rendered report while `problems` stayed `[]` -- the #160 class (a
+    false clean) produced by the leg's OWN output, because the only surface carrying the
+    finding was the one a reader greps for problems.
+
+    THE FIXTURE IS THE MEASURED SHAPE, not a convenient one: four fires a day apart with a
+    7 h measured max give a residual of ~28 h against a 24 h cadence, i.e. 1.17x -- the same
+    class the live `factory-registry-attest` carried at 1.66x in that read.
     """
     fires = _fires((0.5, 24.5, 48.5))
     ledger = [
@@ -3279,16 +3282,129 @@ def test_an_OVER_CADENCE_residual_is_PRINTED_never_refused() -> None:
     residual = leg["coverage"]["residuals"][0]
     assert residual["cadence_secs"] == 86400.0, residual
     assert residual["over_cadence"] is True, residual
-    assert residual["residual_secs"] >= residual["cadence_secs"], residual
     assert leg["coverage"]["rounds_over_cadence"] == 1, leg["coverage"]
-    # NEVER REFUSED, and never a problem in its own right: the leg still returns a verdict
-    # over the round, and the duty's timing is reported rather than judged.
+    # ARM 1: the duty is NAMED in `problems`, carrying its ratio.
+    named = [p for p in leg["problems"] if residual["name"] in p]
+    assert len(named) == 1, leg["problems"]
+    assert f"{RUNNER.duty_cadence_ratio(residual):.2f}x" in named[0], named[0]
+    assert "DISCRIMINATE" in named[0], named[0]
+    assert "never" in named[0] and "clamped" in named[0], named[0]
+    # AND THE WINDOW IS STILL APPLIED: a problem about the DERIVATION is not a refusal of
+    # the duty, and the leg still returns a verdict over the round.
     assert leg["status"] == "ASSERTED", leg
-    assert leg["problems"] == [], leg["problems"]
     rc, out, err = _run([], ledger, cron_rows=[_duty_row()], prefixes=["factory-"],
                         cron_fires=fires)
     assert "OVER CADENCE" in out, out[-3000:]
+    assert "REPORTED as a PROBLEM" in out, out[-3000:]
     assert "never clamped to the cadence" in out, out[-3000:]
+
+
+def test_a_SUB_CADENCE_residual_stays_CLEAN() -> None:
+    """ARM 2 of the #549 ruling: the POSITIVE CONTROL, and the half that keeps the fix honest.
+
+    A leg that redded on every duty would be permanently red, which is the pre-fix defect
+    inverted. Three weekly duties and one sub-cadence duty read clean on this box in the
+    SAME read that named four problems, and this fixture is that population's shape: four
+    fires a day apart with a 6000 s measured max give a residual of ~6.7 h against the 24 h
+    cadence -- 0.28x.
+    """
+    fires = _fires((0.5, 24.5, 48.5))
+    ledger = [
+        _fire_receipt(0.5, 6000.0, 31),
+        _fire_receipt(24.5, 3000.0, 32),
+        _fire_receipt(48.5, 1200.0, 33),
+    ]
+    leg = _duty_leg([_duty_row()], ledger, fires=fires)
+    residual = leg["coverage"]["residuals"][0]
+    assert residual["cadence_secs"] == 86400.0, residual
+    assert residual["over_cadence"] is False, residual
+    assert leg["coverage"]["rounds_over_cadence"] == 0, leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+
+
+def test_a_residual_of_TWICE_the_cadence_is_NEVER_clean() -> None:
+    """ARM 3 of the #549 ruling: the NEGATIVE CONTROL, at the threshold the ruling names.
+
+    At 2x the cadence the window covers two whole fire intervals, so EVERY round sits inside
+    it and the leg can excuse a duty indefinitely -- the sharpest form of the defect. On this
+    box at 2026-10-25T18:20Z three duties sat past that threshold (7.14x, 15.07x, 12.64x)
+    and all three read `problems: 0`. This control FAILS on that tree and passes on the
+    fixed one, and it is stated as a property of the leg rather than of a live value.
+    """
+    fires = _fires((0.5, 24.5, 48.5))
+    ledger = [
+        _fire_receipt(0.5, 50000.0, 61),
+        _fire_receipt(24.5, 50000.0, 62),
+        _fire_receipt(48.5, 50000.0, 63),
+    ]
+    leg = _duty_leg([_duty_row()], ledger, fires=fires)
+    residual = leg["coverage"]["residuals"][0]
+    ratio = RUNNER.duty_cadence_ratio(residual)
+    assert ratio >= 2.0, ratio
+    assert residual["over_cadence"] is True, residual
+    assert [p for p in leg["problems"] if residual["name"] in p], (
+        f"a residual at {ratio:.2f}x the job's own cadence excuses every round it covers, so "
+        f"it must never read clean: {leg['problems']}"
+    )
+
+
+def test_a_MILDLY_OVER_CADENCE_duty_reports_JUDGEABLE_with_its_WINDOW() -> None:
+    """ARM 4 of the #549 ruling: `factory-registry-attest` reads 1.66x, and it is JUDGEABLE.
+
+    The live read at 2026-10-25T18:20Z: residual 39.91 h against a 24.00 h cadence. A duty
+    whose window reaches its cadence is a FINDING, but it is not a duty that cannot be
+    judged -- its round IS judged against that window and the leg returns a verdict over it.
+    That distinction is the whole of this arm: a problem that read as NOT JUDGED would
+    retract a verdict the leg did reach, which is the #160 class in the other direction.
+    """
+    fires = _fires((0.5, 24.5, 48.5))
+    ledger = [
+        _fire_receipt(0.5, 35920.0, 41),
+        _fire_receipt(24.5, 35920.0, 42),
+        _fire_receipt(48.5, 35920.0, 43),
+    ]
+    # Read PAST the newest fire's window (48.5 h fire + 39.9 h residual), so the round is
+    # JUDGED rather than excused as IN FLIGHT -- otherwise the arm would assert judgeability
+    # from a run that judged nothing.
+    leg = _duty_leg([_duty_row()], ledger, fires=fires,
+                    read_at=_plus(_DUTY_BOUND, 100.0))
+    residual = leg["coverage"]["residuals"][0]
+    ratio = RUNNER.duty_cadence_ratio(residual)
+    assert residual["over_cadence"] is True, residual
+    assert 1.5 < ratio < 2.0, ratio
+    assert leg["coverage"]["duties_judged"], leg["coverage"]
+    named = [p for p in leg["problems"] if residual["name"] in p]
+    assert len(named) == 1, leg["problems"]
+    assert "still JUDGEABLE with" in named[0], named[0]
+    assert f"{ratio:.2f}x" in named[0], named[0]
+    assert "never refused" in named[0], named[0]
+
+
+def test_a_SUPPRESSED_duty_keeps_its_EXCUSE_beside_the_CADENCE_finding() -> None:
+    """ARM 5 of the #549 ruling: the new finding must not SWALLOW the existing excuses.
+
+    `factory-questions-redeliver` is the live instance: it is judged on a PRIOR round every
+    time because its own gate suppresses each fire, and its excuse is the daemon's own record
+    rather than a declaration. A problem appended to the same leg must leave that excuse in
+    `excused`, with its reason -- a finding that displaced an excuse would trade a false
+    clean for a false MISSING, which is the #160 class from the other side.
+    """
+    fires = _fires((0.5, 24.5, 48.5), suppressed=True)
+    ledger = [
+        _fire_receipt(0.5, 25200.0, 51),
+        _fire_receipt(24.5, 25200.0, 52),
+        _fire_receipt(48.5, 25200.0, 53),
+    ]
+    leg = _duty_leg([_duty_row()], ledger, fires=fires,
+                    read_at=_plus(_DUTY_BOUND, 100.0))
+    assert leg["coverage"]["rounds_excused_by_suppression"] >= 1, leg["coverage"]
+    suppressed = [e for e in leg["excused"] if "SUPPRESSED" in e]
+    assert suppressed, leg["excused"]
+    assert RUNNER.CRON_SUPPRESSION_MARKER in suppressed[0], suppressed[0]
+    # AND the cadence finding is still there: the two are different facts about one job.
+    assert leg["coverage"]["rounds_over_cadence"] == 1, leg["coverage"]
+    assert any("DISCRIMINATE" in p for p in leg["problems"]), leg["problems"]
+
 
 def test_a_MALFORMED_receipt_is_REPORTED_and_proven_to_BITE() -> None:
     """#281 (A), acceptance 1 of ruling n=2003 — and the BITE is the probe.
@@ -5032,7 +5148,15 @@ def test_the_fires_arm_is_CLEAN_when_every_fire_answered() -> None:
     cov = leg["coverage"]
     assert cov["fires_unanswered"] == 0, (cov, leg["problems"])
     assert cov["rounds_under_receipted"] == 0, cov
-    assert not leg["problems"], leg["problems"]
+    # SCOPED TO THE RECEIPT ARMS, because `problems` now carries a SECOND class. The
+    # cadence finding (ruling n=4153) fires on this fixture by construction: all four
+    # receipts key ONE round date, so "newest candidate wins" gives the FIRST fire a
+    # 12.25 h latency (44100 s measured max over 4 rounds) and the derived residual
+    # reaches 12.25x the 4 h cadence. That is the derivation's own behaviour, not a
+    # receipt that failed to answer a fire -- so a blanket `problems == []` here would
+    # conflate two arms and stay RED forever on a fixture whose receipts are all present.
+    assert not [p for p in leg["problems"] if "UNDER-RECEIPTED" in p], leg["problems"]
+    assert cov["rounds_over_cadence"] == 1, cov
 
 def test_the_fires_arm_REDs_a_receipt_that_keys_its_COMPLETION_hour() -> None:
     """The 10-06 miss, reproduced: the fire is at 06:50 and the lane wrote a `T09` row.
