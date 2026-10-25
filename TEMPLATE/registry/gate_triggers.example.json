@@ -264,6 +264,7 @@
       "docs/hygiene-protected.json",
       "evidence/**",
       "registry/**",
+      "reviews/**",
       "tools/hygiene.py"
     ],
     "tests/test_hygiene_stale_dirs.py": [
@@ -733,6 +734,7 @@
       "docs/*exemptions*.example.json",
       "docs/*exemptions*.json",
       "docs/hygiene-protected.json",
+      "reviews/**",
       "tools/hygiene.py"
     ],
     "tools/ledger.py": [
