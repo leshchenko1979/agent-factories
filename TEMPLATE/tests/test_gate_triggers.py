@@ -980,6 +980,163 @@ PROBES = (
 )
 
 
+# --- #553: a run STATES its own outcome, so a pass and a crash differ -----------------
+#
+# No stated skip: every arm builds its OWN fixture tree and runs the real CLI as a
+# SUBPROCESS with stdout and stderr on the SAME file. That is not incidental. In-process
+# capture writes to a StringIO, which does not block-buffer, so the buffering defect this
+# unit removes is invisible to it: the ordering arm below can only red if the child's stdout
+# is a real file descriptor. A probe that captured in-process would pass on the broken code.
+
+FIXTURE_553_AUDIT = (
+    "from __future__ import annotations\n"
+    "import sys\n"
+    "from pathlib import Path\n"
+    "\n"
+    "sys.path.insert(0, str(Path(__file__).resolve().parent))\n"
+    "from gate_budget import gate_key_for_cmd  # noqa: E402\n"
+    "\n"
+    "gates_to_run = []\n"
+    'gates_to_run.append([sys.executable, "tests/fixture_clean_gate.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/fixture_fail_gate.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/fixture_kill_gate.py"])\n'
+    "\n"
+    "def registered_gates(repo_root):\n"
+    "    return [cmd for cmd in gates_to_run if gate_key_for_cmd(cmd, repo_root)]\n"
+)
+
+FIXTURE_553_CRASHING_AUDIT = (
+    "from __future__ import annotations\n"
+    "import sys\n"
+    "from pathlib import Path\n"
+    "\n"
+    "sys.path.insert(0, str(Path(__file__).resolve().parent))\n"
+    "from gate_budget import gate_key_for_cmd  # noqa: E402\n"
+    "\n"
+    "def registered_gates(repo_root):\n"
+    "    return None\n"
+)
+
+FIXTURE_553_GATES = {
+    "tests/fixture_clean_gate.py": "raise SystemExit(0)\n",
+    "tests/fixture_fail_gate.py": (
+        "import sys\nsys.stderr.write('fixture says no\\n')\nraise SystemExit(1)\n"
+    ),
+    "tests/fixture_kill_gate.py": "raise SystemExit(124)\n",
+}
+
+def _fixture_553(root: Path, selected: str | None) -> None:
+    """One gate on the map, so each arm's run has exactly one outcome to report."""
+    (root / "tools").mkdir(parents=True, exist_ok=True)
+    (root / "tests").mkdir(parents=True, exist_ok=True)
+    (root / "registry").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(GATE_BUDGET, root / "tools" / "gate_budget.py")
+    (root / "tools" / "audit.py").write_text(FIXTURE_553_AUDIT, encoding="utf-8")
+    for relative, body in FIXTURE_553_GATES.items():
+        (root / relative).write_text(body, encoding="utf-8")
+    gates = {selected: ["*.txt"]} if selected else {}
+    (root / "registry" / "gate_triggers.json").write_text(
+        json.dumps({"gates": gates, "floor": [], "default": "full"}), encoding="utf-8"
+    )
+
+def _run_553(root: Path, log: Path) -> tuple[int, list[str]]:
+    """Run the real CLI with BOTH streams on one file, so their ORDER is observable."""
+    with log.open("wb") as handle:
+        proc = subprocess.run(
+            [sys.executable, str(GATE_SELECT), "--paths", "x.txt", "--run",
+             "--repo-root", str(root)],
+            stdout=handle,
+            stderr=subprocess.STDOUT,
+            cwd=str(root),
+        )
+    return proc.returncode, log.read_text(encoding="utf-8").splitlines()
+
+def _summary_553(lines: list[str]) -> list[str]:
+    return [line for line in lines if "gate-select:" in line and " gate(s) ran, " in line]
+
+def probe_a_run_STATES_its_own_outcome() -> None:
+    """#553 (ruling `n=4180`): every `--run` exit prints ONE summary line, and a crash does not.
+
+    A clean `--run` used to print nothing after its selection: `FAILED` and `NO VERDICT` were
+    the only verdicts in the file and the clean path fell through to `return 0` in silence, so
+    a green log and a crashed process were the SAME BYTES. Four arms, each with its own
+    fixture gate, because each state must be distinguishable from the other three:
+
+      * pass      -- rc=0, and the line says so
+      * fail      -- rc=1, and the line says so
+      * no verdict -- rc=124, and the line says so; a kill is never a pass
+      * crash     -- NO line at all, which is the only thing that tells it from a pass
+
+    The ordering arm is the discriminator for the flush: stdout is block-buffered when it is a
+    file and stderr is not, so on the broken code a red run's log OPENED with `FAILED` lines
+    about a tree it had not yet named.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+
+        pass_root = base / "pass"
+        _fixture_553(pass_root, "tests/fixture_clean_gate.py")
+        rc, lines = _run_553(pass_root, base / "pass.log")
+        summary = _summary_553(lines)
+        check(
+            "a CLEAN run exits 0 and STATES it in one summary line",
+            rc == 0
+            and summary == ["gate-select: 1 gate(s) ran, 0 failed, 0 no-verdict \u2014 rc=0"],
+            f"rc={rc} summary={summary}",
+        )
+        check(
+            "the summary line is the LAST line of the log",
+            bool(lines) and bool(summary) and lines[-1] == summary[-1],
+            f"last={lines[-1] if lines else None!r} summary={summary}",
+        )
+
+        fail_root = base / "fail"
+        _fixture_553(fail_root, "tests/fixture_fail_gate.py")
+        rc, lines = _run_553(fail_root, base / "fail.log")
+        summary = _summary_553(lines)
+        check(
+            "a FAILING run exits 1 and STATES the failure and the code",
+            rc == 1
+            and summary == ["gate-select: 1 gate(s) ran, 1 failed, 0 no-verdict \u2014 rc=1"],
+            f"rc={rc} summary={summary}",
+        )
+        header_at = next(
+            (i for i, line in enumerate(lines) if line.startswith("gate-select: 1 gate(s), mode=")),
+            None,
+        )
+        failed_at = next(
+            (i for i, line in enumerate(lines) if line.startswith("gate-select: FAILED")), None
+        )
+        check(
+            "the selection header is FLUSHED before the verdict it introduces",
+            header_at is not None and failed_at is not None and header_at < failed_at,
+            f"header_at={header_at} failed_at={failed_at} (header after verdict = unflushed)",
+        )
+
+        kill_root = base / "kill"
+        _fixture_553(kill_root, "tests/fixture_kill_gate.py")
+        rc, lines = _run_553(kill_root, base / "kill.log")
+        summary = _summary_553(lines)
+        check(
+            "a KILLED gate exits 124 and the line says no-verdict, never a pass",
+            rc == 124
+            and summary == ["gate-select: 1 gate(s) ran, 0 failed, 1 no-verdict \u2014 rc=124"],
+            f"rc={rc} summary={summary}",
+        )
+
+        crash_root = base / "crash"
+        _fixture_553(crash_root, "tests/fixture_clean_gate.py")
+        (crash_root / "tools" / "audit.py").write_text(
+            FIXTURE_553_CRASHING_AUDIT, encoding="utf-8"
+        )
+        rc, lines = _run_553(crash_root, base / "crash.log")
+        summary = _summary_553(lines)
+        check(
+            "a CRASHED run prints NO summary line, which is how it differs from a pass",
+            rc != 0 and summary == [],
+            f"rc={rc} summary={summary} (a line here means the crash was reported as a run)",
+        )
+
 def main() -> int:
     for relative in (GATE_SELECT, AUDIT, GATE_REGISTRY, REWORK_TABLE, GATE_BUDGET):
         if not relative.is_file():
@@ -1047,6 +1204,10 @@ def test_probe_the_cli_reports_the_mode() -> None:
 
 def test_probe_the_run_mode_executes_gates_with_the_interpreter() -> None:
     _assert_probe(probe_the_run_mode_executes_gates_with_the_interpreter)
+
+def test_probe_a_run_states_its_own_outcome() -> None:
+    _assert_probe(probe_a_run_STATES_its_own_outcome)
+    _assert_probe(probe_a_run_STATES_its_own_outcome)
 
 if __name__ == "__main__":
     sys.exit(main())

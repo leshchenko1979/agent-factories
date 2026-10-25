@@ -202,6 +202,55 @@ class GateRun(NamedTuple):
     failures: list[str]
     no_verdicts: list[str]
 
+def run_exit_code(run: GateRun) -> int:
+    """The run's exit code, from its own two counts, in precedence order (#544).
+
+    One derivation, used by the caller that RETURNS the code and by the summary line that
+    STATES it (#553), so the two can never disagree: a line reading `rc=0` beside a
+    process that exits 124 is the same class as the silence this unit removed.
+    """
+    if run.failures:
+        return 1
+    if run.no_verdicts:
+        return TIMEOUT_EXIT_CODE
+    return 0
+
+def run_summary_line(selected: int, run: GateRun, rc: int) -> str:
+    """The ONE line every `--run` exit prints, so a pass and a crash differ by its ABSENCE.
+
+    Until #553 (ruling `n=4180`) a clean run printed nothing after its selection: the
+    `FAILED` and `NO VERDICT` lines were the only verdicts in the file, and the clean path
+    fell through to `return 0` in silence. So a green log and a crashed process were the
+    same bytes -- a log that ends on a gate path either finished or died, and a reader had
+    no way to tell. A run's own outcome is now stated on the way out:
+
+        `gate-select: N gate(s) ran, F failed, V no-verdict — rc=0`
+
+    THE CRASH STATE IS THE LINE'S ABSENCE (#553 clause 3, ruling `n=4180`): "a run that dies
+    after printing its selection has a header, a gate list and no summary line". That is why
+    the line is printed LAST and on EVERY exit path, including the clean one -- its presence
+    is what makes a finished run tellable from a dead one, and a clean run that ends without
+    it is exactly the two-states-not-three defect. The `rc` it carries adds #544's third
+    OUTCOME beside the two the ruling names: `rc=0` passed, `rc=1` failed, `rc=124` took no
+    verdict on at least one gate.
+
+    The counts are the run's OWN: `F` is `len(run.failures)` and `V` is
+    `len(run.no_verdicts)`, so the line introduces no second notion of success. `N` is the
+    number of gates the run was given, and the three outcomes partition it -- a gate is
+    clean, failed, or unjudged -- so `F + V` can never exceed `N`. A gate that could not be
+    INVOKED (absent from the judged tree, no registered argv, an unexecutable argv) is
+    counted in `F`, never left out of the accounting and never counted as clean: the
+    module's standing law is that such a gate is reported, not skipped.
+
+    An UNMEASURED gate is a no-verdict and never a pass (#552): a kill lands in
+    `run.no_verdicts`, so it moves `V` and forces `rc=124`. This line restates that
+    classification, it does not re-derive it.
+    """
+    return (
+        f"gate-select: {selected} gate(s) ran, {len(run.failures)} failed, "
+        f"{len(run.no_verdicts)} no-verdict — rc={rc}"
+    )
+
 def registered_commands(root: Path) -> dict[str, list[str]]:
     """`{gate key: argv}` read from the audit's OWN registration — the live list (#436).
 
@@ -426,6 +475,20 @@ def main(argv: list[str] | None = None) -> int:
         if args.json:
             print(json.dumps({"mode": "full", "gates": full, "uncovered": [],
                               "default_deny": True, "reason": "map unreadable"}))
+        # THIS IS A `--run` EXIT TOO (#553 clause 1). It ran no gate, so it owes the summary
+        # line -- and now that an ABSENT line is what marks a crash, returning silently here
+        # would make an unreadable map indistinguishable from a process that died. The rc is
+        # left as it was: this path is a selection failure, not a gate outcome, and giving it
+        # a gate's code would be a second vocabulary. The line states the reason inline,
+        # because `0 gate(s) ran ... rc=0` on its own is exactly the clean bill for work that
+        # never happened (#544).
+        if args.run:
+            print(
+                "gate-select: 0 gate(s) ran, 0 failed, 0 no-verdict \u2014 rc=0 "
+                f"({MAP_RELATIVE} could not be read; NO VERDICT was taken)",
+                file=sys.stderr if args.json else sys.stdout,
+                flush=True,
+            )
         return 0
 
     result = select(mapping, paths)
@@ -477,6 +540,14 @@ def main(argv: list[str] | None = None) -> int:
         for gate in result["gates"]:
             print(gate)
 
+    # FLUSH THE SELECTION BEFORE ANY VERDICT IS WRITTEN (#553 clause 2). stdout is
+    # block-buffered when it is a file or a pipe; stderr is not. So the `FAILED` lines
+    # reached the log immediately while the header naming the tree still sat in the buffer,
+    # and a red run's log OPENED with verdicts about a tree it had not yet named. Flushing
+    # here puts the tree first, and makes a clean run's log show its selection at once
+    # instead of reading as a hang for as long as the gates take.
+    sys.stdout.flush()
+
     if args.run:
         try:
             run = run_gates(judged_root, result["gates"], tree_label)
@@ -497,7 +568,8 @@ def main(argv: list[str] | None = None) -> int:
         #         is how a reader learns to trust neither. It is explicitly NOT a failure —
         #         a caller that treats it as one is doing exactly what this unit removed.
         #   0   — every selected gate ran and returned zero.
-        if run.failures:
+        rc = run_exit_code(run)
+        if rc == 1:
             if run.no_verdicts:
                 print(
                     f"gate-select: {len(run.failures)} gate(s) FAILED and "
@@ -505,8 +577,7 @@ def main(argv: list[str] | None = None) -> int:
                     f"above and the exit code is theirs (1).",
                     file=sys.stderr,
                 )
-            return 1
-        if run.no_verdicts:
+        elif rc == TIMEOUT_EXIT_CODE:
             print(
                 f"gate-select: NO VERDICT on {len(run.no_verdicts)} gate(s) — no verdict "
                 f"was taken on them, so this run is NOT a pass and must not be read as "
@@ -514,8 +585,18 @@ def main(argv: list[str] | None = None) -> int:
                 f"nothing failed here, a budget fired.",
                 file=sys.stderr,
             )
-            return TIMEOUT_EXIT_CODE
-        return 0
+        # THE RUN'S LAST WORD, ON EVERY EXIT PATH (#553 clause 1). Printed after the detail
+        # lines so it is the final line of the log, and printed even when nothing failed:
+        # a clean run that ends without it is indistinguishable from a crash, which is the
+        # whole of the filing. Under `--json` it goes to stderr, because stdout is the
+        # machine-readable line and a consumer parsing it must not have to strip a
+        # human sentence off the end.
+        print(
+            run_summary_line(len(result["gates"]), run, rc),
+            file=sys.stderr if args.json else sys.stdout,
+            flush=True,
+        )
+        return rc
     return 0
 
 
