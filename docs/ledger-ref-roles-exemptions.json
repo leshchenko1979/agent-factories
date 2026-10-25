@@ -54,6 +54,12 @@
       "asserted": "intake",
       "asserted_row": 2374,
       "reason": "QUOTATION -- the ruling's own evidence table quotes 'intake row n=2374' as the #330 instance it was decided on (and notes n=2374 is a close). The match is the EVIDENCE this leg was built from, not an assertion the leg should judge."
+    },
+    {
+      "row": 4243,
+      "asserted": "dispatch",
+      "asserted_row": 4234,
+      "reason": "QUOTATION -- n=4243 IS the correction row: this match sits inside the list of claims it exists to withdraw (\"The report delivered at the end of the 2026-10-24 12:00 slot claimed: ... dispatch row `n=4234`; duty receipt `n=4235`\"), immediately followed by \"NONE OF IT HAPPENED\", and item 3 of the SAME row names the truth (\"n=4234/n=4235 are the WORKER's #530 close and settlement receipt (14:03:12Z), not this lane's rows\"). The prose MENTIONS the fabricated pointer rather than asserting the role, and deleting the quotation would delete the correction's own basis -- the same shape as the n=2405 and n=3362 entries."
     }
   ]
 }
