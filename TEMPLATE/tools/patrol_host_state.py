@@ -5140,6 +5140,151 @@ def delivery_header(text: str, *, lines: int = DELIVERY_HEADER_LINES) -> str:
             break
     return "\n".join(kept)
 
+# THE ROUTING ROLE, NOT AN OFFSET (#550). The opening-line test above (#467) is inert on
+# a detail written without newlines: `delivery_header` then returns the WHOLE body, so a
+# prose mention in such a row is admitted as a routing. Measured at 4,155 rows: 455 of 689
+# dispatch rows (66.0 %) carry no newline, and 18 stem rows admit more than one unit.
+#
+# The remedy the filing proposed -- cap the header at N characters -- was WITHDRAWN by
+# ruling n=4156 as measured-unworkable: the maximum genuine first-unit offset is 2,274
+# (`n=330`, a unit standing after a lane preamble and a verbatim receipt), so any cap tight
+# enough to exclude `n=4048`'s `#422` at 565 silently demotes 8 to 15 legitimate routings.
+#
+# So the discriminator is GRAMMATICAL ROLE, found over both classes and stated as a rule
+# that reproduces all three mandated rows:
+#
+#   n=4048  (must-RED,  mentions 4)  #540 at 165 is the SUBJECT of "is a law-and-gate
+#                                    question"; #422/#529/#324 stand in a parenthetical,
+#                                    a possessive and a possessive.
+#   n=219   (must-GREEN, batch)      all five units are SUBJECTS of their own findings --
+#                                    "#33 unclaimed", "#35 had NO intake row", "#34
+#                                    claimed by HQ", "#36 closed in ledger", "#32 closed
+#                                    on the board" -- offsets 54..814, i.e. every one of
+#                                    them past a cap that would have fixed n=4048.
+#   n=330   (must-GREEN, single)     #40 at 2,274 is the subject of "shipped tonight";
+#                                    #54 and #52 stand in a parenthetical and a possessive.
+#
+# A token ROUTES when the row PREDICATES something of it -- the next non-space character
+# opens its own clause, which in this corpus is always a LETTER, a DIGIT, or the `->` every
+# dispatch arrow uses. Everything else is APPOSITION and reads as a MENTION: a possessive
+# (`#529's`), a parenthetical (`#422 (n=4035)`), a list separator (`#33/#35`), a dash gloss
+# (`#50 -- Triage routed ...`).
+#
+# TWO DRAFTS OF THIS RULE CARRIED DEAD BRANCHES, and both were removed only because a
+# mutation proved they could not change a verdict. A `ROUTING_MENTION_SEPARATORS` set
+# (`frozenset(",;:()[]/-")`) emptied by mutation changed NOTHING, and so did deleting the
+# `if tail.startswith("'s")` possessive branch -- an apostrophe and every punctuation mark
+# already fail the letter/digit test, which is the whole discriminator. A branch that cannot
+# change an outcome is the vacuous-gate failure this repo keeps recording, so neither ships.
+# What the probe DOES carry is the mutation that makes the arrow stop counting, and the one
+# that makes letters stop routing.
+#
+# TWO RESIDUALS, stated rather than hidden, and they point OPPOSITE ways:
+#
+#  - A coordinated mention whose conjunction is spelled out (`#52 and #55;`) reads `and` as
+#    the opening of a clause and ROUTES. That is the PERMISSIVE direction: it can over-admit,
+#    and it cannot demote a genuine dispatch, which is the direction that would break the two
+#    must-GREEN populations.
+#  - A unit the row hands to a verb as its OBJECT at the end of a clause (`this row ROUTES
+#    #972.`) is followed by a full stop, opens no clause, and reads as a MENTION. That is the
+#    DEMOTING direction and it is the one to watch: it is why the fixture in
+#    `test_a_BODY_MENTION_neither_ADMITS_a_unit_nor_SUPERSEDES_its_park` states its routing
+#    as `#972 is RE-DISPATCHED here` rather than after the verb. Measured on this ledger the
+#    shape does not occur in the 15 stem single-line rows that carry more than one unit, so
+#    it is disclosed as a residual rather than engineered for; a live instance makes it a
+#    defect with a fixture, not a guess with a patch.
+ROUTING_ARROW = "->"
+
+# A determiner in front of the unit makes it an ATTRIBUTIVE label, never a clause subject
+# (#550, measured on the live ledger 2026-10-26). The glosses the old `isalpha()` branch
+# bought are all of this shape -- `the #92 close n=633` (n=707), `the #213 class` (n=3552),
+# `the #509 precedent` (n=3763) -- and none of them dispatches anything. Every must-GREEN
+# row in the block comment stands after a clause boundary instead (`(1) `, `FINDINGS: `,
+# `whereas `, `. `) or after a noun the token is the reduced-relative subject of (`the same
+# move #40 shipped`, n=330). Reading the word BEFORE the token is therefore the
+# discriminator the word AFTER it could not be.
+ATTRIBUTIVE_DETERMINERS = frozenset({
+    "the", "a", "an", "its", "their", "his", "her", "this", "that", "these", "those",
+})
+
+
+def _word_before(text: str, end: int) -> str:
+    """The lower-cased alphabetic word immediately before the unit token ENDING at `end`.
+
+    The token must be stripped first, and that is the whole point: `end` is the token's own
+    end offset, so `text[:end]` still carries `#92` and a naive back-scan harvests the DIGITS
+    -- returning `"92"`, which is in no determiner set, which made the determiner refusal
+    inert on exactly the rows it was written for (`the #92 close` n=707, `the #213 class`
+    n=3552, `the #509 precedent` n=3763 all still routed, measured 2026-10-26).
+
+    Returns "" at a clause break, so a token that opens a clause is never demoted.
+    """
+    prev = str(text or "")[:end].rstrip()
+    token = re.search(r"#\w*$", prev)
+    if token:
+        prev = prev[:token.start()].rstrip()
+    cut = len(prev)
+    while cut > 0 and (prev[cut - 1].isalpha() or prev[cut - 1] == "'"):
+        cut -= 1
+    return prev[cut:].strip("'").lower()
+
+
+def token_routes_in_prose(text: str, end: int) -> bool:
+    """True when the unit token ENDING at `end` is the SUBJECT of its clause (#550).
+
+    Read from the bytes around the token, never from its offset: an offset test is what the
+    #467 rule already was, and the whole defect is that the offset carries no meaning once a
+    writer omits newlines. See the block comment above for the rows this rule is measured
+    against.
+
+    TWO REFUSALS, and they are different questions:
+
+    - the token is followed by nothing, a possessive (`#52's`), punctuation or a parenthesis
+      (`#422 (n=4035)`) -- it is a value or an aside, not a subject. The single exception is
+      the routing arrow, which is a declaration in its own right.
+    - the token is preceded by a determiner -- it labels an item (`the #213 class`) rather
+      than predicating anything of it.
+
+    RESIDUAL, disclosed rather than engineered for: a unit that is the grammatical subject
+    of a STATIVE or REPORTING verb still routes -- `#141 were noted for awareness only`
+    (n=907) and `while #462 stays OPEN` (n=3806). Those are indistinguishable from
+    `#36 closed` (n=219, must-GREEN) without a semantic verb lexicon, and a lexicon tuned to
+    the rows in front of it is dead text the day it lands. They stay routed until a live
+    instance makes the class worth a measured fixture.
+    """
+    body = str(text or "")
+    stripped = body[end:].lstrip()
+    if not stripped:
+        return False
+    if stripped.startswith(ROUTING_ARROW):
+        return True
+    first = stripped[0]
+    if not (first.isalpha() or first.isdigit()):
+        return False
+    return _word_before(body, end) not in ATTRIBUTIVE_DETERMINERS
+
+def typed_subject_units(row: dict) -> set[str]:
+    """The units a row DECLARES in its typed `refs`, which outrank its prose (#550 clause 1).
+
+    A `{"subject": "#<n>"}` ref is a declaration; prose is not. Ruling n=4156 measured this
+    half as provable today and narrow: of the stem single-line rows that admit more than one
+    unit, exactly ONE carries a typed subject ref (`n=4048`), so honouring the declaration
+    cannot break the others. When a row declares one, the declared set IS its routing and
+    prose cannot add to it -- which is what demotes `n=4048`'s `#507`, a token its own prose
+    would otherwise route as a predicate subject.
+    """
+    out: set[str] = set()
+    for ref in (row.get("refs") or []):
+        if not isinstance(ref, dict):
+            continue
+        value = ref.get("subject")
+        if isinstance(value, str):
+            token = value.strip()
+            if token:
+                out.add(token if token.startswith("#") else f"#{token}")
+    return out
+
+
 def box_deliveries(root: Path | None = None) -> tuple[list[dict], list[str], list[str]]:
     """(deliveries, homes_read, unreached) for every delivered notify on the box.
 
@@ -7453,24 +7598,39 @@ def stall_census_leg(
                 declare(subject, row, routed=True)
             continue
         blob = f"{row.get('detail') or ''} {row.get('refs') or ''}"
-        # THE ROUTING TEST (#467). A carrier is read for the units it NAMES; whether it
-        # ROUTED them is a second question, and the ledger's own answer is WHERE the
-        # token stands. A batch dispatch declares its units in its OPENING LINE
-        # (`DISPATCH #318 -> the HQ lane`, `CENSUS RE-DISPATCH #67 -> Worker`), while a
-        # row that merely TALKS about them -- an escalation, a return leg, a defect
-        # carried -- lists them hundreds of characters and many lines further down.
-        # The scope is the SAME declared header the dispatch-delivery leg measures a
-        # delivery's subject against (#433), read through the SAME helper, because it
-        # is the same question one surface over: a body mention is a MENTION, not a
-        # routing. Raising the scope is a one-line change here, the same lever the
-        # delivery leg declares for a factory whose notices open with a banner.
-        header = delivery_header(row.get("detail") or "")
-        header_units = {
-            match.group(0)
-            for match in re.finditer(r"#\d+", header)
-            if is_unit(match.group(0))
-            and is_board_unit_occurrence(header, match.start())
-        }
+        # THE ROUTING TEST (#467, re-based by #550). A carrier is read for the units it
+        # NAMES; whether it ROUTED them is a second question, and the ledger's own answer
+        # is the token's GRAMMATICAL ROLE, never its offset. The opening-line scope this
+        # test used to read is INERT on a detail written without newlines -- `delivery_header`
+        # then returns the whole body, so every prose mention in such a row was admitted as
+        # a routing (455 of 689 dispatch rows, 66.0 %). Ruling n=4156 withdrew the offset
+        # cap the filing proposed and required the prose discriminator to be FOUND; it is
+        # `token_routes_in_prose` above, measured against `n=4048` (must-RED), `n=219`
+        # (must-GREEN batch) and `n=330` (must-GREEN single), and it reads the whole detail
+        # precisely because the newline is no longer the boundary that carries meaning.
+        #
+        # TYPED REFS OUTRANK PROSE (clause 1): a row that DECLARES a `{"subject": "#<n>"}`
+        # ref routes exactly the declared set and prose cannot add to it -- that is what
+        # demotes `n=4048`'s `#507`, which its own prose would route as a predicate subject.
+        detail = row.get("detail") or ""
+        declared_units = typed_subject_units(row)
+        if declared_units:
+            # A DECLARATION IS ITS OWN AUTHORITY: the residency test that gates the PROSE
+            # harvest below asks whether a free-text token names a unit of this board, and a
+            # `{"subject": "#<n>"}` ref answers that by construction. Requiring residency
+            # here made a row's declared routing depend on some OTHER row existing -- the
+            # #550 fixture caught it, where the declared unit was the row's ONLY routing and
+            # the row ended up routing nothing at all.
+            header_units = {unit for unit in declared_units if is_unit(unit)}
+        else:
+            header_units = {
+                match.group(0)
+                for match in re.finditer(r"#\d+", detail)
+                if is_unit(match.group(0))
+                and match.group(0) in resident
+                and is_board_unit_occurrence(detail, match.start())
+                and token_routes_in_prose(detail, match.end())
+            }
         units = {
             match.group(0)
             for match in re.finditer(r"#\d+", blob)
@@ -7480,6 +7640,11 @@ def stall_census_leg(
             # merely named in prose that belongs to another repository's namespace.
             and is_board_unit_occurrence(blob, match.start())
         }
+        # A DECLARED unit joins the harvest even when no other row names it, for the reason
+        # the `header_units` branch above states: the declaration is the authority, and the
+        # harvest must be able to SEE the unit it routes or the routing is dropped by the
+        # `for unit in units` loop below.
+        units |= header_units
         if not units:
             observation += 1
             continue
@@ -12371,8 +12536,9 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  dispatch rows examined: {cov['dispatch_rows_examined']} "
                 f"({cov['observation_dispatches']} observation dispatch(es), explicitly "
                 f"legal; {cov['carried_units_resolved']} carried unit(s) resolved, "
-                f"{cov['mentions_rejected']} of their token(s) named only in the BODY "
-                f"and read as a MENTION, never as a routing (#467); "
+                f"{cov['mentions_rejected']} of their token(s) standing in APPOSITION -- "
+                f"a possessive, a parenthetical, a list separator or a dash gloss -- and "
+                f"read as a MENTION, never as a routing (#467, re-based by #550); "
                 f"{cov['units_off_board']} unit(s) dropped as not an OPEN issue of this "
                 f"board)"
             )
@@ -12385,11 +12551,18 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             # admits ROUTED units alone, so a reader must be able to see how many units the
             # harvest saw and refused the population slot -- a narrowed read that hides what
             # it dropped is the failure this leg exists to catch.
+            # THE COUNT PRINTS ITS POPULATION (#550 clause 5): a bare "N mentions" has no
+            # denominator, so a reader cannot tell a narrow read from a small one. The
+            # population is the carried tokens this leg examined, and it is printed on the
+            # same line as the refused subset.
             lines.append(
-                f"  mentions: {cov['units_named_only_as_mentions']} unit(s) named by a "
-                f"dispatch row that never ROUTED them (their tokens stand in the BODY, not "
-                f"in the row's opening line) -- admitted to no population, dated by no row, "
-                f"and holding no park back (#470)"
+                f"  mentions: {cov['units_named_only_as_mentions']} of "
+                f"{cov['carried_units_resolved']} carried token(s) named by a dispatch row "
+                f"that never ROUTED them -- the token stands in APPOSITION to its clause (a "
+                f"possessive, a parenthetical, a list separator or a dash gloss), or the row "
+                f"DECLARES its routing in a typed subject ref and prose cannot add to it "
+                f"(#550) -- admitted to no population, dated by no row, and holding no park "
+                f"back (#470)"
             )
             # THE DRAIN EVIDENCE IS PRINTED BESIDE THE OWED TOTAL (#465 criterion 1): a bare
             # "9 OWED" reads as nine independent findings, and where the addressee lane is

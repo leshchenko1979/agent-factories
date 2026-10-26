@@ -7116,13 +7116,21 @@ def test_a_BODY_MENTION_neither_ADMITS_a_unit_nor_SUPERSEDES_its_park() -> None:
     in the harvest's coverage (#467 criterion 3, asserted below), but it may take no ROUTING
     slot -- not population admission, not the age, not park supersession.
 
-    THE DISCRIMINATOR IS THE TOKEN'S POSITION, not the row's identity, and the arms below
-    differ in that ALONE. `#971` is named only in a carrier's body, and its park HOLDS.
-    `#972` is named in the SAME carrier's opening line, so it was ROUTED and its park is
-    SUPERSEDED. `#973` is routed by a direct dispatch row and is superseded too. An
-    implementation that refused every carrier row fails on `#972`; one that obeyed every
-    carrier row fails on `#971` -- and the carrier is the NEWEST row in both cases, so the
-    mention arm is a live supersession that must not happen rather than a row too old to act.
+    THE DISCRIMINATOR IS THE TOKEN'S GRAMMATICAL ROLE, not its offset (#550 re-based this
+    from #467's opening-line test, which ruling n=4156 withdrew as inert on one-line
+    details). The arms below differ in ROLE ALONE: `#971` is named only in a carrier's body,
+    standing in APPOSITION to its clause, and its park HOLDS. `#972` is the SUBJECT of the
+    same carrier's opening clause, so it was ROUTED and its park is SUPERSEDED. `#973` is
+    routed by a direct dispatch row and is superseded too. An implementation that refused
+    every carrier row fails on `#972`; one that obeyed every carrier row fails on `#971` --
+    and the carrier is the NEWEST row in both cases, so the mention arm is a live
+    supersession that must not happen rather than a row too old to act.
+
+    Note the shape `#972` needs: a token the row PREDICATES something of, never one it merely
+    hands to a verb as an object. `this row ROUTES #972.` reads as a MENTION under the role
+    test, because the bytes after the token open no clause -- which is the same reason
+    `n=4048`'s `#529's tests` does not route. The fixture states the routing the way a real
+    dispatch row does: subject first, then the predicate.
     """
     now = dt.datetime.now(dt.timezone.utc)
     read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -7131,7 +7139,8 @@ def test_a_BODY_MENTION_neither_ADMITS_a_unit_nor_SUPERSEDES_its_park() -> None:
         # #971: parked, then named only in a carrier's BODY -- the park must HOLD.
         _stall_row(1, "intake", "#971", 6, now=now),
         _park_row(2, "#971", 5, "park:owner:q40", now=now),
-        # #972: parked, then named in the carrier's OPENING LINE -- ROUTED, so SUPERSEDED.
+        # #972: parked, then the SUBJECT of the carrier's opening clause -- ROUTED, so
+        # SUPERSEDED.
         _stall_row(3, "intake", "#972", 6, now=now),
         _park_row(4, "#972", 5, "park:owner:q41", now=now),
         # #973: parked, then re-dispatched by a direct row -- SUPERSEDED, the #331 control.
@@ -7139,9 +7148,10 @@ def test_a_BODY_MENTION_neither_ADMITS_a_unit_nor_SUPERSEDES_its_park() -> None:
         _park_row(6, "#973", 5, "park:owner:q42", now=now),
         _stall_row(7, "dispatch", "#973", 2, now=now),
         # THE CARRIER, and the newest row in the population: a descriptive stem that ROUTES
-        # #972 in its opening line and only TALKS about #971 further down (the `n=3098` shape).
+        # #972 as the subject of its opening clause and only TALKS about #971 further down
+        # (the `n=3098` shape).
         _stall_row(8, "dispatch", "stall-census-escalation-probe", 3, now=now,
-                   detail="TRIAGE ESCALATION -> the HQ lane: this row ROUTES #972.\n\n"
+                   detail="TRIAGE ESCALATION -> the HQ lane: #972 is RE-DISPATCHED here.\n\n"
                           "Its body then talks about #971, and hands it to nobody."),
     ]
 
@@ -10775,8 +10785,11 @@ def test_the_stall_census_leg_reads_a_CARRIER_mention_as_a_MENTION_never_a_ROUTI
     # THE RENDER HALF: the rejected count reaches the report.
     rc, out, _ = _run(issues, rows, lane_names_fn=lambda: names)
     assert rc == 1, f"OWED lines must fail the run, got rc={rc}\n{out}"
-    assert "named only in the BODY and read as a MENTION, never as a routing (#467)" in out, out
-    assert "2 of their token(s) named only in the BODY" in out, out
+    # The predicate's NAME moved with #550 (the discriminator is grammatical role, not the
+    # opening line), so the assertion tracks the current wording -- what it pins is the
+    # SUBSTANCE: a token this leg refused is reported as a MENTION and never as a routing.
+    assert "read as a MENTION, never as a routing (#467, re-based by #550)" in out, out
+    assert "2 of their token(s) standing in APPOSITION" in out, out
 
 # --- #241: the shared-tree rider ------------------------------------------------
 
@@ -11237,6 +11250,190 @@ def test_the_criterion_path_leg_JUDGES_bare_prose_with_no_attribution() -> None:
     assert leg["problems"], "bare prose with no attribution was excused — the branch became a catch-all"
     assert "`docs/some-new-law-forbidden.json`" in leg["problems"][0], leg["problems"]
     assert leg["coverage"]["cited"] == 0, leg["coverage"]
+
+# THE ROUTING DISCRIMINATOR IS GRAMMATICAL ROLE, NOT AN OFFSET (#550).
+#
+# The #467 test read a carrier's routing off its OPENING LINE, and `delivery_header` returns
+# the first non-blank line -- so a detail written with NO newline made the "header" the whole
+# body and every prose mention in it a routing. Measured at 4,155 rows: 455 of 689 dispatch
+# rows (66.0 %) carry no newline. Ruling n=4156 withdrew the offset cap the filing proposed
+# (the maximum genuine first-unit offset is 2,274, so any cap tight enough to fix the defect
+# silently demotes 8 to 15 real routings) and required the prose discriminator to be FOUND
+# over both classes. The three fixtures below are those classes, taken from the live rows
+# `n=4048` (must-RED), `n=219` (must-GREEN batch) and `n=330` (must-GREEN single), and the
+# fourth arm proves the verdict no longer depends on the newline at all.
+
+def _pad(chars: int) -> str:
+    """Prose filler with no unit token and no repository qualifier in it."""
+    unit = "the lane read its own store and stated the measurement rather than the impression "
+    return (unit * (chars // len(unit) + 1))[:chars]
+
+def test_the_ROUTING_test_reads_GRAMMATICAL_ROLE_not_the_opening_line() -> None:
+    """#550 acceptance (1)-(3): a one-line detail separates its ROUTED unit from its
+    MENTIONS, a genuine batch keeps every unit, and a unit standing 2,000+ characters in
+    after a preamble still routes -- so the fix cannot pass by demoting real dispatches.
+
+    Arm 1 is `n=4048`'s shape: a typed `{"subject": "#961"}` ref, a SECOND unit 800+
+    characters later that its own prose predicates (`#962 was built for`), a possessive
+    (`#963's`) and a parenthetical (`#964 (n=4035)`). Before the fix all four read ROUTED
+    and four units were dispatched by a row that dispatched one. Arm 2 is `n=219`'s batch:
+    five units, every one the subject of its own finding, spread past offset 800 -- the
+    population an offset cap destroys. Arm 3 is `n=330`'s single dispatch: the unit at
+    offset 2,274, after a lane preamble and a verbatim receipt.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # ---- arm 1: the must-RED shape (n=4048) -----------------------------------------
+    typed_detail = (
+        "DISPATCH to the HQ lane, resolved LIVE this turn rather than from memory. "
+        "#961 is a law-and-gate question and HQ owns the ruling, so HQ is the addressee; "
+        "no worker dispatch is owed until HQ rules. WHAT IS OWED: a ruling on the shape. "
+        + _pad(700)
+        + " #962 was built for that case. NOT OWED TO A WORKER: the other findings are "
+        "already routed -- #963's tests were dispatched elsewhere, and #964 (n=4035) is "
+        "parked on the owner design gate."
+    )
+    arm1_rows = [
+        _stall_row(1, "dispatch", "criterion-path-dead-exemption-probe", 5, now=now,
+                   detail=typed_detail, refs=[{"subject": "#961"}]),
+        _stall_row(2, "intake", "#962", 9, now=now),
+        _stall_row(3, "intake", "#963", 9, now=now),
+        _stall_row(4, "intake", "#964", 9, now=now),
+    ]
+    arm1_issues = [_issue(961, "OPEN"), _issue(962, "OPEN"), _issue(963, "OPEN"),
+                   _issue(964, "OPEN")]
+    arm1 = RUNNER.stall_census_leg(arm1_issues, arm1_rows, read_at=read_at)
+    cov = arm1["coverage"]
+    assert cov["units_in_population"] == 1, (
+        f"the row DECLARES #961 in a typed subject ref and prose cannot add to it (#550 "
+        f"clause 1) -- three units dispatched by a row that dispatched one is the defect\n"
+        f"{cov}"
+    )
+    named = "\n".join(arm1["problems"])
+    assert "OWED #961" in named, named
+    for mention in ("#962", "#963", "#964"):
+        assert f"OWED {mention}" not in named, (
+            f"{mention} stands in apposition to its clause and must never become a "
+            f"routing, let alone an OWED finding\n{named}"
+        )
+    assert cov["units_named_only_as_mentions"] == 3, cov
+
+    # ---- arm 1b: the mentions count PRINTS ITS POPULATION (clause 5) ----------------
+    # A bare "3 mentions" has no denominator, so a reader cannot tell a narrow read from a
+    # small one. Driven through the REAL `main()` so the line under test is the one a lane
+    # reads, not a string this probe assembled.
+    rc1, out1, _ = _run(arm1_issues, arm1_rows)
+    assert rc1 == 1, f"the owed unit must fail the run\n{out1}"
+    assert "mentions: 3 of 4 carried token(s)" in out1, (
+        f"the count must stand beside the population it was drawn from -- 3 refused out of "
+        f"4 examined\n{[ln for ln in out1.splitlines() if 'mention' in ln]}"
+    )
+    assert "in APPOSITION" in out1, (
+        f"the line must state the predicate it applied, not just a number\n{out1[-2000:]}"
+    )
+
+    # ---- arm 2: the must-GREEN batch (n=219) ----------------------------------------
+    batch_detail = (
+        "Hourly triage pacemaker sweep complete. FINDINGS: (1) #971 unclaimed 4h10m since "
+        "intake -> dispatched to the Worker lane. " + _pad(300)
+        + " (2) #972 had NO intake row -> intaken and dispatched in the same brief. "
+        + _pad(300)
+        + " (3) #973 claimed by HQ and parked while HQ lands the owner's item. "
+        + _pad(300)
+        + " (4) #974 closed in the ledger but OPEN on the board. "
+        + _pad(300)
+        + " (5) #975 closed on the board 34s after its ledger close."
+    )
+    batch_rows = [
+        _stall_row(11, "dispatch", "sweep-probe", 5, now=now, detail=batch_detail),
+    ] + [_stall_row(20 + i, "intake", f"#{n}", 9, now=now)
+         for i, n in enumerate((971, 972, 973, 974, 975))]
+    batch_issues = [_issue(n, "OPEN") for n in (971, 972, 973, 974, 975)]
+    batch = RUNNER.stall_census_leg(batch_issues, batch_rows, read_at=read_at)
+    assert batch["coverage"]["units_in_population"] == 5, (
+        f"every unit in a genuine batch is the SUBJECT of its own finding, at offsets past "
+        f"800 -- a fix that demotes them is the offset cap the ruling withdrew\n"
+        f"{batch['coverage']}"
+    )
+    assert batch["coverage"]["units_named_only_as_mentions"] == 0, batch["coverage"]
+
+    # ---- arm 3: the must-GREEN single dispatch at offset 2,274 (n=330) --------------
+    preamble = ("hq -> Worker lane, delivery turn-end; receipt verbatim: 'Delivered to "
+                "session ... It will process the message on its next turn.' ")
+    single_detail = (
+        preamble + _pad(2000)
+        + " THE DECIDING MOVE #976 shipped tonight. PRIORITY STATED: before #977 (n=325) "
+        "and before #978's two mechanical halves."
+    )
+    assert single_detail.index("#976") > 2000, single_detail.index("#976")
+    single_rows = [
+        _stall_row(31, "dispatch", "ledger-clause-gate-exit-probe", 5, now=now,
+                   detail=single_detail),
+        _stall_row(32, "intake", "#977", 9, now=now),
+        _stall_row(33, "intake", "#978", 9, now=now),
+        _stall_row(34, "intake", "#976", 9, now=now),
+    ]
+    single = RUNNER.stall_census_leg(
+        [_issue(976, "OPEN"), _issue(977, "OPEN"), _issue(978, "OPEN")],
+        single_rows, read_at=read_at)
+    assert single["coverage"]["units_in_population"] == 1, single["coverage"]
+    assert "OWED #976" in "\n".join(single["problems"]), (
+        f"a unit at offset {single_detail.index('#976')} is a REAL dispatch and must route; "
+        f"an offset cap tight enough to fix arm 1 demotes exactly this\n"
+        f"{single['problems']}"
+    )
+    assert single["coverage"]["units_named_only_as_mentions"] == 2, single["coverage"]
+
+    # ---- arm 4: the newline is NOT the discriminator --------------------------------
+    # The filing's own criterion 2, sharpened: the SAME text with real newlines at the same
+    # logical places must reach the SAME verdict, so the fix is provably not a narrowing of
+    # the newline case in either direction.
+    newlined = batch_detail.replace(" (", "\n(")
+    assert newlined != batch_detail, "the control must actually change the bytes"
+    newline_rows = [
+        _stall_row(41, "dispatch", "sweep-probe", 5, now=now, detail=newlined),
+    ] + [_stall_row(50 + i, "intake", f"#{n}", 9, now=now)
+         for i, n in enumerate((971, 972, 973, 974, 975))]
+    split = RUNNER.stall_census_leg(batch_issues, newline_rows, read_at=read_at)
+    assert split["coverage"]["units_in_population"] == 5, split["coverage"]
+    assert split["coverage"]["units_named_only_as_mentions"] == 0, split["coverage"]
+
+def test_the_ROUTING_role_predicate_states_each_measured_shape() -> None:
+    """The predicate ITSELF, on the three live rows' own token contexts (#550).
+
+    Driven through `token_routes_in_prose` directly, because the leg-level arms above can be
+    satisfied by a rule that happens to agree on these fixtures while reading the wrong
+    signal. Each assertion quotes the bytes that follow the token on the live row it came
+    from, so a widened or narrowed separator set fails here by name.
+    """
+    routes = RUNNER.token_routes_in_prose
+    # n=219 -- every one of these is the subject of its own finding.
+    assert routes("#33 unclaimed 4h10m since intake", len("#33")) is True
+    assert routes("#35 had NO intake row", len("#35")) is True
+    assert routes("#34 claimed by HQ (n=198)", len("#34")) is True
+    assert routes("#36 closed in ledger", len("#36")) is True
+    assert routes("#32 closed on the board 34s", len("#32")) is True
+    # n=330 -- the routed unit, then two mentions.
+    assert routes("#40 shipped tonight", len("#40")) is True
+    assert routes("#54 (n=325) and before", len("#54")) is False
+    assert routes("#52's two mechanical halves", len("#52")) is False
+    # n=4048 -- the typed ref routes #540; these three are prose mentions.
+    assert routes("#540 is a law-and-gate question", len("#540")) is True
+    assert routes("#422 (n=4035). Removing them", len("#422")) is False
+    assert routes("#529's tests were dispatched", len("#529")) is False
+    assert routes("#324's TEMPLATE test parked", len("#324")) is False
+    # the dispatch arrow every routing row uses, and the list/coordination separators.
+    assert routes("#318 -> the HQ lane", len("#318")) is True
+    assert routes("#33/#35, which the Worker claimed", len("#33")) is False
+    assert routes("#50 -- Triage routed the identical row", len("#50")) is False
+    # the possessive is refused on its own, not because of what follows it.
+    assert routes("#52's", len("#52")) is False
+    assert routes("#52 and #55; the issue's number", len("#52")) is True, (
+        "a spelled-out conjunction opens a clause and ROUTES: the residual is stated in "
+        "the source, and it is the permissive direction -- it can over-admit, never "
+        "silently demote a genuine dispatch"
+    )
 
 if __name__ == "__main__":
     raise SystemExit(main())
