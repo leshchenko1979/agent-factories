@@ -93,7 +93,7 @@
     },
     {
       "id": "miidas-hq-daily-trigger-is-ours",
-      "text": "cron miidas-hq-daily-trigger (0 9 * * *, enabled, delivers to session e4f96a33-45ac-412e-8788-1b678cf2addb, the HQ topic) is the MIIDAS factory's own pacemaker. Peers must not disable, repace or repoint it.",
+      "text": "cron miidas-hq-daily-trigger (0 9 * * *, enabled) is the MIIDAS factory's own pacemaker; it delivers to the HQ topic's currently bound session. Peers must not disable, repace or repoint it.",
       "severity": "info",
       "since": "2026-09-11T00:00:00Z",
       "affects": [
@@ -151,7 +151,7 @@
         "miidas",
         "inferhub-watch"
       ],
-      "evidence": "config.py \u2014 gateway overlay finds [providers. at :204-208 and returns text[:start] + snippet + text[end:] at :249; openrouter overlay at :142-185.",
+      "evidence": "agent/runtime/lib/miidas_boot/config.py re-read 2026-10-26 at repo HEAD a799c46: _overlay_openrouter_minimax_vision finds `[providers.` at :148-152 and returns text[:start]+snippet+text[end:] at :186; _overlay_gateway_minimax_vision finds it at :205-209 and returns the splice at :246. :249 is `def refresh_config`, NOT a splice \u2014 the previous evidence citation (:204-208 / :249, openrouter :142-185) predates the 2026-10-25 correction and no longer resolves.",
       "since": "2026-10-05T06:06:09Z"
     },
     {
@@ -220,20 +220,20 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-25T18:35:44Z",
+  "attested_at": "2026-10-26T06:27:23Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
       "green": true,
       "behind_by": 6,
-      "measured_at": "2026-10-21T06:14:00Z",
-      "reason": "Paths UNCHANGED: 6 of 15 held, 9 absent, 0 of the 6 byte-identical to canonical (all 6 re-checked sha256 vs TEMPLATE at origin/main this turn). behind_by 6 on held-but-lagging, 15 on adoption-lag \u2014 BOTH stated. green true is a run of THIS turn: tools/ledger.py verify rc=0, 349 rows (this block last read 267, 2026-10-05), monotonic, sequences complete, 1 hand-excused line (#30 missing intake, granted 2026-09-19). RE-ENTRY unchanged: a CLOSURE migration, not a file port."
+      "measured_at": "2026-10-26T06:08:14Z",
+      "reason": "GATE RE-RUN THIS TURN at /root/miidas HEAD a799c46: tools/ledger.py verify rc=0 \u2014 'ledger clean: 370 row(s), monotonic, all event types known, sequences complete' (the block previously recorded 349 rows, read 2026-10-05). Repositories: leshchenko1979/miidas (310 rows); 8 legacy bare subjects accepted on read (n=10,11,12,16,17,18,19,20); 1 hand-excused line stands (#30 missing intake at row n=32, granted 2026-09-19 \u2014 the close n=32 is a true record and the leg cannot be added in place, ledger is append-only and the check is positional). behind_by 6 is the PATH census and was NOT re-measured this turn: it still carries the 2026-10-21 reading (6 of 15 declared paths held, 9 absent, 0 of the 6 byte-identical to canonical), on held-but-lagging; adoption-lag 15. RE-ENTRY unchanged: a CLOSURE migration, not a file port."
     },
     "open-questions": {
       "state": "partial",
       "behind_by": 1,
       "measured_at": "2026-10-21T06:14:00Z",
-      "reason": "MOVED MATERIALLY \u2014 #92 re-ported this instrument. 3 of 4 declared paths held, 1 absent (docs/instruments/open-questions.md). tools/questions md5 a2c9c4a6 (355811 B) and tools/questions-render.mjs md5 8f57eff4 (15617 B) are now BYTE-IDENTICAL to canonical; previously 185758 B and 11326 B, differing. tests/test_questions.py md5 99671139 (8796 B) stays the declared fork (disposition c, since 2026-09-29) and is AHEAD of canonical 9480e513 (5596 B): the kit copy lacks resolve_cap, gate_budget, UNKNOWN_EXIT_CODE, FALLBACK_CAP. behind_by 1 on adoption-lag (1 absent + 0 differing), 0 on held-but-lagging \u2014 BOTH stated. Gate green THIS turn: tests/test_questions.py rc=0, 483 checks, 1682 s of a declared 1852.5 s cap at load 9.97 on 4 cores (the 745 s basis was taken at load 2.45-4.70)."
+      "reason": "NOT re-measured this round \u2014 its gate is a ~1682 s run and was last green 2026-10-21. 3 of 4 declared paths held, 1 absent (docs/instruments/open-questions.md); tools/questions and tools/questions-render.mjs byte-identical to canonical after #92; tests/test_questions.py stays the declared fork (disposition c since 2026-09-29) and is AHEAD of canonical. A fresh attested_at on the fragment must NOT be read as a fresh measurement of this instrument."
     }
   }
 }

@@ -110,6 +110,17 @@
         "profile"
       ],
       "scope": "profile"
+    },
+    {
+      "id": "hq-pacemaker-weekly",
+      "text": "The meta-factory HQ pacemaker now fires WEEKLY (cron `50 9 * * Mon`, 09:50Z Mondays) instead of every 6 hours, on owner order 2026-10-26. A unit filed for an HQ ruling can now wait up to 7 days before it is ruled, so anything needing a decision inside a day must be raised as a notify rather than left to the cycle.",
+      "severity": "info",
+      "since": "2026-10-26T06:16:57Z",
+      "affects": [
+        "meta-factory"
+      ],
+      "scope": "factory",
+      "evidence": "cron store read in place, mode=ro, 2026-10-26T06:16:57Z: factory-hq-pacemaker cron_expr `50 9 * * Mon`, enabled, next_run_at 2026-10-26T09:50:00Z, was `50 */6 * * *`; ledger row n=4287 records the repace with both states"
     }
   ],
   "lanes": [
@@ -199,7 +210,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-25T19:15:05Z",
+  "attested_at": "2026-10-26T06:28:11Z",
   "instruments": {
     "ledger": {
       "state": "adopted",

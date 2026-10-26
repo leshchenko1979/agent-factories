@@ -89,7 +89,7 @@
       "affects": [
         "profile"
       ],
-      "evidence": "Live 2026-10-24: `/root/.opencrabs/config.toml:203`, `/root/.opencrabs/profiles/ops/config.toml:138` and `/root/.opencrabs/profiles/family/config.toml:136` each read `providers = [\"inferhub\", \"openrouter\"]` under `[providers.fallback]`. `vision` differs by profile by design: root `[\"inferhub\"]`, ops `[\"minimax\"]`, family `[\"inferhub\"]`."
+      "evidence": "Live 2026-10-26: `providers = [\"inferhub\", \"openrouter\"]` at `/root/.opencrabs/config.toml:203`, `/root/.opencrabs/profiles/ops/config.toml:138`, `/root/.opencrabs/profiles/family/config.toml:136`. `vision` differs by profile by design: root `[\"minimax\", \"inferhub\"]` (:204), ops `[\"minimax\"]` (:139), family `[\"minimax\", \"inferhub\"]` (:137)."
     },
     {
       "id": "inferhub-root-credential-in-shared-compose",
@@ -129,7 +129,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-25T18:39:27Z",
+  "attested_at": "2026-10-26T06:14:45Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
