@@ -818,6 +818,22 @@ REQUIRED_GATES: tuple[str, ...] = (
     # asserts the family view's PRESENCE and cannot read its arithmetic -- so a mean computed
     # over a reduced population was indistinguishable from one computed over the whole family.
     "test_score_artifact_measurable.py",
+    # Added with its registration (#566, ruled at n=4320, dispatched at n=4328). REQUIRED is
+    # the correct grain and OPTIONAL is not: every probe drives a SYNTHETIC repository the
+    # fixture BUILDS (three commits, the third orphaned by a hard reset), so it reads no live
+    # board, no fleet manifest and no box-local fixture, and it passes in a bootstrapped
+    # factory exactly as it does here. Its ONE live-tree dependency is the scores directory
+    # and the boundary declaration, and both are handled the way `tests/ledger_boundary.py`
+    # exists to enforce -- an ABSENT declaration SKIPS with its reason, a MALFORMED one
+    # FAILS, and a tree with no scores artifact to judge skips rather than passing vacuously.
+    # It is byte-paired with a TEMPLATE copy, so the manifest grain is what keeps a factory
+    # from dropping the runner and keeping the file. THE MECHANISM IT GUARDS: a round
+    # artifact is written before the push and the catch-up rebase rewrites every sha it
+    # created, so a citation recorded at write time is dead BY CONSTRUCTION -- it happened
+    # twice (`ea7f357d`, then `48244053` and `686aae47`) and nothing asserted the property.
+    # THE NEAR-MISS IT HOLDS OPEN: `48244053` is ALL DIGITS, so the obvious "skip all-digit
+    # tokens" filter drops the exact defect the gate exists to catch.
+    "test_score_artifact_citations.py",
     "test_score_artifact_sections.py",
     "test_score_gate_recorded.py",
     "test_single_writer.py",

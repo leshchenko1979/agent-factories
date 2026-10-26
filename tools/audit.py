@@ -3142,6 +3142,45 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_criterion_path_exemptions.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_criterion_path_exemptions.py"])
 
+    # 97. the SCORE ARTIFACT CITATION gate (#566, ruled at n=4320). Every backticked hex
+    #     token in an in-scope round artifact must name a commit REACHABLE FROM HEAD. The
+    #     class is structural, not careless: an artifact is written BEFORE the push, and the
+    #     catch-up rebase (`git rebase --committer-date-is-author-date origin/main`) rewrites
+    #     every sha the round created, so a sha recorded at write time is dead by
+    #     construction. It reproduced twice -- `ea7f357d` on one round, then `48244053` and
+    #     `686aae47` on the next -- before anything asserted the property.
+    #
+    #     THE PREDICATE IS RESOLUTION, NEVER SHAPE, and the discriminator is a live
+    #     near-miss: `48244053` is ALL DIGITS, so the obvious "skip all-digit tokens, they
+    #     are not shas" filter discards the exact defect the gate exists to catch. A probe
+    #     holds that arm open.
+    #
+    #     THE ESCAPES ARE DECLARED, NEVER INFERRED (n=4320). A foreign repository's commit, a
+    #     pre-rebase name recorded as the withdrawn value, and a non-commit identifier are
+    #     all, to a resolver, indistinguishable from a typo -- so a gate that guessed would
+    #     either pass typos or red on correct artifacts, which is worse than no gate. The
+    #     class is written on the citation (`foreign:<owner/repo>`, `pre-rebase:`,
+    #     `non-commit:`) and the marker must sit on the token's OWN line, so one declaration
+    #     cannot exempt a file's citations below it. Over-declaration is never a finding, the
+    #     same one-directional rule the trigger map follows (#567, #568).
+    #
+    #     The boundary is FACTORY DATA in `docs/ledger-invariants.json`
+    #     (`score_artifact_citations`), never a literal in the file: this gate is a declared
+    #     byte pair, so a date typed here would ship to every member and be read against the
+    #     MEMBER's scores directory. Pre-boundary artifacts print as `excused:` with their
+    #     count on every run and are never backfilled.
+    #
+    #     PYTEST-form, because the file carries module-level `def test_*` probes: a
+    #     script runner over a pytest-shaped target is the mismatch direction 5 of
+    #     `tests/test_gate_registration.py` names, and the probes are meant to be collected
+    #     one per arm rather than driven by a hand-rolled loop. It carries NO
+    #     `registry/gates.json` budget entry -- a budget value is the process owner's
+    #     (n=574 PART 5), so it runs on the declared default and the audit prints that it did.
+    if (repo_root / "tests/test_score_artifact_citations.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "tests/test_score_artifact_citations.py"]
+        )
+
     # tests/test_gate_direct_invocation.py -- issue #542, ruling n=4071. THE MECHANISM IT
     # GUARDS: `python3 tests/<name>.py` on a file with no `__main__` block imports the module
     # and runs NO test, reporting rc=0 with zero bytes of output -- a shape indistinguishable

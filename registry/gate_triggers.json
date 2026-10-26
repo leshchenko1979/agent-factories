@@ -667,6 +667,14 @@
       "tests/test_score_artifact_measurable.py",
       "tools/audit.py"
     ],
+    "tests/test_score_artifact_citations.py": [
+      "docs/ledger-invariants.example.json",
+      "docs/ledger-invariants.json",
+      "docs/measurement-procedure.md",
+      "evidence/scores/**",
+      "tests/ledger_boundary.py",
+      "tests/test_score_artifact_citations.py"
+    ],
     "tests/test_score_artifact_sections.py": [
       "docs/measurement-procedure.md",
       "docs/quality-criteria.md",

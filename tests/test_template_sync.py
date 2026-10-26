@@ -527,6 +527,7 @@ PAIRS = [
     ("tests/test_criterion_path_exemptions.py",
      "TEMPLATE/tests/test_criterion_path_exemptions.py"),
     ("tests/test_patrol_host_state.py", "TEMPLATE/tests/test_patrol_host_state.py"),
+    ("tests/test_score_artifact_citations.py", "TEMPLATE/tests/test_score_artifact_citations.py"),
     ("tests/test_score_artifact_sections.py", "TEMPLATE/tests/test_score_artifact_sections.py"),
     ("tests/test_score_artifact_measurable.py", "TEMPLATE/tests/test_score_artifact_measurable.py"),
     ("tests/test_duplicate_prose.py", "TEMPLATE/tests/test_duplicate_prose.py"),

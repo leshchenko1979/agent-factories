@@ -10609,7 +10609,7 @@ def kit_drift_leg(
 #
 # THE EXCLUDED OBJECT CLASS. `tools/hygiene.py` derives its scratch population from the
 # repository's own directory name (`scratch_patterns_for("agent-factories")` ->
-# `/tmp/agent-factories-*`), while a lane names its worktree whatever it likes
+# `/tmp/<repo>-*`), while a lane names its worktree whatever it likes
 # (`/tmp/<lane>-*`, `/tmp/rr-*`, `/tmp/kit*`). So NO worktree path can ever match that glob and
 # the residue is outside the cleanliness instrument's population BY CONSTRUCTION rather than
 # by a cleanliness result — measured at the filing: 38 registered worktrees, 0 matching.
