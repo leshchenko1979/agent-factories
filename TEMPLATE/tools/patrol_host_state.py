@@ -5989,7 +5989,7 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     declaration in their own prompt. Three buckets are COUNTED, NAMED and PRINTED rather
     than dropped, because a population that resolves to no object cannot be checked by the
     reader it is reported to (#126): the rows JUDGED, the declared rows owing no receipt,
-    and the rows attributed to nobody.
+    and the rows left unattributed.
     """
     if not prefixes:
         return no_prefixes_leg("duty-receipt", population=len(rows), unit="row(s)",
@@ -11879,7 +11879,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  rows: {cov['rows_read']} enabled read across {cov['homes_read']} "
                 f"home(s), {cov['rows_attributed']} attributed to this factory "
                 f"({', '.join(cov['prefixes']) or 'no declared prefix'}), "
-                f"{cov['rows_unattributed']} attributed to nobody"
+                f"{cov['rows_unattributed']} unattributed"
             )
             for row in cov.get("unattributed_rows", []):
                 lines.append(
@@ -12052,7 +12052,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  duties: {cov['jobs_declaring_receipt']} row(s) declare a receipt, "
                 f"{cov['jobs_owing_none']} declare they OWE NONE, "
                 f"{cov['jobs_undeclared']} declare NOTHING and are NOT JUDGED, "
-                f"{cov['jobs_unattributed']} attributed to nobody"
+                f"{cov['jobs_unattributed']} unattributed"
             )
             for name in cov.get("owes_none_jobs", []):
                 lines.append(
@@ -12568,7 +12568,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             )
             lines.append(
                 f"  rows judged: {cov['rows_judged']} of this factory's enabled row(s) "
-                f"({cov['unattributed_rows']} attributed to nobody), across "
+                f"({cov['unattributed_rows']} unattributed), across "
                 f"{cov['homes_read']} home(s) read"
             )
             lines.append("  population (owner — resolved session — the wake that satisfies it):")

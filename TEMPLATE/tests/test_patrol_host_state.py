@@ -753,7 +753,7 @@ def test_the_cron_leg_RUNS_and_states_the_population_it_examined() -> None:
     )
     assert "3 enabled read across 2 home(s)" in out, out
     assert "2 attributed to this factory (factory-)" in out, out
-    assert "1 attributed to nobody" in out, (
+    assert "1 unattributed" in out, (
         f"a row nobody declares is COUNTED, and the count must be printed\n{out}"
     )
     assert "homes unreached: 1" in out, out
@@ -796,7 +796,7 @@ def test_an_unattributable_row_is_COUNTED_NAMED_and_never_judged() -> None:
     rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home", "other-home"],
                       prefixes=["factory-"])
     assert rc == 0, f"an unattributable row must not fail this factory's run\n{out}"
-    assert "1 attributed to nobody" in out, out
+    assert "1 unattributed" in out, out
     assert "    unattributed: sibling-some-other-factory-job (home other-home)" in out, (
         f"the population read must NAME every row it could not attribute, with the home "
         f"it was read from — a count alone resolves to no object and cannot be checked "
