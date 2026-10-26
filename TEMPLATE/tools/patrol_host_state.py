@@ -8997,6 +8997,49 @@ def undispatched_batches_fn(repo: Path | None = None) -> dict:
 
 MENTION_CONTEXT_CHARS = 40
 
+# A NUMBER THAT IS NOT AN ISSUE (#534). The token accepts the bare digits as well as the
+# hash form, because a delivery is free prose that names its routed unit however its sender
+# wrote it. That generosity has a cost the mention test inherited: `n=534` (a ledger ROW
+# number) and `src/cron/scheduler.rs:534` (a source LINE number) both satisfy `#?534` with a
+# non-alphanumeric boundary on either side, so a row reference and a file offset both
+# entered the leg as issue references. Measured on the live tree (2026-10-26, tree
+# 87ff9a38): of the seven items the leg had been excusing, `n=554`,
+# `docs/instruments/kit.md:548` and `_LOG_ENABLED = False at :556` were three such
+# coincidences -- four artifacts that have nothing to do with the units whose numbers they
+# happen to contain.
+#
+# The refusal is applied to the token's PREFIX and `subject_token_re` is left UNTOUCHED.
+# The boundary discipline (#49, #425) is one home shared by the match, the locator and the
+# header/body split, so widening or narrowing it globally would move all three at once;
+# what is refused here is a MATCH WHOSE PREFIX SAYS IT IS A NUMBER, not a token that looks
+# like one. A hash-form token needs no special case: no row number and no source line is
+# ever spelled `#534`, so `#` can never carry either prefix.
+NON_ISSUE_TOKEN_PREFIX_RE = re.compile(r"(?:\bn=|:)$")
+
+
+def mention_occurrence(detail: str, number: int) -> "re.Match[str] | None":
+    """The FIRST occurrence of unit `number` in `detail` that is an ISSUE reference.
+
+    None when the text carries no such occurrence -- either no token at all, or every
+    occurrence is a row number (`n=534`, `row n=534`) or a source line (`scheduler.rs:534`,
+    `at :556`).
+
+    The prefix is read from the SAME bytes the match came from, so the refusal cannot
+    disagree with the match about which occurrence it is judging; `mention_evidence` calls
+    THIS function rather than `subject_token_re` directly, so the locator a verdict prints
+    is always the occurrence that admitted the row (#433).
+    """
+    body = str(detail or "")
+    token = subject_token_re(f"#{number}")
+    if token is None:
+        return None
+    for found in token.finditer(body):
+        if NON_ISSUE_TOKEN_PREFIX_RE.search(body[: found.start()]):
+            continue
+        return found
+    return None
+
+
 def mention_evidence(detail: str, number: int) -> dict | None:
     """WHERE a dispatch row's body carries unit `number`: matched text, offset, line, context.
 
@@ -9011,10 +9054,7 @@ def mention_evidence(detail: str, number: int) -> dict | None:
     whose numbers they happen to contain.
     """
     body = str(detail or "")
-    token = subject_token_re(f"#{number}")
-    if token is None:
-        return None
-    found = token.search(body)
+    found = mention_occurrence(body, number)
     if found is None:
         return None
     start = found.start()
@@ -9124,10 +9164,16 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
         for number in sorted(open_numbers):
             if number in in_subject:
                 continue
-            if delivery_subject_matches(detail, f"#{number}"):
-                # The locator is computed from the SAME token that admitted the row, and it
-                # travels with the record: an exemption that cannot show WHAT it matched is
+            if mention_occurrence(detail, number) is not None:
+                # The locator is computed from the SAME occurrence that admitted the row, and
+                # it travels with the record: an exemption that cannot show WHAT it matched is
                 # a coincidence the reader can only find by grepping the row afterwards.
+                #
+                # A ROW NUMBER AND A SOURCE LINE ARE NOT ISSUE REFERENCES (#534). `n=534`
+                # and `scheduler.rs:534` satisfy the token with a clean boundary on both
+                # sides, so this test used to admit them as mentions of unit 534; the
+                # refusal lives in `mention_occurrence`, beside the locator, so the
+                # occurrence judged and the occurrence printed cannot drift apart.
                 evidence = mention_evidence(detail, number) or {}
                 in_body_only.setdefault(number, {
                     "issue": number,

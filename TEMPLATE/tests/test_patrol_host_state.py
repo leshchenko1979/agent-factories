@@ -12625,16 +12625,34 @@ def test_the_undispatched_ruling_leg_BITES_and_discriminates_on_every_bucket() -
 _LIVE_MENTION_COINCIDENCES = {
     # unit -> (dispatch subject, dispatch detail). The SHAPES are verbatim from the live rows
     # the #556 ruling measured (read_at 2026-10-24T06:52-06:59Z, 4,207 rows, 556 board
-    # items): a `file:line`, a `max ... h` duration, an `n=<row>` and a bare `:<line>`.
-    548: ("kit-defect-cluster-2026-10-20T15",
-          "the cluster is recorded at docs/instruments/kit.md:548 in the tree"),
+    # items). These FOUR carry an ISSUE reference -- the `#NNN` form, or a bare digit that no
+    # prefix claims -- so they stay in the mention class and the leg still prints what they
+    # matched and where.
     549: ("#529", "the four lanes named #549 as the unit to route next"),
     550: ("#324", "row #550 carries the same shape as #324"),
+    # `max 553.73 h` is the ONE coincidence #534 does NOT refuse: its boundary is a DECIMAL
+    # point, not a row or file prefix, and the token's boundary discipline is a separate
+    # question (#49/#425). It stays a mention, and it stays visible.
     553: ("#527", "the window measured max 553.73 h across the fleet"),
-    554: ("#87", "ruling n=554 set the pace for the round"),
     555: ("#336", "the Owns: header round (#555) closed at 06:25Z"),
+}
+
+# THE OTHER THREE ARE NOT ISSUE REFERENCES AT ALL (#534). The token accepts the bare digits,
+# so a `file:line`, an `n=<row>` and a bare `:<line>` were all admitted as mentions of the
+# unit whose number they happen to contain. `mention_occurrence` now refuses a token whose
+# PREFIX says it is a number, so these rows mention NOTHING. They are still OWED -- a
+# mention never cleared a debt in either direction (#556 step 1) -- but counting them as
+# mentions would be asserting the defect, and printing them as mentions would point a reader
+# at a row number as if it were evidence about the unit.
+_LIVE_REFUSED_COINCIDENCES = {
+    548: ("kit-defect-cluster-2026-10-20T15",
+          "the cluster is recorded at docs/instruments/kit.md:548 in the tree"),
+    554: ("#87", "ruling n=554 set the pace for the round"),
     556: ("#189", "the flag reads _LOG_ENABLED = False at :556"),
 }
+
+# ONE population for the OWED assertion: all seven are owed, whatever the classification.
+_ALL_LIVE_COINCIDENCES = {**_LIVE_MENTION_COINCIDENCES, **_LIVE_REFUSED_COINCIDENCES}
 
 def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> None:
     """#556 acceptance (1)-(3) / ruling n=4194: a bare-digit coincidence is OWED, and the
@@ -12646,17 +12664,25 @@ def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> 
     fixture is RED, because these seven provably carry no dispatch row. Before the fix the
     leg reported `items_owed_dispatch: 0` over exactly this population while calling itself
     ASSERTED: the #271 shape, a zero that cannot be told from a clean read.
+
+    #534 NARROWED THE MENTION CLASS, AND THIS PROBE IS WHERE THAT SHOWS. Three of the seven
+    are a `file:line`, an `n=<row>` and a bare `:<line>`: a row number and a source line are
+    not issue references, so those rows mention nothing at all now. All seven remain OWED --
+    the debt never depended on the mention -- but the MENTION count drops from seven to four,
+    and a probe still expecting seven would be asserting the defect it was written to catch.
     """
     now = dt.datetime.now(dt.timezone.utc)
     read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     numbers = sorted(_LIVE_MENTION_COINCIDENCES)
-    issues = [_issue(n, "OPEN") for n in numbers]
+    refused = sorted(_LIVE_REFUSED_COINCIDENCES)
+    all_numbers = sorted(_ALL_LIVE_COINCIDENCES)
+    issues = [_issue(n, "OPEN") for n in all_numbers]
     issues.append(_issue(557, "OPEN"))   # dispatched in its SUBJECT -> out of the population
     issues.append(_issue(558, "OPEN"))   # resolved by a declared batch -> excused
     rows = []
     n = 600
-    for number in numbers:
-        subject, detail = _LIVE_MENTION_COINCIDENCES[number]
+    for number in all_numbers:
+        subject, detail = _ALL_LIVE_COINCIDENCES[number]
         rows.append(_stall_row(n, "ruling", f"#{number}", 2, now=now))
         rows.append(_stall_row(n + 1, "dispatch", subject, 1.9, now=now, detail=detail))
         n += 2
@@ -12670,11 +12696,15 @@ def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> 
 
     leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches=batches)
     cov = leg["coverage"]
-    assert cov["items_owed_dispatch"] == len(numbers), (
-        f"all seven coincidences are OWED: a mention clears nothing\n{cov}"
+    assert cov["items_owed_dispatch"] == len(all_numbers), (
+        f"all seven are OWED: a mention clears nothing, and a REFUSED token was never a "
+        f"mention to begin with\n{cov}"
     )
-    assert cov["owed"] == numbers, cov
-    assert cov["items_named_in_body_only"] == len(numbers), cov
+    assert cov["owed"] == all_numbers, cov
+    assert cov["items_named_in_body_only"] == len(numbers), (
+        f"FOUR of the seven carry an ISSUE reference; the other three carry a row number, a "
+        f"source line and a bare line number, which #534 refuses\n{cov}"
+    )
     assert "#557" not in cov["owed"], "a subject match IS a dispatch, not a debt"
     assert "#558" not in cov["owed"], "a declared batch act resolves, and clears the debt"
     assert cov["items_resolved_by_batch"] == 1, cov
@@ -12685,7 +12715,7 @@ def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> 
 
     # WHAT IT MATCHED, VERBATIM, AND WHERE (#556 step 3). The offset is recomputed here from
     # the fixture's own bytes, so an offset the leg invented cannot pass.
-    for number in (548, 553, 554, 556):
+    for number in numbers:
         _subject, detail = _LIVE_MENTION_COINCIDENCES[number]
         mention = next(e["mention"] for e in cov["owed_detail"] if e["issue"] == number)
         token = RUNNER.subject_token_re(f"#{number}").search(detail)
@@ -12700,11 +12730,22 @@ def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> 
             f"grepping the row\n{named}"
         )
 
-    for verbatim in ("docs/instruments/kit.md:548", "max 553.73 h", "n=554",
-                     "_LOG_ENABLED = False at :556"):
-        assert verbatim in named, (
-            f"the coincidence {verbatim!r} must appear VERBATIM, or a reader cannot see that "
-            f"the match is not a dispatch\n{named}"
+    assert "max 553.73 h" in named, (
+        f"the ONE coincidence still admitted -- a DECIMAL boundary, which #534 does not "
+        f"touch -- must stay visible, or narrowing the class would have hidden it\n{named}"
+    )
+    # ... AND THE THREE REFUSED FORMS ARE NOT MENTIONS, WHILE STILL BEING OWED (#534). A
+    # refusal that quietly dropped them from the debt would be the false-CLEAN twin.
+    for number in refused:
+        _subject, _detail = _LIVE_REFUSED_COINCIDENCES[number]
+        assert f"#{number} is OPEN" in named, (
+            f"#{number} must still be OWED: its dispatch row names a row number or a source "
+            f"line, which is neither a dispatch nor a mention\n{named}"
+        )
+        assert number in cov["owed"], cov
+        assert not any(e.get("mention") for e in cov["owed_detail"] if e["issue"] == number), (
+            f"#{number} must carry NO mention: the token in its dispatch row is a row number "
+            f"or a source line, not an issue reference\n{cov}"
         )
 
     # ... and the discriminating control: the SAME seven, with dispatch rows whose details do
@@ -12713,14 +12754,14 @@ def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> 
     # it may not decide it the other way either.
     quiet_rows = []
     n = 700
-    for number in numbers:
+    for number in all_numbers:
         quiet_rows.append(_stall_row(n, "ruling", f"#{number}", 2, now=now))
         quiet_rows.append(_stall_row(n + 1, "dispatch", "consolidated-brief", 1.9, now=now,
                                      detail="covering other units entirely"))
         n += 2
     quiet = RUNNER.undispatched_ruling_leg(
-        [_issue(x, "OPEN") for x in numbers], quiet_rows, read_at=read_at, batches={})
-    assert quiet["coverage"]["owed"] == numbers, (
+        [_issue(x, "OPEN") for x in all_numbers], quiet_rows, read_at=read_at, batches={})
+    assert quiet["coverage"]["owed"] == all_numbers, (
         f"the debt must not depend on the mention: the same seven are owed with no mention "
         f"present at all\n{quiet['coverage']}"
     )
@@ -12731,12 +12772,134 @@ def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> 
     # output still reads `0 owed` would have fixed nothing a reader can see, so the print
     # block is asserted through the REAL `main()` rather than inspected.
     _rc, out, _err = _run(issues, rows, dispatch_batches=batches)
-    assert "OWED #548 — MENTION ONLY: '548' at offset" in out, (
+    assert "OWED #549 — MENTION ONLY: '#549' at offset" in out, (
         f"the owed line must carry the mention BESIDE it, with its offset\n{out}"
     )
-    assert "docs/instruments/kit.md:548" in out, out
+    assert "max 553.73 h" in out, out
+    for number in refused:
+        assert f"OWED #{number} — MENTION ONLY" not in out, (
+            f"#{number} must NOT render as a mention: its row carries a row number or a "
+            f"source line (#534)\n{out}"
+        )
+        assert f"OWED #{number}" in [ln.strip() for ln in out.splitlines()], (
+            f"#{number} must still render as plainly OWED\n{out}"
+        )
     assert "it EXCUSES NOTHING: every one of them is OWED above" in out, (
         f"the mention class must declare that it excuses nothing\n{out}"
+    )
+
+
+def test_a_ROW_NUMBER_and_a_FILE_LINE_are_NOT_issue_references() -> None:
+    """#534, ruled at ledger n=4183: the mention test admitted a row number and a file offset.
+
+    THE DEFECT. `subject_token_re("#534")` compiles `#?534`, because a delivery is free prose
+    and names its routed unit however its sender wrote it -- so THE HASH IS OPTIONAL. That
+    generosity let two artifacts that are not issues at all satisfy the token: `n=534` (a
+    ledger ROW number) and `src/cron/scheduler.rs:534` (a source LINE). Measured by Triage on
+    the live tree at 2026-10-26T06:05Z, tree 87ff9a38: of the seven items the leg had been
+    excusing, `n=554`, `docs/instruments/kit.md:548` and `_LOG_ENABLED = False at :556` were
+    three such coincidences -- a unit's number appearing in a row reference or a file offset.
+
+    THE FIX IS A REFUSAL AT THE CALL SITE, NOT A NARROWER TOKEN. The boundary discipline
+    (#49, #425) is ONE home shared by the match, the locator and the header/body split, so
+    widening or narrowing the pattern globally would move all three at once; what is refused
+    is a MATCH WHOSE PREFIX SAYS IT IS A NUMBER. The unit stays OWED either way -- a mention
+    never cleared a debt in either direction (#556 step 1) -- so the harm repaired here is a
+    FALSE CLASSIFICATION, not a false clean. That is why the arms below assert the OWED set
+    AND the mention count: a fix that only moved one of them would look green.
+
+    THE POSITIVE CONTROLS ARE THE LAST TWO ARMS. A refusal that also killed a genuine `#534`
+    reference would be the same defect wearing the opposite sign, and a token narrowed to
+    reject the DIGITS would pass every negative arm while destroying the mention class.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # ---- arm 0: the predicate on the five shapes Triage measured, plus its own pair ----
+    measured = [
+        ("dispatch row n=534 carrying the ruling", False),
+        ("src/cron/scheduler.rs:534 writes both", False),
+        ("see #534 for the defect", True),
+        ("#534's premise is false", True),
+        ("n=1534 and 5340", False),
+    ]
+    for text, want in measured:
+        got = RUNNER.mention_occurrence(text, 534) is not None
+        assert got is want, (
+            f"mention_occurrence({text!r}, 534) must be {want}, got {got}: a row number and "
+            f"a source line are not issue references, and the boundary discipline that keeps "
+            f"`1534`/`5340` out must not be the thing doing the refusing"
+        )
+    # THE PREFIX IS WHAT REFUSES, NOT THE DIGITS: drop the prefix and the SAME digits are a
+    # reference. This pair is the discriminator inside the predicate, so a token narrowed to
+    # reject the digits cannot pass it.
+    assert RUNNER.mention_occurrence("row n=534", 534) is None, (
+        "a `row n=` prefix is a ledger ROW reference"
+    )
+    assert RUNNER.mention_occurrence("row 534", 534) is not None, (
+        "with no prefix the same digits are a bare reference, which the token has always "
+        "accepted (#49): the refusal is about the prefix, never the number"
+    )
+
+    # ---- arms 1-4: the LEG, because the predicate is not what a lane reads -----------
+    issues = [_issue(n, "OPEN") for n in (534, 535, 536, 537)]
+    rows = [
+        _stall_row(801, "ruling", "#534", 2, now=now),
+        # a LEDGER ROW NUMBER -> not an issue reference
+        _stall_row(802, "dispatch", "round-receipt-2026-10-26", 1.9, now=now,
+                   detail="the round is recorded at dispatch row n=534 in the store"),
+        _stall_row(803, "ruling", "#535", 2, now=now),
+        # a SOURCE LINE -> not an issue reference
+        _stall_row(804, "dispatch", "scheduler-audit-2026-10-26", 1.9, now=now,
+                   detail="src/cron/scheduler.rs:535 writes both arms of the branch"),
+        _stall_row(805, "ruling", "#536", 2, now=now),
+        # a GENUINE issue reference in the body -> a MENTION, and still OWED
+        _stall_row(806, "dispatch", "consolidated-brief", 1.9, now=now,
+                   detail="covering #536 and two other units"),
+        _stall_row(807, "ruling", "#537", 2, now=now),
+        # ... and a SUBJECT that names it -> ROUTED, out of the population entirely
+        _stall_row(808, "dispatch", "#537", 1.9, now=now),
+    ]
+    leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches={})
+    cov = leg["coverage"]
+    named = "\n".join(leg["problems"])
+
+    # ARMS 1 AND 2: both refused forms leave the unit OWED, and neither is a mention.
+    for number in (534, 535):
+        assert f"#{number} is OPEN" in named, (
+            f"#{number} must be OWED: its dispatch row names a row number or a source line, "
+            f"which is neither a dispatch nor a mention\n{named}"
+        )
+        assert number in cov["owed"], cov
+        assert not any(e.get("mention") for e in cov["owed_detail"] if e["issue"] == number), (
+            f"#{number} must carry NO mention entry\n{cov}"
+        )
+    assert cov["items_named_in_body_only"] == 1, (
+        f"ONLY #536 is a mention: #534 and #535 carry a row number and a source line, which "
+        f"#534 refuses, so counting them would be asserting the defect\n{cov}"
+    )
+    # ARM 3: a genuine reference IS a mention -- and a mention excuses nothing (#556 step 1).
+    assert 536 in cov["owed"], cov
+    mention = next(e["mention"] for e in cov["owed_detail"] if e["issue"] == 536)
+    assert mention["matched_text"] == "#536", mention
+    # ARM 4: the SUBJECT match ROUTES, so the unit is not in the population at all.
+    assert 537 not in cov["owed"], cov
+    assert 537 not in [e["issue"] for e in cov["owed_detail"]], cov
+
+    # ---- and the RENDER: a refused token must never print as a mention ---------------
+    _rc, out, _err = _run(issues, rows, dispatch_batches={})
+    assert "OWED #536 — MENTION ONLY: '#536' at offset" in out, (
+        f"the genuine reference must still print with its offset\n{out}"
+    )
+    for number in (534, 535):
+        assert f"OWED #{number} — MENTION ONLY" not in out, (
+            f"#{number} must NOT render as a mention\n{out}"
+        )
+        assert f"OWED #{number}" in [ln.strip() for ln in out.splitlines()], (
+            f"#{number} must still render as plainly OWED, or the refusal hid a debt\n{out}"
+        )
+    assert "named only in a dispatch row's BODY (#467): 1 item(s)" in out, (
+        f"the count must print the population it was drawn from\n{out}"
     )
 
 def test_an_ABSENT_batch_declaration_RESOLVES_NOTHING_and_SAYS_SO() -> None:
