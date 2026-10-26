@@ -6903,22 +6903,41 @@ def test_the_stall_census_leg_PRINTS_the_tracker_assignee_and_still_reads_OWED()
     assert rc == 1, f"an OWED line must fail the run, got rc={rc}\n{out}"
     assert "ASSIGNED to leshchenko1979" in out, out
 
-def _park_row(n, unit, days_ago, token=None, *, now, mention=None):
-    """A ledger row that DECLARES a park on `unit` (#331 clause 1).
+def _park_row(n, unit, days_ago, question=None, *, now, mention=None):
+    """A ledger row that DECLARES a park on `unit` (#535, ruling n=4007).
 
-    The token stands ALONE on the last line, which is the shape the live declarations use --
-    Triage's rows n=2881/n=2882 carry `park:owner:q30` exactly so -- and the shape the reader
-    requires. `mention` writes a sentence that QUOTES a token without declaring one, and
-    `token` is left free-form so a probe can write the REFUSED forms as well as the accepted
-    one: the live row that withdrew #301's park (n=2883) quotes two tokens mid-sentence and
-    closes "THIS ROW CARRIES NO PARK TOKEN".
+    The declaration is a `park` EVENT carrying the question as a ref of the DECLARED kind
+    `question` -- never the `park:owner:qN` prose token this leg read before #535. The token
+    shape is what the ruling removed: n=3339 names `park:owner:q39` in the prose of the row
+    that ENDED #313's park, and n=2884 names three parks in a ruling whose subject is a
+    fourth unit, so a token scan returns the inverse of one row's meaning and invents a park
+    on a bystander from another.
+
+    `question` is left free-form so a probe can write the REFUSED forms as well as the
+    accepted one: a park naming NO question at all (pass `None`), and a park whose question
+    ref is not a register id. `mention` writes a sentence that NAMES a token in the detail
+    while the row's own event stays `park` -- the third acceptance arm, where prose must
+    declare nothing.
     """
     body = f"CENSUS DISPOSITION -- {unit} is PARKED AT THE OWNER DESIGN GATE.\n\n"
     if mention:
         body += f"{mention}\n\n"
-    if token:
-        body += token
-    return _stall_row(n, "run", unit, days_ago, now=now, detail=body.rstrip())
+    body += "The park is an EVENT plus a typed ref, not a prose token."
+    refs = [{"question": question}] if question else None
+    return _stall_row(n, "park", unit, days_ago, now=now, detail=body.rstrip(), refs=refs)
+
+
+def _unpark_row(n, unit, days_ago, park_n, *, now, reason="the owner answered"):
+    """A ledger row that ENDS a park on `unit` (#535 leg 2).
+
+    The park it supersedes travels as `--ref row:<n>`, which is what makes the pair joinable:
+    without it an unpark is a second, unattached claim about state, and "which park did this
+    end?" has no answer that is not a guess at row order alone.
+    """
+    return _stall_row(
+        n, "unpark", unit, days_ago, now=now,
+        detail=f"UNPARK {unit} -- {reason}.", refs=[{"row": str(park_n)}],
+    )
 
 def test_the_stall_census_leg_holds_a_DECLARED_PARK_out_of_the_owed_total() -> None:
     """#331 clause 1, two-sided: a unit whose OWN row declares `park:owner:<question>` reads
@@ -6940,7 +6959,7 @@ def test_the_stall_census_leg_holds_a_DECLARED_PARK_out_of_the_owed_total() -> N
     issues = [_issue(931, "OPEN"), _issue(932, "OPEN")]
     rows = [
         _stall_row(1, "dispatch", "#931", 5, now=now),
-        _park_row(2, "#931", 4, "park:owner:q32", now=now),   # declared -> PARKED
+        _park_row(2, "#931", 4, "q32", now=now),   # declared -> PARKED
         _stall_row(3, "dispatch", "#932", 5, now=now),        # undeclared -> stays OWED
     ]
 
@@ -6984,83 +7003,225 @@ def test_the_stall_census_leg_holds_a_DECLARED_PARK_out_of_the_owed_total() -> N
     assert "PARKED #931" in out, out
     assert "not a finding" in out, out
 
-def test_the_stall_census_leg_reads_a_park_ONLY_from_a_standalone_token() -> None:
-    """#331 clause 1, the READ discipline, two-sided: a declaration is a LINE OF ITS OWN, and
-    a token quoted inside a sentence is a MENTION.
+def test_the_stall_census_leg_reads_a_park_from_the_EVENT_and_never_from_prose() -> None:
+    """#535 / ruling n=4007, the READ discipline: a park is a TRANSITION, and prose declares
+    nothing.
 
-    This is not a hypothetical. The row that WITHDREW #301's park (n=2883) quotes
-    `park:owner:q30` and `park:owner:q39` mid-sentence while carrying no token of its own, and
-    closes "THIS ROW CARRIES NO PARK TOKEN". A reader that matched the substring would park
-    #301 on the very mis-citation that row exists to withdraw -- the false positive would be
-    the exact defect the correction was written to repair.
+    THE THREE ACCEPTANCE ARMS the ruling names, each mechanical and each measured here:
 
-    The four units below are discriminated by SHAPE ALONE, and the last one is the control
-    that keeps this from being a blanket refusal: the mention and the two refused forms stay
-    OWED with a PROBLEM naming them, the standalone `park:owner:qN` is the only one that
-    holds. HQ's C1 scope ruling (n=2884) fixes the shape at ONE -- the register is the only
-    sanctioned blocked-on-you channel -- so the `memo:` form and a `<placeholder>` standing in
-    for an id are refused loudly rather than silently parking nothing.
+      1. a subject with a `park` row and no `unpark` reads PARKED and leaves the owed total;
+      2. the same subject with an `unpark` AFTER the park is not parked, and reads OWED;
+      3. a row whose DETAIL carries `park:owner:q39` while its event is not `park` is NOT
+         parked -- prose is a mention, never a declaration.
+
+    Arms 1 and 2 are the fold: state is the LAST transition in row order, so the pair is what
+    makes the verdict a position in a sequence rather than a presence in a file. Arm 3 is why
+    the token scan was removed: the live row that WITHDREW #301's park (n=2883) quotes
+    `park:owner:q30` and `park:owner:q39` mid-sentence, and a reader matching the substring
+    parks #301 on the very correction written to withdraw that park.
+
+    The three units below are discriminated by SHAPE ALONE, and the last is the control that
+    keeps this from being a blanket refusal: a park naming NO question, and a park whose
+    question ref is not a register id, both stay OWED with a PROBLEM naming them, while a
+    park carrying `question:q39` is the only one that holds. HQ's C1 scope ruling (n=2884)
+    fixes the shape at ONE -- the register is the only sanctioned blocked-on-you channel.
     """
     now = dt.datetime.now(dt.timezone.utc)
     read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-    issues = [_issue(n, "OPEN") for n in (951, 952, 953, 954)]
+    issues = [_issue(n, "OPEN") for n in (951, 952, 953, 954, 955)]
     rows = [
         _stall_row(1, "dispatch", "#951", 5, now=now),
-        _park_row(2, "#951", 4, now=now,
-                  mention="n=2878 declared park:owner:q30 for it; this row WITHDRAWS that as "
-                          "a MIS-CITATION and CARRIES NO PARK TOKEN of its own"),
+        # ARM 3: the row NAMES the token in prose and carries no park event at all. It is an
+        # ordinary `run` row, so nothing about it declares a state.
+        _stall_row(
+            2, "run", "#951", 4, now=now,
+            detail="n=2878 declared park:owner:q30 for it; this row WITHDRAWS that as a "
+                   "MIS-CITATION and CARRIES NO PARK TOKEN of its own",
+        ),
+        # The refused shape the WRITE PATH refuses: a `park` event carrying no question ref.
         _stall_row(3, "dispatch", "#952", 5, now=now),
-        _park_row(4, "#952", 4, "park:owner:memo:#301", now=now),
+        _park_row(4, "#952", 4, None, now=now),
         _stall_row(5, "dispatch", "#953", 5, now=now),
-        _park_row(6, "#953", 4, "park:owner:<question>", now=now),
+        _park_row(6, "#953", 4, "memo:#301", now=now),
         _stall_row(7, "dispatch", "#954", 5, now=now),
-        _park_row(8, "#954", 4, "park:owner:q39", now=now),
+        _park_row(8, "#954", 4, "<question>", now=now),
+        _stall_row(9, "dispatch", "#955", 5, now=now),
+        _park_row(10, "#955", 4, "q39", now=now),
     ]
 
     leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
     named = "\n".join(leg["problems"])
-    for quiet in ("#951", "#952", "#953"):
+    for quiet in ("#951", "#952", "#953", "#954"):
         assert f"OWED {quiet}" in named, (
-            f"{quiet} must stay OWED: a mention is not a declaration, and a declaration in a "
-            f"refused shape cannot be read as one\n{named}"
+            f"{quiet} must stay OWED: prose declares nothing, and a park whose question ref "
+            f"is missing or is not a register id cannot be read as a declaration\n{named}"
         )
-    assert "OWED #954" not in named, (
-        f"the standalone declaration is the CONTROL -- if it did not hold, the probe above "
-        f"would pass a reader that parks nothing at all\n{named}"
+    assert "OWED #955" not in named, (
+        f"the park carrying `question:q39` is the CONTROL -- if it did not hold, the probes "
+        f"above would pass a reader that parks nothing at all\n{named}"
     )
-    # ... and the two refused shapes are PROBLEMS, each naming the row and the ONE lawful
-    # shape: a declaration the census cannot see re-arms the very line it was written to hold.
-    assert "cannot read" in named and "memo:#301" in named, named
-    assert "park:owner:<question>" in named, named
-    assert "row n=4" in named and "row n=6" in named, named
+    # ARM 3 is asserted on the row that PROVES it: #951's detail names the token and the unit
+    # is still OWED. A reader that matched the substring would have cleared it here.
+    assert "park:owner:q30" in "\n".join(
+        r["detail"] for r in rows if r["n"] == 2
+    ), "the fixture must actually carry the token in prose, or arm 3 tests nothing"
+    # ... and the two refused park shapes are PROBLEMS, each naming the row and the ONE
+    # lawful shape: a declaration the census cannot see re-arms the very line it was meant
+    # to hold.
+    assert "is a `park` naming no question" in named and "row n=4" in named, named
+    assert "not a register question id" in named and "memo:#301" in named, named
+    assert "<question>" in named and "row n=8" in named, named
 
     cov = leg["coverage"]
-    assert cov["units_owed"] == 3, cov
+    assert cov["units_owed"] == 4, cov
     assert cov["parks_declared"] == 1, cov
     assert cov["units_parked"] == 1, cov
-    assert "PARKED #954" in "\n".join(cov["parks"]), cov["parks"]
+    assert cov["park_rows_examined"] == 4, cov
+    assert "PARKED #955" in "\n".join(cov["parks"]), cov["parks"]
 
-    # A park declared for a unit the census does NOT report owed is PRINTED as a note, never
-    # dropped: a declaration that matches no OWED line is indistinguishable from a declaration
-    # aimed at the wrong subject, and it is the same silence the refusals above exist to stop.
-    # The two arms below are the two REASONS a park matches no OWED line, and they read
-    # differently because the reasons are different (#470).
-    extra = rows + [
-        # #955 has no dispatch row at all: no ROUTING ever handed it to a lane, so it was
-        # never in the population and its declaration held nothing out. It reads PARKED --
-        # not "matched NO OWED line", whose reasons all describe a unit that WAS routed.
-        _park_row(9, "#955", 4, "park:owner:q39", now=now),
-        # #956 WAS routed (a direct dispatch row) and the board carries it CLOSED, so it is
-        # dropped from the census by the off-board filter: this is the "matched NO OWED line"
+
+def test_a_park_is_CLEARED_by_a_LATER_unpark_and_the_pair_is_joined_by_its_ROW_ref() -> None:
+    """#535 leg 2, acceptance arms 1 and 2: the state is the LAST transition, not the first.
+
+    One fixture, two reads, and the ONLY difference between them is whether the `unpark` row
+    is present -- so the verdict is measured as the thing the unpark moved rather than as two
+    independent reads that happen to differ.
+
+    The unpark names the park it ends as `--ref row:<n>`. An unpark naming a row that is not
+    a park for that subject is a PROBLEM, not a silent close: the write path refuses that
+    shape at append, but a row is immutable once pushed, so the leg is the half that can
+    still see it.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(981, "OPEN"), _issue(982, "OPEN")]
+    base = [
+        _stall_row(1, "dispatch", "#981", 6, now=now),
+        _park_row(2, "#981", 5, "q39", now=now),
+        _stall_row(3, "dispatch", "#982", 6, now=now),
+        _park_row(4, "#982", 5, "q40", now=now),
+    ]
+    parked_leg = RUNNER.stall_census_leg(issues, base, read_at=read_at)
+    parked_cov = parked_leg["coverage"]
+    assert parked_cov["units_parked"] == 2, parked_cov
+    assert parked_cov["units_owed"] == 0, parked_cov
+    named = "\n".join(parked_leg["problems"])
+    assert "OWED #981" not in named and "OWED #982" not in named, named
+
+    # ARM 2: the SAME fixture plus one unpark row, dated LATER than #981's park. #982 has no
+    # unpark and stays parked, so the read discriminates the pair rather than flipping both.
+    cleared = base + [_unpark_row(5, "#981", 4, 2, now=now)]
+    leg = RUNNER.stall_census_leg(issues, cleared, read_at=read_at)
+    cov = leg["coverage"]
+    named = "\n".join(leg["problems"])
+    assert "OWED #981" in named, (
+        f"the unpark row must put #981 back in play -- a park with no end is a permanent gag, "
+        f"and an unpark that does not clear is the same defect wearing the other face\n{named}"
+    )
+    assert "OWED #982" not in named, (
+        f"#982's park has no unpark and must STILL hold -- otherwise the arm above passes a "
+        f"reader that clears every park it sees\n{named}"
+    )
+    assert cov["units_parked"] == 1, cov
+    assert cov["units_owed"] == 1, cov
+    assert cov["park_rows_examined"] == 3, cov
+
+    # A MIS-JOINED unpark is a PROBLEM: here it names #982's park while its subject is #981,
+    # which no write path would mint today and which a pushed row can still carry.
+    misjoined = base + [_unpark_row(5, "#981", 4, 4, now=now)]
+    leg3 = RUNNER.stall_census_leg(issues, misjoined, read_at=read_at)
+    named3 = "\n".join(leg3["problems"])
+    assert "cannot unpark another unit's park" in named3, named3
+    assert "OWED #981" not in named3, (
+        f"a refused unpark must NOT clear the park it names, so #981 stays PARKED -- "
+        f"honouring it would let a row clear a state it has no authority over\n{named3}"
+    )
+    assert leg3["coverage"]["units_parked"] == 2, leg3["coverage"]
+
+
+def test_a_ruling_that_SAYS_blocked_on_the_owner_design_gate_owes_a_park_row() -> None:
+    """#535 leg 3: a state that lives only in a ruling's prose is invisible to the census.
+
+    Ruling n=2360 says in as many words that #324 is "BLOCKED on the owner design gate" and no
+    `park` row exists for it, so the census could not fold the state and the unit read OWED.
+    The leg reports the GAP -- the ruling without the row -- rather than re-reading the prose
+    as a declaration, which is the token scan this whole unit removed.
+
+    WINDOW-BOUNDED (#536): the window is ROWS FROM THE LEDGER'S OWN TAIL, so a replayed
+    fixture is stable without an injected clock, and an unbounded version would re-litigate
+    every historical ruling on the first run. The population examined is asserted, because a
+    clean verdict over an examined-nothing read is not a verdict (#242).
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(991, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#991", 6, now=now),
+        _stall_row(
+            2, "ruling", "#991", 5, now=now,
+            detail="## RULED -- #991 is ACCEPTED and BLOCKED on the owner design gate; no "
+                   "worker dispatch is owed.",
+        ),
+    ]
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    cov = leg["coverage"]
+    named = "\n".join(leg["problems"])
+    assert cov["owed_units_examined_for_park_gap"] == 1, cov
+    assert cov["ruling_park_gaps"] == 1, cov
+    assert "no `park` row for it" in named, named
+    assert "row n=2" in named, named
+
+    # THE CONTROL: the same ruling WITH its park row reports no gap. The examined count falls
+    # to 0 and that is the fix rather than an artefact -- the population is the OWED set, so a
+    # unit that IS parked leaves it and is never re-litigated. A leg that kept examining it
+    # would report a gap on every parked unit in the factory.
+    with_park = rows + [_park_row(3, "#991", 4, "q39", now=now)]
+    leg2 = RUNNER.stall_census_leg(issues, with_park, read_at=read_at)
+    cov2 = leg2["coverage"]
+    assert cov2["owed_units_examined_for_park_gap"] == 0, cov2
+    assert cov2["ruling_park_gaps"] == 0, cov2
+    assert cov2["units_parked"] == 1, cov2
+    assert "no `park` row for it" not in "\n".join(leg2["problems"]), leg2["problems"]
+
+    # A ruling that names NO design gate is not in the population at all, and the count says
+    # so -- an empty finding and an empty population must not read the same (#116).
+    quiet = [rows[0], _stall_row(2, "ruling", "#991", 5, now=now,
+                                 detail="## RULED -- #991 is a duplicate of #990.")]
+    leg3 = RUNNER.stall_census_leg(issues, quiet, read_at=read_at)
+    assert leg3["coverage"]["owed_units_examined_for_park_gap"] == 1, leg3["coverage"]
+    assert leg3["coverage"]["ruling_park_gaps"] == 0, leg3["coverage"]
+
+
+def test_a_park_matching_NO_owed_line_is_PRINTED_never_dropped() -> None:
+    """#470, on the event mechanism: a park declared for a unit the census does NOT report owed
+    is PRINTED as a note, never dropped.
+
+    A declaration that matches no OWED line is indistinguishable from a declaration aimed at
+    the wrong subject, and dropping it silently is the same failure an unreadable one is. The
+    two arms below are the two REASONS a park matches no OWED line, and they read differently
+    because the reasons are different: `#955` was never ROUTED, so no park held anything out;
+    `#956` WAS routed and its board item is CLOSED, so the off-board filter dropped it.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(955, "OPEN"), _issue(956, "CLOSED")]
+    rows = [
+        # #955 has no dispatch row at all: no ROUTING ever handed it to a lane, so it was never
+        # in the population and its declaration held nothing out. It reads PARKED -- not
+        # "matched NO OWED line", whose reasons all describe a unit that WAS routed.
+        _park_row(9, "#955", 4, "q39", now=now),
+        # #956 WAS routed and the board carries it CLOSED: this is the "matched NO OWED line"
         # disposition, and it must keep a fixture of its own.
         _stall_row(10, "dispatch", "#956", 5, now=now),
-        _park_row(11, "#956", 4, "park:owner:q40", now=now),
+        _park_row(11, "#956", 4, "q40", now=now),
     ]
-    leg2 = RUNNER.stall_census_leg(issues + [_issue(956, "CLOSED")], extra, read_at=read_at)
-    notes = "\n".join(leg2["coverage"]["parks"])
-    assert "#955" in notes and "PARKED #955" in notes, leg2["coverage"]["parks"]
-    assert "#956" in notes and "matched NO OWED line" in notes, leg2["coverage"]["parks"]
-    assert leg2["coverage"]["units_parked"] == 1, leg2["coverage"]
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
+    notes = "\n".join(leg["coverage"]["parks"])
+    assert "#955" in notes and "PARKED #955" in notes, leg["coverage"]["parks"]
+    assert "#956" in notes and "matched NO OWED line" in notes, leg["coverage"]["parks"]
+    assert leg["coverage"]["units_parked"] == 0, leg["coverage"]
+    assert leg["coverage"]["parks_declared"] == 2, leg["coverage"]
+
 
 def test_the_stall_census_leg_SUPERSEDES_a_park_a_LATER_dispatch_lifted() -> None:
     """#331 clause 1, the STATE half: a park holds until a LATER dispatch puts the unit back
@@ -7077,11 +7238,11 @@ def test_the_stall_census_leg_SUPERSEDES_a_park_a_LATER_dispatch_lifted() -> Non
     issues = [_issue(961, "OPEN"), _issue(962, "OPEN")]
     rows = [
         # #961: parked FIRST, then re-dispatched -- the park is stale and the unit is OWED.
-        _park_row(1, "#961", 5, "park:owner:q33", now=now),
+        _park_row(1, "#961", 5, "q33", now=now),
         _stall_row(2, "dispatch", "#961", 4, now=now),
         # #962: dispatched FIRST, parked after -- the declaration is the newest act.
         _stall_row(3, "dispatch", "#962", 5, now=now),
-        _park_row(4, "#962", 4, "park:owner:q33", now=now),
+        _park_row(4, "#962", 4, "q33", now=now),
     ]
 
     leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at)
@@ -7138,14 +7299,14 @@ def test_a_BODY_MENTION_neither_ADMITS_a_unit_nor_SUPERSEDES_its_park() -> None:
     rows = [
         # #971: parked, then named only in a carrier's BODY -- the park must HOLD.
         _stall_row(1, "intake", "#971", 6, now=now),
-        _park_row(2, "#971", 5, "park:owner:q40", now=now),
+        _park_row(2, "#971", 5, "q40", now=now),
         # #972: parked, then the SUBJECT of the carrier's opening clause -- ROUTED, so
         # SUPERSEDED.
         _stall_row(3, "intake", "#972", 6, now=now),
-        _park_row(4, "#972", 5, "park:owner:q41", now=now),
+        _park_row(4, "#972", 5, "q41", now=now),
         # #973: parked, then re-dispatched by a direct row -- SUPERSEDED, the #331 control.
         _stall_row(5, "intake", "#973", 6, now=now),
-        _park_row(6, "#973", 5, "park:owner:q42", now=now),
+        _park_row(6, "#973", 5, "q42", now=now),
         _stall_row(7, "dispatch", "#973", 2, now=now),
         # THE CARRIER, and the newest row in the population: a descriptive stem that ROUTES
         # #972 as the subject of its opening clause and only TALKS about #971 further down
@@ -7369,7 +7530,7 @@ def test_a_DISPOSITION_that_matches_no_OWED_line_is_PRINTED_once() -> None:
         _stall_row(2, "dispatch", "#998", 5, now=now),
         _disposition_row(3, "#998", 4, "disposition:void", now=now),
         _stall_row(4, "dispatch", "#999", 5, now=now),
-        _park_row(5, "#999", 4, "park:owner:q43", now=now),
+        _park_row(5, "#999", 4, "q43", now=now),
         _disposition_row(6, "#999", 3, "disposition:void", now=now),
     ]
 

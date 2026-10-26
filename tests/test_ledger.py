@@ -605,6 +605,97 @@ def check_release_vocabulary() -> None:
                   r.returncode == 0 and "0 terminal by release, 1 open" in r.stdout,
                   r.stdout[-420:])
 
+def check_park_vocabulary() -> None:
+    """#535's park arms, driven where the vocabulary exists.
+
+    The `park`/`unpark` events are FACTORY DATA (`docs/ledger-refs-kinds.json`), and the kit
+    ships only the empty `.example.json`. So a shipped tree has nothing to drive, and these
+    arms red as though the instrument were broken -- the same bytes scoring two verdicts,
+    which is a missing declaration reported as a defect (#229). The precondition is stated
+    ONCE, above the arms; a tree that has not adopted the vocabulary SKIPS with its reason
+    rather than reporting a false red.
+
+    EIGHT ARMS, and the shape is `release`'s (#210, ruling `n=1577`) because the remedy is:
+    the ruling (n=4007) makes a unit's parked state a TRANSITION read in row order rather
+    than a `park:owner:qN` string grepped out of free prose, and a transition is only
+    representable if the row that performs it can be written at all. (a) the control, (b) a
+    park naming no question refused, (c) a park whose question is not a register id refused,
+    (d) a lawful park accepted, (e) an unpark naming no park refused, (f) an unpark naming a
+    row that is not a park refused, (g) a lawful unpark accepted, (h) an unpark with no
+    stated reason refused.
+    """
+    if not _event_is_known("park"):
+        print(
+            "  SKIP  the park arms -- this tree declares no `park` event: "
+            "docs/ledger-refs-kinds.json is absent or silent. "
+            f"Population examined: {_vocabulary_size()} event(s) resolved in "
+            "this tree; 8 park arms declared, 0 driven here. A factory that declares "
+            "the vocabulary gets these arms; reding here would report a missing "
+            "declaration as a broken instrument (#229)."
+        )
+        return
+
+    with tempfile.TemporaryDirectory() as td:
+        park_ledger = Path(td) / "park.jsonl"
+        park_subj = "#5351"
+        run(park_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger")
+        r = run(park_ledger, "append", "--event", "intake", "--actor", "triage",
+                "--subject", park_subj, "--detail", f"intake: {park_subj}")
+        check("(535a) the intake lands (the control)", r.returncode == 0,
+              r.stderr.strip()[-90:])
+
+        r = run(park_ledger, "append", "--event", "park", "--actor", "hq",
+                "--subject", park_subj, "--detail", "parked at the owner design gate")
+        msg = (r.stdout + r.stderr).strip()
+        check("(535b) a park naming NO question is REFUSED",
+              r.returncode != 0 and "must name the register question" in msg, msg[-110:])
+
+        r = run(park_ledger, "append", "--event", "park", "--actor", "hq",
+                "--subject", park_subj, "--detail", "parked at the owner design gate",
+                "--ref", "question:memo:#301")
+        msg = (r.stdout + r.stderr).strip()
+        check("(535c) a park whose question is not a register id is REFUSED",
+              r.returncode != 0 and "not a register question id" in msg, msg[-110:])
+
+        r = run(park_ledger, "append", "--event", "park", "--actor", "hq",
+                "--subject", park_subj, "--detail", "parked at the owner design gate",
+                "--ref", "question:q39")
+        check("(535d) a park naming a register question is ACCEPTED", r.returncode == 0,
+              (r.stdout + r.stderr).strip()[-110:])
+        # The row number is READ from the fixture, never assembled.
+        _rows = [json.loads(line) for line in
+                 park_ledger.read_text().splitlines() if line.strip()]
+        park_n = _rows[-1]["n"]
+
+        r = run(park_ledger, "append", "--event", "unpark", "--actor", "hq",
+                "--subject", park_subj, "--detail", "the owner answered q39")
+        msg = (r.stdout + r.stderr).strip()
+        check("(535e) an unpark naming NO park row is REFUSED",
+              r.returncode != 0 and "must name the park row" in msg, msg[-110:])
+
+        r = run(park_ledger, "append", "--event", "unpark", "--actor", "hq",
+                "--subject", park_subj, "--detail", "the owner answered q39",
+                "--ref", f"row:{park_n - 1}")
+        msg = (r.stdout + r.stderr).strip()
+        check("(535f) an unpark naming a row that is NOT a park is REFUSED",
+              r.returncode != 0 and "is the only row it can supersede" in msg,
+              msg[-110:])
+
+        r = run(park_ledger, "append", "--event", "unpark", "--actor", "hq",
+                "--subject", park_subj, "--detail", "   ",
+                "--ref", f"row:{park_n}")
+        msg = (r.stdout + r.stderr).strip()
+        check("(535h) an unpark with NO stated reason is REFUSED",
+              r.returncode != 0 and "must state the reason" in msg, msg[-110:])
+
+        r = run(park_ledger, "append", "--event", "unpark", "--actor", "hq",
+                "--subject", park_subj, "--detail", "the owner answered q39",
+                "--ref", f"row:{park_n}")
+        check("(535g) an unpark naming the park, with a reason, is ACCEPTED",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-110:])
+
+
 def check_conversion_vocabulary() -> None:
     """#67's conversion arms, driven where the vocabulary exists.
 
@@ -3093,6 +3184,7 @@ def main() -> int:
     check_intake_duplicate_intersection()
     check_release_vocabulary()
     check_conversion_vocabulary()
+    check_park_vocabulary()
 
     print()
     if failures:

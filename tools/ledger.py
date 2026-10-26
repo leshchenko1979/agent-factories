@@ -1507,6 +1507,91 @@ def cmd_append(args: argparse.Namespace) -> int:
                 "artifact cannot be joined to the regression it answers, so the duty "
                 "reads as unconverted forever (#67)"
             )
+        # A PARK MUST NAME THE QUESTION IT IS BLOCKED ON, AND AN UNPARK MUST NAME THE PARK
+        # IT ENDS (#535, ruling `n=4007`; the remedy the ruling calls for at its leg 1).
+        #
+        # THE DEFECT WAS A PROSE TOKEN. `park:owner:qN` stood alone on a line of a `run` or
+        # `ruling` row and the patrol census read it out of `detail` with a regex. Two rows
+        # in this ledger prove a token scan cannot answer "is this subject parked": n=3339
+        # is the RELEASE of #313's park and its prose names `park:owner:q39` while the row
+        # is the act that ENDED it, so a grep reads #313 as parked by the row that unparked
+        # it; and n=2884 is a ruling whose SUBJECT is #331 whose text names the parks of
+        # #301/#312/#313, so a grep invents a park on #331 that no row declares. A state is
+        # a TRANSITION read in row order, never a string present in free prose.
+        #
+        # SO THE TRANSITION IS AN EVENT, on `release`'s terms exactly (#210, ruling
+        # `n=1577`): declared locally in `ledger-refs-kinds.json`, deliberately NOT added to
+        # the core tuple, so a member that never parks anything carries no dead vocabulary.
+        #
+        # `park` carries the question as a ref of the DECLARED kind `question` (`q39`), and
+        # a park naming none is REFUSED -- a park row that names no question is
+        # indistinguishable from an ordinary run row, and the census would go on reporting
+        # the subject OWED, which is the false-owed direction the whole ruling repairs.
+        #
+        # `unpark` carries the park row it supersedes as `--ref row:<n>` plus a stated
+        # reason, and both are REFUSED when absent. The ref is what makes the pair joinable:
+        # without it an unpark is a second, unattached claim about state, and "which park did
+        # this end?" has no answer that is not a guess at row order alone. The reason is
+        # required because an unpark whose cause is unstated is indistinguishable from a
+        # park that was withdrawn by accident, and the census prints it as the record.
+        #
+        # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the sibling refusals state:
+        # this binds the row ABOUT TO BE WRITTEN, so it can never predate itself. History is
+        # the leg's business, and nothing is backfilled -- the eight prose-token parks this
+        # ledger carries keep their rows untouched, and the ruling says so in as many words.
+        if args.event == "park":
+            _questions = [
+                str(value) for _ref in refs for kind, value in _ref.items()
+                if kind == "question"
+            ]
+            if not _questions:
+                sys.exit(
+                    "ledger append refused: a 'park' must name the register question it "
+                    "is blocked on as a ref of kind 'question' (--ref question:q39). A "
+                    "park naming no question is indistinguishable from an ordinary row, "
+                    "and the census would go on reporting the subject OWED (#535)"
+                )
+            for _q in _questions:
+                if not (_q.startswith("q") and _q[1:].isdigit()):
+                    sys.exit(
+                        f"ledger append refused: park names the question {_q!r}, which is "
+                        f"not a register question id. The ONE shape is `qN` -- the "
+                        f"sanctioned blocked-on-you channel is the questions register "
+                        f"(`docs/instruments/open-questions.md` section 3), so a park naming "
+                        f"a memo, a unit or a free-text placeholder has no truthful "
+                        f"referent (#535, HQ `n=2884`)"
+                    )
+        if args.event == "unpark":
+            _superseded = [
+                int(value) for _ref in refs for kind, value in _ref.items()
+                if kind == "row" and str(value).isdigit()
+            ]
+            if not _superseded:
+                sys.exit(
+                    "ledger append refused: an 'unpark' must name the park row it "
+                    "supersedes as a ref of kind 'row' (--ref row:<n>). An unpark that "
+                    "names no park is a second unattached claim about state, and 'which "
+                    "park did this end?' has no answer that is not a guess (#535)"
+                )
+            for _n in _superseded:
+                _target = next((r for r in rows if r.get("n") == _n), None)
+                if _target is None:
+                    sys.exit(
+                        f"ledger append refused: unpark names row n={_n}, which this "
+                        f"ledger does not hold"
+                    )
+                if _target.get("event") != "park":
+                    sys.exit(
+                        f"ledger append refused: unpark names row n={_n}, whose event is "
+                        f"{_target.get('event')!r} -- an unpark ends a PARK, and a park "
+                        f"row is the only row it can supersede (#535)"
+                    )
+            if not str(args.detail or "").strip():
+                sys.exit(
+                    "ledger append refused: an 'unpark' must state the reason it ends the "
+                    "park. An unstated unpark is indistinguishable from a park withdrawn "
+                    "by accident, and the census prints the reason as the record (#535)"
+                )
         # A NEW INTAKE IS INTERSECTED AGAINST THE OPEN SET, AND A DUPLICATE IS REFUSED
         # (#417, ruled `n=2745`; the owner's answers to `q34`/`q35`).
         #

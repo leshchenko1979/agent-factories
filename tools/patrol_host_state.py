@@ -6989,79 +6989,156 @@ def is_board_unit_occurrence(blob: str, start: int) -> bool:
             return False
     return True
 
-# THE PARK TOKEN (#331 clause 1): `park:owner:<question>`, declared in a work unit's OWN
-# ledger row. HQ's C1 scope ruling (n=2884) fixes the shape at ONE -- the register is the
-# only sanctioned blocked-on-you channel (docs/instruments/open-questions.md section 3), so
-# the token names a REGISTER QUESTION and nothing else. A unit waiting on a board memo has
-# no truthful token; `park:owner:memo:<issue>#<comment>` is REFUSED, and #301/#312/#313 wait
-# on q39 once it is minted.
+# THE PARK TRANSITION (#331 clause 1, REPLACED by #535 / ruling n=4007). A unit is parked
+# when the ledger carries a `park` EVENT for it and no `unpark` EVENT after it. That is the
+# whole declaration: a TRANSITION read in row order, never a string present in free prose.
 #
-# IT IS READ FROM THE ROWS, NOT FROM A TABLE, and the deciding evidence is the live ledger:
-# Triage's own park rows for #317/#320 (n=2881/n=2882) carry the token as the LAST LINE of
-# their `detail`, and each says in as many words that "this row is the declared park HQ's C1
-# defines". A table this tree edits would never see them, so the declaration the census has
-# to honour is the one already written.
+# WHY THE PROSE TOKEN WAS REMOVED, measured rather than argued. Until #535 a park was the
+# line `park:owner:<question>` standing alone in a `run` or `ruling` row's `detail`, read
+# with a regex. Two rows in this very ledger show that reading cannot answer "is this
+# subject parked", and both are still in the file:
 #
-# THE TOKEN MUST STAND ALONE ON A LINE OF ITS OWN. The correction row beside those two
-# (n=2883) QUOTES the token shape in prose while carrying no token itself -- it names
-# `park:owner:q30` and `park:owner:q39` mid-sentence and closes "THIS ROW CARRIES NO PARK
-# TOKEN". A reader that matched the substring would park #301 on the very mis-citation that
-# row exists to withdraw, so a declaration is a line of its own and a mention is not.
-PARK_TOKEN_RE = re.compile(r"^park:owner:(q\d+)$")
-PARK_TOKEN_PREFIX = "park:owner:"
+#   * n=3339 is the RELEASE of #313's park. Its prose names `park:owner:q39` because it is
+#     the act that ENDED that park, so a token scan reads #313 as parked by the row that
+#     unparked it -- the verdict is the exact inverse of the row's meaning.
+#   * n=2884 is a ruling whose SUBJECT is #331 whose text names the parks of #301/#312/#313.
+#     A token scan invents a park on #331 that no row declares, on the strength of a ruling
+#     that never mentions #331's state at all.
+#
+# A reader that can return "parked" for an unpark and "parked" for a bystander is not a
+# reader with an edge case; it is reading the wrong object. The state a census needs is a
+# POSITION in a sequence, and only the row that performs the transition can say where it
+# stands.
+#
+# THE VOCABULARY IS DECLARED, not invented: `park` and `unpark` live in
+# `docs/ledger-refs-kinds.json` `events` and `docs/ledger-authorizations.json` `by_event`,
+# on `release`'s terms exactly (#210, ruling `n=1577`). The ref kind `question` is declared
+# in the same file, because the core kinds name rows, subjects, commits, sessions and
+# rework, and a register question is none of those.
+#
+# NOTHING IS BACKFILLED. The eight prose-token parks this ledger carries keep their rows
+# untouched and simply stop being read, which costs nothing live: every one of them is on a
+# CLOSED unit (#301, #312, #313, #317, #320, #460, #473 are all closed; #324 is claimed).
+# A unit that should be parked from now on gets a `park` row, which is a forward act.
+
+PARK_EVENT = "park"
+UNPARK_EVENT = "unpark"
+
+
+def _row_refs(row: dict, kind: str) -> list[str]:
+    """Every value of `kind` among a row's refs, in declared order. One reading, no parse."""
+    return [
+        str(value)
+        for ref in (row.get("refs") or [])
+        for k, value in ref.items()
+        if k == kind
+    ]
 
 
 def declared_parks(
     rows: list[dict], is_unit, precedes_filing=None
 ) -> tuple[dict[str, tuple[str, dict]], list[str]]:
-    """Read every `park:owner:<question>` declaration off the units' own ledger rows.
+    """Read the `park`/`unpark` EVENTS and return the units that are parked NOW.
 
-    Returns `{unit: (question_id, row)}` holding the NEWEST declaration per unit, plus
-    problem strings. The declaring ROW travels with the question because the census must be
-    able to print which row declared the park -- a park no reader can trace to a row is a
-    claim, not a declaration.
+    Returns `{unit: (question_id, park_row)}` holding each currently-parked unit's park,
+    plus problem strings. The declaring ROW travels with the question because the census
+    must be able to print which row declared the park -- a park no reader can trace to a
+    row is a claim, not a declaration.
+
+    THE STATE IS A FOLD IN ROW ORDER, not a set of matches. A `park` opens, an `unpark`
+    closes, and the last transition wins. `_ledger_row_order` is the ordering the whole leg
+    already uses, so "which came later" has one answer rather than one per call site.
+
+    AN UNPARK NAMES THE PARK IT ENDS (`--ref row:<n>`), and that ref is HONOURED rather than
+    assumed: an unpark whose target is not a park row for the same subject is a PROBLEM, not
+    a silent close. The write path refuses that shape at append, but a row is immutable once
+    pushed, so the leg is the half that can still see it -- and a member factory's own
+    `ledger.py` may predate the refusal.
 
     A LINE THAT TRIES TO DECLARE AND CANNOT BE READ IS A PROBLEM, never a silent pass: the
     factory believes it parked something the census cannot see, and the census would then go
     on reporting that unit OWED -- a defect in the declaration wearing the shape of a finding
-    about the unit. The ONE shape is `park:owner:qN`, the id being a register question (HQ
-    n=2884); the refused `memo:` form, a bare `<question>` placeholder and an empty id all
-    land here. A member factory whose register mints a different id shape gets a visible
-    problem rather than a silent non-park -- that is the honest direction, and it is a law
-    question to settle, not one for this reader to guess at.
-
-    A unit whose rows name two DIFFERENT questions is not adjudicated: the newest declaration
-    wins and the PARKED line names the question and row it read, so a re-park (one question
-    answered, another standing) is a traceable act rather than a silent overwrite.
+    about the unit. A `park` with no `question` ref, a `park` whose question is not `qN`, an
+    `unpark` with no `row` ref, and an `unpark` naming a row that is absent or is not a park
+    all land here.
     """
-    declarations: dict[str, list[tuple[str, dict]]] = {}
     problems: list[str] = []
-    for row in rows:
+    # `unit -> (question, park_row) | None`, folded in row order. None is an explicit
+    # "unparked" so a later `park` can re-open it; a unit absent from the map was never
+    # mentioned by a park row at all, which is a different thing and must stay different.
+    state: dict[str, tuple[str, dict] | None] = {}
+    parks_by_row: dict[object, str] = {}
+    ordered = sorted(rows, key=_ledger_row_order)
+    for row in ordered:
         subject = str(row.get("subject") or "").strip()
         if not is_unit(subject):
             continue
         if precedes_filing is not None and precedes_filing(row.get("ts"), subject):
             continue
-        for line in str(row.get("detail") or "").splitlines():
-            stripped = line.strip()
-            if not stripped.startswith(PARK_TOKEN_PREFIX):
-                continue
-            match = PARK_TOKEN_RE.match(stripped)
-            if not match:
+        event = str(row.get("event") or "")
+        if event == PARK_EVENT:
+            questions = _row_refs(row, "question")
+            if not questions:
                 problems.append(
-                    f"row n={row.get('n')} ({subject}) declares a park in a shape this leg "
-                    f"cannot read: {stripped!r} -- the ONE shape is `park:owner:<question>` "
-                    f"with a register question id (qN). The refused `memo:` form, a "
-                    f"`<placeholder>` standing in for an id, or a prose line that merely "
-                    f"STARTS with the prefix all land here: reword it, or make the "
-                    f"declaration a line of its own (#331, HQ n=2884)"
+                    f"row n={row.get('n')} ({subject}) is a `park` naming no question -- "
+                    f"the declaration carries no referent, so this reader cannot tell what "
+                    f"the unit is blocked on and the census will report it OWED. The shape "
+                    f"is `--ref question:qN` (#535, ruling n=4007)"
                 )
                 continue
-            declarations.setdefault(subject, []).append((match.group(1), row))
-    parks: dict[str, tuple[str, dict]] = {}
-    for unit, items in declarations.items():
-        items.sort(key=lambda item: _ledger_row_order(item[1]))
-        parks[unit] = items[-1]
+            question = questions[0]
+            if not (question.startswith("q") and question[1:].isdigit()):
+                problems.append(
+                    f"row n={row.get('n')} ({subject}) is a `park` naming {question!r}, "
+                    f"which is not a register question id -- the ONE shape is `qN`, the "
+                    f"sanctioned blocked-on-you channel being the questions register "
+                    f"(#535, HQ n=2884)"
+                )
+                continue
+            state[subject] = (question, row)
+            parks_by_row[row.get("n")] = subject
+        elif event == UNPARK_EVENT:
+            targets = _row_refs(row, "row")
+            if not targets:
+                problems.append(
+                    f"row n={row.get('n')} ({subject}) is an `unpark` naming no park row -- "
+                    f"an unpark that names no park cannot be joined to the state it ends, "
+                    f"so the census cannot tell a withdrawn park from a park that never "
+                    f"existed. The shape is `--ref row:<n>` (#535, ruling n=4007)"
+                )
+                continue
+            _parked_here = False
+            for target in targets:
+                if not target.isdigit():
+                    problems.append(
+                        f"row n={row.get('n')} ({subject}) is an `unpark` naming row "
+                        f"{target!r}, which is not a row number (#535)"
+                    )
+                    continue
+                owner = parks_by_row.get(int(target))
+                if owner is None:
+                    problems.append(
+                        f"row n={row.get('n')} ({subject}) is an `unpark` naming row "
+                        f"n={target}, which is not a `park` row this read saw -- an unpark "
+                        f"ends a PARK, and a park row is the only row it can supersede. "
+                        f"A park in a foreign namespace, or a typo'd row number, reads as "
+                        f"this (#535, ruling n=4007)"
+                    )
+                    continue
+                if owner != subject:
+                    problems.append(
+                        f"row n={row.get('n')} ({subject}) is an `unpark` naming the park "
+                        f"of {owner} (row n={target}) -- a unit cannot unpark another "
+                        f"unit's park, and honouring it would clear a state this row has "
+                        f"no authority over (#535)"
+                    )
+                    continue
+                _parked_here = True
+            if _parked_here:
+                state[subject] = None
+    parks: dict[str, tuple[str, dict]] = {
+        unit: value for unit, value in state.items() if value is not None
+    }
     return parks, problems
 
 # THE DECLARED DISPOSITION (#473). A ruling can DISPOSE of a unit -- rule it
@@ -7155,6 +7232,83 @@ def _ledger_row_order(row: dict) -> tuple:
     """
     n = row.get("n")
     return (n if isinstance(n, int) else -1, str(row.get("ts") or ""))
+
+# THE RULING-PROSE PARK GAP (#535 leg 3). A ruling can SAY a unit is blocked on the owner
+# design gate and no `park` row for that subject exists. Until this leg, that state lived only
+# in the ruling's prose, so the census could not see it and the unit read OWED forever -- the
+# false-owed direction #535 repairs, one row type over from the token scan.
+#
+# THE PREDICATE IS POSITIONAL, and that is the whole correctness of it. A ruling's `detail` is
+# free prose that QUOTES other rulings as evidence, so a whole-detail scan invents a state for
+# the wrong subject. MEASURED on this ledger the first time this leg ran: n=3997 (#534) and
+# n=4007 (#535) both carry the phrase "blocked on the owner design gate" deep in their bodies,
+# where it QUOTES `#324`'s ruling n=2360 -- and a whole-detail scan reported BOTH as gaps,
+# naming two units as held on a decision neither ruling makes about them. That is the same
+# defect as the `park:owner:` token scan one layer up, found by reading the bytes instead of
+# the match. The OPENING PARAGRAPH is where a ruling states its verdict about its OWN subject,
+# and there the arms separate cleanly: n=2360's first paragraph reads "## RULED -- #324 is
+# ACCEPTED ... and BLOCKED on the owner design gate", while n=3997's and n=4007's opening
+# paragraphs say nothing about a gate.
+#
+# THE POPULATION IS THE OWED SET, NOT A ROW WINDOW (#536's concern, answered by a better
+# bound). A row-count window has two failures and the second is fatal: sized small it misses
+# the one live case (`#324`'s ruling is 1975 rows back from the tail), sized large it
+# re-litigates the 68 historical rulings #536 names. The OWED set is bounded by what a reader
+# can ACT on -- a closed, claimed or parked unit is never examined -- so it can neither decay
+# as the ledger grows nor bury the live finding under history. The counts are PRINTED on every
+# outcome, because a clean verdict over an examined-nothing read is not a verdict (#242) and an
+# empty population is otherwise indistinguishable from a clean one (#116).
+RULING_PARK_GAP_RE = re.compile(
+    r"blocked on the owner('s)? design gate", re.IGNORECASE
+)
+
+
+def ruling_park_gaps(
+    rows: list[dict],
+    is_unit,
+    parked_units: set[str],
+    owed_units: set[str],
+) -> tuple[list[str], int, int]:
+    """Rulings that SAY their own subject is blocked on the owner design gate, no park row.
+
+    Returns the problem strings, the number of OWED units examined, and the number of gaps --
+    three numbers, because "no gap" and "nothing looked at" are different verdicts and must
+    never print the same.
+
+    A unit already in `parked_units` is EXEMPT by construction: the declaration exists and this
+    leg exists to find the case where it does not. A unit NOT in `owed_units` is out of the
+    population entirely, which is what bounds the read to live work.
+
+    The NEWEST ruling per subject wins, so a re-ruling that lifts the gate is honoured without
+    a second pass: a later ruling that says nothing about a gate simply does not match.
+    """
+    ordered = sorted(rows, key=_ledger_row_order)
+    newest: dict[str, dict] = {}
+    for row in ordered:
+        if str(row.get("event") or "") != "ruling":
+            continue
+        subject = str(row.get("subject") or "").strip()
+        if not is_unit(subject) or subject not in owed_units:
+            continue
+        newest[subject] = row
+    examined = len(newest)
+    gaps: list[str] = []
+    for subject, row in sorted(newest.items(), key=lambda item: _ledger_row_order(item[1])):
+        opening = str(row.get("detail") or "").split("\n\n")[0]
+        if not RULING_PARK_GAP_RE.search(opening):
+            continue
+        if subject in parked_units:
+            continue
+        gaps.append(
+            f"{subject}: ruling row n={row.get('n')} opens by saying the unit is blocked on "
+            f"the owner design gate, and the ledger carries no `park` row for it -- the state "
+            f"lives only in that ruling's prose, which no reader can fold into a sequence, so "
+            f"the census reports held work as neglected. Write the park row "
+            f"(`--event park --subject {subject} --ref question:qN`); the ruling's own text "
+            f"stays as written and nothing is backfilled (#535, ruling n=4007)"
+        )
+    return gaps, examined, len(gaps)
+
 
 def stall_lane_names() -> dict[str, str]:
     """Live session id -> lane name, from the box's own session bindings (#331 clause 2).
@@ -8176,6 +8330,21 @@ def stall_census_leg(
             f"{age_note} {remedy_note}"
         )
 
+    # THE RULING-PROSE PARK GAP (#535 leg 3), read LAST so it is judged against the parks the
+    # fold actually resolved. A unit a `park` row already holds is exempt by construction:
+    # this leg exists to find the case where the declaration does NOT exist and the state
+    # lives only in a ruling's prose, which the census cannot fold and therefore reports as
+    # neglected work.
+    #
+    # The population is the OWED set, not a row window -- see the leg's own comment for why a
+    # window both misses the live case and re-litigates history. Both counts travel into the
+    # coverage on EVERY outcome, because a clean verdict over an examined-nothing read is not
+    # a verdict (#242).
+    park_gaps, park_gap_examined, park_gap_found = ruling_park_gaps(
+        rows, is_unit, set(parks), {entry["unit"] for entry in owed}
+    )
+    problems.extend(park_gaps)
+
     return {
         "name": "stall-census",
         "status": "ASSERTED",
@@ -8208,6 +8377,15 @@ def stall_census_leg(
             # declared and then SUPERSEDED is counted in neither -- it is named in `parks`,
             # where a reader meets the declaration and the dispatch that lifted it.
             "parks_declared": len(parks),
+            # THE PARK TRANSITION'S OWN COVERAGE (#535): the fold reads EVENTS, so the count
+            # of transition rows it examined and the count of open ruling-prose gaps are the
+            # two halves that keep a clean verdict from being a silent one.
+            "park_rows_examined": sum(
+                1 for _r in rows
+                if str(_r.get("event") or "") in (PARK_EVENT, UNPARK_EVENT)
+            ),
+            "owed_units_examined_for_park_gap": park_gap_examined,
+            "ruling_park_gaps": park_gap_found,
             "units_parked": len(parked_units),
             "units_park_superseded": len(park_superseded),
             "parks": parked + park_notes,
