@@ -164,7 +164,8 @@ def _remint_successor(row: dict, after_rows: list[dict]) -> int | None:
     prose often names the number it replaced, so requiring those to match would fail on
     exactly the rows the law permits.
 
-    SAME `n` IS A RE-MINT, and demanding strictly-up was the #569 defect. §9.1's freedom is
+    SAME `n` IS A RE-MINT, and demanding strictly-up was the #569 defect. The freedom in
+    `docs/instruments/ledger.md` §9.1 is
     about PUBLICATION, not about arithmetic: a row that exists only in a working tree may be
     re-stamped before it is pushed, and the ordinary way a lane does that is to edit the row
     in place -- same `n`, fresh `ts` -- rather than to skip numbers it never published.
@@ -330,7 +331,8 @@ def no_shrink_problems(
                 reminted.append(key)
             elif merged_in_rows:
                 # shape 2: absent from every merged-in line, so the identity never reached
-                # the published line and §9.1 makes the re-mint free. A signature is not
+                # the published line, and the re-mint bound in
+                # `docs/instruments/ledger.md` §9.1 makes the re-mint free. A signature is not
                 # required here because the merged-in line IS the publication evidence.
                 reminted.append(key)
             else:
