@@ -255,11 +255,11 @@
       "load_at_measure": 2.0
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 907.11,
-      "load_at_measure": 9.01,
-      "margin_x": 4.003,
-      "measured_at": "3af21226a0d25f4b44d50b9cd0d1019f424faaef",
-      "measured_sec": 226.59
+      "budget_sec": 838.59,
+      "load_at_measure": 3.4,
+      "margin_x": 4.004,
+      "measured_at": "ea7f357d552f4ea5a604355185f03b3c4fc3ea10",
+      "measured_sec": 209.46
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 22.43,

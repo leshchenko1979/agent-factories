@@ -2386,6 +2386,33 @@ def probe_a_refused_sample_is_not_a_basis_and_a_passing_one_still_derives() -> N
         check("the derivation records the revision it was measured at",
               written["measured_at"] == head, json.dumps(written))
 
+        # ARM 3 — THE REVISION IS THE SAMPLE'S, NOT THE WRITE-TIME ONE. A report that
+        # declares the tree it ran against must have that revision recorded, because a
+        # survey round writes its artifact, commits and rebases BEFORE it applies: stamping
+        # write-time HEAD would name a tree these samples never ran against, and the entry
+        # would read NOT EXAMINED in any fresh clone. Same gate, same repo, only the
+        # declaration differs — so the arm cannot pass on a coincidence of the fixture.
+        # A FRESH manifest, because ARM 2's apply left the entry consistent with HEAD and
+        # an empty population derives nothing: the arm needs a stale basis to have work.
+        manifest_b = _manifest(root, {"tests/test_moved.py": _basis(base)})
+        declared = root / "audit-declared-tree.json"
+        declared.write_text(json.dumps({
+            "tree": {"head_sha": base, "modified_count": 0},
+            "gates": [{
+                "gate_key": "tests/test_moved.py", "cmd": "synthetic",
+                "passed": True, "unknown": False, "duration_sec": 40.0, "exit_code": 0,
+            }],
+        }), encoding="utf-8")
+        from_sample = _leg_proc("--manifest", str(manifest_b), "--repo-root", str(root),
+                                "--audit-report", str(declared), "--apply")
+        written = json.loads(manifest_b.read_text(encoding="utf-8"))["gates"]["tests/test_moved.py"]
+        check("measured_at is the report's own tree revision, never the write-time HEAD",
+              written["measured_at"] == base and written["measured_at"] != head,
+              f"measured_at={written['measured_at']} base={base} head={head}")
+        check("the sample's own revision still derives from that sample",
+              written["measured_sec"] == 40.0 and "APPLIED 1" in from_sample.stdout,
+              from_sample.stdout[:400])
+
         # THE TRIGGER IS UNTOUCHED (#307): an UNKNOWN gate is still not a sample, and is
         # still the exhausted-budget trigger. A fix that collapsed the two would regress it.
         unknown = report(passed=False, unknown=True, duration=1008.75)

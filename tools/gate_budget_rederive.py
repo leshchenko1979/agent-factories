@@ -97,9 +97,9 @@ class Population:
         return tuple(sorted({s.key for s in self.stale} | set(self.exhausted)))
 
 
-def _audit_samples(report_path: Path) -> tuple[dict, tuple, tuple, str]:
+def _audit_samples(report_path: Path) -> tuple[dict, tuple, tuple, str, str | None]:
     """The report's PASSING samples, the keys it reported UNKNOWN, the keys whose every
-    completed sample FAILED, and the report's note.
+    completed sample FAILED, the report's note, and the REVISION the samples were taken at.
 
     TWO populations, returned SEPARATELY, and the separation is the whole point (#307). A
     COMPLETED sample is the only thing a basis may be derived from: it is a MEASUREMENT. An
@@ -129,12 +129,23 @@ def _audit_samples(report_path: Path) -> tuple[dict, tuple, tuple, str]:
     """
     if not report_path.is_file():
         return ({}, (), (),
-                f"no audit report at {report_path} — no fresh samples, so nothing can be applied")
+                f"no audit report at {report_path} — no fresh samples, so nothing can be applied",
+                None)
     try:
         payload = json.loads(report_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         return ({}, (), (),
-                f"audit report at {report_path} is unreadable ({exc}) — UNKNOWN, never clean")
+                f"audit report at {report_path} is unreadable ({exc}) — UNKNOWN, never clean",
+                None)
+    # The REVISION the samples were taken at, read from the report's own declaration of the
+    # tree it ran against. This is what `measured_at` must record: the tree the measurement
+    # came FROM, never whatever HEAD happens to be when the manifest is written. The two are
+    # the same only when the leg runs immediately after the audit; a survey round writes its
+    # artifact, commits, rebases and only then applies, so the write-time HEAD is a different
+    # revision and stamping it names a tree the samples never saw.
+    revision = (payload.get("tree") or {}).get("head_sha")
+    if not isinstance(revision, str) or len(revision) != 40:
+        revision = None
     samples: dict[str, float] = {}
     exhausted: list[str] = []
     failed: list[str] = []
@@ -161,6 +172,7 @@ def _audit_samples(report_path: Path) -> tuple[dict, tuple, tuple, str]:
         f"{len(samples)} passing sample(s) read from {report_path.name}"
         + (f"; {len(set(failed))} gate(s) completed and FAILED, so they carry no basis"
            if failed else ""),
+        revision,
     )
 
 
@@ -212,16 +224,18 @@ def containment_population(
     failed_only: tuple = ()
     samples: dict = {}
     sample_note = "no audit report given — the exhausted-budget trigger was not read"
+    sample_revision: str | None = None
     if audit_report is not None:
-        samples, exhausted_keys, failed_keys, sample_note = _audit_samples(Path(audit_report))
-        # A gate whose only completed samples FAILED is NOT DERIVABLE, and it is named by
-        # key rather than skipped (#558). Restricted to the POPULATION: a report carries a
-        # record for every gate it ran, so naming every red gate in the suite would bury the
-        # one entry this leg was asked about.
-        failed_only = tuple(
-            key for key in failed_keys
-            if key in entries and key in {s.key for s in stale}
+        samples, exhausted_keys, failed_keys, sample_note, sample_revision = _audit_samples(
+            Path(audit_report)
         )
+        # A gate whose only completed samples FAILED is NOT DERIVABLE, and it is named by
+        # key rather than skipped (#558). Scoped to every DECLARED entry, never to the
+        # containment population: a collapsed basis is self-consistent, so the gate it
+        # starved is NOT stale and would be filtered out by exactly the blind spot this
+        # clause exists to close (#558's 17.19 s entry reads clean against itself while its
+        # gate dies every round). A silent skip and a refusal look identical in a count.
+        failed_only = tuple(key for key in failed_keys if key in entries)
         # The trigger is the audit's OWN declaration that a declared entry exhausted its
         # budget -- the `unknown` flag -- never a comparison against the cap. It is read from
         # the UNKNOWN population, not from the completed samples: a completed sample finished
@@ -245,7 +259,7 @@ def containment_population(
         not_examined=not_examined,
         note=note,
         extras={"samples": samples, "sample_note": sample_note, "manifest": str(path),
-                "failed_only": failed_only},
+                "failed_only": failed_only, "sample_revision": sample_revision},
     )
 
 
@@ -285,14 +299,19 @@ def apply_rederivation(
     pop: Population,
     manifest_path: Path,
     root: Path,
-    head: str,
+    head: str | None,
 ) -> Population:
     """Re-derive every entry in the containment population from a completed audit sample.
 
     The derivation is the manifest's own law, evaluated by the manifest's own function:
     `margin_x = margin_for(measured_sec)` and `budget_sec = round(margin_x x measured_sec, 2)`.
-    `measured_at` is recorded as the ABSOLUTE revision the sample was taken at, and
-    `load_at_measure` as the load read at that instant.
+    `measured_at` is recorded as the ABSOLUTE revision the SAMPLE was taken at — the audit
+    report's own `tree.head_sha` — and `load_at_measure` as the load read at that instant.
+
+    `head` is only the FALLBACK for a report that declares no tree: a survey round writes its
+    artifact, commits and rebases BEFORE it applies, so the write-time HEAD names a revision
+    these samples never ran against, and stamping it would make the entry NOT EXAMINED in any
+    fresh clone (`gate_budget.py`, the `measured_at` reachability read).
 
     The result is re-read through `load_gate_budgets()` BEFORE it is written. The manifest's
     loader refuses a stated derivation its own numbers contradict, so a re-derivation that
@@ -302,6 +321,8 @@ def apply_rederivation(
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     entries = data["gates"]
     load = _load_at_measure()
+    # The revision the MEASUREMENT came from, never the write-time one.
+    measured_at = pop.extras.get("sample_revision") or head
 
     applied: list = []
     held: list = []
@@ -333,7 +354,7 @@ def apply_rederivation(
         entry["measured_sec"] = round(float(sample), 2)
         entry["margin_x"] = round(margin_x, 3)
         entry["budget_sec"] = round(margin_x * float(sample), 2)
-        entry["measured_at"] = head
+        entry["measured_at"] = measured_at
         if load is not None:
             entry["load_at_measure"] = load
         applied.append(key)
@@ -435,9 +456,12 @@ def main(argv: list[str] | None = None) -> int:
                 "whole-command sample and will not carry a number forward (never a value by feel)"
             )
             return EXIT_REFUSED
-        head = _head_sha(root)
+        head = pop.extras.get("sample_revision") or _head_sha(root)
         if head is None:
-            print(f"REFUSED — no resolvable HEAD under {root}, so `measured_at` cannot be recorded")
+            print(
+                f"REFUSED — the audit report declares no tree and no HEAD resolves under "
+                f"{root}, so `measured_at` cannot be recorded"
+            )
             return EXIT_REFUSED
         pop = apply_rederivation(pop, manifest, root, head)
 
@@ -452,6 +476,7 @@ def main(argv: list[str] | None = None) -> int:
                     "exhausted": list(pop.exhausted),
                     "not_examined": list(pop.not_examined),
                     "failed_only": list(pop.extras.get("failed_only") or ()),
+                    "sample_revision": pop.extras.get("sample_revision"),
                     "applied": list(pop.applied),
                     "held": [{"key": k, "why": w} for k, w in pop.held],
                     "note": pop.note,
