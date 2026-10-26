@@ -158,12 +158,24 @@ def removed_identities(before_rows: list[dict], after_rows: list[dict]) -> list[
 def _remint_successor(row: dict, after_rows: list[dict]) -> int | None:
     """The `n` that re-mints `row` in `after_rows`, or None when nothing does.
 
-    A re-mint is the SAME ACT under a NEW number: `event`, `actor` and `subject` are the
-    row's identity of act, and a re-mint keeps all three while moving `n` UP (a re-mint
-    never reuses a number at or below the one it replaces -- that would be a different row
-    wearing a published number). `ts` and `detail` are deliberately NOT compared: a re-mint
-    is normally stamped at a new instant and its prose often names the number it replaced,
-    so requiring those to match would fail on exactly the rows the law permits.
+    A re-mint is the SAME ACT carried under the SAME OR A HIGHER number: `event`, `actor`
+    and `subject` are the row's identity of act, and a re-mint keeps all three. `ts` and
+    `detail` are deliberately NOT compared: a re-mint is stamped at a new instant and its
+    prose often names the number it replaced, so requiring those to match would fail on
+    exactly the rows the law permits.
+
+    SAME `n` IS A RE-MINT, and demanding strictly-up was the #569 defect. §9.1's freedom is
+    about PUBLICATION, not about arithmetic: a row that exists only in a working tree may be
+    re-stamped before it is pushed, and the ordinary way a lane does that is to edit the row
+    in place -- same `n`, fresh `ts` -- rather than to skip numbers it never published.
+    Measured on `e446fa9d` (2026-10-26): 4307 rows either side, all four removed identities
+    re-present at the SAME `n` with the same `(event, actor, subject)` and only `ts` moved,
+    which `r["n"] > n` could not see; the gate called that commit a shrink while no `n` was
+    removed anywhere in it.
+
+    LOWER `n` is still NOT a re-mint, and that half of the bound stands unchanged: a
+    successor at a lower number is a different row wearing a number the removal did not
+    publish, which is precisely what the identity law forbids.
     """
     n = row.get("n")
     if not isinstance(n, int):
@@ -174,7 +186,7 @@ def _remint_successor(row: dict, after_rows: list[dict]) -> int | None:
         for r in after_rows
         if (r.get("event"), r.get("actor"), r.get("subject")) == want
         and isinstance(r.get("n"), int)
-        and r["n"] > n
+        and r["n"] >= n
     ]
     return min(candidates) if candidates else None
 
@@ -213,11 +225,29 @@ def no_shrink_problems(
          published line, so the re-mint bound (`docs/instruments/ledger.md` §9.1) makes the
          re-mint free. EXCUSED, and printed, because "clean"
          and "a re-mint happened here" must not read the same.
-      3. REMOVED BY A SINGLE-PARENT COMMIT -- there is no merged-in line to compare
-         against, so absence proves nothing. The row must carry the re-mint SIGNATURE (the
-         same event/actor/subject at a higher `n` in `after`), or be exempted, or be named
-         by a reconciliation. A bare authored deletion of a published row stays a PROBLEM,
-         which is what keeps shape 2 from becoming a blanket excuse.
+      3. REMOVED WITH NO MERGED-IN LINE TO COMPARE AGAINST -- absence proves nothing, so the
+         row must carry the re-mint SIGNATURE (the same event/actor/subject at the same or a
+         higher `n` in `after`), or be exempted, or be named by a reconciliation. A bare
+         authored deletion of a published row stays a PROBLEM, which is what keeps shape 2
+         from becoming a blanket excuse.
+
+    SHAPES 2 AND 3 ARE PROPERTIES OF THE ROW, AND #569 IS WHAT FORCED THAT APART. Each shape
+    asks one question of the IDENTITY: was it PUBLISHED (present in a population a peer could
+    see), and does the SAME ACT stand in `after`. Shape 2's free pass is therefore not "the
+    commit is a merge" -- it is "the row is absent from the published population, and this
+    transition HAS a published population to be absent from"; a merge with no merged-in rows
+    read has none, and the signature decides instead. Before #569 the branch read
+    `if is_merge`, a property of the COMMIT, so shape 2 could never fire on the ordinary way a
+    lane re-mints before publishing -- a single-parent commit -- and a lawful re-stamp read as
+    a deletion.
+
+    The obvious-looking alternative -- free the re-mint when the row's `n` sits above the
+    highest `n` on the merged-in line -- is REJECTED, and the rejection is the reason shape 2
+    is phrased as absence rather than as arithmetic. A row that exists only on the LOCAL
+    first-parent line can sit BELOW the remote's high-water mark (a peer published further
+    while this lane held an unpublished row at a lower `n`), and it was still never
+    published; an `n`-vs-watermark test would red exactly that lawful case. Publication is a
+    property of the population, never of the number.
 
     The INVERSE case is its own leg: an identity present on a merged-in line and absent from
     the merge, that was never on the first-parent line, was dropped ON THE WAY IN. A
@@ -242,7 +272,6 @@ def no_shrink_problems(
         after_rows = transition["after"]
         after_ids = {identity_of(r) for r in after_rows}
         before_ids = {identity_of(r) for r in transition["before"]}
-        is_merge = bool(merged_in_rows)
         removed = removed_identities(transition["before"], after_rows)
 
         # The inverse leg: published rows the resolution dropped on the way in. A row that
@@ -279,22 +308,39 @@ def no_shrink_problems(
         for key in removed:
             if key in declared or entry is not None:
                 continue
+            # THE DECISION IS ABOUT THE ROW, NEVER ABOUT THE COMMIT (#569). Each test below
+            # asks a question of the IDENTITY, and the two properties that decide it are
+            # both row-level: whether the row was PUBLISHED (present on a line a peer could
+            # see) and whether the SAME ACT stands in `after`. `is_merge` is not consulted
+            # at all -- it is a property of the commit, and a predicate keyed on it cannot
+            # tell a lane's ordinary pre-publication re-stamp from a deletion, which is what
+            # made `e446fa9d` (single parent, four unpublished rows re-stamped in place) read
+            # as a shrink.
             if key in merged_in_ids:
-                shrunk.append(key)          # shape 1: it was published
+                shrunk.append(key)          # shape 1: it was PUBLISHED, and the merge dropped it
                 continue
             row = before_by_id.get(key, {})
             successor = _remint_successor(row, after_rows)
-            if is_merge:
-                reminted.append(key)        # shape 2: never published, free to re-mint
-            elif successor is not None:
-                reminted.append(key)        # shape 3: the re-mint signature is present
+            if successor is not None:
+                # shape 3: the re-mint SIGNATURE is present -- the same act at the same or a
+                # higher `n`. Checked before the merge free-pass on purpose: where a
+                # signature exists the printed reason names the evidence rather than the
+                # absence of a merged-in line, and where the row WAS published, shape 1 has
+                # already fired above, so a same-`n` re-stamp of a published row still fails.
+                reminted.append(key)
+            elif merged_in_rows:
+                # shape 2: absent from every merged-in line, so the identity never reached
+                # the published line and §9.1 makes the re-mint free. A signature is not
+                # required here because the merged-in line IS the publication evidence.
+                reminted.append(key)
             else:
-                shrunk.append(key)          # shape 3 without a signature: a real deletion
+                shrunk.append(key)          # no signature and no merged-in line: a deletion
 
         if reminted:
             excused.append(
-                f"re-mint {sha[:12]} — {len(reminted)} identity(ies) re-minted above the "
-                "published line: "
+                f"re-mint {sha[:12]} — {len(reminted)} identity(ies) re-minted: the same act "
+                "stands at the same or a higher `n` and no merged-in line carries the "
+                "identity: "
                 + ", ".join(f"n={key[0]} ({key[2]} {key[3]} {key[4]})" for key in reminted)
             )
         if shrunk:
@@ -1404,8 +1450,106 @@ def probe_a_SINGLE_PARENT_removal_needs_the_re_mint_signature() -> list[str]:
     if not problems_c:
         fails.append(
             "a removal whose only same-act row sits at a LOWER n was excused as a re-mint "
-            "-- a re-mint moves the number up, and reusing a lower one is a different row "
-            "wearing a published number"
+            "-- a re-mint carries the number up or holds it, and moving DOWN is a different "
+            "row wearing a published number"
+        )
+    return fails
+
+def probe_a_SAME_n_re_stamp_is_a_re_mint_but_a_published_one_still_bites() -> list[str]:
+    """#569: the ts-only re-stamp, and the arm that keeps it from being a blanket excuse.
+
+    The shape is the live one. `e446fa9d` (2026-10-26T08:35:50Z, single parent `785dcc49`)
+    re-stamped four unpublished rows before pushing them: 4307 rows either side, no `n`
+    removed anywhere, all four identities re-present at the SAME `n` with the same
+    `(event, actor, subject)` and only `ts` moved. The gate called that a shrink, because
+    `_remint_successor` demanded `r["n"] > n` and a re-stamp does not move the number at all.
+
+    Three arms, because a probe that only shows the widening cannot show it still bites:
+
+      * arm A -- single parent, same `n`, `ts` moved: a RE-MINT. The gate must be SILENT and
+        must PRINT it. This arm is the regression test for the `>=` half of #569's fix: with
+        the old `>`, `problems` is non-empty and this arm fails.
+      * arm B -- the identical successor, but the removed identity is PRESENT on a merged-in
+        line, i.e. it was PUBLISHED: the gate must RED. This is the discriminator that stops
+        a same-`n` re-stamp from becoming a blanket excuse -- publication is judged first,
+        and a signature can never outrank it.
+      * arm C -- single parent, same `n`, and the only same-act row in `after` carries a
+        DIFFERENT subject: no signature, so a real authored deletion must still RED.
+    """
+    fails: list[str] = []
+
+    def stamped(n: int, ts: str, event: str, actor: str, subject: str) -> dict:
+        row = _row(n, event=event, actor=actor, subject=subject)
+        row["ts"] = ts
+        return row
+
+    kept = _row(1, event="claim", actor="worker", subject="#487")
+    before_a = [
+        kept,
+        stamped(4304, "2026-10-26T08:09:24Z", "ruling", "hq", "#562"),
+        stamped(4307, "2026-10-26T08:15:58Z", "dispatch", "triage", "#564"),
+    ]
+    restamped = [
+        kept,
+        stamped(4304, "2026-10-26T08:34:31Z", "ruling", "hq", "#562"),
+        stamped(4307, "2026-10-26T08:34:31Z", "dispatch", "triage", "#564"),
+    ]
+
+    # arm A -- the live shape: a single-parent ts-only re-stamp of UNPUBLISHED rows
+    problems, excused, stale, reconciled, stale_declarations = no_shrink_problems(
+        [_transition(SHA_A, before_a, restamped, subject="re-mint four unpublished rows")], {}
+    )
+    if problems:
+        fails.append(
+            "a single-parent ts-only re-stamp at the SAME n was charged as a shrink -- the "
+            f"re-mint signature is not accepting a same-`n` successor: {problems}"
+        )
+    if not any("re-mint" in line and "n=4304" in line for line in excused):
+        fails.append(
+            f"the same-`n` re-mint was not PRINTED as a re-mint: excused={excused}"
+        )
+    if stale or reconciled or stale_declarations:
+        fails.append(
+            f"unexpected stale/reconciled on a lawful re-stamp: {stale} {reconciled} "
+            f"{stale_declarations}"
+        )
+
+    # arm B -- the SAME successor, but the identity was published on the merged-in line
+    problems_b, _, _, _, _ = no_shrink_problems(
+        [
+            _transition(
+                SHA_B,
+                before_a,
+                restamped,
+                subject="merge: resolution re-stamps a published row",
+                merged_in=before_a,
+            )
+        ],
+        {},
+    )
+    if not problems_b:
+        fails.append(
+            "a same-`n` re-stamp of an identity PRESENT on the merged-in line was excused -- "
+            "publication must be judged before the signature, or the signature becomes a "
+            "blanket excuse for any published row whose act reappears"
+        )
+
+    # arm C -- no signature: the same act is not in `after` at all
+    problems_c, _, _, _, _ = no_shrink_problems(
+        [
+            _transition(
+                SHA_A,
+                before_a,
+                [kept, stamped(4304, "2026-10-26T08:34:31Z", "ruling", "hq", "#999")],
+                subject="authored deletion of an unpublished row",
+            )
+        ],
+        {},
+    )
+    if not problems_c:
+        fails.append(
+            "a removal whose only same-act row in `after` carries a DIFFERENT subject was "
+            "excused as a re-mint -- the signature is being matched on `n` alone"
         )
     return fails
 
@@ -1465,6 +1609,7 @@ def main() -> int:
         probe_a_MERGE_that_only_REMINTS_does_not_raise_the_alarm,
         probe_a_removal_only_on_the_MERGED_IN_line_is_DETECTED,
         probe_a_SINGLE_PARENT_removal_needs_the_re_mint_signature,
+        probe_a_SAME_n_re_stamp_is_a_re_mint_but_a_published_one_still_bites,
     )
     # The probe set is PRINTED, by count and by name, so a probe deleted from this tuple is
     # VISIBLE: a run that silently stops exercising a leg reads exactly like one that
