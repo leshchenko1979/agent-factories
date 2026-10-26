@@ -30,7 +30,9 @@
       "TEMPLATE/*.tmpl",
       "docs/**",
       "docs/addons/**",
-      "skills/**"
+      "evidence/ledger.jsonl",
+      "skills/**",
+      "tools/*"
     ],
     "tests/test_binding_sync.py": [
       "TEMPLATE/tests/test_binding_sync.py",
@@ -43,7 +45,8 @@
     ],
     "tests/test_brain_metrics.py": [
       "AGENTS.md",
-      "TEMPLATE/AGENTS.md.tmpl"
+      "TEMPLATE/AGENTS.md.tmpl",
+      "tools/brain_metrics.py"
     ],
     "tests/test_citation_clause_titles.py": [
       "*.md",
@@ -64,7 +67,8 @@
     ],
     "tests/test_close_board_recorded.py": [
       "docs/close-board-exemptions.json",
-      "evidence/ledger.jsonl"
+      "evidence/ledger.jsonl",
+      "tools/field_predicate.py"
     ],
     "tests/test_close_row_revision.py": [
       "TEMPLATE/tools/ledger.py",
@@ -209,8 +213,10 @@
       "TEMPLATE/tools/gate_select.py",
       "registry/gate_triggers.json",
       "tests/gate_registry.py",
+      "tests/rework_table.py",
       "tests/test_gate_triggers.py",
       "tools/audit.py",
+      "tools/gate_budget.py",
       "tools/gate_select.py"
     ],
     "tests/test_harness_bindings.py": [
@@ -259,6 +265,8 @@
     "tests/test_hygiene_namespace.py": [
       "TEMPLATE/tools/hygiene.py",
       "docs/hygiene-protected.json",
+      "tools/*",
+      "tools/audit.py",
       "tools/hygiene.py"
     ],
     "tests/test_hygiene_placement.py": [
@@ -434,6 +442,7 @@
       "docs/instruments/ledger.md",
       "docs/ledger-*.json",
       "evidence/ledger.jsonl",
+      "tools/*",
       "tools/field_predicate.py",
       "tools/ledger.py",
       "tools/ledger_declaration.py",
@@ -482,6 +491,7 @@
     ],
     "tests/test_ledger_factory_scope.py": [
       "TEMPLATE/tools/ledger.py",
+      "tools/*",
       "tools/ledger.py"
     ],
     "tests/test_ledger_header_closure.py": [
@@ -502,7 +512,8 @@
       "registry/factories/**",
       "registry/fleet.json",
       "tools/ledger.py",
-      "tools/ledger_declaration.py"
+      "tools/ledger_declaration.py",
+      "tools/registry.py"
     ],
     "tests/test_ledger_index.py": [
       "TEMPLATE/tools/ledger-index.py",
@@ -612,9 +623,11 @@
       "tools/registry*.py"
     ],
     "tests/test_rework.py": [
+      "evidence/ledger.jsonl",
       "evidence/rework.md"
     ],
     "tests/test_rework_declared_landed.py": [
+      "evidence/ledger.jsonl",
       "evidence/rework.md"
     ],
     "tests/test_rework_relative_revision.py": [
@@ -631,27 +644,32 @@
       "evidence/ledger.jsonl",
       "tools/field_predicate.py",
       "tools/ledger.py",
+      "tools/patrol_host_state.py",
       "tools/rule.py"
     ],
     "tests/test_score_artifact_measurable.py": [
-      "evidence/scores/**",
-      "docs/measurement-procedure.md",
       "TEMPLATE/docs/measurement-procedure.md",
-      "tests/test_score_artifact_measurable.py",
-      "TEMPLATE/tests/test_score_artifact_measurable.py",
-      "tests/gate_registry.py",
-      "TEMPLATE/tests/gate_registry.py",
-      "tools/audit.py",
-      "TEMPLATE/tools/audit.py",
-      "registry/gates.json",
-      "registry/gate_triggers.json",
-      "registry/gate_triggers.example.json",
       "TEMPLATE/registry/gate_triggers.example.json",
-      "registry/kit.json",
+      "TEMPLATE/registry/kit.example.json",
+      "TEMPLATE/tests/gate_registry.py",
+      "TEMPLATE/tests/test_score_artifact_measurable.py",
+      "TEMPLATE/tools/audit.py",
+      "docs/measurement-procedure.md",
+      "docs/quality-criteria.md",
+      "evidence/scores/**",
+      "registry/fleet.json",
+      "registry/gate_triggers.example.json",
+      "registry/gate_triggers.json",
+      "registry/gates.json",
       "registry/kit.example.json",
-      "TEMPLATE/registry/kit.example.json"
+      "registry/kit.json",
+      "tests/gate_registry.py",
+      "tests/test_score_artifact_measurable.py",
+      "tools/audit.py"
     ],
     "tests/test_score_artifact_sections.py": [
+      "docs/measurement-procedure.md",
+      "docs/quality-criteria.md",
       "evidence/scores/**"
     ],
     "tests/test_score_gate_recorded.py": [
@@ -660,8 +678,11 @@
     ],
     "tests/test_self_audit_instant.py": [
       "TEMPLATE/processes.md.tmpl",
+      "docs/processes.md",
+      "evidence/scores/*",
       "processes.md",
-      "skills/**"
+      "skills/**",
+      "tools/audit.py"
     ],
     "tests/test_session_bindings.py": [
       "*.md",
@@ -675,10 +696,12 @@
     "tests/test_shipped_audit_runs.py": [
       "TEMPLATE/**",
       "TEMPLATE/tools/audit.py",
+      "docs/shipped-audit-skips.json",
       "tools/audit.py"
     ],
     "tests/test_shipped_mechanism_law.py": [
       "TEMPLATE/**",
+      "docs/shipped-mechanism-law.json",
       "skills/**"
     ],
     "tests/test_single_writer.py": [
@@ -696,7 +719,8 @@
     ],
     "tests/test_subject_anchor.py": [
       "ONTOLOGY.md",
-      "evidence/ledger.jsonl"
+      "evidence/ledger.jsonl",
+      "tools/subject_anchor.py"
     ],
     "tests/test_subject_form.py": [
       "ONTOLOGY.md",
@@ -711,6 +735,7 @@
     "tests/test_synthesize_interface.py": [
       "TEMPLATE/tools/synthesize_insights.py",
       "evidence/insights.jsonl",
+      "tools/*",
       "tools/synthesize_insights.py"
     ],
     "tests/test_telemetry_reader_registry.py": [
@@ -756,10 +781,11 @@
       "tools/roadmap.py"
     ],
     "tests/test_gate_direct_invocation.py": [
+      "TEMPLATE/tests/test_*.py",
       "TEMPLATE/tests/test_gate_direct_invocation.py",
-      "tests/test_gate_direct_invocation.py",
+      "tests/*",
       "tests/test_*.py",
-      "TEMPLATE/tests/test_*.py"
+      "tests/test_gate_direct_invocation.py"
     ]
   }
 }

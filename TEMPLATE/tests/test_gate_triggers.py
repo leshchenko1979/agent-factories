@@ -962,10 +962,286 @@ def probe_a_failed_receipt_carries_the_childs_word() -> None:
             f"failures={silent.failures}",
         )
 
+# --- #568: the DECLARED-vs-OPENED census ---------------------------------------------
+#
+# The trigger map is hand-maintained, so it goes stale the first time a gate grows a read,
+# and the fallback does NOT save it: default-deny fires only for a path matching NO glob,
+# so a PARTLY mapped path silently drops every reader the map omits. Measured both arms
+# (ruling n=4321): an unmapped path forces 107 gates, while `evidence/rework.md` -- partly
+# mapped -- derives 16 and `evidence/ledger.jsonl` derives 31, each without the gate that
+# reads it. Nothing in this file compared the two sides before now; `#567` was that gap
+# found by hand, after a commit had already gone out over a file the missing gate reds on.
+#
+# ONE DIRECTION ONLY. An undeclared reader is a finding; a declared glob matching nothing
+# is NEVER one. The map's own note states why: over-inclusion costs only time, while a
+# gate missing from a path it reads is the silent miss the map exists to remove. A probe
+# that can fail in two directions gets exempted into silence.
+#
+# READ STATICALLY, NOT BY TRACE. A trace covers the paths a test exercised -- a sample of
+# the map's coverage, never the map. The declaration is a property of the SOURCE, so this
+# parses the AST and executes nothing, and it runs on any tree with no working runtime.
+
+REPO_ROOT_SYMBOLS = frozenset({"REPO", "REPO_ROOT", "ROOT", "TREE", "BASE"})
+"""The names this factory uses for a repo root. A read is repo-relative only if it starts
+from one of these -- `REPO / "evidence" / "x"` is a claim about THIS tree, which is what
+the map declares coverage of; `tmp / "x"` or `argv[1]` is not."""
+
+
+def _div_parts(node):
+    """Flatten `a / b / c` into [a, b, c], or None when the node is not a `/` chain."""
+    import ast as _ast
+
+    if not (isinstance(node, _ast.BinOp) and isinstance(node.op, _ast.Div)):
+        return None
+    parts = []
+    while isinstance(node, _ast.BinOp) and isinstance(node.op, _ast.Div):
+        parts.append(node.right)
+        node = node.left
+    parts.append(node)
+    return list(reversed(parts))
+
+
+def _repo_root_symbol(node):
+    """The repo-root symbol a `/` chain starts from, or None. `REPO.parent / "x"` counts."""
+    import ast as _ast
+
+    if isinstance(node, _ast.Name) and node.id in REPO_ROOT_SYMBOLS:
+        return node.id
+    if isinstance(node, _ast.Attribute) and node.attr == "parent":
+        inner = node.value
+        while isinstance(inner, _ast.Attribute) and inner.attr == "parent":
+            inner = inner.value
+        if isinstance(inner, _ast.Name) and inner.id in REPO_ROOT_SYMBOLS:
+            return inner.id
+    return None
+
+
+def opened_paths(source: str, *, filename: str = "<gate>") -> list:
+    """Every MODULE-LEVEL repo-rooted path constant, as (line, symbol, repo-relative path).
+
+    THE BOUND, printed by the probe rather than assumed: this reads a gate's DECLARED READ
+    SURFACE -- a constant the module builds from the repo root -- and nothing else. A path
+    assembled at runtime (`REPO / name`, an f-string, an argument, a literal handed straight
+    to `open()`) is invisible here, and so is a read whose path never becomes a module-level
+    constant (a function-local `ledger_file = REPO_ROOT / "evidence/ledger.jsonl"` is the
+    commonest shape in `tools/`). That is why the probe prints how many gates it could speak
+    about: a gate with no extracted constant is a gate this instrument has no opinion on,
+    and silence there must read as a blind spot rather than as coverage.
+    """
+    import ast as _ast
+
+    tree = _ast.parse(source, filename=filename)
+    found = []
+    for node in tree.body:
+        if not isinstance(node, _ast.Assign):
+            continue
+        parts = _div_parts(node.value)
+        if parts is None or _repo_root_symbol(parts[0]) is None:
+            continue
+        segments = []
+        for part in parts[1:]:
+            if not (isinstance(part, _ast.Constant) and isinstance(part.value, str)):
+                segments = []
+                break
+            segments.append(part.value)
+        if not segments:
+            continue
+        for target in node.targets:
+            if isinstance(target, _ast.Name):
+                found.append((node.lineno, target.id, "/".join(segments)))
+    return found
+
+
+def _is_subtree(root, relative: str) -> bool:
+    """Whether a repo-rooted constant names a DIRECTORY rather than a file.
+
+    Read from the TREE, not the source: `REPO / "tools"` and `REPO / "tools/audit.py"` are
+    the same AST shape and only the tree says which is a subtree. A constant naming a
+    directory is a read of everything under it, so its declaration is `tools/*` -- a bare
+    `tools` in the map would cover the directory entry and nothing inside it.
+    """
+    return (root / relative).is_dir()
+
+
+def _read_is_covered(globs, relative: str, *, subtree: bool) -> bool:
+    """Whether a declared glob covers this read.
+
+    A SUBTREE read is covered only by a glob matching a CHILD under it. A bare directory
+    name in the map (`TEMPLATE`) is deliberately NOT accepted: it matches no changed file
+    under that directory -- `fnmatch("TEMPLATE/x", "TEMPLATE")` is False -- so it declares
+    coverage while delivering none, which is precisely the silent class this census exists
+    to find. Accepting it would let the census pass over a gate that no real change selects.
+    """
+    import fnmatch as _fnmatch
+
+    if subtree:
+        return any(_fnmatch.fnmatchcase(relative + "/x", str(glob)) for glob in globs)
+    return any(_fnmatch.fnmatchcase(relative, str(glob)) for glob in globs)
+
+
+def opened_vs_declared(root, mapping: dict) -> dict:
+    """The one-directional census: findings, extraction counts, and the blind spot.
+
+    Returns `{findings, constants, gates_judged, blind}`. `findings` is one dict per read
+    with no covering glob, carrying the `declares` glob the map needs -- the remedy is
+    copy-pasteable rather than a description of a remedy. `blind` names the gates with no
+    extracted constant at all, so an empty finding list can never be mistaken for a clean
+    sweep over every gate.
+    """
+    gates = mapping.get("gates", {}) if isinstance(mapping, dict) else {}
+    findings = []
+    constants = 0
+    blind = []
+    for gate, globs in sorted(gates.items()):
+        path = root / gate
+        if not path.is_file():
+            continue
+        try:
+            reads = opened_paths(path.read_text(encoding="utf-8"), filename=gate)
+        except (OSError, SyntaxError, ValueError):
+            blind.append(gate)
+            continue
+        constants += len(reads)
+        if not reads:
+            blind.append(gate)
+        for line, symbol, relative in reads:
+            subtree = _is_subtree(root, relative)
+            if _read_is_covered(globs, relative, subtree=subtree):
+                continue
+            findings.append({
+                "gate": gate,
+                "line": line,
+                "symbol": symbol,
+                "path": relative,
+                "declares": relative + "/*" if subtree else relative,
+            })
+    return {
+        "findings": findings,
+        "constants": constants,
+        "gates_judged": len([g for g in gates if (root / g).is_file()]) - len(blind),
+        "blind": blind,
+    }
+
+
+def probe_every_read_a_gate_opens_is_declared() -> None:
+    """The census: a gate that opens a repo path must be selected when that path changes.
+
+    Five arms. Arm 1 is the POSITIVE CONTROL on the extraction, and it is the arm that makes
+    every other verdict mean something: if the parser silently stopped seeing reads, arms 2
+    and 4 would both pass on an empty population and this gate would be an instrument that
+    reports coverage it cannot measure. Arms 4 and 5 drive a SYNTHETIC map in both
+    directions, so the census is proven to bite and proven not to bite where it must not.
+    """
+    module = _load("oc_gate_select_census", GATE_SELECT)
+    mapping = _live_map()
+    root = REPO
+
+    # ARM 1 -- the extraction, pinned to referents that do not depend on the map.
+    # `tests/test_audit_rates.py:129` builds `LEDGER` from the repo root and `:130` builds
+    # `REWORK`; both are the reads `#567` had to declare by hand. NOTE the coordinates: the
+    # #568 dispatch names `tools/audit.py:129`/`:130` as these read sites, and that is wrong
+    # -- `tools/audit.py:129` sits inside a `from gate_budget import (...)` block and holds
+    # no path at all, while its own reads are at `:3432`/`:3433` and are FUNCTION-LOCAL, so
+    # a module-level census does not see them and should not. The referents below are the
+    # ones read at the bytes; the dispatch's line numbers were a transcription of the
+    # GATE's constants against the TOOL's filename.
+    control = opened_paths((REPO / "tests" / "test_audit_rates.py").read_text(encoding="utf-8"),
+                           filename="tests/test_audit_rates.py")
+    check(
+        "CONTROL: the extraction finds tests/test_audit_rates.py:129 -> evidence/ledger.jsonl",
+        (129, "LEDGER", "evidence/ledger.jsonl") in control,
+        f"extracted={[c for c in control if c[1] in {'LEDGER', 'REWORK'}]}",
+    )
+    check(
+        "CONTROL: and :130 -> evidence/rework.md -- the two reads #567 declared by hand",
+        (130, "REWORK", "evidence/rework.md") in control,
+        f"extracted={[c for c in control if c[1] in {'LEDGER', 'REWORK'}]}",
+    )
+    hermetic = opened_paths(
+        "from pathlib import Path\n"
+        "REPO = Path('.')\n"
+        "TOP = REPO / 'docs' / 'a.md'\n"
+        "def f():\n"
+        "    local = REPO / 'evidence' / 'b.jsonl'\n"
+        "    return REPO / 'c.md'\n",
+        filename="<hermetic>",
+    )
+    check(
+        "CONTROL: and it reads MODULE-LEVEL constants only, so a function-local read is "
+        "outside it -- the stated bound, pinned rather than trusted",
+        hermetic == [(3, "TOP", "docs/a.md")],
+        f"extracted={hermetic}",
+    )
+
+    # ARM 2 -- the live map. Zero findings, and the population it was measured over.
+    live = opened_vs_declared(root, mapping)
+    check(
+        "no gate opens a repo path the map does not declare for it",
+        not live["findings"],
+        f"{len(live['findings'])} undeclared read(s): "
+        + "; ".join(f"{f['gate']}:{f['line']} {f['path']} -> needs {f['declares']}"
+                    for f in live["findings"][:4]),
+    )
+    # THE BLIND SPOT IS PRINTED, never folded into the verdict. A gate with no module-level
+    # constant is not a gate this census cleared; it is one it could not look at.
+    print(
+        f"STATED BOUND -- {live['gates_judged']} of {len(mapping.get('gates', {}))} mapped "
+        f"gate(s) carried {live['constants']} module-level repo-rooted constant(s) and were "
+        f"judged; {len(live['blind'])} had none and are OUTSIDE this census "
+        f"(function-local or runtime-assembled reads are invisible to a static parse)"
+    )
+
+    # ARM 3 -- over-declaration is NEVER a finding.
+    generous = json.loads(json.dumps(mapping))
+    first = sorted(generous.get("gates", {}))[0]
+    generous["gates"][first] = list(generous["gates"][first]) + ["no/such/path/at/all.xyz"]
+    over = opened_vs_declared(root, generous)
+    check(
+        "ARM 3: a declared glob that matches nothing extracted is NOT a finding",
+        not over["findings"],
+        f"{len(over['findings'])} finding(s) appeared from over-declaration alone",
+    )
+
+    # ARM 4 -- it BITES. Undo #567's two declarations on a COPY of the live map: the census
+    # must name exactly those two reads, at the lines the control just pinned.
+    starved = json.loads(json.dumps(mapping))
+    gate_key = "tests/test_audit_rates.py"
+    starved["gates"][gate_key] = [
+        glob for glob in starved["gates"][gate_key]
+        if glob not in ("evidence/ledger.jsonl", "evidence/rework.md")
+    ]
+    bitten = [f for f in opened_vs_declared(root, starved)["findings"] if f["gate"] == gate_key]
+    check(
+        "ARM 4: undoing #567's two declarations is reported as EXACTLY those two reads",
+        [(f["line"], f["path"]) for f in bitten]
+        == [(129, "evidence/ledger.jsonl"), (130, "evidence/rework.md")],
+        f"findings={[(f['line'], f['path']) for f in bitten]}",
+    )
+
+    # ARM 5 -- a subtree read is declared by its CHILDREN, not by the bare directory name.
+    # `TEMPLATE` is a real directory in this tree, so the rule is driven against one rather
+    # than against a fixture that could drift from what `_is_subtree` actually consults.
+    check(
+        "ARM 5: a bare directory glob does NOT cover a subtree read -- it needs TEMPLATE/*",
+        _is_subtree(root, "TEMPLATE")
+        and not _read_is_covered(["TEMPLATE"], "TEMPLATE", subtree=True)
+        and _read_is_covered(["TEMPLATE/*"], "TEMPLATE", subtree=True),
+        "a bare directory declaration was accepted as covering the files under it",
+    )
+    # ... and the REMEDY it prints is the glob the map needs, not a description of one.
+    remedy = opened_vs_declared(root, {"gates": {"tests/test_binding_mechanism_exists.py": []}})
+    dir_findings = [f for f in remedy["findings"] if f["path"] == "tools"]
+    check(
+        "ARM 5: a directory constant is reported with the subtree glob to declare",
+        not dir_findings or [f["declares"] for f in dir_findings] == ["tools/*"],
+        f"declares={[f['declares'] for f in dir_findings]}",
+    )
+
 PROBES = (
     probe_every_registered_gate_is_covered,
     probe_every_map_key_is_registered,
     probe_the_map_is_well_formed,
+    probe_every_read_a_gate_opens_is_declared,
     probe_the_example_carries_the_same_shape,
     probe_globs_over_include_deliberately,
     probe_a_covered_change_selects_a_subset,
@@ -1183,6 +1459,9 @@ def test_probe_every_map_key_is_registered() -> None:
 
 def test_probe_the_map_is_well_formed() -> None:
     _assert_probe(probe_the_map_is_well_formed)
+
+def test_probe_every_read_a_gate_opens_is_declared() -> None:
+    _assert_probe(probe_every_read_a_gate_opens_is_declared)
 
 def test_probe_the_example_carries_the_same_shape() -> None:
     _assert_probe(probe_the_example_carries_the_same_shape)
