@@ -4057,6 +4057,33 @@ CADENCE_GRACE_PERIOD_FRACTION = 0.5
 # also the point at which the derivation gives up and DECLARES rather than guesses.
 CADENCE_BOUNDARY_SCAN_DAYS = 800
 
+# THE RETROSPECTIVE GAP READ'S TWO CONSTANTS (#565, ruling n=4319). The ruling REFUSED
+# per-job gap thresholds outright and the refusal is not a matter of tuning: a 29-hour gap in
+# a single job is ORDINARY -- a weekly job has 167 of them a year and a monthly one more --
+# so a per-job threshold can only ever never fire or fire constantly. The stall is defined by
+# MANY jobs sharing ONE gap, so the predicate is a FRACTION over the aggregate run stream and
+# these are its numbers.
+#
+#   * SILENT FRACTION: how much of the DUE population must be silent across one gap. 0.80
+#     rather than 1.0 because a job that fired at the very edge of a gap is not evidence
+#     against a stall, and 0.80 is still far above anything an ordinary box produces: while
+#     every job is healthy the aggregate stream's own gaps are seconds to minutes, so the
+#     fraction is never consulted at all.
+#   * MIN DUE JOBS: a fraction cannot discriminate over one job. With a single due job the
+#     ratio is 1.0 whether it stalled or merely carries a long period, so a read over fewer
+#     than this many due jobs DECLINES rather than firing. That is also why a single job
+#     stopping is NOT this leg's class -- the per-job slot read above catches that one, and
+#     this leg exists for the class the slot read structurally cannot see.
+#
+# THE FLOOR IS NOT A CONSTANT HERE, and that is the ruling's third requirement: the leg
+# derives its MINIMUM DETECTABLE STALL each round from the shortest enabled period on the
+# box. A stall shorter than the densest job's own cadence is invisible to a gap read by
+# construction, because that job's own fires fill the window. Declaring the floor rather
+# than asserting it is the whole point: an undeclared floor reads as coverage, and #565
+# exists because a bound the docstring did not carry was read as covered.
+CADENCE_STALL_SILENT_FRACTION = 0.80
+CADENCE_STALL_MIN_DUE_JOBS = 2
+
 # THE DAY-OF-WEEK DIALECT IS THE SCHEDULER'S, AND IT IS NOT POSIX. Measured 2026-10-22 on
 # this box: `ai-antispam-wave0-unactivated-reprobe` carries `0 12 * * 2` and the scheduler
 # stored `2026-10-26T09:00:00+00:00` (12:00 MSK) -- a MONDAY. Under POSIX numbering `2` is
@@ -4280,6 +4307,246 @@ def cadence_job_runs(row: dict, fires: list[dict] | None, *, parse=None) -> list
             instants.append(instant)
     instants.sort()
     return instants
+
+def cadence_job_period(row: dict, *, ref, parse=None) -> dict:
+    """The row's OWN period in seconds, derived from its schedule, or the reason it cannot be.
+
+    THE QUANTITY. A schedule's period is the median gap between consecutive boundaries of
+    that schedule, placed by `cron_boundaries_before` -- three boundaries yield two gaps, and
+    the median of two is one of them, so the value is a period the schedule actually
+    exhibits rather than an average it never produces.
+
+    THE VALIDATION IS THE SAME ONE `cadence_grace_for` APPLIES, and for the same reason
+    (rule 7): the scheduler stores `next_run_at` ALREADY RESOLVED against the row's zone, so
+    this reader's parse must reproduce that instant as a boundary of that schedule before any
+    number derived from the parse is usable. A parse that cannot reproduce it is wrong, and a
+    wrong period would silently misclassify a job as due or not-due in the stall read below.
+
+    WHY IT IS SEPARATE FROM `cadence_grace_for`. The grace needs the job's LATENESS HISTORY --
+    it pairs every run to the boundary it served -- so it cannot answer "how often does this
+    job fire?" for a job with no run history, which is exactly the job the stall read most
+    needs to count. The period is a property of the SCHEDULE alone, so it is derivable from a
+    row and a reference instant with no runs at all.
+    """
+    parse = parse or reader_parse_ts
+    record = {"period_secs": None, "samples": 0, "reason": ""}
+    expr = str(row.get("cron_expr") or "").strip()
+    timezone = str(row.get("timezone") or "UTC")
+    raw_next = str(row.get("next_run_at") or "").strip()
+
+    def _refuse(reason: str) -> dict:
+        return {**record, "reason": reason}
+
+    if not expr:
+        return _refuse("the row records no cron_expr, so its period cannot be derived")
+    if not raw_next:
+        return _refuse(
+            "the row records no next_run_at to validate a schedule parse against")
+    try:
+        slot = parse(raw_next)
+    except (ValueError, TypeError) as exc:
+        return _refuse(f"next_run_at {raw_next!r} does not parse ({exc})")
+    if slot.tzinfo is None:
+        return _refuse(f"next_run_at {raw_next!r} carries no zone offset")
+    try:
+        zone = cron_zone(timezone)
+        parsed = parse_cron_expr(expr)
+    except ValueError as exc:
+        return _refuse(f"the row's schedule cannot be parsed ({exc})")
+    if not cron_boundary_matches(slot.astimezone(zone), parsed):
+        return _refuse(
+            f"this reader's parse of {expr!r} in {timezone} does not reproduce the "
+            f"scheduler's own next_run_at {raw_next} as a boundary of that schedule, so the "
+            f"parse is not trustworthy and no period is derived from it")
+    try:
+        boundaries = sorted(cron_boundaries_before(expr, timezone, ref, limit=3))
+    except ValueError as exc:
+        return _refuse(f"this job's boundaries cannot be placed ({exc})")
+    gaps = [(later - earlier).total_seconds()
+            for earlier, later in zip(boundaries, boundaries[1:])]
+    if not gaps:
+        return _refuse(
+            "fewer than two boundaries were placed, so no period is measurable")
+    return {"period_secs": statistics.median(gaps), "samples": len(gaps), "reason": ""}
+
+def cadence_stall_gaps(cron_rows: list[dict], fires: list[dict] | None, *, now,
+                       parse=None) -> dict:
+    """The RETROSPECTIVE aggregate-gap read: was there a window in which the box went SILENT?
+
+    THE CLASS THIS EXISTS FOR, and why the slot read above cannot reach it (#565, ruling
+    n=4319). A stall has two independent consequences, and they defeat the two obvious
+    detectors in opposite ways. (1) The detector is dispatched BY the stalled scheduler, so
+    any detector that must RUN during the stall never runs. (2) The recovery burst advances
+    `next_run_at` in the same statement that records the run, so any detector that judges a
+    PENDING SLOT finds the slot already moved into the future and reads NOT JUDGED.
+
+    A retrospective read needs neither property. It does not run during the stall -- it runs
+    after recovery and reads recorded history -- and it does not judge a pending slot, because
+    it reads gaps that have already CLOSED. The burst can only EXTEND that history: the
+    statement that records a run is the same one that overwrites `next_run_at`, so the gap
+    survives precisely where the slot state does not. That is the whole argument, and it is
+    why the ruling forecloses the partial fixes -- an external scheduler, or a second
+    dispatcher, addresses (1) alone and leaves (2) erasing the trace.
+
+    THE PREDICATE. Every `cron_job_runs` instant is sorted into ONE aggregate stream, and each
+    consecutive pair bounds a gap. For each gap at or above the derived floor, the DUE
+    population is every enabled job whose own period is short enough that it was expected to
+    fire inside that gap; a due job with no run anywhere in the gap is SILENT. When the silent
+    share of the due population reaches `CADENCE_STALL_SILENT_FRACTION` and at least
+    `CADENCE_STALL_MIN_DUE_JOBS` were due, the gap is a STALL.
+
+    WHY THE DUE FILTER, when the ruling's sentence names the enabled population. A weekly job
+    is silent across every 29-hour gap and across every ordinary gap alike, so a raw fraction
+    over ALL enabled jobs would be inflated by jobs that were never expected to fire. The
+    filter is the ruling's own discriminator applied precisely -- "a single sparse job's long
+    gap is not [the stall], and must never trigger it" -- and it is strictly narrower than the
+    literal sentence, never wider. A job whose period cannot be derived is EXCLUDED and
+    counted, because including it would mean choosing on its behalf whether it was due.
+
+    THE FLOOR IS DERIVED, per the ruling: it is the shortest enabled period on the box, taken
+    over the rows whose period this reader could derive. A stall shorter than the densest
+    job's own cadence is invisible to a gap read by construction, because that job's own fires
+    fill the window. When no period is derivable the floor is UNDECLARED and the read DECLINES
+    -- it does not fall back to a constant, because a constant here would be the exact defect
+    #565 files, a bound the docstring does not carry being read as covered.
+
+    `None` for `fires` means the run store was NOT READ, which is a different fact from "the
+    store holds no run": the read declines and says so, rather than reporting an empty stream
+    as a silent box.
+    """
+    parse = parse or reader_parse_ts
+    # THE POPULATION IS ALREADY THE ENABLED SET. `box_cron_rows` reads `where enabled = 1`
+    # and carries no `enabled` column through, so filtering here on a key the rows do not
+    # carry would find nothing and decline every round -- the read would look principled and
+    # be dead. The caller's contract is the filter.
+    enabled = list(cron_rows)
+    record: dict = {
+        "verdict": "DECLINED",
+        "enabled_jobs": len(enabled),
+        "jobs_with_period": 0,
+        "period_underivable": [],
+        "runs_examined": 0,
+        "gaps_examined": 0,
+        "floor_secs": None,
+        "floor_job": None,
+        "longest_gap_secs": None,
+        "longest_gap_from": None,
+        "longest_gap_to": None,
+        "longest_gap_due": 0,
+        "longest_gap_silent": 0,
+        "longest_gap_fraction": None,
+        "stalls": [],
+        "reason": "",
+    }
+    if fires is None:
+        return {**record, "reason": (
+            "the run store was NOT READ this round, so no inter-arrival gap exists to read -- "
+            "an unread store is not an empty one")}
+    if not enabled:
+        return {**record, "reason": (
+            "no enabled cron row was read, so there is no due population to measure "
+            "silence against")}
+
+    # THE PERIODS, ONE DERIVATION PER ROW, and the identity is the same triple
+    # `cadence_job_runs` matches on so a job cannot be counted twice under two keys.
+    def _key(row: dict) -> tuple:
+        return (str(row.get("home") or "").strip(),
+                str(row.get("id") or "").strip(),
+                str(row.get("name") or "").strip())
+
+    periods: dict[tuple, float] = {}
+    names: dict[tuple, str] = {}
+    underivable: list[dict] = []
+    instants_by_key: dict[tuple, list] = {}
+    for row in enabled:
+        key = _key(row)
+        names[key] = str(row.get("name") or "")
+        derived = cadence_job_period(row, ref=now, parse=parse)
+        if derived["period_secs"] is None:
+            underivable.append({"name": names[key], "reason": derived["reason"]})
+            continue
+        periods[key] = derived["period_secs"]
+        instants_by_key[key] = cadence_job_runs(row, fires, parse=parse) or []
+    record["jobs_with_period"] = len(periods)
+    record["period_underivable"] = underivable
+    if not periods:
+        return {**record, "reason": (
+            f"none of the {len(enabled)} enabled row(s) yielded a derivable period, so the "
+            f"minimum detectable stall is UNDECLARED and no gap is judged -- a floor "
+            f"asserted here rather than derived is the defect this unit files")}
+
+    floor = min(periods.values())
+    floor_job = min(periods, key=lambda key: periods[key])
+    record["floor_secs"] = floor
+    record["floor_job"] = names[floor_job]
+
+    # THE AGGREGATE STREAM: every run instant on the box, from EVERY enabled job, sorted.
+    # `cadence_job_runs` already drops unparseable and naive instants, so this is the same
+    # population the per-job read trusts.
+    stream = sorted(
+        instant for key in instants_by_key for instant in instants_by_key[key])
+    record["runs_examined"] = len(stream)
+    if len(stream) < 2:
+        return {**record, "reason": (
+            f"only {len(stream)} run instant(s) were read across {len(periods)} job(s), so "
+            f"no inter-arrival gap exists -- a stream too short to hold a gap is not a "
+            f"silent box")}
+
+    gaps = [(earlier, later, (later - earlier).total_seconds())
+            for earlier, later in zip(stream, stream[1:])]
+    record["gaps_examined"] = len(gaps)
+
+    longest = max(gaps, key=lambda item: item[2])
+    record["longest_gap_secs"] = longest[2]
+    record["longest_gap_from"] = longest[0].isoformat()
+    record["longest_gap_to"] = longest[1].isoformat()
+
+    stalls: list[dict] = []
+    for earlier, later, gap in gaps:
+        if gap < floor:
+            # BELOW THE FLOOR IS NOT A CLEAN GAP, it is an INVISIBLE one: the densest job's
+            # own cadence fills any window this short, so nothing can be concluded either way.
+            continue
+        # A JOB IS DUE ACROSS THE GAP WHEN THE GAP IS LONGER THAN ITS OWN PERIOD, and the
+        # comparison is STRICT for a reason found by running it: a job firing exactly at both
+        # edges of a gap has served both boundaries, and a `<=` here made every healthy
+        # one-hour gap mark every hourly job due -- so the interior test below found them all
+        # silent and the read fired on a perfectly healthy stream. At `period < gap` there is
+        # at least one fire that was due strictly INSIDE, which is the fire a stall suppresses.
+        due = [key for key, period in periods.items() if period < gap]
+        # SILENCE IS THE ABSENCE OF A FIRE INSIDE THE GAP, never at its edges. A run at
+        # `earlier` or `later` is a fire that opened or closed the gap, so counting it would
+        # make the gap unfalsifiable: every job that fired on either side would read as
+        # having fired during it, and no stall could ever be found.
+        silent = [key for key in due
+                  if not any(earlier < instant < later
+                             for instant in instants_by_key.get(key, []))]
+        if (earlier, later) == (longest[0], longest[1]):
+            record["longest_gap_due"] = len(due)
+            record["longest_gap_silent"] = len(silent)
+            record["longest_gap_fraction"] = (len(silent) / len(due)) if due else None
+        if len(due) < CADENCE_STALL_MIN_DUE_JOBS:
+            continue
+        fraction = len(silent) / len(due)
+        if fraction < CADENCE_STALL_SILENT_FRACTION:
+            continue
+        stalls.append({
+            "from": earlier.isoformat(),
+            "to": later.isoformat(),
+            "gap_secs": gap,
+            "due": len(due),
+            "silent": len(silent),
+            "fraction": fraction,
+            "silent_names": sorted(names[key] for key in silent),
+        })
+    record["stalls"] = stalls
+    record["verdict"] = "READ"
+    record["reason"] = (
+        f"{len(stalls)} stall(s) over {record['gaps_examined']} inter-arrival gap(s), judged "
+        f"at or above the DERIVED floor {floor:.0f}s (the shortest enabled period, "
+        f"`{names[floor_job]}`)")
+    return record
+
 
 def _percentile(values: list[float], fraction: float) -> float:
     """Nearest-rank percentile over an ASCENDING list, so the value is one that was MEASURED.
@@ -4599,6 +4866,17 @@ def cadence_slot_leg(
     row reads NOT JUDGED. That is why the derivation, not the bucket, is what this leg
     prints.
 
+    A SECOND, RETROSPECTIVE READ (#565, ruling n=4319), because the slot judgement above is
+    structurally blind to the stall. The scheduler advances `next_run_at` in the same
+    statement that records a run, so a stall that ends with a recovery burst leaves no
+    pending slot to judge -- the evidence is ERASED by the very act that ends it. The gap
+    survives, though, because the burst can only extend it: `cadence_stall_gaps` sorts every
+    recorded run instant into one aggregate stream and asks whether many jobs were
+    SIMULTANEOUSLY silent across a gap, which is a question about closed history and needs
+    neither to run during the stall nor to judge a pending slot. The two reads are kept in
+    one leg because they read the same two injected inputs and a reader who saw one without
+    the other would take it for the whole story.
+
     BOUNDS, declared on the leg itself so a green line cannot be read as more than it is:
 
       * DETECTOR, NOT PREVENTION. It catches a slot the scheduler let pass unserved; it
@@ -4618,6 +4896,13 @@ def cadence_slot_leg(
         row exists, so this leg reads DISPATCHED. #528 was re-scoped at n=3923 to a lane that
         wakes and emits no tool call, which is a different defect, and it is named here so
         the citation does not silently imply coverage this leg does not have.
+      * A STALL SHORTER THAN THE SHORTEST ENABLED PERIOD IS INVISIBLE (#565). The
+        retrospective gap read below measures silence over the aggregate run stream, so the
+        densest job's own cadence fills any window shorter than itself and nothing can be
+        concluded either way. The floor is DERIVED each round, not asserted, and it is
+        printed beside the read; when no period is derivable the read DECLINES rather than
+        falling back to a constant. A single job that stops is likewise NOT this read's
+        class -- the per-job slot verdict above catches that one.
     """
     parse = parse or reader_parse_ts
     if now is None:
@@ -4662,6 +4947,20 @@ def cadence_slot_leg(
                 f"{record['reason']}")
 
     underivable = [record for record in findings if record.get("grace_underivable")]
+    # THE RETROSPECTIVE READ, RUN ALWAYS -- not only when a slot missed. A stall that the
+    # recovery burst erased produces no MISSED at all, so gating this read behind the slot
+    # verdict would silence it in exactly the state it exists to catch.
+    stall_read = cadence_stall_gaps(cron_rows, fires, now=now, parse=parse)
+    # A STALL IS A PROBLEM, and it is a DIFFERENT problem from a missed slot -- different
+    # cause, different evidence, different remedy -- so it is named separately rather than
+    # folded into the slot verdicts. The count travels in the message because a stall that
+    # names only its first gap would hide the others.
+    for stall in stall_read.get("stalls") or []:
+        problems.append(
+            f"cadence STALL: {stall['silent']} of {stall['due']} due job(s) "
+            f"({stall['fraction']:.0%}) were simultaneously silent from {stall['from']} to "
+            f"{stall['to']} ({stall['gap_secs']:.0f}s): "
+            + ", ".join(f"`{name}`" for name in stall["silent_names"]))
     coverage = {
         # THE POPULATION IS ALWAYS PRINTED. `examined 0, 0 problems` and `examined 34, 0
         # problems` are different readings, and only the count tells them apart (skill
@@ -4703,6 +5002,11 @@ def cadence_slot_leg(
             1 for record in findings
             if (record.get("grace") or {}).get("grace_secs") is None),
         "dispatches_read": sum(record.get("runs_read") or 0 for record in findings),
+        # THE SECOND READING, carried whole rather than summarised: its verdict, the DERIVED
+        # floor with the job that set it, the population it examined and every stall it
+        # found. A count alone would let a reader take `0 stalls` for coverage without
+        # seeing whether the read could fire at all.
+        "retrospective_gap_read": stall_read,
         "retired": [{"verdict": verdict, "reason": reason}
                     for verdict, reason in CADENCE_SLOT_RETIRED],
         "bound": (
@@ -4712,7 +5016,9 @@ def cadence_slot_leg(
             "overlap-skipped slot is indistinguishable from a miss (no overlap guard is "
             "readable from cron_jobs), and a job whose period is shorter than its own "
             "latency tail is judged against a period-clamped grace whose verdict is a coin "
-            "flip by construction"
+            "flip by construction. The retrospective gap read beside it closes the stall "
+            "class, bounded in turn by the DERIVED minimum detectable stall -- the shortest "
+            "enabled period -- below which the densest job's own fires fill the window"
         ),
     }
 
@@ -4774,6 +5080,67 @@ def cadence_slot_leg(
         # travel beside it so a reader can see the population was read and where it landed.
         "coverage": {**coverage, "judged": judged},
     }
+
+def render_cadence_stall(read: dict) -> list[str]:
+    """The retrospective gap read's own lines: the FLOOR, the population, then each stall.
+
+    THE FLOOR IS THE FIRST LINE BECAUSE IT IS THE BOUND (#565). A `0 stalls` verdict over an
+    undeclared floor reads as "the box never went silent", when what it may mean is "no gap
+    shorter than N could be seen at all". Printing the derived floor with the job that set it
+    is what makes the zero interpretable, and it is the specific omission that made #565
+    possible: the docstring carried four bounds and this was the fifth.
+
+    A DECLINED READ PRINTS ITS REASON AND NO ZERO. An unread run store, an underivable floor
+    and a stream too short to hold a gap are three different facts, and none of them is
+    "quiet", so none of them renders as one.
+    """
+    if not read:
+        return ["  retrospective gap read: NOT CARRIED on this coverage record"]
+    verdict = read.get("verdict") or "DECLINED"
+    floor = read.get("floor_secs")
+    lines = [
+        "  retrospective gap read (#565): "
+        f"{verdict} -- {read.get('runs_examined', 0)} run instant(s) across "
+        f"{read.get('jobs_with_period', 0)} job(s) with a derivable period, "
+        f"{read.get('gaps_examined', 0)} inter-arrival gap(s) examined"
+    ]
+    if floor is None:
+        lines.append(
+            "    minimum detectable stall: UNDECLARED -- no enabled row yielded a derivable "
+            "period, so no gap was judged rather than judged against an invented floor"
+        )
+    else:
+        lines.append(
+            f"    minimum detectable stall: {floor:.0f}s, DERIVED as the shortest enabled "
+            f"period on the box (`{read.get('floor_job')}`) -- a stall shorter than this is "
+            f"invisible to a gap read because that job's own fires fill the window"
+        )
+    longest = read.get("longest_gap_secs")
+    if longest is not None:
+        fraction = read.get("longest_gap_fraction")
+        lines.append(
+            f"    longest gap: {longest:.0f}s ({read.get('longest_gap_from')} -> "
+            f"{read.get('longest_gap_to')}), {read.get('longest_gap_silent', 0)} of "
+            f"{read.get('longest_gap_due', 0)} due job(s) silent"
+            + (f" ({fraction:.0%})" if fraction is not None else "")
+        )
+    for stall in read.get("stalls") or []:
+        lines.append(
+            f"    STALL: {stall['silent']} of {stall['due']} due job(s) "
+            f"({stall['fraction']:.0%}) simultaneously silent {stall['from']} -> "
+            f"{stall['to']} ({stall['gap_secs']:.0f}s): "
+            + ", ".join(f"`{name}`" for name in stall["silent_names"])
+        )
+    underivable = read.get("period_underivable") or []
+    if underivable:
+        lines.append(
+            f"    period UNDERTAKABLE for {len(underivable)} of "
+            f"{read.get('enabled_jobs', 0)} enabled row(s): EXCLUDED from the due "
+            f"population rather than counted as silent or as served -- "
+            + "; ".join(f"`{entry['name']}` ({entry['reason']})" for entry in underivable)
+        )
+    lines.append(f"    read: {read.get('reason') or 'unstated'}")
+    return lines
 
 def render_cadence_slot(coverage: dict) -> list[str]:
     """The leg's own lines: the population, the DERIVATION per job, then each finding.
@@ -4849,6 +5216,7 @@ def render_cadence_slot(coverage: dict) -> list[str]:
         )
     for entry in coverage.get("retired") or []:
         lines.append(f"  RETIRED verdict `{entry['verdict']}`: {entry['reason']}")
+    lines.extend(render_cadence_stall(coverage.get("retrospective_gap_read") or {}))
     unreached = coverage.get("unreached") or []
     if unreached:
         lines.append(f"  homes NOT read: {'; '.join(unreached)}")

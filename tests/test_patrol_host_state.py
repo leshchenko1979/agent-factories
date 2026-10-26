@@ -12359,6 +12359,162 @@ def test_arm3_a_job_whose_run_rows_STOP_entirely_still_bites() -> None:
     assert len(leg["problems"]) == 1, leg["problems"]
     assert "job-stopped" in leg["problems"][0], leg["problems"]
 
+def _stall_fixture(*, silent_from: str, silent_to: str, before: int = 6,
+                   after: int = 6) -> tuple[list, list]:
+    """Three hourly jobs whose fires STOP for `silent_from` -> `silent_to`, then resume.
+
+    Built so the aggregate stream has ONE long gap and many short ones: `before` fires an
+    hour apart up to `silent_from`, then nothing until `after` fires resume from `silent_to`.
+    Three jobs share the same schedule, so all three are due across the stall and all three
+    are silent -- the shape the ruling defines, "many jobs sharing the same gap".
+
+    The rows carry `0 * * * *` (hourly), so the derived floor is 3600 s and the stall gap is
+    many times that, which is what makes the read's own floor reachable rather than moot.
+    """
+    rows, fires = [], []
+    start = RUNNER.reader_parse_ts(silent_from) - dt.timedelta(hours=before)
+    resume = RUNNER.reader_parse_ts(silent_to)
+    for index in range(3):
+        name = f"job-hourly-{index}"
+        row_id = f"id-hourly-{index}"
+        rows.append(_cron_row(name, next_run_at="2026-10-21T07:00:00+00:00",
+                              last_run_at=silent_to, cron_expr="0 * * * *",
+                              timezone="UTC", row_id=row_id))
+        for step in range(before):
+            fires.append(_run_record(name, (start + dt.timedelta(hours=step)).isoformat(),
+                                     job_id=row_id))
+        for step in range(after):
+            fires.append(_run_record(name, (resume + dt.timedelta(hours=step)).isoformat(),
+                                     job_id=row_id))
+    return rows, fires
+
+def test_arm5_a_shared_SILENCE_is_a_STALL_the_slot_read_cannot_see() -> None:
+    """ARM 5 (#565): the retrospective read catches what the pending-slot read structurally cannot.
+
+    THE STATE THAT USED TO BE INVISIBLE. Every job's run rows stop for hours and then resume
+    in a burst. By the time any reader looks, the burst has advanced `next_run_at` in the same
+    statement that wrote the run, so there is no pending slot left to judge -- the slot read
+    reports NOT JUDGED and the stall is GONE from the record. The gap survives, because the
+    burst could only extend it, and that is the whole argument for this read.
+
+    THE ARM IS NOT VACUOUS: the same fixture is driven quiet in arm 6 by removing the stall,
+    so the finding here is attributable to the shared silence rather than to a read that
+    always fires.
+    """
+    rows, fires = _stall_fixture(silent_from="2026-10-20T12:00:00+00:00",
+                                 silent_to="2026-10-20T21:00:00+00:00")
+    read = RUNNER.cadence_stall_gaps(rows, fires,
+                                     now=RUNNER.reader_parse_ts("2026-10-21T07:00:00+00:00"))
+    assert read["verdict"] == "READ", read
+    assert read["floor_secs"] == 3600.0, read
+    assert len(read["stalls"]) == 1, read
+    stall = read["stalls"][0]
+    # The gap is TEN hours, not the nine of the silent window: the last pre-stall fire lands
+    # at 11:00 (one hour before `silent_from`) and the first post-stall fire at 21:00.
+    assert stall["gap_secs"] == 10 * 3600, stall
+    assert stall["due"] == 3, stall
+    assert stall["silent"] == 3, stall
+    assert stall["fraction"] == 1.0, stall
+    assert sorted(stall["silent_names"]) == [
+        "job-hourly-0", "job-hourly-1", "job-hourly-2"], stall
+
+    # AND IT REACHES THE LEG AS A PROBLEM, not only as coverage data: a read whose finding
+    # never becomes a problem is a report nobody is told about.
+    leg = RUNNER.cadence_slot_leg(rows, ["ops"], [],
+                                  read_at="2026-10-21T07:00:00Z", fires=fires)
+    assert any("cadence STALL" in problem for problem in leg["problems"]), leg["problems"]
+    named = [problem for problem in leg["problems"] if "cadence STALL" in problem]
+    assert "3 of 3 due job(s)" in named[0], named[0]
+    assert "job-hourly-0" in named[0], named[0]
+
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z",
+                        issues=[])
+    assert "retrospective gap read (#565)" in out, out
+    assert "minimum detectable stall: 3600s" in out, out
+    assert "`job-hourly-0`" in out, out
+
+def test_arm6_a_HEALTHY_stream_raises_NO_stall_and_still_PRINTS_its_floor() -> None:
+    """ARM 6, THE DISCRIMINATOR: a read that always fires proves nothing.
+
+    Identical rows, identical population, identical floor as arm 5 -- only the silence is
+    removed, so every job fires through the window. The read must find NO stall, and it must
+    still print the derived floor, because a `0 stalls` over an undeclared floor is exactly
+    the reading #565 files: it looks like coverage and states nothing.
+    """
+    rows, fires = _stall_fixture(silent_from="2026-10-20T12:00:00+00:00",
+                                 silent_to="2026-10-20T12:00:00+00:00",
+                                 before=6, after=9)
+    read = RUNNER.cadence_stall_gaps(rows, fires,
+                                     now=RUNNER.reader_parse_ts("2026-10-21T07:00:00+00:00"))
+    assert read["verdict"] == "READ", read
+    assert read["stalls"] == [], read
+    assert read["floor_secs"] == 3600.0, read
+    # EVERY gap in a healthy stream is exactly one hour, which equals the floor rather than
+    # exceeding it, and every job fires inside each one.
+    assert read["longest_gap_secs"] == 3600.0, read
+    assert read["longest_gap_silent"] == 0, read
+
+    leg = RUNNER.cadence_slot_leg(rows, ["ops"], [],
+                                  read_at="2026-10-21T07:00:00Z", fires=fires)
+    assert not any("cadence STALL" in problem for problem in leg["problems"]), leg["problems"]
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z",
+                        issues=[])
+    assert "0 stall(s)" in out, out
+    assert "minimum detectable stall: 3600s" in out, out
+    assert "DERIVED as the shortest enabled period" in out, out
+
+def test_arm7_a_SINGLE_silent_job_is_NOT_a_stall_and_the_floor_DECLINES_without_periods() -> None:
+    """ARM 7: the ruling's two refusals, each measured.
+
+    FIRST REFUSAL -- "a single sparse job's long gap is not [the stall], and must never
+    trigger it". ONE job stops for nine hours while the other two keep firing: the aggregate
+    stream has no gap at all, so nothing can fire. Then the same lone job is the ONLY job
+    silent across a gap that DOES exist, and the due population is 1, below
+    `CADENCE_STALL_MIN_DUE_JOBS` -- so the fraction, which would be 1.0, is never consulted.
+    A fraction over one job cannot discriminate, which is why the floor on the population
+    exists rather than a cleverer ratio.
+
+    SECOND REFUSAL -- an undeclared floor is DECLINED, not defaulted. With no derivable
+    period the read returns DECLINED and says the floor is UNDECLARED; it must NOT fall back
+    to a constant, because a constant here is precisely the defect #565 files.
+    """
+    # (a) one job stops, two keep firing: the aggregate stream never goes quiet.
+    rows, fires = [], []
+    start = RUNNER.reader_parse_ts("2026-10-20T06:00:00+00:00")
+    for index in range(2):
+        name, row_id = f"job-steady-{index}", f"id-steady-{index}"
+        rows.append(_cron_row(name, next_run_at="2026-10-21T07:00:00+00:00",
+                              last_run_at="2026-10-21T06:00:00Z",
+                              cron_expr="0 * * * *", timezone="UTC", row_id=row_id))
+        for step in range(24):
+            fires.append(_run_record(name, (start + dt.timedelta(hours=step)).isoformat(),
+                                     job_id=row_id))
+    lone = _cron_row("job-lone", next_run_at="2026-10-21T07:00:00+00:00",
+                     last_run_at="2026-10-20T06:00:00Z", cron_expr="0 * * * *",
+                     timezone="UTC", row_id="id-lone")
+    rows.append(lone)
+    fires.append(_run_record("job-lone", start.isoformat(), job_id="id-lone"))
+    read = RUNNER.cadence_stall_gaps(rows, fires,
+                                     now=RUNNER.reader_parse_ts("2026-10-21T07:00:00+00:00"))
+    assert read["verdict"] == "READ", read
+    assert read["stalls"] == [], read
+    assert read["longest_gap_secs"] == 3600.0, read
+
+    # (b) no derivable period -> DECLINED, never a defaulted floor.
+    dead = [_cron_row("job-unparseable", next_run_at="", cron_expr="not a schedule",
+                      row_id="id-dead")]
+    declined = RUNNER.cadence_stall_gaps(dead, fires,
+                                         now=RUNNER.reader_parse_ts("2026-10-21T07:00:00+00:00"))
+    assert declined["verdict"] == "DECLINED", declined
+    assert declined["floor_secs"] is None, declined
+    assert "UNDECLARED" in declined["reason"], declined
+
+    # (c) the store was NOT read is a THIRD fact, distinct from an empty store.
+    unread = RUNNER.cadence_stall_gaps(rows, None,
+                                       now=RUNNER.reader_parse_ts("2026-10-21T07:00:00+00:00"))
+    assert unread["verdict"] == "DECLINED", unread
+    assert "NOT READ" in unread["reason"], unread
+
 def test_arm4_the_grace_is_DERIVED_per_job_and_PRINTED_with_its_derivation() -> None:
     """ARM 4: a hardcoded constant must be unable to produce these numbers.
 
