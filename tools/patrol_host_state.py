@@ -4428,6 +4428,30 @@ def cadence_stall_gaps(cron_rows: list[dict], fires: list[dict] | None, *, now,
     -- it does not fall back to a constant, because a constant here would be the exact defect
     #565 files, a bound the docstring does not carry being read as covered.
 
+    THE COVERAGE BOUND, and the THIRD STATE (#570, ruling n=4366). A floor bounds what the
+    read can RESOLVE. It says nothing about what the read can SEE, and the two populations it
+    compares are not bounded alike: DUE comes from the SCHEDULE (a period needs only
+    `cron_expr` + `next_run_at`, no runs), while SILENT comes from RECORDS (the absence of a
+    fire). So a job whose store did not exist yet was counted DUE and read as SILENT -- the
+    value of the failure. On this box that was 2518 of 2574 named silences, and the first
+    window it produced named 34 of 34 due jobs silent across a date four months before 33 of
+    their stores existed.
+
+    The bound therefore comes from the RECORD side, PER JOB: a job enters the DUE population
+    only for windows at or after its OWN first record, and the instant is printed per job
+    rather than applied silently -- an undeclared coverage bound reads as coverage exactly as
+    an undeclared floor does. Per HOME was refused by the ruling and is non-functional for the
+    filed instance: the May gap is manufactured by the DEFAULT home's stream, so a home whose
+    store begins in September still has its jobs counted DUE across that May window.
+
+    A job with ZERO records anywhere is neither due nor silent: it is reported in
+    `never_recorded`, its own field, printed beside the floor and the bounds. Dropping it
+    would recreate the defect one bound over -- "excluded from the population" and "healthy"
+    would print identically -- so a scheduled job with no observable history is a FINDING.
+    The lens question this unit adds is three-valued: for the failure this instrument exists
+    to catch, what does it return, does that differ from what it returns on health, AND does
+    it differ from what it returns where it cannot see at all?
+
     `None` for `fires` means the run store was NOT READ, which is a different fact from "the
     store holds no run": the read declines and says so, rather than reporting an empty stream
     as a silent box.
@@ -4443,6 +4467,14 @@ def cadence_stall_gaps(cron_rows: list[dict], fires: list[dict] | None, *, now,
         "enabled_jobs": len(enabled),
         "jobs_with_period": 0,
         "period_underivable": [],
+        # THE COVERAGE BOUND (#570, ruling n=4366), and it is DECLARED rather than applied
+        # silently: `n=4319` established that an undeclared FLOOR reads as coverage, and the
+        # same sentence holds one bound over. `coverage_bounds` carries, per job, the instant
+        # from which that job is observable at all; `never_recorded` carries the jobs that
+        # have no observable history anywhere.
+        "coverage_bounds": [],
+        "never_recorded": [],
+        "never_recorded_count": 0,
         "runs_examined": 0,
         "gaps_examined": 0,
         "floor_secs": None,
@@ -4487,6 +4519,42 @@ def cadence_stall_gaps(cron_rows: list[dict], fires: list[dict] | None, *, now,
         instants_by_key[key] = cadence_job_runs(row, fires, parse=parse) or []
     record["jobs_with_period"] = len(periods)
     record["period_underivable"] = underivable
+
+    # THE COVERAGE BOUND IS DERIVED FROM THE RECORD SIDE (#570, ruling n=4366), because the
+    # SCHEDULE side is unbounded by construction. `cadence_job_period` needs only `cron_expr`
+    # + `next_run_at` and no runs at all, so a job created last month is counted DUE across a
+    # window in May; SILENT, meanwhile, is the absence of a recorded fire, so a job whose
+    # store did not exist is INDISTINGUISHABLE from a job that stalled. That is the third
+    # state -- NO COVERAGE -- and its value was the failure's value.
+    #
+    # So each job's own first record is the instant from which it is observable, and a job
+    # enters the DUE population only for windows at or after it. The bound is PER JOB, never
+    # per home: the May gap is manufactured by the DEFAULT home's stream, so a home whose
+    # store begins in September still has its jobs counted DUE across that May window. A
+    # per-home bound leaves 150 of the 179 windows standing; this removes them and keeps the
+    # cross-home history the read exists for.
+    first_record: dict[tuple, object] = {}
+    for key in periods:
+        instants = instants_by_key.get(key) or []
+        first_record[key] = instants[0] if instants else None
+    ordered = sorted(periods, key=lambda key: (
+        first_record[key] is None,
+        first_record[key].isoformat() if first_record[key] is not None else "",
+        names[key]))
+    record["coverage_bounds"] = [
+        {"name": names[key],
+         "first_record": (first_record[key].isoformat()
+                          if first_record[key] is not None else None)}
+        for key in ordered]
+    # A JOB THAT HAS NEVER RECORDED IS ITS OWN FINDING, NEVER SILENCE (#570, ruling n=4366
+    # clause 2). Dropping it would recreate exactly what `n=4319` removed, one bound over:
+    # "excluded from the population" and "healthy" would print identically, and the next
+    # reader would inherit the same blindness under a different name. Something is scheduled
+    # with no observable history, and that is worth saying out loud.
+    never_recorded = [names[key] for key in ordered if first_record[key] is None]
+    record["never_recorded"] = sorted(never_recorded)
+    record["never_recorded_count"] = len(never_recorded)
+
     if not periods:
         return {**record, "reason": (
             f"none of the {len(enabled)} enabled row(s) yielded a derivable period, so the "
@@ -4531,7 +4599,22 @@ def cadence_stall_gaps(cron_rows: list[dict], fires: list[dict] | None, *, now,
         # one-hour gap mark every hourly job due -- so the interior test below found them all
         # silent and the read fired on a perfectly healthy stream. At `period < gap` there is
         # at least one fire that was due strictly INSIDE, which is the fire a stall suppresses.
-        due = [key for key, period in periods.items() if period < gap]
+        due = [key for key, period in periods.items()
+               if period < gap
+               # AND THE JOB MUST HAVE BEEN OBSERVABLE ACROSS THE WHOLE WINDOW (#570,
+               # ruling n=4366 clause 1). This is the bound that makes the two populations
+               # comparable: DUE is derived from the SCHEDULE, which is unbounded, while
+               # SILENT is derived from RECORDS, which begin at the job's first fire. Without
+               # it, 33 of the 34 jobs in the 2026-05-17 window were counted DUE across a
+               # window four months before their stores existed, and their emptiness read as
+               # silence -- 2518 of the 2574 named silences on this box.
+               #
+               # `first_record <= earlier`, not `<= later`: a job whose store BEGINS inside
+               # the window has no coverage across the part before it, so the window is not
+               # one it can be silent in. A job with no record at all is excluded here and
+               # reported in `never_recorded` instead -- never dropped, never counted silent.
+               and first_record[key] is not None
+               and first_record[key] <= earlier]
         # SILENCE IS THE ABSENCE OF A FIRE INSIDE THE GAP, never at its edges. A run at
         # `earlier` or `later` is a fire that opened or closed the gap, so counting it would
         # make the gap unfalsifiable: every job that fired on either side would read as
@@ -4562,7 +4645,9 @@ def cadence_stall_gaps(cron_rows: list[dict], fires: list[dict] | None, *, now,
     record["reason"] = (
         f"{len(stalls)} stall(s) over {record['gaps_examined']} inter-arrival gap(s), judged "
         f"at or above the DERIVED floor {floor:.0f}s (the shortest enabled period, "
-        f"`{names[floor_job]}`)")
+        f"`{names[floor_job]}`), with the DUE population bounded PER JOB by that job's own "
+        f"first run record ({len(never_recorded)} of {len(periods)} job(s) have none and are "
+        f"reported as never recorded rather than counted silent)")
     return record
 
 
@@ -5133,6 +5218,36 @@ def render_cadence_stall(read: dict) -> list[str]:
             f"period on the box (`{read.get('floor_job')}`) -- a stall shorter than this is "
             f"invisible to a gap read because that job's own fires fill the window"
         )
+    # THE COVERAGE BOUND, DECLARED PER JOB, BESIDE THE FLOOR (#570, ruling n=4366 clause 3).
+    # The floor bounds what the read can RESOLVE; this bounds what it can SEE, and an
+    # undeclared coverage bound reads as coverage exactly as an undeclared floor does. The
+    # instant is printed for every job rather than applied silently, because a reader who
+    # cannot see the bound cannot tell "this job was quiet" from "this job was not recorded
+    # yet" -- which is the whole defect this unit removes.
+    bounds = read.get("coverage_bounds") or []
+    if bounds:
+        recorded = [entry for entry in bounds if entry.get("first_record")]
+        lines.append(
+            f"    coverage bound: a job is counted DUE only for windows at or after its OWN "
+            f"first run record -- {len(recorded)} of {len(bounds)} job(s) carry one, and the "
+            f"instant each becomes observable is listed below"
+        )
+        if recorded:
+            lines.append(
+                "      observable from: "
+                + "; ".join(f"`{entry['name']}` {entry['first_record']}"
+                            for entry in recorded))
+    # A JOB THAT HAS NEVER RECORDED IS ITS OWN FINDING, PRINTED BESIDE THE FLOOR AND THE
+    # BOUND (#570, ruling n=4366 clause 2). It is not dropped and it is not silent: dropping
+    # it silently is the defect one bound over, because "excluded from the population" and
+    # "healthy" would then print the same way.
+    never = read.get("never_recorded") or []
+    lines.append(
+        f"    never recorded: {len(never)} job(s) scheduled with ZERO run records anywhere -- "
+        f"a FINDING (something is scheduled with no observable history), never counted silent "
+        f"and never counted as served"
+        + (": " + ", ".join(f"`{name}`" for name in never) if never else "")
+    )
     longest = read.get("longest_gap_secs")
     if longest is not None:
         fraction = read.get("longest_gap_fraction")

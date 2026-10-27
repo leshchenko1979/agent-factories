@@ -12515,6 +12515,163 @@ def test_arm7_a_SINGLE_silent_job_is_NOT_a_stall_and_the_floor_DECLINES_without_
     assert unread["verdict"] == "DECLINED", unread
     assert "NOT READ" in unread["reason"], unread
 
+def _coverage_fixture(*, coverage: dict) -> tuple[list, list]:
+    """Hourly jobs sharing ONE long silence, with each job's store OPENING chosen by the caller.
+
+    The stream is arm 5's -- fires hourly, stops for ten hours, resumes in a burst -- and the
+    ONLY thing `coverage` changes is where each job's own first record sits relative to that
+    gap. Four words, one per job:
+
+    * ``full``   -- first record six hours BEFORE the gap, so the job is observable across it;
+    * ``inside`` -- first record INSIDE the gap, so it fires there and cannot read as silent;
+    * ``after``  -- first record AFTER the gap has closed, so it has no fire in the gap at all;
+    * ``never``  -- no run record anywhere, so it has no observable history.
+
+    ``after`` is the May-2026 shape this unit files (#570): the job is DUE from its SCHEDULE,
+    which is unbounded, while SILENT is the absence of a RECORD, which begins at the first
+    fire -- so before the bound, a store that did not exist yet read exactly like a stall.
+    ``inside`` is the milder half of the same defect: the job was observable for part of the
+    window, so it dilutes the fraction without ever having had the chance to be silent.
+    """
+    rows, fires = [], []
+    gap_from = RUNNER.reader_parse_ts("2026-10-20T11:00:00+00:00")
+    gap_to = RUNNER.reader_parse_ts("2026-10-20T21:00:00+00:00")
+    opens = {
+        "full": RUNNER.reader_parse_ts("2026-10-20T06:00:00+00:00"),
+        "inside": RUNNER.reader_parse_ts("2026-10-20T12:00:00+00:00"),
+        "after": RUNNER.reader_parse_ts("2026-10-20T22:00:00+00:00"),
+    }
+    end = RUNNER.reader_parse_ts("2026-10-21T02:00:00+00:00")
+    for name in sorted(coverage):
+        when = coverage[name]
+        assert when in (*opens, "never"), when
+        row_id = f"id-{name}"
+        rows.append(_cron_row(name, next_run_at="2026-10-21T07:00:00+00:00",
+                              last_run_at=end.isoformat(), cron_expr="0 * * * *",
+                              timezone="UTC", row_id=row_id))
+        if when == "never":
+            continue
+        step, opening = opens[when], True
+        while step <= end:
+            # THE OPENING RECORD IS ALWAYS WRITTEN, and the gap interior is skipped after it:
+            # a store that opens inside the gap HAS a fire there (that is what `inside`
+            # means), while a store open across the gap records nothing in it (that is what
+            # makes `full` silent).
+            if opening or not (gap_from < step < gap_to):
+                fires.append(_run_record(name, step.isoformat(), job_id=row_id))
+            opening = False
+            step += dt.timedelta(hours=1)
+    return rows, fires
+
+def test_arm15_a_store_that_OPENED_after_the_gap_is_NOT_counted_silent() -> None:
+    """ARM 15 (#570, ruling n=4366 clause 1): the false stall the coverage bound removes.
+
+    THE STATE THAT USED TO RED, and it is the filed instance in miniature. One job has full
+    coverage across the ten-hour silence; two others were created afterwards, so their first
+    record sits after the gap has already closed. Without the bound all three are DUE -- their
+    periods come from the SCHEDULE and need no records at all -- and all three are SILENT,
+    because none of them has a record inside the gap. The read therefore reported a 3-of-3
+    stall across a window in which two of the jobs did not exist.
+
+    THE CONTROL IS IN THE SAME ARM. The fixture is rebuilt with the same three jobs and the
+    same silence, changing ONLY the two late stores' opening instant to before the gap -- and
+    the stall appears. So the quiet above is attributable to the bound and not to a read that
+    cannot fire.
+    """
+    rows, fires = _coverage_fixture(coverage={"job-a": "full", "job-b": "after",
+                                              "job-c": "after"})
+    bounded = RUNNER.cadence_stall_gaps(
+        rows, fires, now=RUNNER.reader_parse_ts("2026-10-21T07:00:00+00:00"))
+    assert bounded["verdict"] == "READ", bounded
+    assert bounded["longest_gap_secs"] == 10 * 3600, bounded
+    assert bounded["longest_gap_due"] == 1, bounded
+    assert bounded["longest_gap_silent"] == 1, bounded
+    assert bounded["stalls"] == [], bounded
+    # The late stores are not HIDDEN by the bound: each one's instant is carried per job.
+    late = [entry for entry in bounded["coverage_bounds"]
+            if entry["name"] in ("job-b", "job-c")]
+    assert [entry["first_record"] for entry in late] == [
+        "2026-10-20T22:00:00+00:00", "2026-10-20T22:00:00+00:00"], late
+
+    control_rows, control_fires = _coverage_fixture(
+        coverage={"job-a": "full", "job-b": "full", "job-c": "full"})
+    control = RUNNER.cadence_stall_gaps(
+        control_rows, control_fires, now=RUNNER.reader_parse_ts("2026-10-21T07:00:00+00:00"))
+    assert control["longest_gap_due"] == 3, control
+    assert control["longest_gap_silent"] == 3, control
+    assert [stall["gap_secs"] for stall in control["stalls"]] == [10 * 3600], control
+
+def test_arm16_a_job_with_ZERO_records_is_a_FINDING_and_never_silent() -> None:
+    """ARM 16 (#570, ruling n=4366 clause 2): the THIRD state gets its own field.
+
+    A job that is enabled and scheduled but has NO run record anywhere is neither due nor
+    silent: it has no observable history, so nothing can be concluded about its silence.
+    Dropping it would recreate the defect one bound over, because "excluded from the
+    population" and "healthy" would then print identically.
+
+    So it is reported in `never_recorded`, its own field, and the genuine stall beside it
+    still reports: two jobs with full coverage are silent across the gap while the third has
+    never recorded at all, and the read must name the stall (2 of 2) AND the finding (1 job)
+    without confusing the two.
+    """
+    rows, fires = _coverage_fixture(coverage={"job-a": "full", "job-b": "full",
+                                              "job-c": "never"})
+    read = RUNNER.cadence_stall_gaps(
+        rows, fires, now=RUNNER.reader_parse_ts("2026-10-21T07:00:00+00:00"))
+    assert read["verdict"] == "READ", read
+    # It IS scheduled, so it has a derivable period: the finding is not "unreadable".
+    assert read["jobs_with_period"] == 3, read
+    assert read["never_recorded"] == ["job-c"], read
+    assert read["never_recorded_count"] == 1, read
+    assert read["longest_gap_due"] == 2, read
+    stalls = read["stalls"]
+    assert [stall["gap_secs"] for stall in stalls] == [10 * 3600], stalls
+    assert stalls[0]["silent"] == 2, stalls[0]
+    assert "job-c" not in stalls[0]["silent_names"], stalls[0]
+
+    leg = RUNNER.cadence_slot_leg(rows, ["ops"], [],
+                                  read_at="2026-10-21T07:00:00Z", fires=fires)
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z",
+                        issues=[])
+    assert "never recorded: 1 job(s)" in out, out
+    assert "`job-c`" in out, out
+
+def test_arm17_the_coverage_bound_is_DECLARED_beside_the_floor_not_applied_silently() -> None:
+    """ARM 17 (#570, ruling n=4366 clause 3): a bound a reader cannot see is not a bound.
+
+    `n=4319` established that an undeclared FLOOR reads as coverage -- a `0 stalls` over a
+    floor nobody printed looks like a quiet box. The coverage bound has the same failure one
+    over, and it is worse: without it printed, "this job was quiet" and "this job was not
+    recorded yet" render identically.
+
+    So the bound is printed with its own population, the instant each store becomes observable
+    is listed PER JOB, and the never-recorded count is printed even when it is ZERO -- a field
+    that only appears when it fires is a field a reader cannot tell from an absent one.
+    """
+    rows, fires = _coverage_fixture(coverage={"job-a": "full", "job-b": "full",
+                                              "job-c": "full"})
+    read = RUNNER.cadence_stall_gaps(
+        rows, fires, now=RUNNER.reader_parse_ts("2026-10-21T07:00:00+00:00"))
+    leg = RUNNER.cadence_slot_leg(rows, ["ops"], [],
+                                  read_at="2026-10-21T07:00:00Z", fires=fires)
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T07:00:00Z",
+                        issues=[])
+    lines = out.splitlines()
+    floor_at = next(index for index, line in enumerate(lines)
+                    if "minimum detectable stall:" in line)
+    bound_at = next(index for index, line in enumerate(lines)
+                    if "coverage bound:" in line)
+    # BESIDE THE FLOOR, not somewhere later: the two bounds qualify the same verdict, and a
+    # reader who meets the stalls first has already formed the wrong one.
+    assert bound_at == floor_at + 1, out
+    assert "3 of 3 job(s) carry one" in out, out
+    assert "observable from: `job-a` 2026-10-20T06:00:00+00:00" in out, out
+    assert "never recorded: 0 job(s)" in out, out
+    # The arm is not vacuous: this fixture DOES stall, so the bound is printed on a read that
+    # found something rather than on a declined one.
+    assert [stall["gap_secs"] for stall in read["stalls"]] == [10 * 3600], read
+    assert "STALL:" in out, out
+
 def test_arm8_the_unit_citation_form_is_the_SUBJECT_in_PARENTHESES_not_the_whole_message() -> None:
     """ARM 8 (#555, ruling n=4182): the discriminator is TIGHTER than the filing proposed.
 
