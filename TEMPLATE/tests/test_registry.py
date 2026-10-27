@@ -715,20 +715,27 @@ def probe_the_sentinel_would_rewrite_badges() -> None:
     attestation — the one case where both instants agree — and measured that the claim in
     the docstring was the wrong way round.
     """
-    stale = "2026-09-01T00:00:00Z"
-    at_commit = rr._freshness_badge("attested", stale, rr.parse_instant("2026-09-19T14:00:00Z"))
+    # The stale fixture is DERIVED from the window, not a hardcoded date: the
+    # window is `ATTEST_CADENCE_HOURS x ATTEST_STALE_MULTIPLE`, so 2026-09-01
+    # silently stopped being stale when #575 took the cadence from daily to
+    # weekly — the probe would have kept passing while testing nothing.
+    at_commit_instant = rr.parse_instant("2026-09-19T14:00:00Z")
+    stale = (at_commit_instant - datetime.timedelta(hours=rr.ATTEST_STALE_HOURS + 1)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    at_commit = rr._freshness_badge("attested", stale, at_commit_instant)
     at_sentinel = rr._freshness_badge("attested", stale, rr.parse_instant(rr.RESOLVED_SENTINEL))
     check(
         "a sentinel render would HIDE a stale attestation (so the fresh side renders at the committed instant)",
         at_sentinel != at_commit and "STALE" in at_commit and "STALE" not in at_sentinel,
         f"at commit: {at_commit!r} · at sentinel: {at_sentinel!r}",
     )
-    fresh = "2026-09-19T12:00:00Z"
+    fresh = (at_commit_instant - datetime.timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     check(
         "...while a fresh attestation reads the same at both, which is why the claim is stated per case",
-        rr._freshness_badge("attested", fresh, rr.parse_instant("2026-09-19T14:00:00Z"))
+        rr._freshness_badge("attested", fresh, at_commit_instant)
         == rr._freshness_badge("attested", fresh, rr.parse_instant(rr.RESOLVED_SENTINEL)),
-        f"at commit: {rr._freshness_badge('attested', fresh, rr.parse_instant('2026-09-19T14:00:00Z'))!r}",
+        f"at commit: {rr._freshness_badge('attested', fresh, at_commit_instant)!r}",
     )
 
 def render_carried_binding_index(snapshot: dict) -> tuple[int | None, str]:

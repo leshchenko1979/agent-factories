@@ -54,11 +54,20 @@ from registry import (
 
 # --- Freshness windows -----------------------------------------------------
 #
-# The re-attest pacemaker runs DAILY (SKILL.md §Periodic processes & the Pacemaker Law), so a fragment older than a
-# small multiple of that cadence is a PROCESS failure — nobody answered — while
-# a moved binding is a STATE failure that a re-render fixes. The two are
-# rendered separately so a reader is never sent to repair the wrong half.
-ATTEST_CADENCE_HOURS = 24
+# The re-attest pacemaker `factory-registry-attest` runs WEEKLY — cron
+# `0 6 * * Mon` UTC, owner order 2026-10-27 (#575); the Pacemaker Law it serves
+# is P28 in `docs/processes.md`. A fragment older than a small multiple of that
+# cadence is a PROCESS failure — nobody answered — while a moved binding is a
+# STATE failure that a re-render fixes. The two are rendered separately so a
+# reader is never sent to repair the wrong half.
+#
+# The MULTIPLE is a count of MISSED ROUNDS, so it does not move with the
+# cadence: 3 stays 3 whether a round is a day or a week. Moving the schedule
+# without this constant would leave the badge judging freshness against a
+# cadence the job no longer keeps — the renderer would call a fragment fresh for
+# 72 h after a weekly job had missed its round, and the gate below would assert
+# the stale constant as correct.
+ATTEST_CADENCE_HOURS = 168
 ATTEST_STALE_MULTIPLE = 3
 ATTEST_STALE_HOURS = ATTEST_CADENCE_HOURS * ATTEST_STALE_MULTIPLE
 

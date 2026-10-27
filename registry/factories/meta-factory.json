@@ -57,7 +57,7 @@
       "name": "factory-registry-attest",
       "audience": "agent",
       "entry": "cron factory-registry-attest",
-      "cadence": "daily 06:00Z"
+      "cadence": "weekly, Mon 06:00Z (cron `0 6 * * Mon`, UTC)"
     },
     {
       "name": "factory-publish",

@@ -222,12 +222,94 @@ def test_announcements_sort_critical_first_then_newest():
 def test_attest_stale_hours_is_derived_from_the_cadence_not_guessed():
     """The window is cadence x multiple — a number with its predicate attached."""
     assert rr.ATTEST_STALE_HOURS == rr.ATTEST_CADENCE_HOURS * rr.ATTEST_STALE_MULTIPLE
-    assert rr.ATTEST_CADENCE_HOURS == 24, "the re-attest pacemaker runs daily"
+    # 168 = one week. The pacemaker is `factory-registry-attest`, cron
+    # `0 6 * * Mon` UTC (owner order 2026-10-27, #575); it was daily until then.
+    # This arm exists because the schedule and this constant are two declarations
+    # of ONE fact on two surfaces, and moving one alone leaves the freshness
+    # badge judging a cadence the job no longer keeps.
+    assert rr.ATTEST_CADENCE_HOURS == 168, "the re-attest pacemaker runs weekly"
+
+
+_DAY_NAMES = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+
+
+def _cron_period_hours(expr: str) -> int:
+    """Hours between two fires of a 5-field cron expression.
+
+    Deliberately NARROW: it decodes only the shapes the re-attest pacemaker has
+    actually taken — a wildcard day-of-week (daily) and a single named or numeric
+    day-of-week (weekly) — and RAISES on everything else. A helper that returned a
+    default for a schedule it did not understand would re-create the very defect
+    the arm below exists to catch: a cadence the reader believes is checked.
+    """
+    fields = expr.split()
+    if len(fields) != 5:
+        raise ValueError(f"not a 5-field cron expression: {expr!r}")
+    _minute, _hour, dom, month, dow = fields
+    if dom != "*" or month != "*":
+        raise ValueError(f"unhandled day-of-month/month shape: {expr!r}")
+    if dow == "*":
+        return 24
+    if dow.lower() in _DAY_NAMES or dow.isdigit():
+        return 168
+    raise ValueError(f"unhandled day-of-week shape: {expr!r}")
+
+
+def test_the_attest_cadence_matches_the_pacemaker_schedule():
+    """The schedule and the constant are ONE fact declared on two surfaces.
+
+    The freshness window is DERIVED from `ATTEST_CADENCE_HOURS`, so a
+    schedule-only edit leaves the badge judging against a cadence the job no
+    longer keeps — the failure #575 named. Asserting the literal (the arm above)
+    pins the constant but cannot SEE the cron move; this arm reads the schedule
+    out of `registry/state.json`, the repo-tracked mirror of the live cron rows,
+    which the render drift gate keeps honest against the box.
+
+    Bound, stated rather than implied: this reads the MIRROR, not the daemon
+    database — a schedule changed on the box and never re-rendered is the drift
+    gate's catch, not this arm's. An absent job row fails loudly, never vacuously.
+    """
+    # Positive control: the decoder DISCRIMINATES, so a 168 out of it means
+    # weekly rather than a constant the helper always answers. This half runs in
+    # EVERY tree, including one that carries no rendered state (below).
+    assert _cron_period_hours("0 6 * * *") == 24
+    assert _cron_period_hours("0 6 * * Mon") == 168
+
+    state_path = REPO_ROOT / "registry" / "state.json"
+    if not state_path.exists():
+        # A template or a member tree that has not rendered yet carries no
+        # schedule to pair against. SKIP, never pass silently: pytest reports the
+        # skip in its summary, so "exempt" and "clean" are not the same output.
+        import pytest
+
+        pytest.skip(
+            f"{state_path} is absent — no rendered schedule in this tree to pair "
+            f"the cadence against; the decoder controls above still ran"
+        )
+
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    rows = [j for j in state.get("jobs", []) if j.get("name") == "factory-registry-attest"]
+    assert len(rows) == 1, f"expected one factory-registry-attest job row, found {len(rows)}"
+    expr = rows[0]["cron_expr"]
+    period = _cron_period_hours(expr)
+    assert period == rr.ATTEST_CADENCE_HOURS, (
+        f"the pacemaker's schedule {expr!r} fires every {period} h but "
+        f"ATTEST_CADENCE_HOURS is {rr.ATTEST_CADENCE_HOURS} — the freshness badge "
+        f"would judge against a cadence the job no longer keeps"
+    )
 
 
 def test_freshness_badge_marks_a_stale_attestation():
     now = datetime.datetime(2026, 9, 19, 12, 0, tzinfo=datetime.timezone.utc)
-    stale = rr._freshness_badge("attested", "2026-09-10T12:00:00Z", now)
+    # Derived from the WINDOW, never a hardcoded date: the window is
+    # `ATTEST_CADENCE_HOURS x ATTEST_STALE_MULTIPLE`, so a fixed fixture date
+    # silently stops being stale the moment the cadence moves (#575 took the
+    # re-attest pacemaker from daily to weekly, and 2026-09-10 went from stale
+    # to fresh without one line of the badge changing).
+    stale_at = (now - datetime.timedelta(hours=rr.ATTEST_STALE_HOURS + 1)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    stale = rr._freshness_badge("attested", stale_at, now)
     assert "STALE" in stale, stale
     fresh = rr._freshness_badge("attested", "2026-09-19T09:00:00Z", now)
     assert "STALE" not in fresh and "attested" in fresh, fresh
@@ -444,9 +526,15 @@ def test_cell_folds_newlines_and_escapes_pipes():
 
 def test_backdated_fragment_renders_stale_marker_in_the_document():
     """A fragment attested longer ago than cadence x multiple reads as STALE."""
-    old = _fragment("alpha", attested_at="2026-09-10T00:00:00Z")
+    # The fixture age is DERIVED from the window `_ctx`'s instant is judged
+    # against, not a date that happens to exceed today's window (#575).
+    at = datetime.datetime(2026, 9, 19, 12, 0, tzinfo=datetime.timezone.utc)
+    backdated = (at - datetime.timedelta(hours=rr.ATTEST_STALE_HOURS + 1)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    old = _fragment("alpha", attested_at=backdated)
     markdown = rr.render_markdown(_ctx([old]))
-    assert "| freshness | ⚠️ STALE — last attested 2026-09-10T00:00:00Z |" in markdown, markdown[:800]
+    assert f"| freshness | ⚠️ STALE — last attested {backdated} |" in markdown, markdown[:800]
 
 def test_freshly_attested_fragment_does_not_read_as_stale():
     """The negative half: the marker must distinguish, not decorate every row."""

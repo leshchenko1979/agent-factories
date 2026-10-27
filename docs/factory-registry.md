@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-10-27T07:08:50Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-10-27T12:43:30Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-10-27T07:08:50Z` |
+| generated | live reads | resolved `2026-10-27T12:43:30Z` |
 
 ## Announcements
 
@@ -185,7 +185,7 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 |---|---|---|---|---|---|---|---|---|---|
 | Outreach | `Outreach` | 10780 | outreach | `acc3fa9b-cefa-4e35-bf87-422696e558f0` | Telegram: ai-antispam / Outreach [chat:-1003993000918:topic:10780] | superseded | telegram | 2026-09-26T17:30:41Z | — |
 | Triage | `Triage` | 10781 | triage | `6ca0d547-4a72-4c29-ac10-967daa98af0a` | Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781] | resolved | telegram | 2026-10-01T11:01:30Z | — |
-| HQ | `HQ` | 10782 | hq | `cb06a94a-be02-4e8c-b6c6-c8c9f09922f4` | Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782] | resolved | telegram | 2026-10-26T14:26:44Z | — |
+| HQ | `HQ` | 10782 | hq | `cb06a94a-be02-4e8c-b6c6-c8c9f09922f4` | Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782] | resolved | telegram | 2026-10-27T12:32:59Z | — |
 | ai-antispam Landing lane | `Landing` | 10783 | landing | `99b348f6-a040-4119-8aa8-00736c7fb61d` | ai-antispam Landing lane | resolved | telegram | 2026-09-11T21:55:58Z | — |
 | Bot lane — ai-antispam service (Bot topic) | `Bot` | 10784 | bot | `6d921dca-fb0a-455b-bceb-dfb78dcf1f07` | Bot lane — ai-antispam service (Bot topic) | resolved | telegram | 2026-10-20T12:47:12Z | — |
 | MAX domain — lane acceptance & verification | `Max` | 11156 | _unstated_ | `85425045-2567-4beb-9867-100d6755e2cd` | MAX domain — lane acceptance & verification | resolved | telegram | 2026-09-15T03:45:41Z | — |
@@ -197,19 +197,19 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | `ai-antispam-118-probe` | ops | `0 4 1 1 *` | UTC | **no** | 0 | **absent** | 2027-01-01T04:00:00+00:00 | — | — |
 | `ai-antispam-bot-service-health` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T06:15:00+00:00 | — | — |
 | `ai-antispam-day7-retire-wake` | ops | `15 6 22 9 *` | UTC | **no** | 0 | **absent** | 2027-09-22T06:15:00+00:00 | session:acc3fa9b-cefa-4e35-bf87-422696e558f0 | — |
-| `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-10-27T07:15:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
+| `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-10-27T12:45:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
 | `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-28T07:00:00+00:00 | — | — |
 | `ai-antispam-outreach-db-sync` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T06:15:00+00:00 | — | — |
 | `ai-antispam-outreach-mining-tranche` | ops | `15 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-10-28T06:15:00+00:00 | — | — |
 | `ai-antispam-outreach-stream-joins` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-28T00:00:00+00:00 | — | — |
-| `ai-antispam-outreach-watch-poll` | ops | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T12:07:00+00:00 | — | — |
+| `ai-antispam-outreach-watch-poll` | ops | `7 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T18:07:00+00:00 | — | — |
 | `ai-antispam-owner-digest` | ops | `30 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T06:30:00+00:00 | — | — |
 | `ai-antispam-self-audit-daily` | ops | `50 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T05:50:00+00:00 | — | — |
-| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T12:40:00+00:00 | — | — |
-| `ai-antispam-timeout-monitor` | ops | `0 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T12:00:00+00:00 | — | — |
-| `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T12:25:00+00:00 | — | out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skil… |
+| `ai-antispam-stream-liveness-check` | ops | `40 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T18:40:00+00:00 | — | — |
+| `ai-antispam-timeout-monitor` | ops | `0 12 * * *` | UTC | yes | 0 | **absent** | 2026-10-28T12:00:00+00:00 | — | — |
+| `ai-antispam-triage-sweep` | ops | `25 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T18:25:00+00:00 | — | out=$(timeout 25 /usr/bin/python3 -u /root/.opencrabs/profiles/ops/skil… |
 | `ai-antispam-watch-funnel-day7-report` | ops | `0 9 22 9 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-09-22T06:00:00+00:00 | telegram:-1003993000918:10780 | — |
-| `ai-antispam-wave0-reply-sweep` | ops | `0 12 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-27T09:00:00+00:00 | — | — |
+| `ai-antispam-wave0-reply-sweep` | ops | `0 12 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T09:00:00+00:00 | — | — |
 | `ai-antispam-wave0-unactivated-reprobe` | ops | `0 12 * * 2` | Europe/Moscow | yes | 0 | **absent** | 2026-11-02T09:00:00+00:00 | — | — |
 
 Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
@@ -261,9 +261,9 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 |---|---|---|---|---|---|---|---|---|---|
 | `inferhub-auto-switcher` | ops | `33 */6 * * *` | UTC | **no** | 0 | **absent** | 2026-09-19T00:33:00+00:00 | — | — |
 | `inferhub-daily-report` | ops | `0 8 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T05:00:00+00:00 | — | — |
-| `inferhub-hq-pacemaker` | ops | `10 */6 * * *` | UTC | yes | 1 | present | 2026-10-27T12:10:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
+| `inferhub-hq-pacemaker` | ops | `10 */6 * * *` | UTC | yes | 1 | present | 2026-10-27T18:10:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
 | `inferhub-self-audit-daily` | ops | `40 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T06:40:00+00:00 | session:359fe71b-c7a1-420b-b856-acfb49939a7b | — |
-| `inferhub-usage-logs-sync` | ops | `23 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T12:23:00+00:00 | — | — |
+| `inferhub-usage-logs-sync` | ops | `23 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T18:23:00+00:00 | — | — |
 
 Attribution basis: deliver_to -> lane, name prefix.
 3 of 5 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
@@ -343,7 +343,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 | `infra-mac-backup-verify-oneshot` | ops | `15 19 28 9 *` | Europe/Moscow | **no** | 0 | **absent** | 2027-09-28T16:15:00+00:00 | telegram:-1004486255170:4 | — |
 | `infra-sender-logs-check` | ops | `05 18 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-27T15:05:00+00:00 | — | — |
 | `infra-surveys-daily` | ops | `5 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T06:05:00+00:00 | — | — |
-| `infra-triage-patrol` | ops | `5 */6 * * *` | UTC | yes | 0 | present | 2026-10-27T12:05:00+00:00 | — | /root/vds-servers/tools/triage_preflight.py --delta --mark |
+| `infra-triage-patrol` | ops | `5 */6 * * *` | UTC | yes | 0 | present | 2026-10-27T18:05:00+00:00 | — | /root/vds-servers/tools/triage_preflight.py --delta --mark |
 
 Attribution basis: deliver_to -> chat, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
@@ -372,7 +372,7 @@ Attribution basis: deliver_to -> chat, name prefix.
 | factory-insights-weekly | agent | cron factory-insights-weekly | weekly, Fri 18:00 MSK (15:00Z); fires only when its trigger_cmd exits 0 |
 | factory-template-weekly | agent | cron factory-template-weekly | weekly, Mon 09:00 MSK (06:00Z); fires only when its trigger_cmd exits 0 |
 | factory-growth-map-biweekly | agent | cron factory-growth-map-biweekly | 1st and 15th, 09:00 MSK (06:00Z) |
-| factory-registry-attest | agent | cron factory-registry-attest | daily 06:00Z |
+| factory-registry-attest | agent | cron factory-registry-attest | weekly, Mon 06:00Z (cron `0 6 * * Mon`, UTC) |
 | factory-publish | agent | cron factory-publish | every 6h (UTC) |
 | factory-questions-redeliver | agent | cron factory-questions-redeliver | every 6h at :12 (UTC); fires only when its trigger_cmd exits non-empty |
 | factory-hq-pacemaker | agent | cron factory-hq-pacemaker | weekly, Mon 09:50Z (cron `50 9 * * Mon`, UTC); deliver_to the HQ lane, resolved live from session_bindings |
@@ -414,7 +414,7 @@ LATEST READING 2026-10-27T06:05:23Z — this block SUPERSEDES the 2026-10-24 rea
 |---|---|---|---|---|---|---|---|---|---|
 | Surveys | `Surveys` | 19 | surveys | `5c99ad51-8889-40cb-b589-fa13fd673c06` | Telegram: Factories / Surveys [chat:-1004497192134:topic:19] | resolved | telegram | 2026-09-29T07:29:49Z | — |
 | Agent Factories Triage Lane | `Triage` | 20 | triage | `f4c192c9-a8e9-4268-9026-ee3e4970cc8a` | Agent Factories Triage Lane | resolved | telegram | 2026-10-01T00:26:51Z | — |
-| Meta-Factory HQ: ASIF Architecture & Crons | `HQ` | 21 | hq | `2646d31a-71ee-49f0-be81-9c8dc32d32fa` | Meta-Factory HQ: ASIF Architecture & Crons | resolved | telegram | 2026-10-26T06:13:25Z | — |
+| Meta-Factory HQ: ASIF Architecture & Crons | `HQ` | 21 | hq | `2646d31a-71ee-49f0-be81-9c8dc32d32fa` | Meta-Factory HQ: ASIF Architecture & Crons | resolved | telegram | 2026-10-27T11:16:25Z | — |
 | Delegate | `Delegate` | 68 | delegate | `23549292-77ff-40d1-97e3-5aa0bdd19d74` | Telegram: Factories / Delegate [chat:-1004497192134:topic:68] | resolved | telegram | 2026-09-28T11:47:14Z | — |
 | Worker | `Worker` | 1271 | worker | `dcd8f7a9-c1e7-48c3-b184-d901dc08eac7` | Telegram: Factories / Worker [chat:-1004497192134:topic:1271] | resolved | telegram | 2026-09-30T12:54:22Z | — |
 | Factories / Ledger | `Ledger` | 3981 | ledger | `d0cba805-92c9-4377-8808-a1cf715bce9e` | Telegram: Factories / Ledger [chat:-1004497192134:topic:3981] | resolved | telegram | 2026-09-29T08:30:32Z | — |
@@ -431,20 +431,21 @@ LATEST READING 2026-10-27T06:05:23Z — this block SUPERSEDES the 2026-10-24 rea
 
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
-| `factory-binding-sync` | ops | `20 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T12:20:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | python3 /root/agent-factories/tools/sync_binding.py --apply |
+| `factory-attest-verify-574` | ops | `30 6 28 10 *` | UTC | yes | 0 | **absent** | 2026-10-28T06:30:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | python3 /root/.opencrabs/profiles/ops/attest_round_check.py 2026-10-28… |
+| `factory-binding-sync` | ops | `20 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T18:20:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | python3 /root/agent-factories/tools/sync_binding.py --apply |
 | `factory-growth-map-biweekly` | ops | `0 9 1,15 * *` | Europe/Moscow | yes | 0 | **absent** | 2026-11-01T06:00:00+00:00 | — | — |
 | `factory-hq-pacemaker` | ops | `50 9 * * Mon` | UTC | yes | 1 | present | 2026-11-02T09:50:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | — |
 | `factory-insights-weekly` | ops | `0 18 * * Fri` | Europe/Moscow | yes | 0 | **absent** | 2026-10-30T15:00:00+00:00 | — | python3 /root/agent-factories/tools/synthesize_insights.py --audit |
 | `factory-measurement-daily` | ops | `0 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T06:00:00+00:00 | — | — |
-| `factory-publish` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T12:00:00+00:00 | — | — |
-| `factory-questions-redeliver` | ops | `12 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T12:12:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | /root/.opencrabs/profiles/ops/scripts/oc_questions_redeliver.sh |
-| `factory-registry-attest` | ops | `0 6 * * *` | UTC | yes | 0 | **absent** | 2026-10-28T06:00:00+00:00 | — | — |
+| `factory-publish` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T18:00:00+00:00 | — | — |
+| `factory-questions-redeliver` | ops | `12 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T18:12:00+00:00 | session:2646d31a-71ee-49f0-be81-9c8dc32d32fa | /root/.opencrabs/profiles/ops/scripts/oc_questions_redeliver.sh |
+| `factory-registry-attest` | ops | `0 6 * * Mon` | UTC | yes | 0 | **absent** | 2026-11-02T06:00:00+00:00 | — | — |
 | `factory-template-weekly` | ops | `0 9 * * Mon` | Europe/Moscow | yes | 0 | **absent** | 2026-11-02T06:00:00+00:00 | — | python3 /root/agent-factories/tools/roadmap.py --cadence |
-| `factory-triage-patrol` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T12:00:00+00:00 | — | out=$(gh issue list -R leshchenko1979/agent-factories --state open --li… |
+| `factory-triage-patrol` | ops | `0 */6 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T18:00:00+00:00 | — | out=$(gh issue list -R leshchenko1979/agent-factories --state open --li… |
 
 Attribution basis: deliver_to -> lane, name prefix.
 `trigger_cmd` is truncated to 72 characters here; the full command is in `registry/index.json`.
-7 of 10 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
+7 of 11 job(s) carry no explicit `deliver_to`. The column is rendered as the live row holds it; whether a null falls back to the creating session or to nothing is the scheduler's contract, and this registry does not assert it.
 
 ### miidas — Miidas Factory
 
@@ -511,7 +512,7 @@ Attribution basis: deliver_to -> lane, name prefix.
 
 | job | home | cron_expr | timezone | enabled | set_goal | goal_template | next_run_at | deliver_to | trigger_cmd |
 |---|---|---|---|---|---|---|---|---|---|
-| `miidas-hq-daily-trigger` | ops | `0 9 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T09:00:00+00:00 | session:e4f96a33-45ac-412e-8788-1b678cf2addb | — |
+| `miidas-hq-daily-trigger` | ops | `0 9 * * *` | UTC | yes | 0 | **absent** | 2026-10-28T09:00:00+00:00 | session:e4f96a33-45ac-412e-8788-1b678cf2addb | — |
 
 Attribution basis: deliver_to -> lane.
 
@@ -568,8 +569,8 @@ Attribution basis: deliver_to -> lane.
 | Core: Subagents | `Core: Subagents` | 30517 | _unstated_ | `a5b34466-1c14-441f-b2c6-6eaf4f316dde` | Telegram: Opencrabs Dev Factory / Subagents [chat:-1003936827469:topic:30517] | resolved | telegram | 2026-10-25T18:45:33Z | — |
 | Telegram: Throttling | `Telegram: Throttling` | 30679 | _unstated_ | `61161247-5b1d-4efe-979b-bf46ffc85c48` | Telegram: Opencrabs Dev Factory / Flood Throttling [chat:-1003936827469:topic:30679] | resolved | telegram | 2026-10-06T20:34:51Z | — |
 | Lifecycle: Restarts | `Lifecycle: Restarts` | 31683 | _unstated_ | `7e1ebbb6-68b3-478b-abc2-b697e70c2f37` | Telegram: Opencrabs Dev Factory / Graceful restart [chat:-1003936827469:topic:31683] | resolved | telegram | 2026-09-29T06:44:05Z | — |
-| Core: Plan & Tasks | `Core: Plan & Tasks` | 31789 | _unstated_ | `462181e9-ad99-4163-bd3d-c983c48049a8` | Telegram: Opencrabs Dev Factory / Core: Plan & Tasks [chat:-1003936827469:topic:31789] | resolved | telegram | 2026-09-28T14:56:57Z | — |
-| Telegram: Rich Text | `Telegram: Rich Text` | 31847 | _unstated_ | `2fbfb2f8-9b08-417a-aae8-c75edc1de1ea` | Fix #1938/#1939/#1940 — marker & link seam | resolved | telegram | 2026-10-25T22:05:17Z | — |
+| Core: Plan & Tasks | `Core: Plan & Tasks` | 31789 | _unstated_ | `462181e9-ad99-4163-bd3d-c983c48049a8` | Telegram: Opencrabs Dev Factory / Plan tool [chat:-1003936827469:topic:31789] | resolved | telegram | 2026-10-27T12:30:12Z | — |
+| Telegram: Rich Text | `Telegram: Rich Text` | 31847 | _unstated_ | `2fbfb2f8-9b08-417a-aae8-c75edc1de1ea` | Fix #1938/#1939/#1940 — marker & link seam | resolved | telegram | 2026-10-27T12:32:16Z | — |
 | Memory: Compaction | `Compaction visibility` | 34653 | _unstated_ | `cbdfde4a-b3fe-457a-817b-5113b938f12d` | Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653] | resolved | telegram | 2026-10-20T12:36:14Z | — |
 | Memory: Vectors | `Memory: Vectors` | 36841 | _unstated_ | `212b3c83-6659-49c8-9984-0cf849f769c1` | Telegram: Opencrabs Dev Factory / Vector memory [chat:-1003936827469:topic:36841] | resolved | telegram | 2026-09-28T19:33:58Z | — |
 | OC DEV TOOLSMITH | `Carrier tools` | 39171 | toolsmith | `2fae1230-de9e-4fa5-aa24-822cf7188c3e` | Toolsmith Issue 255 and PR Dependency Laws | resolved | telegram | 2026-10-18T23:45:27Z | — |
@@ -577,7 +578,7 @@ Attribution basis: deliver_to -> lane.
 | Lifecycle: Boot | `Lifecycle: Boot` | 39862 | _unstated_ | `c10cd97b-2c99-49fa-a1c4-d78a02dfd7d1` | Telegram: Opencrabs Dev Factory / Rich resume wire [chat:-1003936827469:topic:39862] | resolved | telegram | 2026-10-01T12:53:47Z | — |
 | Core: Loop | `Core: Loop` | 39883 | _unstated_ | `40427d4f-af4a-48ba-993f-f5f0b21916c0` | Telegram: Opencrabs Dev Factory / Loop guard [chat:-1003936827469:topic:39883] | resolved | telegram | 2026-09-27T14:32:52Z | — |
 | Config: Schema | `Config: Schema` | 40011 | _unstated_ | `c2ba4ef2-eac3-406c-98d6-c861c5bebec2` | Telegram: Opencrabs Dev Factory / #83 config-manager-warn [chat:-1003936827469:topic:40011] | resolved | telegram | 2026-10-10T01:53:24Z | — |
-| Config: Typings | `Config: Typings` | 40479 | _unstated_ | `aff7ff41-a3a7-4c53-adc5-80fb7a33ba50` | Telegram: Opencrabs Dev Factory / #87 config-write-types [chat:-1003936827469:topic:40479] | resolved | telegram | 2026-10-26T05:07:45Z | — |
+| Config: Typings | `Config: Typings` | 40479 | _unstated_ | `aff7ff41-a3a7-4c53-adc5-80fb7a33ba50` | Telegram: Opencrabs Dev Factory / #87 config-write-types [chat:-1003936827469:topic:40479] | resolved | telegram | 2026-10-27T10:05:41Z | — |
 | Memory: Search | `Memory: Search` | 40524 | _unstated_ | `42a44908-b8f3-42e1-bbd2-f2a672b8056e` | #705 nine bare #679 citations → ex-upstream | resolved | telegram | 2026-10-01T16:30:59Z | — |
 | Browser: CDP | `Browser: CDP` | 40695 | _unstated_ | `aaa8d8ae-a4be-4b89-9f92-01a317075be3` | Telegram: Opencrabs Dev Factory / Harvest rich-host buttons [chat:-1003936827469:topic:40695] | resolved | telegram | 2026-09-27T14:37:22Z | — |
 | Security: Policies | `Security: Policies` | 40696 | _unstated_ | `afe476f8-279b-4d54-b628-c9d7e35873c8` | Telegram: Opencrabs Dev Factory / Harvest retry-429 ladder [chat:-1003936827469:topic:40696] | resolved | telegram | 2026-09-25T16:19:27Z | — |
@@ -632,7 +633,7 @@ Attribution basis: deliver_to -> chat, deliver_to -> lane, name prefix.
 
 ## Unattributed jobs
 
-Read from the declared profile homes: 6 home(s) opened, 71 job row(s). Homes read: avito, code-spike, family, miidas, oc348probe, ops.
+Read from the declared profile homes: 6 home(s) opened, 72 job row(s). Homes read: avito, code-spike, family, miidas, oc348probe, ops.
 
 These rows name no known factory in their `deliver_to` and match no naming prefix. They are rendered rather than dropped: a job the registry cannot place is a finding, not an omission. Each row carries the profile home it was read from, so a row that should not be here can be found and changed without guessing which home owns it.
 
