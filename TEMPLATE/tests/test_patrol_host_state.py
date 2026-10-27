@@ -12555,11 +12555,35 @@ def test_arm8_the_unit_citation_form_is_the_SUBJECT_in_PARENTHESES_not_the_whole
         "#531's citation must be the FIX and nothing else -- the ruling measured exactly one, "
         f"got {cites.get('#531')}"
     )
-    assert "#555" not in cites, (
-        "#555's only citing commit is its own INTAKE row, which touches nothing but the "
-        "ledger: a unit must never have its re-hand withdrawn on the strength of the row "
-        f"that filed it, got {cites.get('#555')}"
+    # THE BOOKKEEPING FILTER, judged on the unit that carries BOTH rows. The earlier version
+    # of this arm asserted `"#555" not in cites`, true while #555 had no work commit -- and
+    # then the fix LANDED, citing the unit and changing `tools/`, so the arm red-ed on its
+    # own subject's repair. The property was never "no entry": it is that the row which
+    # FILED a unit can never discharge it. So the intake row is located in history and its
+    # ABSENCE from the map is the assertion -- a filter loosened back to form-alone would
+    # put `4810aaf4` straight back in.
+    # SUBJECT-ONLY, and this probe learned it the hard way: `git log --grep` scans the WHOLE
+    # message, so `--grep 'ledger(#555)'` returned the FIX commit as well -- its body
+    # discusses the intake row it must exclude. That is #555's own defect reproduced inside
+    # the probe built to test it, which is why the row is located by its subject prefix here
+    # and never by a message scan.
+    history = subprocess.run(
+        ["git", "log", "origin/main", "--format=%h%x1f%s"],
+        cwd=str(RUNNER.REPO), capture_output=True, text=True, timeout=120,
+    ).stdout.splitlines()
+    intake = next(
+        (sha for sha, _, subject in (line.partition("\x1f") for line in history)
+         if subject.startswith("ledger(#555)")), "",
+    )[:8]
+    assert intake, "the #555 intake row is in this repo's history -- the probe is aimed at it"
+    assert intake not in [sha for sha, _ in cites.get("#555", [])], (
+        "the #555 INTAKE row discharges the unit it filed -- the filter must exclude a "
+        f"commit that touches nothing but {RUNNER.UNIT_CITATION_BOOKKEEPING_PREFIX}"
     )
+    # ...and the fix, which changes `tools/`, MUST be credited: the filter excludes the row
+    # and keeps the repair, and an arm that only tested exclusion would pass on a filter
+    # that excluded everything.
+    assert cites.get("#555"), "#555's repair cites the unit; an empty entry means the filter ate it"
     assert [sha for sha, _ in cites.get("#552", [])] == ["45394852"], (
         "#552's citation must be its WORK commit, not its dispatch row, got "
         f"{cites.get('#552')}"
@@ -12636,6 +12660,100 @@ def test_arm10_a_commit_CITATION_is_not_a_claim_and_cannot_discharge_one() -> No
         "made must never withdraw a remedy on evidence nobody read"
     )
     assert blind["coverage"]["owed_close_units"] == 0, blind["coverage"]
+
+def test_arm11_a_tree_only_row_AT_LEVEL_is_named_and_NEVER_becomes_a_problem() -> None:
+    """ARM 11: the #559 contradiction, and the reason it may not be a problem line.
+
+    A reset leaves the rows in the working tree and the commits unreachable, so
+    `rev-list --left-right --count` reads `0 0` and the pusher's own `in-sync` -- that same
+    count -- is satisfied while the rows exist nowhere on the base. The leg NAMES the rows.
+
+    It carries NO problem, and that is the point: a lane's uncommitted append produces the
+    identical read (measured live at `0 0`, tree 4360 vs base 4359, the extra row a claim
+    stamped minutes earlier), so a problem here would be red on a healthy tree -- #83's
+    class. Ruling n=4232: the leg reports the numbers, the reader decides.
+    """
+    leg = RUNNER.row_set_leg(
+        read_at="2026-10-27T02:40:00Z",
+        level_fn=lambda repo, base: (0, 0, None),
+        tree_fn=lambda repo, path: ([4358, 4359, 4360], None),
+        remote_fn=lambda repo, base, path: ([4358, 4359], None),
+    )
+    cov = leg["coverage"]
+    assert leg["status"] == "ASSERTED", leg
+    assert cov["level"] is True, cov
+    assert cov["tree_only"] == [4360], cov
+    assert cov["remote_only"] == [], cov
+    assert cov["rows_examined"] == 3, cov
+    # THE ARM THAT MATTERS: a named contradiction is still not a problem.
+    assert leg["problems"] == [], leg
+    assert leg["excused"] == [], leg
+    assert "reader decides" in cov["verdict"], cov["verdict"]
+
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-27T02:40:00Z",
+                        issues=[])
+    assert "row-set leg" in out, out
+    assert "n=4360" in out, out
+    assert "0/0" in out, out
+    assert "AT LEVEL" in out, out
+    assert "recoverable:" in out, out   # the route is printed, not merely referenced
+    assert "problems: 0" in out, out
+
+
+def test_arm12_an_ordinary_UNPUSHED_append_reads_its_LEVEL_and_is_not_the_defect() -> None:
+    """ARM 12: the same row list ahead of the base is ordinary work in flight.
+
+    The count alone cannot tell these two apart -- that is exactly the defect -- so the
+    LEVEL must travel beside it and the render must say which reading applies. A leg that
+    printed "1 row in the tree and not on origin/main" with no level would be
+    indistinguishable from the incident it was built for.
+    """
+    leg = RUNNER.row_set_leg(
+        read_at="2026-10-27T02:40:00Z",
+        level_fn=lambda repo, base: (2, 0, None),
+        tree_fn=lambda repo, path: ([4359, 4360, 4361], None),
+        remote_fn=lambda repo, base, path: ([4359], None),
+    )
+    cov = leg["coverage"]
+    assert leg["status"] == "ASSERTED", leg
+    assert cov["level"] is False, cov
+    assert cov["tree_only"] == [4360, 4361], cov
+    assert leg["problems"] == [], leg
+
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-27T02:40:00Z",
+                        issues=[])
+    assert "2/0" in out, out
+    assert "not level" in out, out
+    assert "work in flight" in out, out
+    # The AT LEVEL paragraph is the defect's own reading and must NOT appear here.
+    assert "AT LEVEL" not in out, out
+
+
+def test_arm13_a_read_that_CANNOT_be_made_is_NOT_RUN_with_its_reason() -> None:
+    """ARM 13: a zero standing in for "could not look" is what made the incident silent.
+
+    Every dependency is injected, so each of the three failure points must produce NOT RUN
+    WITH A REASON rather than an empty set that renders as a clean round.
+    """
+    for kwargs in (
+        {"level_fn": lambda repo, base: (0, 0, "no such base ref: origin/main")},
+        {"level_fn": lambda repo, base: (0, 0, None),
+         "tree_fn": lambda repo, path: ([], "ledger unreadable")},
+        {"level_fn": lambda repo, base: (0, 0, None),
+         "tree_fn": lambda repo, path: ([1], None),
+         "remote_fn": lambda repo, base, path: ([], "base ref unreadable")},
+    ):
+        leg = RUNNER.row_set_leg(read_at="2026-10-27T02:40:00Z", **kwargs)
+        assert leg["status"] == "NOT RUN", leg
+        assert leg["problems"] == [], leg
+        reason = leg["coverage"]["reason"]
+        assert reason, leg
+        out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-27T02:40:00Z",
+                            issues=[])
+        assert "NOT RUN" in out, out
+        assert reason in out, out
+        # A NOT RUN round must never print a row population: there is none.
+        assert "row(s) in the tree and NOT on" not in out, out
 
 def test_arm4_the_grace_is_DERIVED_per_job_and_PRINTED_with_its_derivation() -> None:
     """ARM 4: a hardcoded constant must be unable to produce these numbers.

@@ -11002,6 +11002,318 @@ def render_shared_tree_rider(rider: dict) -> list[str]:
     return lines
 
 
+# ---------------------------------------------------------------------------
+# #559 — THE ROW-SET LEG. The level count is not a work-integrity check.
+#
+# A `git reset --mixed origin/main` in the SHARED TREE keeps the working tree, so committed
+# ledger rows survive on disk while their commits become unreachable. Every instrument a
+# lane then consults reads CLEAN, and each is blind for a STRUCTURAL reason rather than by
+# bug: `git rev-list --left-right --count` prints `0 0` because a reset makes that
+# arithmetic true BY CONSTRUCTION, and the pusher's `in-sync` is that same count
+# (`tools/publish.py:486-488`). The count is not lying; it answers a different question.
+#
+# The discriminator costs one `git show` and a set difference: under `0 0` there are no
+# local commits, so a row in the tree that `origin/main` does not carry cannot be explained
+# by "not pushed yet". That is the whole read.
+#
+# WHY THIS CARRIES NO PROBLEM LINE, MEASURED RATHER THAN PREFERRED. A `--mixed` reset and a
+# lane that appended a row without committing are INDISTINGUISHABLE from git's point of
+# view: both leave HEAD level with origin, the ledger dirty against HEAD, and rows in the
+# tree that origin lacks. The second case is CONSTANT in a shared tree — measured while
+# this leg was written, `0 0` with tree 4360 against origin 4359, the extra row being an
+# uncommitted claim stamped minutes earlier — so a problem line would be red on the ordinary
+# state of a healthy tree, which is #83's class: a permanent report of a state nobody can
+# fix. The ruling (n=4232) resolved exactly this: *"it reports the row numbers and the
+# reader decides ... the alarm is cheap and always right about the fact, and the cause is a
+# judgement the numbers support."* So the rows are NAMED, the coverage PRINTS, and the
+# verdict is not this leg's to give.
+#
+# NOT the detector: `git fsck --unreachable`. Measured at the ruling, it reports NONE of the
+# three orphans (`9b3df74e`, `294f8da2`, `eb1fa764`) because the reflog still references
+# them, at 171.61 s a run — blind for exactly the 30 days (`gc.reflogExpireUnreachable`) in
+# which recovery is still possible. The reflog scan below is the RECOVERY route, documented
+# beside the read rather than gated: over 3,485 entries its population was 202 commits,
+# which is too noisy to judge.
+# ---------------------------------------------------------------------------
+
+ROW_SET_BASE_REF = "origin/main"
+"""The ref the level count and the remote row set are both read from — the ruling's own."""
+
+ROW_SET_LEDGER = "evidence/ledger.jsonl"
+"""The one path whose row identity is the subject. A lost CLOSE row is the case worth
+catching: it makes finished work read as still open (#555's class, one surface over)."""
+
+ROW_SET_RECOVERY = (
+    "git reflog --all | while read -r sha rest; do git show --name-only --format= "
+    f"\"$sha\" | grep -q \"^{ROW_SET_LEDGER}$\" && git merge-base --is-ancestor "
+    f"\"$sha\" {ROW_SET_BASE_REF} || echo \"recoverable: $sha\"; done"
+)
+"""The RECOVERY route, printed beside the read because `fsck` cannot help (#559). It lists
+every reflog entry whose commit touches the ledger and is not an ancestor of the base — the
+population is noisy, which is why it is documentation and not a check."""
+
+ROW_SET_NAME_CAP = 40
+"""How many differing row numbers print before the list is summarised. A cap is stated with
+its own count rather than silently truncating: the population is always printed in full in
+the coverage, so a capped line can never read as the whole set."""
+
+_ROW_SET_N = re.compile(r'"n"\s*:\s*(\d+)')
+
+
+def row_set_level(repo: Path = REPO, base: str = ROW_SET_BASE_REF) -> tuple[int, int, str | None]:
+    """`(ahead, behind, error)` from the count every lane already trusts — or the error."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-list", "--left-right", "--count", f"{base}...HEAD"],
+            cwd=str(repo), capture_output=True, text=True, timeout=60,
+        )
+    except Exception as exc:  # noqa: BLE001 — any failure is "could not look"
+        return 0, 0, f"the level count could not be read: {exc}"
+    if out.returncode != 0:
+        return 0, 0, (
+            "the level count could not be read: "
+            f"`git rev-list --left-right --count {base}...HEAD` exited "
+            f"{out.returncode}: {out.stderr.strip()[:200]}"
+        )
+    parts = out.stdout.split()
+    if len(parts) != 2 or not all(p.isdigit() for p in parts):
+        return 0, 0, f"the level count was not two integers: {out.stdout.strip()[:120]!r}"
+    return int(parts[1]), int(parts[0]), None
+
+
+def row_set_numbers(text: str) -> list[int]:
+    """Every row number in a ledger's bytes, in file order.
+
+    The `n` field is parsed from the JSON rather than by splitting on a delimiter: a
+    `detail` carries arbitrary prose, and a line-oriented split would take a number out of
+    someone's sentence. A line that does not parse is SKIPPED and the count of skipped
+    lines is the caller's to report — never silently absorbed into a row set.
+    """
+    numbers: list[int] = []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        match = _ROW_SET_N.search(line)
+        if match:
+            numbers.append(int(match.group(1)))
+    return numbers
+
+
+def row_set_tree(repo: Path = REPO, path: str = ROW_SET_LEDGER) -> tuple[list[int], str | None]:
+    """The working tree's row numbers — the population the shared tree still carries."""
+    try:
+        text = (Path(repo) / path).read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:  # noqa: BLE001
+        return [], f"the working tree's {path} could not be read: {exc}"
+    return row_set_numbers(text), None
+
+
+def row_set_remote(
+    repo: Path = REPO, ref: str = ROW_SET_BASE_REF, path: str = ROW_SET_LEDGER,
+) -> tuple[list[int], str | None]:
+    """The base ref's row numbers, read from the OBJECT and never from the tree.
+
+    Read through `git show <ref>:<path>` so the comparison is against what the remote
+    actually carries. A leg that read `origin/main` from the working copy would compare the
+    tree with itself and could never see this class at all.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "show", f"{ref}:{path}"],
+            cwd=str(repo), capture_output=True, text=True, timeout=120,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return [], f"{ref}:{path} could not be read: {exc}"
+    if out.returncode != 0:
+        return [], (
+            f"{ref}:{path} could not be read: `git show` exited {out.returncode}: "
+            f"{out.stderr.strip()[:200]}"
+        )
+    return row_set_numbers(out.stdout), None
+
+
+def row_set_leg(
+    *,
+    read_at: str,
+    repo: Path = REPO,
+    base: str = ROW_SET_BASE_REF,
+    path: str = ROW_SET_LEDGER,
+    level_fn=None,
+    tree_fn=None,
+    remote_fn=None,
+) -> dict:
+    """The tree's ledger rows against the base ref's — the level count's own contradiction.
+
+    A REPORT, not a verdict: see the block comment above for the measurement that decides
+    that, and for why a problem line here would be red on a healthy shared tree.
+
+    Three dependencies are injected for the reason every leg here has them: a probe must
+    drive the contradiction, the ordinary case and NOT RUN without a live repository, and a
+    leg that can only run against the live box cannot be probed at all when the live box is
+    what is wrong.
+
+    A read that cannot be made is NOT RUN with its reason, never an empty set: the whole
+    point of this leg is that a zero standing in for "could not look" is what made the
+    incident silent.
+    """
+    level_fn = level_fn or row_set_level
+    tree_fn = tree_fn or row_set_tree
+    remote_fn = remote_fn or row_set_remote
+
+    ahead, behind, level_error = level_fn(repo, base)
+    if level_error:
+        return {
+            "name": "row-set",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "read_at": read_at,
+                "base": base,
+                "path": path,
+                "reason": level_error,
+                "recovery": ROW_SET_RECOVERY,
+            },
+        }
+
+    tree_numbers, tree_error = tree_fn(repo, path)
+    if tree_error:
+        return {
+            "name": "row-set",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "read_at": read_at,
+                "base": base,
+                "path": path,
+                "ahead": ahead,
+                "behind": behind,
+                "reason": tree_error,
+                "recovery": ROW_SET_RECOVERY,
+            },
+        }
+
+    remote_numbers, remote_error = remote_fn(repo, base, path)
+    if remote_error:
+        return {
+            "name": "row-set",
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": [],
+            "coverage": {
+                "read_at": read_at,
+                "base": base,
+                "path": path,
+                "ahead": ahead,
+                "behind": behind,
+                "tree_rows": len(tree_numbers),
+                "reason": remote_error,
+                "recovery": ROW_SET_RECOVERY,
+            },
+        }
+
+    tree_set = set(tree_numbers)
+    remote_set = set(remote_numbers)
+    tree_only = sorted(tree_set - remote_set)
+    remote_only = sorted(remote_set - tree_set)
+
+    return {
+        "name": "row-set",
+        "status": "ASSERTED",
+        "problems": [],
+        "excused": [],
+        "coverage": {
+            "read_at": read_at,
+            "base": base,
+            "path": path,
+            "ahead": ahead,
+            "behind": behind,
+            # THE CONTRADICTION ITSELF. `level` is the shape that makes a tree-only row
+            # unexplainable by "not pushed yet": no local commits, so nothing is in flight.
+            "level": ahead == 0 and behind == 0,
+            "tree_rows": len(tree_numbers),
+            "remote_rows": len(remote_numbers),
+            "tree_only": tree_only,
+            "tree_only_count": len(tree_only),
+            "remote_only": remote_only,
+            "remote_only_count": len(remote_only),
+            "rows_examined": len(tree_set | remote_set),
+            "recovery": ROW_SET_RECOVERY,
+            # STATED, because the leg's own silence is what a reader must be able to judge.
+            "verdict": "none -- the rows are named and the reader decides (#559 ruling n=4232)",
+        },
+    }
+
+
+def render_row_set(read: dict) -> list[str]:
+    """The row-set report: coverage, the differing row numbers, and the recovery route.
+
+    Every branch prints the instant and the population. A tree-only row prints with the
+    LEVEL it was read at, because the same list means different things at `0 0` (nothing in
+    flight, so it is the defect's shape) and ahead of the base (an ordinary unpushed
+    append). Printing the count without the level would make the two indistinguishable,
+    which is the defect this leg exists to end.
+    """
+    head = "row-set leg (the level count is not a work-integrity check)"
+    coverage = read.get("coverage") or {}
+    # The instant may sit on the LEG or on its coverage: the round passes the whole leg
+    # here, so reading only one of the two is how a live read renders "unstated".
+    instant = coverage.get("read_at") or read.get("read_at") or "unstated"
+    if read.get("status") == "NOT RUN":
+        return [
+            f"{head} — NOT RUN: {coverage.get('reason') or 'reason not stated'} "
+            f"(read attempted at {instant})"
+        ]
+    lines = [
+        f"{head} — read at {instant}",
+        f"  {coverage.get('path')} against {coverage.get('base')}: "
+        f"tree {coverage.get('tree_rows')} row(s), base {coverage.get('remote_rows')} "
+        f"row(s), {coverage.get('rows_examined')} row number(s) examined",
+        f"  level (ahead/behind): {coverage.get('ahead')}/{coverage.get('behind')}"
+        + (
+            " — LEVEL, so no local commit is in flight: a tree-only row is either "
+            "orphaned from a reset or not committed at all"
+            if coverage.get("level")
+            else " — not level, so a tree-only row is explainable by work in flight"
+        ),
+    ]
+    tree_only = coverage.get("tree_only") or []
+    if tree_only:
+        shown = tree_only[:ROW_SET_NAME_CAP]
+        more = len(tree_only) - len(shown)
+        named = ", ".join(f"n={n}" for n in shown)
+        lines.append(
+            f"  {len(tree_only)} row(s) in the tree and NOT on {coverage.get('base')}: "
+            f"{named}" + (f" ... and {more} more" if more else "")
+        )
+        if coverage.get("level"):
+            lines.append(
+                "    AT LEVEL: nothing is in flight, so either a reset orphaned these "
+                "rows' commits or a lane appended them and has not committed. The rows "
+                "are the fact; the cause is not this leg's to give (#559)."
+            )
+    else:
+        lines.append(
+            f"  0 row(s) in the tree and not on {coverage.get('base')} — the tree carries "
+            "nothing the base does not"
+        )
+    remote_only = coverage.get("remote_only") or []
+    if remote_only:
+        shown = remote_only[:ROW_SET_NAME_CAP]
+        more = len(remote_only) - len(shown)
+        named = ", ".join(f"n={n}" for n in shown)
+        lines.append(
+            f"  {len(remote_only)} row(s) on {coverage.get('base')} and NOT in the tree: "
+            f"{named}" + (f" ... and {more} more" if more else "")
+        )
+    lines.append(
+        "  recovery route when these are orphans (fsck cannot see them for 30 days): "
+        f"{coverage.get('recovery')}"
+    )
+    return lines
+
+
 def worktree_records(repo: Path = REPO) -> tuple[list[dict], str | None]:
     """`git worktree list --porcelain` parsed into records — or (records, error).
 
@@ -13259,6 +13571,14 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 for path in cov["missing_directory"]:
                     lines.append(f"    ~ {path}")
             lines.append(f"  read at {cov['read_at']}")
+        elif leg["name"] == "row-set":
+            # ONE render home, so a clean round, a contradiction and NOT RUN all read the
+            # same way and neither arm can drift from the other (#392's rule one leg over).
+            lines.extend(render_row_set(leg))
+            lines.append(f"  excused: {len(leg['excused'])}")
+            lines.append(f"  problems: {len(leg['problems'])}")
+            lines.append("")
+            continue
         elif leg["name"] == "pacemaker-presence":
             # The EXAMINED POPULATION travels with the verdict, so a clean read over zero
             # owners is never indistinguishable from a verified one (#242). Every owner is
@@ -14225,6 +14545,7 @@ def main(
     predicate=None,
     publish_fn=None,
     worktree_fn=None,
+    row_set_fn=None,
     presence_fn=None,
     dirty_paths_fn=None,
     ruling_scope_fn=None,
@@ -14552,6 +14873,12 @@ def main(
         ), read_at),
         leg_guard("publish-freshness", lambda: (publish_fn or publish_freshness_leg)(read_at=read_at), read_at),
         leg_guard("worktree", lambda: (worktree_fn or worktree_leg)(read_at=read_at), read_at),
+        # A REPORT, for the reason the leg's own block comment measures: the defect's shape
+        # and a lane's uncommitted append are indistinguishable, and the second is constant
+        # in a shared tree, so a problem line here would be red on a healthy tree (#83's
+        # class). The ruling orders the READ, the named rows and the coverage -- not a
+        # verdict (#559, n=4232).
+        leg_guard("row-set", lambda: (row_set_fn or row_set_leg)(read_at=read_at), read_at),
         leg_guard("pacemaker-presence", lambda: (presence_fn or live_pacemaker_presence_leg)(
             cron_rows, homes_read, unreached, prefixes=prefixes_fn(),
             read_at=read_at,
