@@ -220,7 +220,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-26T06:27:23Z",
+  "attested_at": "2026-10-27T06:46:32Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
