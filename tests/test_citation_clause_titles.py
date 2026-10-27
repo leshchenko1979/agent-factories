@@ -45,8 +45,11 @@ SELF_NAMES = {OWN.name}
 
 # Interpolation of the scope: source instruments and gates. `evidence/` -- the ledger -- is
 # outside this scope by a directory boundary, and NOT by the reason that excludes prose: a
-# ledger ROW numbers no sections of its own, so every `§N` it carries is a citation into
-# another document. Judging that is the ledger's OWN leg, which lives with the ledger's gate
+# ledger ROW MAY number its own sections (31 post-boundary rows carry `## N.` headings,
+# measured 2026-10-27 under #547), but it carries no DOCUMENT token -- so every section
+# number in it cites another document or a NAMED ROW, never a `*.md` inside this tree.
+# Judging that is
+# the ledger's OWN leg, which lives with the ledger's gate
 # set (`docs/instruments/ledger.md` section 5). Docs are the surface the prose reason covers:
 # they may number their own sections. Neither reason moves a path into `SCOPE_DIRS` -- this
 # gate keeps ONE population and ONE predicate (#262, ruled at ledger `n=2246`).

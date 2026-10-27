@@ -1,10 +1,6 @@
 {
-  "_note": "THIS factory's declared exemptions for tests/test_ledger_citation_declared.py (#317). The gate reads a ledger row's OWN VOICE and reds when a `§N` has no document token (a `*.md` name) in the 70 characters BEFORE it, because a ledger row numbers no sections of its own: a bare `§N` in a row can only point at ANOTHER document and resolves in no tree. This store exists because the ledger is APPEND-ONLY: a row written at or after the declared boundary has an EMPTY REPAIR SPACE -- the row is immutable once published, and `ledger.py repair --append-detail` inserts BEFORE the canonical trailer, i.e. AFTER the citation, so the bare number survives every lawful repair. `docs/instruments/ledger.md` section 9.6 names excusing as the remedy for exactly this shape. THE ADMISSION RULE: every entry names ONE row and carries a `reason` stating what the citation actually points at and why the row's prose is correct as written -- an exemption nobody can check is forgiveness, and this list is debt. An entry that names a row carrying NO bare citation is a STALE exemption and a gate ERROR, so the store can only ever hold rows that are actually red. Every matched entry prints as an `excused:` line on EVERY run and is counted in the population, so 'clean' and 'excused' are never the same output. A malformed or duplicated entry, or an unparseable store, is an ERROR. Absent or empty means no exemptions, never a failure. THE FIVE CLASSES OF ADMITTED ROW, each named in its reason: (1) the document is named EARLIER IN THE SAME ROW, beyond the 70-character window -- the window is a heuristic and the row is resolvable; (2) the citation is a ROW REFERENCE's own numbered part (`n=2861 §5(a)`), and a row is not a document; (3) the citation is QUOTED prose reporting a bare citation that was repaired -- a quotation, not a citation; (4) the document is the meta-factory SKILL cited by its in-tree name (`SKILL §6`), whose numbering differs per tree; (5) the row is a ruling about ONE instrument and the section numbers are that instrument's own, named at the row's head. The gate cannot tell these from neglect, which is why they are declared here rather than silently passed.",
+  "_note": "THIS factory's declared exemptions for tests/test_ledger_citation_declared.py (#317). The gate reads a ledger row's OWN VOICE and reds when a `§N` has no document token (a `*.md` name) in the 70 characters BEFORE it, because a `§N` carrying NO QUALIFIER A READER CAN FOLLOW has nothing to resolve against. THE PREMISE THIS NOTE CARRIED UNTIL #547 WAS FALSE -- *\"a ledger row numbers no sections of its own\"* -- measured 2026-10-27 at 31 post-boundary rows carrying `## N.` / `### N.` headings (23 when #547 was filed, so the class grows with every cycle receipt that numbers its parts). The gate now DISCRIMINATES four qualifiers mechanically and reports only what none of them covers: a `*.md` document token before the number; a matching numbered heading of the CITING ROW; a row reference (`n=NNNN`) in the same clause before the number; and ANAPHORA -- the same number already qualified earlier in the row. This store exists because the ledger is APPEND-ONLY: a row written at or after the declared boundary has an EMPTY REPAIR SPACE -- the row is immutable once published, and `ledger.py repair --append-detail` inserts BEFORE the canonical trailer, i.e. AFTER the citation, so the bare number survives every lawful repair. `docs/instruments/ledger.md` section 9.6 names excusing as the remedy for exactly this shape. THE ADMISSION RULE: every entry names ONE row and carries a `reason` stating what the citation actually points at and why the row's prose is correct as written -- an exemption nobody can check is forgiveness, and this list is debt. An entry that names a row carrying NO bare citation is a STALE exemption and a gate ERROR, so the store can only ever hold rows that are actually red. Every matched entry prints as an `excused:` line on EVERY run and is counted in the population, so 'clean' and 'excused' are never the same output. A malformed or duplicated entry, or an unparseable store, is an ERROR. Absent or empty means no exemptions, never a failure. THE FIVE CLASSES OF ADMITTED ROW, each named in its reason: (1) the document is named EARLIER IN THE SAME ROW, beyond the 70-character window -- the window is a heuristic and the row is resolvable; (2) the citation is a ROW REFERENCE's own numbered part (`n=2861 §5(a)`) that the mechanical token match cannot reach, because the row reference sits in an ASIDE the own-voice scope deletes or the reference is second-order; (3) the citation is QUOTED prose reporting a bare citation that was repaired -- a quotation, not a citation; (4) the document is the meta-factory SKILL cited by its in-tree name (`SKILL §6`), whose numbering differs per tree; (5) the row is a ruling about ONE instrument and the section numbers are that instrument's own, named at the row's head. The gate cannot tell these from neglect, which is why they are declared here rather than silently passed. AFTER #547 the mechanical qualifiers above took this store from 51 entries to 38: the 13 removed were rows whose citation the predicate now qualifies for itself, so the class stopped needing a hand-written reason. The two ROW-REFERENCE entries that remain are the shapes no token match can follow.",
   "exemptions": [
-    {
-      "row": 2277,
-      "reason": "#305 ruling. The row names `skills/meta-factory/SKILL.md` in its own first clause ('`skills/meta-factory/SKILL.md` §5 prose'); the second occurrence reads 'the same §5', an anaphor whose referent is that named document. Class 1 -- named earlier in the same row."
-    },
     {
       "row": 2278,
       "reason": "#274 ruling. 'CLASS. SKILL §8 -- a counter's NAME is not its PREDICATE' cites the meta-factory SKILL by its in-tree name; 'SKILL' is not a `.md` token, and the doctrine deliberately refuses it because every factory carries its own SKILL with its own numbering. Class 4."
@@ -18,20 +14,12 @@
       "reason": "#77 dispatch. 'add to SKILL §6 (measurement law) the clause' -- the dispatch names both the document by its in-tree name and the section's subject in the same clause. Class 4."
     },
     {
-      "row": 2309,
-      "reason": "#315 ruling. The row opens '**The gap.** `SKILL.md` §6 names every periodic process owner', naming the document with its token; the later 'a §6-named owner' refers back to it from well outside the 70-character window. Class 1."
-    },
-    {
       "row": 2363,
       "reason": "survey-2026-10-05 score. '§5.2 GATE-BUDGET RE-DERIVATION LEG' is the meta-factory SKILL's gate-budget clause, the survey instrument this row scores against; the row's population line names the survey. Class 4."
     },
     {
       "row": 2364,
       "reason": "survey-2026-10-05 run. Same clause as the score row n=2363 it reports: '§5.2' twice, both the meta-factory SKILL's gate-budget re-derivation leg that the run executed. Class 4."
-    },
-    {
-      "row": 2366,
-      "reason": "#326 ruling. '`n=2355` is the §9.1 re-mint of the unpublished `n=2350`' -- `docs/instruments/ledger.md` §9.1, the re-mint clause, in a ruling that is entirely about the ledger instrument's own protocol. Class 5."
     },
     {
       "row": 2407,
@@ -66,10 +54,6 @@
       "reason": "#359 close. 'the §2 declared-set reading is STATED' -- the same clause as the claim n=2525 and run n=2526 of the same unit. Class 4."
     },
     {
-      "row": 2538,
-      "reason": "#353 claim. The row names `kit.md` at its head ('defect(kit): kit.md §4.1 / §9.2-F1'); every later section number (§9.2, §7.2, §2.1, §4.1, §7.2, §9.2) is a subsection of that same `kit.md`, listed in an enumeration that runs far past the 70-character window. Class 1."
-    },
-    {
       "row": 2681,
       "reason": "survey-2026-10-06 score. '§5.2' -- the meta-factory SKILL's gate-budget re-derivation leg, the same survey instrument scored in n=2363 one day earlier. Class 4."
     },
@@ -98,24 +82,12 @@
       "reason": "#438 intake. 'Dispatched to the HQ lane, which owns §11 canonical-trailer doctrine' -- the document is named by the duty's own name in the same clause, and §11 is the meta-factory SKILL's canonical-trailer section. Class 1/4."
     },
     {
-      "row": 2878,
-      "reason": "#301 run. 'Ruling n=2861 §5(a) names ONLY #317 and #320' and four further '§5' -- these are a RULING ROW's own numbered part, not a document's section. A row reference is deliberately not a document (`n=950 §4` is the dominant bare shape this gate tolerates by design). Class 2."
-    },
-    {
       "row": 2880,
-      "reason": "patrol-verify-2026-10-08T00 run. 'RULED at n=2861 (§5)' and 'this is a CORRECTION TO §5' -- the numbered part of ruling row n=2861. Class 2."
+      "reason": "patrol-verify-2026-10-08T00 run. 'RULED at n=2861 (§5)' and 'this is a CORRECTION TO §5' -- the numbered part of ruling row n=2861. Class 2. SURVIVES #547: its qualifier `n=2861 (§5(a)-(d))` sits INSIDE A PARENTHETICAL, and `own_voice_text` DELETES aside content as a quotation, so the own-voice §5 has no antecedent and no token the gate can match. This entry is what makes the row's real referent visible instead of silently bare."
     },
     {
       "row": 2883,
-      "reason": "#301 run. 'its §5 duty is already discharged' and '§5's 7-day default' -- the duty named in ruling n=2861 §5. Class 2."
-    },
-    {
-      "row": 2958,
-      "reason": "#448 ruling. The row names `docs/instruments/ledger.md` at its head ('exposed a gap in `docs/instruments/ledger.md` §9.1, and the gap is closed here') and then cites §9.1 five more times in the same ruling; §12 is the meta-factory SKILL's template-twin clause, quoted as 'P30 / §12'. Class 1."
-    },
-    {
-      "row": 3009,
-      "reason": "#450 ruling. '§7.5' four times is `docs/instruments/template-instruments.md` §7.5, which the row names by path and line ('template-instruments.md:776 (both twins)') before citing it. Class 1."
+      "reason": "#301 run. 'its §5 duty is already discharged' and '§5's 7-day default' -- the duty named in ruling n=2861 §5. Class 2. SURVIVES #547: the row never names n=2861 at all -- its §5 points back to n=2878's and n=2880's §5, a SECOND-ORDER reference that no token match can follow, so the mechanical predicate reads it bare and this entry records that the referent is real."
     },
     {
       "row": 3012,
@@ -154,10 +126,6 @@
       "reason": "hq-cycle-2026-10-11T06 run. '§9.1' names `docs/instruments/ledger.md` in the same sentence ('Per docs/instruments/ledger.md §9.1 the unpublished rows were RE-DERIVED'); '§5.4.3' is the SKILL's clause the cycle executed; '§9' is the SKILL's unattended-lane clause. Class 1."
     },
     {
-      "row": 3143,
-      "reason": "#424 ruling. '`n=3102` §2' three times -- a ROW reference's own numbered part, used to name a prior ruling's clause. A row is not a document. Class 2."
-    },
-    {
       "row": 3880,
       "reason": "#522 claim. Class 5 -- ONE instrument's own clauses. Every section number in this row is a clause of `docs/instruments/kit.md`, the instrument the claimed defect is against: 'Doc sentence applied verbatim to §6.1 as HQ authored it' reports applying HQ's authored class-vocabulary sentence to that delivery doc's closure field. The row abbreviates the document to 'Doc' and never spells the token, which is a real prose defect in a PUBLISHED row -- and #317 makes that unrepairable, because `repair --append-detail` inserts before the canonical trailer and therefore after the citation, leaving an empty repair space. The referent is recorded here because the abbreviation cannot be corrected in place; the next row of this unit names the document properly."
     },
@@ -176,26 +144,6 @@
     {
       "row": 3886,
       "reason": "#523 close. Identical body to n=3882 and n=3884. '§9.2's row measures the gap rather than a word list' names `docs/instruments/kit.md` §9.2's F3 row, which is this subject's own remedy and the last criterion in the table. Class 5 -- the row is about ONE instrument and every section number in it is that instrument's own."
-    },
-    {
-      "row": 4049,
-      "reason": "#540 ruling, SELF-REFERENCE. The row carries literal numbered headings in its own body -- `## 6. A second defect, filed as its own unit` is its sixth section -- so `§6` names THIS ROW's own sixth section, not another document's. The gate's premise that a ledger row numbers no sections of its own is true of ordinary rows and false of a ruling row whose body is organised as `## N.` sections; three occurrences all point at that heading ('land §6's leg fix', '§6's discriminator is a separate unit', '#541 filed separately for §6'). Class 2 extended to a self-reference -- the referent is a row's own numbered part, and a row is not a document. The prose is correct as written: rewriting it to spell a `*.md` name would misname the referent, because the discriminator lives in the ruling text and in no tree file."
-    },
-    {
-      "row": 4050,
-      "reason": "#541 ruling, Class 2 -- a ROW REFERENCE's own numbered part. The row reads 'Full analysis and the store/gate half live in #540's ruling `n=4049` §6', so `§6` is explicitly qualified by the row reference `n=4049` and points at that ruling's sixth section. A row is not a document, so no `*.md` token exists to place in the 70-character window, and the citation resolves in no tree by design. The prose is correct as written and needs no repair."
-    },
-    {
-      "row": 4068,
-      "reason": "hq-cycle-2026-10-22T03 run. BOTH occurrences REPORT the bare-citation shape rather than commit it, and each is qualified by a row reference in the same clause. (1) 'The third is mine: n=4049 and n=4050 carry bare §6 citations naming no document' -- the `§6` is the object of 'carry', naming the two rows' citations, and the same sentence says both were already declared with their referent stated (this store's n=4049 and n=4050 entries). (2) 'n=4049 §6 is its OWN sixth section' -- a ROW REFERENCE's own numbered part, n=4049's sixth section, which is precisely the referent recorded in this store's n=4049 entry (that ruling body is organised as `## N.` headings). Class 2 -- a row reference's numbered part, and a row is not a document -- carrying class 3's reporting character, since the row announces the shape rather than citing a document. The prose is correct as written: it is the cycle's own account of the two exemptions it recorded, and rewriting it to spell a `*.md` token would misname a referent that lives in a ruling body and in no tree file."
-    },
-    {
-      "row": 4121,
-      "reason": "correction-4120 run, Class 2 -- a ROW REFERENCE's own numbered part, BOTH occurrences. (1) The row's heading reads '## Correction to `n=4120` §4 — the unclaimed backlog is 14 units, and two of them are this lane's own'. (2) Its body reads '`n=4120` §4 reported the dispatched-never-claimed set as **11 units**'. In both, `§4` is explicitly qualified by the row reference `n=4120` and points at that row's fourth section, whose heading is '## 4. The class my own ruling leaves unenforced' -- VERIFIED PRESENT in n=4120's own detail, so the referent exists and is unambiguous. A row is not a document, so no `*.md` token exists to place in the 70-character window, and the citation resolves in no tree by design: the referent lives in a ledger row's body and in no tree file. Rewriting it to spell a `*.md` name would MISNAME it. Same shape as this store's n=4050 and n=4068 entries. The prose is correct as written and needs no repair."
-    },
-    {
-      "row": 4124,
-      "reason": "INTAKE #547, Class 2 -- a ROW REFERENCE's own numbered part, and the SHARPEST instance in this store. The row reads 'n=4121 carries two bare §4 citations qualified by `n=4120`'. The `§4` is the object of 'carries', reporting n=4121's citation, and the same clause names its referent: n=4120's fourth section, whose heading '## 4. The class my own ruling leaves unenforced' is VERIFIED PRESENT in n=4120's own detail. A row is not a document, so no `*.md` token exists to place in the 70-character window. WHY THIS ENTRY IS ITSELF THE EVIDENCE FOR #547: n=4124 is the INTAKE ROW that FILES #547, whose whole subject is that this gate cannot distinguish a row-qualified citation from a dangling one. Filing the defect therefore required the exemption the defect is about -- the gate reds on a row that reports it. That is the class, demonstrated on the reporting act itself rather than argued. Same shape as this store's n=4050, n=4068 and n=4121 entries; the prose is correct as written and needs no repair."
     },
     {
       "row": 4133,

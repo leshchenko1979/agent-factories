@@ -2712,8 +2712,10 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     #     section number and are never re-read out of tree. The shipped citation gate
     #     (`tests/test_citation_clause_titles.py`) covers `tools/`, `tests/` and their
     #     TEMPLATE twins, and the ledger sits outside all four -- but it sits outside by a
-    #     DIRECTORY BOUNDARY, not by that gate's own reason for excluding prose, because a
-    #     ledger row numbers no sections of its own. So the shipped gate keeps ONE
+    #     DIRECTORY BOUNDARY, not by that gate's own reason for excluding prose: a ledger row
+    #     MAY number its own sections (#547, 31 post-boundary rows at 2026-10-27), but it
+    #     carries no DOCUMENT token, so a section number in it cites another document or a
+    #     named ROW and never a `*.md` inside this tree. So the shipped gate keeps ONE
     #     population and ONE predicate and `SCOPE_DIRS` gains nothing; this leg is separate
     #     and lives with the ledger's OWN gate set (`docs/instruments/ledger.md` section 5).
     #     The predicate is QUOTING-AWARE and that is the load-bearing half: a row's `detail`

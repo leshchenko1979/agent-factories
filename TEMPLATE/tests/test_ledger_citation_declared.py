@@ -12,8 +12,11 @@ dying (bare share 62-77% by band).
 
 WHY THE LEDGER GETS ITS OWN LEG RATHER THAN AN ENTRY IN THE SHIPPED GATE'S SCOPE_DIRS.
 The shipped gate excludes prose for a PROPERTY -- *"docs are prose that may number their
-own sections"* -- and a ledger row numbers no sections of its own: every `\u00a7N` it carries
-is a citation INTO another document. So the ledger sits outside that gate by a DIRECTORY
+own sections"* -- and a ledger row MAY number its own sections (31 post-boundary rows carry
+`## N.` / `### N.` headings, measured 2026-10-27 under issue #547; it was 23 when the issue
+was filed, so the class grows with every cycle receipt that numbers its parts). What a row
+cannot carry is a DOCUMENT: there is no `*.md` token to place, so the qualifier a reader
+needs is absent even when the section is real. So the ledger sits outside that gate by a DIRECTORY
 BOUNDARY, not by the argument that justifies excluding docs. The shipped gate keeps ONE
 population and ONE predicate; this leg is separate, and lives with the ledger's own gate
 set (`docs/instruments/ledger.md` section 5). The owner's own words (register `q22`,
@@ -23,9 +26,13 @@ Leave the check that ships to every factory exactly as it is, but correct its co
 THE PREDICATE, and the half that is load-bearing.
 
 * **BARE** -- a `\u00a7N` is bare when no document token appears in the `DOC_WINDOW`
-  characters BEFORE it. A row numbers no sections of its own, so a bare `\u00a7N` in a row can
-  only point at ANOTHER document: it cannot resolve inside the ledger, and a reader who
-  meets it out of tree has nothing to resolve it against. The harm is measured, not
+  characters BEFORE it. A row MAY number its own sections, so "bare" cannot mean "resolves
+  in no tree": it means NO QUALIFIER A READER CAN FOLLOW. Two qualifiers are mechanically
+  checkable and both count (#547) -- the cited number matches a `^#{2,3} N[.]` heading in the
+  CITING ROW (self-reference), or a row reference (`n=NNNN`) sits in the SAME CLAUSE before
+  the number (cross-row reference). What neither can supply is a DOCUMENT token, so the
+  gate's subject is a `\u00a7N` carrying no document, no row reference and no matching own
+  heading -- and that shape still reds. The harm is measured, not
   theoretical (#184): a brief carrying a bare `\u00a711` reached Miidas HQ asserting *"your law
   \u00a711 prescribes a remedy"* against a document whose section 11 is its Verification law
   and which contains no occurrence of "repair". The window's DIRECTION is the shipped
@@ -39,8 +46,13 @@ THE PREDICATE, and the half that is load-bearing.
   that way -- `SKILL.md \u00a7State`, `docs/measurement-procedure.md \u00a75`, `insights.md \u00a76` --
   and a bare `SKILL \u00a74` does NOT name a document, because "SKILL" is the basename of a
   file every factory carries its OWN copy of and the numbering differs per tree (#184's
-  class). A row reference (`n=950`) is not a document either: `n=950 \u00a74` is the dominant
-  bare shape in this ledger and stays bare.
+  class). A row reference (`n=950`) is still NOT a document -- and under #547 it does not
+  need to be: `n=950 \u00a74` cites a section of a NAMED ROW, which a reader holding the ledger
+  can resolve, so it is QUALIFIED. What stays BARE is the reference that names neither a
+  document nor a row a reader can reach: `\u00a74` alone, `\u00a74 of n=950` (the qualifier PRECEDES
+  the number in this house's convention, so the direction is load-bearing), and
+  `n=950 did X. Also \u00a74 says Y` -- a row reference in a DIFFERENT clause, which is the #184
+  harm shape this leg exists to red on.
 * **QUOTING-AWARE**, and this is the load-bearing half. A row's `detail` is free prose
   that QUOTES other documents, so a naive scan flags a QUOTATION as a citation -- the
   class `docs/instruments/ledger.md` section 9.8 ("one field, one predicate") was written
@@ -145,6 +157,28 @@ DOCUMENT_TOKEN = re.compile(r"([A-Za-z0-9_./-]+\.md)")
 # this window, so the leg and the finding that ordered it read the same population.
 DOC_WINDOW = 70
 
+# A section number's DIGITS -- the same marker `SECTION_NUMBER` matches, with the number
+# CAPTURED WHOLE (`9.1`, not `9`), so anaphora cannot cross subsections and a self-heading
+# match compares like with like. Kept separate only because the count above needs no
+# capture; `test_probe_the_two_section_patterns_agree` anchors the two to one marker set so
+# they cannot drift apart.
+SECTION_DIGITS = re.compile("\u00a7" + r"\s*(\d+(?:\.\d+)*)")
+
+# The shape that makes "a ledger row numbers no sections of its own" FALSE (#547). A row
+# may carry its own numbered headings, and `n=4049 \u00a76` then cites a REAL section -- of a
+# row, not of a document -- which is why the qualifier the gate needs is a ROW reference
+# and not only a `*.md` token.
+OWN_HEADING = re.compile(r"^#{2,3}\s+(\d+)\.", re.MULTILINE)
+
+# A row REFERENCE. Not a document (see DOCUMENT_TOKEN above) -- but it IS a qualifier: a
+# reader holding the ledger can resolve `n=2861 \u00a75` to a real section of a real row.
+ROW_REFERENCE = re.compile(r"n\s*=\s*\d+")
+
+# Where one clause ends and the next begins, for the cross-row test. A row reference
+# qualifies a section number only inside the SAME CLAUSE: a bare window would qualify
+# `n=1 did X. Also \u00a711 says Y`, which is exactly the #184 shape this leg exists to red on.
+CLAUSE_BREAK = re.compile(r"[.;:]\s|\n")
+
 
 class Verdict(NamedTuple):
     """One run's outcome. `examined` is the SCAN's population (every own-voice `\u00a7N` in the
@@ -223,18 +257,56 @@ def own_voice_citations(detail: object) -> int:
     return len(SECTION_NUMBER.findall(own_voice_text(str(detail or ""))))
 
 
+def _clause_before(own: str, index: int) -> str:
+    """The clause ENDING at `index`: the text back to the nearest clause break.
+
+    The direction is this file's stated convention -- a qualifier PRECEDES the number it
+    qualifies -- so a row reference AFTER the section number does not satisfy the test.
+    """
+    head = own[:index]
+    start = 0
+    for m in CLAUSE_BREAK.finditer(head):
+        start = m.end()
+    return head[start:]
+
 def bare_citations(detail: object) -> list[str]:
     """Every BARE `\u00a7N` in one row's own voice, as a label plus a readable snippet.
 
     The scan runs over the own-voice TEXT itself, never by indexing the raw `detail` with
     own-voice offsets: `own_voice_text` DELETES aside content, so the two strings are not
     the same length and an offset carried between them points at the wrong character.
+
+    BARE means NO QUALIFIER A READER CAN FOLLOW, not "resolves in no tree" (#547). A
+    citation is QUALIFIED -- and so not reported -- when the cited number matches a
+    numbered heading of THIS row, when a row reference sits in the same clause before it,
+    or when the same number was already qualified EARLIER IN THIS ROW (anaphora: a row
+    writes `Ruling n=2861 \u00a75` once and then says `\u00a75` three more times, and every later
+    mention is the same section the first one named). Headings and antecedents are read
+    from the same own-voice scope as the citation, so the count and the verdict stay over
+    ONE scope.
+
+    The RESIDUAL, stated rather than hidden: anaphora cannot tell `docs/a.md \u00a73 ... \u00a73`
+    from a second \u00a73 meant to be a DIFFERENT document's, so such a row reads qualified. The
+    harm this leg exists for (#184) is a citation with no qualifier ANYWHERE, which still
+    reds.
     """
     own = own_voice_text(str(detail or ""))
+    own_numbers = set(OWN_HEADING.findall(own))
+    qualified: set[str] = set()
     out: list[str] = []
-    for m in SECTION_NUMBER.finditer(own):
+    for m in SECTION_DIGITS.finditer(own):
+        digits = m.group(1)
         before = own[max(0, m.start() - DOC_WINDOW): m.start()]
         if DOCUMENT_TOKEN.search(before):
+            qualified.add(digits)
+            continue
+        if digits in own_numbers:
+            qualified.add(digits)
+            continue
+        if ROW_REFERENCE.search(_clause_before(own, m.start())):
+            qualified.add(digits)
+            continue
+        if digits in qualified:
             continue
         snippet = " ".join(own[max(0, m.start() - 45): m.end() + 35].split())
         out.append(f"`{m.group(0).strip()}` -- ...{snippet}...")
@@ -289,9 +361,10 @@ def evaluate(repo: Path) -> Verdict:
             entry = exemptions.get(number) if isinstance(number, int) else None
             if entry is None:
                 problems.extend(
-                    f"n={number} ({row.get('event')}): {b} -- a ledger row numbers no "
-                    f"sections of its own, so this citation names no document and resolves "
-                    f"in no tree" for b in bare
+                    f"n={number} ({row.get('event')}): {b} -- this citation names no "
+                    f"document, sits beside no row reference, and matches no heading of "
+                    f"its own, so a reader who meets it out of tree has nothing to "
+                    f"resolve it against" for b in bare
                 )
                 continue
             matched.add(number)
@@ -401,9 +474,69 @@ def test_probe_a_bare_law_name_does_not_name_a_document() -> None:
     assert len(bare_citations("per SKILL \u00a74 the filer dispatches the intake role")) == 1
 
 
-def test_probe_a_row_reference_is_not_a_document() -> None:
-    """`n=950 \u00a74` is the dominant bare shape in this ledger: a row is not a document."""
-    assert len(bare_citations("the duplicate bar in n=950 \u00a74 binds a CLAIMED item")) == 1
+def test_probe_a_row_reference_QUALIFIES_a_citation_though_it_is_not_a_document() -> None:
+    """#547: `n=950 \u00a74` cites a section of a NAMED ROW. A row is not a document, but the
+    qualifier this gate needs is one a READER can follow, and the ledger resolves it --
+    which is why the old `stays bare` reading was the premise the issue falsified."""
+    assert bare_citations("the duplicate bar in n=950 \u00a74 binds a CLAIMED item") == []
+
+def test_probe_a_row_reference_in_ANOTHER_CLAUSE_does_not_qualify() -> None:
+    """THE #184 HARM SHAPE, and the probe that keeps the qualifier from becoming a blanket
+    pass: a row reference elsewhere in the paragraph must not launder a citation that
+    names nothing."""
+    assert len(bare_citations("n=950 did X. Also \u00a74 says Y")) == 1
+
+def test_probe_a_row_reference_AFTER_the_number_does_not_qualify() -> None:
+    """Direction is load-bearing, exactly as it is for a document token."""
+    assert len(bare_citations("\u00a74 of n=950 binds a CLAIMED item")) == 1
+
+def test_probe_a_row_that_numbers_its_own_sections_qualifies_its_own_citation() -> None:
+    """#547's first discriminator: 31 post-boundary rows carry `## N.` headings, so a
+    citation of their OWN section is a real section and not a bare number."""
+    row = "## 6. The remedy\n\nActing on the \u00a76 duty, the lane closed the item."
+    assert bare_citations(row) == []
+
+def test_probe_a_self_heading_does_not_qualify_a_DIFFERENT_number() -> None:
+    """The heading qualifier is per-NUMBER, not a blanket: a row that numbers its own \u00a76
+    still names nothing when it cites \u00a711."""
+    row = "## 6. The remedy\n\nActing on the \u00a711 duty, the lane closed the item."
+    assert len(bare_citations(row)) == 1
+
+def test_probe_an_anaphoric_repeat_of_a_qualified_number_is_qualified() -> None:
+    """A row names its qualifier once and then repeats the number; every later mention is
+    the section the first one named. The antecedent here is a ROW REFERENCE and the repeat
+    is padded well beyond `DOC_WINDOW`, so this probe isolates ANAPHORA from the document
+    rule -- otherwise the window would qualify the repeat and the probe would prove nothing.
+    """
+    row = "Ruling n=2861 \u00a79.1 is the duty this round executes and reports on. The same duty at \u00a79.1 binds every lane."
+    assert bare_citations(row) == []
+
+def test_probe_anaphora_does_not_carry_across_DIFFERENT_numbers() -> None:
+    """Only the SAME number is anaphoric -- and a SUBSECTION is a different number, which
+    is why the capture takes `9.1` whole rather than its leading `9`."""
+    assert len(bare_citations("Ruling n=2861 \u00a73 binds the lane. \u00a74 is separate.")) == 1
+    assert len(bare_citations("Ruling n=2861 \u00a79.1 binds the lane. \u00a79.2 is separate.")) == 1
+
+def test_probe_a_bare_first_mention_is_not_rescued_by_a_LATER_qualified_one() -> None:
+    """Anaphora runs LEFT TO RIGHT: the first mention is the antecedent, so a bare first
+    occurrence stays bare even when the same number is qualified later in the row."""
+    assert len(bare_citations("The \u00a74 duty binds. See docs/a.md \u00a74 for the clause.")) == 1
+
+def test_probe_the_two_section_patterns_agree() -> None:
+    """`SECTION_NUMBER` counts, `SECTION_DIGITS` judges: both must anchor on the SAME
+    markers, or the examined count and the verdict would describe different text."""
+    sample = "a \u00a73 b \u00a7 12 c (quoted \u00a79) d \u00a79.1 e \u00a7x"
+    assert [m.start() for m in SECTION_NUMBER.finditer(sample)] == [
+        m.start() for m in SECTION_DIGITS.finditer(sample)
+    ]
+
+def test_probe_the_falsified_premise_does_not_return() -> None:
+    """#547's own subject: the module docstring must never reassert that a ledger row
+    numbers no sections of its own -- the sentence that made a real section a defect."""
+    import sys
+
+    module_doc = sys.modules[__name__].__doc__ or ""
+    assert "numbers no sections of its own" not in module_doc
 
 
 def test_probe_a_document_named_only_after_the_number_does_not_satisfy_it() -> None:
@@ -450,6 +583,19 @@ def test_probe_a_governed_row_whose_only_number_is_quoted_passes(tmp_path: Path)
         invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
     )
     assert evaluate(root).status == "pass"
+
+def test_probe_a_governed_row_citing_ITS_OWN_numbered_section_passes(tmp_path: Path) -> None:
+    """#547's core case, through the WHOLE gate rather than the predicate: a post-boundary
+    row that numbers its own sections and cites one of them is not a defect, and before
+    this change the gate called it one."""
+    root = synthetic_tree(
+        tmp_path / "t",
+        rows=[_row(1, "2026-01-03T00:00:00Z", "## 5. The duty\n\nActing on the \u00a75 duty, the lane closed it.")],
+        invariants={INVARIANT_KEY: "2026-01-02T00:00:00Z"},
+    )
+    verdict = evaluate(root)
+    assert verdict.status == "pass", (verdict.status, verdict.problems)
+    assert verdict.governed == 1, "the row must still be JUDGED, not skipped"
 
 
 def test_probe_a_pre_boundary_bare_citation_is_excused(tmp_path: Path) -> None:

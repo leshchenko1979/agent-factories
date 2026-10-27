@@ -1269,9 +1269,13 @@ without a population.
 
 ### 9.14 A row's citation NAMES its document, and only the row's OWN VOICE is judged
 
-**A `§N` written into a row NAMES the document it cites.** A row numbers no sections of its own, so a
-`§N` it carries can only point at ANOTHER document: a bare number resolves against nothing, and a
-reader who meets the row out of tree has nothing to resolve it against. The harm is measured, not
+**A `§N` written into a row NAMES what it cites — a document, or a named ROW.** A row MAY number
+its own sections (31 post-boundary rows carry `## N.` headings, measured 2026-10-27 under `#547`),
+so the defect is not *"resolves inside no document"* but **no qualifier a reader can follow**: no
+`*.md` token before it, no matching numbered heading of the citing row, no row reference in the
+same clause, and no earlier same-number antecedent in the row. A citation with none of those
+resolves against nothing, and a reader who meets the row out of tree has nothing to resolve it
+against. The harm is measured, not
 theoretical (`#184`): a brief carrying a bare `§11` reached Miidas HQ asserting *"your law §11
 prescribes a remedy"* against a document whose section 11 holds no such thing. Measured when this
 clause was written, **149 of 219 `§N` citations in this factory's ledger (68%) named no document**,
