@@ -12515,6 +12515,128 @@ def test_arm7_a_SINGLE_silent_job_is_NOT_a_stall_and_the_floor_DECLINES_without_
     assert unread["verdict"] == "DECLINED", unread
     assert "NOT READ" in unread["reason"], unread
 
+def test_arm8_the_unit_citation_form_is_the_SUBJECT_in_PARENTHESES_not_the_whole_message() -> None:
+    """ARM 8 (#555, ruling n=4182): the discriminator is TIGHTER than the filing proposed.
+
+    TWO LAYERS, and the second was measured AFTER the ruling. Layer one is the FORM: the
+    filing proposed `git log --grep="#531"`, which scans the WHOLE message, and the ruling
+    measured that on its own instance to return FIVE commits of which three are ledger and
+    patrol rows merely NAMING the unit. Scoped to a parenthesised `(#NNN)` occurrence in the
+    SUBJECT, three of the five fall away.
+
+    Layer two is the half the ruling did not have: THE PARENTHESISED FORM ALONE IS STILL NOT
+    ENOUGH. `ledger(#555): intake ...` and `dispatch(#552): ...` are two of the five, they
+    carry the form, and they are bookkeeping rows that cite the unit they are FILING. The
+    five subjects below are the ruling's measured population, copied from the pushed history,
+    so this probe fails if the predicate is ever loosened back to a message scan -- and the
+    second half fails it if the citation is ever credited on form alone.
+    """
+    # LAYER 1 -- the FORM, judged on the subject alone.
+    form = {
+        "score-conversion(#531): a short parse is NOT RUN, never a clean round": True,
+        "ledger: close #515 on the 10-18 conversion row, and file the zero-cell scorecard read as #531": False,
+        "patrol(2026-10-23T18): 23 problems, 22 legs ASSERTED -- #531 re-handed and claimed": False,
+        "ledger(#555): intake -- the OWED line cannot see a fixed-but-unclosed unit, measured on #531": True,
+        "dispatch(#552): first dispatch, deferred one slot while the Worker lane was mid-turn on #531": True,
+    }
+    hits = {s: bool(RUNNER.UNIT_CITATION_RE.search(s)) for s in form}
+    assert hits == form, (
+        "the unit-citation FORM is the parenthesised subject form only -- a bare mention of "
+        f"the unit in a subject is not the citation form: {hits}"
+    )
+    # The capture is the UNIT NUMBER, and the map key is built from it.
+    assert RUNNER.UNIT_CITATION_RE.search("score-conversion(#531): x").group(1) == "531"
+
+    # LAYER 2 -- the WORK, judged on the real commits the five subjects belong to. Three of
+    # the five carry the form; only ONE of them changes a path outside `evidence/`.
+    cites = RUNNER.stall_unit_citations()
+    assert cites, "the citation map must build over this repo's own pushed history"
+    assert [sha for sha, _ in cites.get("#531", [])] == ["9e00791a"], (
+        "#531's citation must be the FIX and nothing else -- the ruling measured exactly one, "
+        f"got {cites.get('#531')}"
+    )
+    assert "#555" not in cites, (
+        "#555's only citing commit is its own INTAKE row, which touches nothing but the "
+        "ledger: a unit must never have its re-hand withdrawn on the strength of the row "
+        f"that filed it, got {cites.get('#555')}"
+    )
+    assert [sha for sha, _ in cites.get("#552", [])] == ["45394852"], (
+        "#552's citation must be its WORK commit, not its dispatch row, got "
+        f"{cites.get('#552')}"
+    )
+
+
+def test_arm9_a_cited_unit_reads_OWED_CLOSE_and_the_RE_HAND_is_WITHDRAWN() -> None:
+    """ARM 9 (#555): the remedy is the finding. Two debts, two prescriptions.
+
+    A fixed-but-unclosed unit is a BOOKKEEPING debt. The line must (a) be labelled
+    OWED-CLOSE rather than OWED, (b) PRINT the citing sha and subject so a reader can tell a
+    fix from a filing, (c) carry the close remedy, and (d) NOT carry the re-hand remedy --
+    which is the whole defect, because a re-hand sent a lane to re-open finished work.
+
+    The sibling unit with no citation must keep the re-hand, or the discriminator would
+    swallow the work-owed class whole.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(901, "OPEN"), _issue(902, "OPEN")]
+    rows = [
+        _stall_row(1, "dispatch", "#901", 3, now=now),
+        _stall_row(2, "dispatch", "#902", 3, now=now),
+    ]
+    cites = {"#901": [("9e00791a", "score-conversion(#901): the fix")]}
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                  unit_citations_fn=lambda: cites)
+    named = "\n".join(leg["problems"])
+    assert "OWED-CLOSE #901" in named, f"a cited unit must read OWED-CLOSE\n{named}"
+    assert "9e00791a" in named and "score-conversion(#901)" in named, (
+        f"the citing commit's sha AND subject must be PRINTED, never concluded from\n{named}"
+    )
+    assert "WITHDRAWN" in named, f"the re-hand prescription must be withdrawn\n{named}"
+    assert "Re-hand it OLDEST FIRST" not in named, (
+        f"a re-hand on a fixed-but-unclosed unit re-opens finished work\n{named}"
+    )
+    # (e) the discriminating arm: an uncited unit keeps the work remedy.
+    assert "OWED #902" in named, f"an uncited unit is still work owed\n{named}"
+    assert "Re-hand it OLDEST FIRST" in named or "Re-dispatch" in named, (
+        f"the work-owed remedy must survive for an uncited unit\n{named}"
+    )
+    # (f) the two debts are counted separately and never summed.
+    assert leg["coverage"]["owed_close_units"] == 1, leg["coverage"]
+    assert leg["coverage"]["unit_citation_commits_examined"] == 1, leg["coverage"]
+
+def test_arm10_a_commit_CITATION_is_not_a_claim_and_cannot_discharge_one() -> None:
+    """ARM 10 (#555 caution 2): the check must not become a second claim leg.
+
+    `tools/ledger.py verify` owns the claim sequence. A cited unit must still appear in the
+    census -- the label changes the REMEDY, never the population -- and a unit whose only
+    discharge is a commit must still be reported. If this ever returns an empty problem list
+    the citation has silently become a completion, which is the failure `#529` proves is real.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(901, "OPEN")]
+    rows = [_stall_row(1, "dispatch", "#901", 3, now=now)]
+    cites = {"#901": [("deadbeef", "area(#901): a commit that says nothing about done")]}
+
+    leg = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                  unit_citations_fn=lambda: cites)
+    assert leg["coverage"]["units_owed"] == 1, (
+        f"a citation must not remove the unit from the population: {leg['coverage']}"
+    )
+    assert any("#901" in p for p in leg["problems"]), (
+        "a citation is not a completion -- the unit must still be REPORTED"
+    )
+    # An unreadable map is the CONSERVATIVE direction: plain OWED, remedy intact.
+    blind = RUNNER.stall_census_leg(issues, rows, read_at=read_at,
+                                    unit_citations_fn=lambda: {})
+    assert "OWED #901" in "\n".join(blind["problems"]), (
+        "with no citation map the unit must read plain OWED -- a read that could not be "
+        "made must never withdraw a remedy on evidence nobody read"
+    )
+    assert blind["coverage"]["owed_close_units"] == 0, blind["coverage"]
+
 def test_arm4_the_grace_is_DERIVED_per_job_and_PRINTED_with_its_derivation() -> None:
     """ARM 4: a hardcoded constant must be unable to produce these numbers.
 

@@ -248,6 +248,24 @@ PREDICATE = REPO / "tests" / "test_board_intake_recorded.py"
 # between a dispatch and its claim. The threshold is PRINTED with this basis on every run
 # (acceptance criterion 3), never carried in a reader's memory.
 STALL_CENSUS_THRESHOLD_DAYS = 1.0
+
+# THE UNIT-CITATION FORM (#555, ruling n=4182). A commit that DOES a unit's work writes the
+# unit in parentheses in its subject -- `score-conversion(#531): ...`. It is deliberately NOT
+# `--grep` over the whole message: on the ruling's own measured instance the message scan
+# returns five commits of which three are ledger and patrol rows merely NAMING the unit, i.e.
+# the bookkeeping this class exists to model.
+UNIT_CITATION_RE = re.compile(r"\(#(\d+)\)")
+
+# A CITATION MUST BE A WORK COMMIT, NOT A BOOKKEEPING ROW (#555, measured -- the parenthesised
+# form ALONE is not enough). `ledger(#555): intake ...` and `dispatch(#552): ...` both carry the
+# form and both touch ONLY `evidence/ledger.jsonl`: they cite the unit they are FILING, never
+# work it. Measured over this repo's 3365 pushed commits: 730 raw citations across 334 units,
+# and **177 of those units carry a bookkeeping citation ONLY** -- a unit would have its re-hand
+# withdrawn on the strength of its own intake row. Requiring one changed path OUTSIDE
+# `evidence/` drops every one of them and leaves the ruling's instance exact: `#531` ->
+# `9e00791a` (the fix), `#555` -> none (still owed, correctly), `#552` -> `45394852` (the work,
+# not its dispatch row). 359 citations across 282 units survive.
+UNIT_CITATION_BOOKKEEPING_PREFIX = "evidence/"
 STALL_CENSUS_THRESHOLD_BASIS = (
     "1.0 d -- the shortest interval in which a lane that intends to take a dispatched "
     "item would have claimed it. Distinct from the Triage card's >30 m, which binds a "
@@ -7707,6 +7725,81 @@ def stall_lane_names() -> dict[str, str]:
             names[session_id] = name
     return names
 
+def stall_unit_citations(ref: str = "origin/main") -> dict[str, list[tuple[str, str]]]:
+    """Unit -> the commits whose SUBJECT cites it in the unit-citation form (#555).
+
+    THE CLASS THIS SEPARATES. The OWED line's premise is stated in every problem it prints:
+    *"dispatched N d ago and NEVER CLAIMED, and the board still carries it OPEN"*. But a unit
+    can be FIXED IN THE TREE and still OPEN on the board, and then the line's remedy --
+    *re-hand it, oldest first* -- sends a lane to re-open finished work. Measured on `#531`:
+    dispatch `n=3947` at 2026-10-21T02:59:32Z, fix commit `9e00791a` **8 m 34 s later**, and
+    of the 63.09 h the leg reported as neglect **62.89 h elapsed after the fix existed**. The
+    Worker's close row `n=4175` opens by saying so.
+
+    THE PREDICATE IS THE SUBJECT, IN THE CITATION FORM, PLUS A CHANGED PATH (#555, ruling
+    n=4182 and the measurement it did not have). The filing proposed `git log --grep`, which
+    scans the WHOLE message: on its own measured instance that returns five commits of which
+    three are bookkeeping -- the very ledger and patrol rows this class exists to model.
+    Scoped to a `(#NNN)` occurrence in the SUBJECT, the same instance yields exactly
+    `9e00791a`, the fix. **The parenthesised form alone is still not enough**, and the second
+    half is measured: `ledger(#555): intake ...` and `dispatch(#552): ...` both carry it, and
+    both touch nothing but `evidence/ledger.jsonl`. Over this repo's 3365 pushed commits the
+    bare form credits 730 commits across 334 units, of which **177 units carry a bookkeeping
+    citation ONLY** -- so a unit would have its re-hand withdrawn on the strength of its own
+    intake row, which is the same false-negative in the opposite direction. Requiring one
+    changed path OUTSIDE `evidence/` leaves 359 citations across 282 units and reproduces the
+    ruling's instance exactly: `#531` -> `9e00791a` (the fix), `#555` -> none (still owed),
+    `#552` -> `45394852` (the work, not its dispatch row). Both halves are read in ONE
+    `git log --name-only` pass rather than a call per unit.
+
+    A CITATION IS NOT A COMPLETION, and this function asserts nothing of the kind. `#529`'s
+    class -- a subject citing a closed unit for other work -- is the standing proof that the
+    reference is loose, which is why the caller PRINTS the sha and subject beside the label
+    and only withdraws the re-hand prescription. It never marks a unit done, and it never
+    touches the claim sequence `tools/ledger.py verify` owns: a commit cannot discharge a
+    claim, and this read cannot either.
+
+    An empty map on failure, never a raise. A git read this function could not make must not
+    decide the census verdict: with no map every unit stays plain OWED, which is the
+    conservative direction -- it re-serves work rather than silently withdrawing a remedy on
+    evidence nobody could read.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "log", ref, "--format=@@%H%x1f%s", "--name-only"],
+            cwd=str(REPO), capture_output=True, text=True, timeout=180,
+        )
+    except Exception:
+        return {}
+    if out.returncode != 0:
+        return {}
+    cites: dict[str, list[tuple[str, str]]] = {}
+    sha = ""
+    subject = ""
+    paths: list[str] = []
+
+    def flush() -> None:
+        # A BOOKKEEPING-ONLY COMMIT IS NOT THE WORK (#555, measured). The parenthesised form
+        # is necessary and not sufficient: the intake, dispatch and patrol rows all cite the
+        # unit they are FILING and touch nothing but the ledger. A commit earns the citation
+        # only by changing at least one path outside `evidence/`.
+        if not sha or not any(
+            not p.startswith(UNIT_CITATION_BOOKKEEPING_PREFIX) for p in paths
+        ):
+            return
+        for match in UNIT_CITATION_RE.finditer(subject):
+            cites.setdefault(f"#{match.group(1)}", []).append((sha[:8], subject))
+
+    for line in out.stdout.splitlines():
+        if line.startswith("@@"):
+            flush()
+            sha, _, subject = line[2:].partition("\x1f")
+            paths = []
+        elif line.strip():
+            paths.append(line.strip())
+    flush()
+    return cites
+
 def _lane_claim_latency(
     units: list[str],
     dispatch_instants: dict[str, "dt.datetime"],
@@ -7784,6 +7877,7 @@ def stall_census_leg(
     read_at: str,
     threshold_days: float = STALL_CENSUS_THRESHOLD_DAYS,
     lane_names_fn=None,
+    unit_citations_fn=None,
 ) -> dict:
     """Every unit dispatched and NEVER claimed, past the declared threshold.
 
@@ -7858,6 +7952,18 @@ def stall_census_leg(
     clear. These lines are this factory's own, and the lane the patrol wakes -- Triage --
     can clear every one of them by re-dispatching the unit or closing it on the board. The
     red is an andon cord with a working exit, not the no-exit class #139 names.
+
+    A UNIT WHOSE REPAIR ALREADY EXISTS IS OWED-CLOSE, NOT OWED (#555, ruling n=4182). The
+    premise above -- *dispatched N d ago and NEVER CLAIMED, and the board still carries it
+    OPEN* -- is TRUE of a fixed-but-unclosed unit and yet the remedy is wrong for it: a
+    re-hand sends a lane to re-open finished work. On `#531` the fix landed 8 m 34 s after
+    the dispatch and 62.89 h of the 63.09 h the leg called neglect elapsed after it existed.
+    So a unit carrying a `(#NNN)` citation in some pushed commit's SUBJECT is labelled
+    OWED-CLOSE: a BOOKKEEPING debt, remedy *close it or state in the close row what
+    remains*, with the re-hand WITHDRAWN. The citing shas and subjects are PRINTED on the
+    line and the leg concludes nothing from them -- a citation is not a completion (`#529`),
+    and no commit discharges a claim, because `tools/ledger.py verify` owns that sequence.
+    The two debts are counted separately and never summed.
 
     A PARKED UNIT IS NOT A FINDING (#331 clause 1). This factory can DECLARE a work unit
     parked on something outside its own reach -- an owner question above all -- and the
@@ -8406,6 +8512,20 @@ def stall_census_leg(
         except Exception:
             lane_names = {}
 
+    # THE UNIT-CITATION MAP (#555, ruling n=4182), read once for the whole population and
+    # only when there is an OWED line it could change. A unit whose repair already exists in
+    # the pushed history is OWED-CLOSE -- a BOOKKEEPING debt -- and the two remedies are
+    # different in kind: a re-hand repairs work, a close repairs bookkeeping. The label
+    # PRINTS its evidence and never concludes from it (caution 1 in the filing), because a
+    # commit citing a unit is not proof the unit is fixed -- `#529`'s class is the standing
+    # proof -- and it does not touch the claim sequence `tools/ledger.py verify` owns.
+    unit_citations: dict[str, list[tuple[str, str]]] = {}
+    if owed and unit_citations_fn is not None:
+        try:
+            unit_citations = dict(unit_citations_fn() or {})
+        except Exception:
+            unit_citations = {}
+
     # THE LANE'S OWN DRAIN (#465), read off the rows and printed BESIDE the OWED total.
     #
     # THE DEFECT THIS ANSWERS. The OWED line used to close with a remedy that, for a unit
@@ -8564,6 +8684,7 @@ def stall_census_leg(
     owed.sort(key=lambda entry: -entry["age_days"])
     addressees_resolved = 0
     units_owed_on_draining_lanes = 0
+    owed_close_units = 0
     # THE BACKLOG GROUPED ON THE SAME DECLARED ROUTING THE ADDRESSEE IS READ FROM (#133).
     # The driverless-lane leg asks whether a lane carrying an unclaimed backlog has a DRIVER,
     # and it must ask that about the SAME addressees this leg already resolved -- re-deriving
@@ -8692,6 +8813,35 @@ def stall_census_leg(
                 f"close it on the board: a dispatch no lane has taken is work nobody is "
                 f"doing"
             )
+        # THE UNIT-CITATION DISCRIMINATOR (#555, ruling n=4182). A unit whose repair already
+        # exists in the pushed history is OWED-CLOSE: a BOOKKEEPING debt whose remedy is a
+        # close, not a re-hand. The re-hand prescription is WITHDRAWN, and that is the whole
+        # point -- on `#531` it sent a lane to re-open work that had been finished 8 m 34 s
+        # after the dispatch, and 62.89 h of the 63.09 h the leg called neglect elapsed after
+        # the fix existed.
+        #
+        # IT PRINTS ITS EVIDENCE AND CONCLUDES NOTHING. The citing commit's sha and subject
+        # travel on the line, so a reader can tell a fix from a filing; the leg never says the
+        # unit is done, because a subject citing a unit is not a completion (`#529`), and it
+        # never discharges a claim, because `tools/ledger.py verify` owns that sequence and a
+        # commit cannot take its place.
+        citing = unit_citations.get(unit) or []
+        if citing:
+            owed_close_units += 1
+            shown = "; ".join(f"{sha} {subject}" for sha, subject in citing[:3])
+            if len(citing) > 3:
+                shown += f"; and {len(citing) - 3} more"
+            problems.append(
+                f"OWED-CLOSE {unit}: dispatched {entry['age_days']:.2f} d ago and NEVER "
+                f"CLAIMED, and the board still carries it OPEN -- but the pushed history "
+                f"ALREADY CITES IT in a commit subject, so this is a BOOKKEEPING debt, not "
+                f"work owed: {shown}. The re-hand prescription is WITHDRAWN (#555): a lane "
+                f"sent to re-open this would be re-doing finished work, which is exactly what "
+                f"the OWED line did on `#531`. CLOSE IT, or state in the close row what "
+                f"remains. A citation is NOT a completion -- read the commit before you "
+                f"close -- and no commit discharges a claim."
+            )
+            continue
         problems.append(
             f"OWED {unit}: dispatched {entry['age_days']:.2f} d ago and NEVER CLAIMED, "
             f"and the board still carries it OPEN -- {addressee_note}.{assignee_note}"
@@ -8797,6 +8947,11 @@ def stall_census_leg(
             "lanes_draining_a_queue": len(draining_lanes - not_a_queue_lanes),
             "lanes_not_a_queue": len(not_a_queue_lanes),
             "units_owed_on_draining_lanes": units_owed_on_draining_lanes,
+            # THE BOOKKEEPING DEBT (#555, ruling n=4182): OWED units whose repair already
+            # exists in the pushed history. They leave the work-owed reading and carry a
+            # close remedy instead, so the two debts are never summed into one number.
+            "owed_close_units": owed_close_units,
+            "unit_citation_commits_examined": len(unit_citations),
             "lane_drain": lane_drain,
             "lane_drain_verdicts": lane_drain_verdicts,
             # THE STANDING ASSERTION OF CHANGE 1 (#546): the claim-keyed remedy's CLAIMED
@@ -14114,6 +14269,11 @@ def main(
     # by whichever lanes happened to be busy.
     driverless_activity_fn=None,
     lane_names_fn=None,
+    # #555: the unit-citation map. Injected for the same reason as every other read here -- a
+    # probe must be able to drive both an OWED and an OWED-CLOSE line from a hermetic map,
+    # because a probe that could only read this repo's live history would be asserting which
+    # units happen to carry a citing commit today rather than the leg's behaviour.
+    unit_citations_fn=None,
     shared_tree_fn=None,
     # #530: the questions-homes leg's gate, repo and timeout, injected for the tenth time and
     # the same reason -- a probe must be able to drive an IN-STEP and a STALE answer from a
@@ -14283,6 +14443,7 @@ def main(
             census_cache["v"] = stall_census_leg(
                 issues, rows, read_at=read_at,
                 lane_names_fn=lane_names_fn or stall_lane_names,
+                unit_citations_fn=unit_citations_fn or stall_unit_citations,
             )
         return census_cache["v"]
 
