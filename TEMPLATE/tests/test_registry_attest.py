@@ -511,6 +511,116 @@ def test_the_orphan_set_arm_bites_when_the_pointer_is_struck_out():
     assert _brief_reads_the_orphan_set_off_the_render(neutered) is False, neutered[-1200:]
 
 
+# --------------------------------------------------------------------------------------
+# #572 (ruling n=4379) — the brief names the route that WORKS, and stops calling a
+# session-local answer a gap.
+# --------------------------------------------------------------------------------------
+
+ANSWER_ROUTE_TOKEN = "ANSWER BY session_notify"
+
+# The exact pre-fix sentences, kept as literals so the regression arm can re-inject the
+# text that CAUSED #572 rather than a paraphrase of it. All three say the same false
+# thing: that an answer sitting in the lane's own session is lost.
+FALSE_GAP_CLAIMS = (
+    "gap in the round rather than an answer to it",
+    "an answer left there is a gap",
+    "an answer left in it is only recovered later by a sweep",
+)
+
+def _answer_route_blocks(text: str) -> list[str]:
+    """Each `ANSWER BY session_notify` block, as the paragraph it opens.
+
+    The brief carries the answer instruction TWICE — once in the condensed head block
+    (which survives the classic cap) and once in the full-detail tail. Both are read,
+    because a lane on the classic leg only ever sees the head one: fixing the tail alone
+    would leave the capped target reading the false claim, which is the same
+    half-a-fix shape #267 was filed for.
+    """
+    return [part.split("\n\n")[0] for part in text.split(ANSWER_ROUTE_TOKEN)[1:]]
+
+def _brief_names_the_recovered_route(text: str) -> bool:
+    """#572 — every answer block must name `--recovered` AND must not call it a gap.
+
+    The claim that made this a defect: the brief named ONE route, and that route is
+    structurally dead for any collector that is a cron session. Measured this round —
+    `factory-registry-attest` has `deliver_to` NULL and `session_bindings` holds no row
+    for its session, so `session_notify` refuses it with a BINDING refusal, not a timing
+    one, and refuses it again every round. Three lanes hit the wall independently
+    (inferhub-watch, infra-factory, meta-factory) and every answer came back through the
+    recovered leg — which `classify_answers` (:433) already models as a first-class class
+    and `--recovered` (:484) already accepts as a sanctioned input to `--collect`.
+
+    So the predicate requires, in EVERY block: the recovered route named, the refusal
+    cause stated plainly (a collector with no channel binding), and none of the pre-fix
+    sentences that called a deliverable answer a gap.
+    """
+    blocks = _answer_route_blocks(text)
+    if len(blocks) < 2:
+        return False
+    for block in blocks:
+        lowered = block.lower()
+        if "--recovered" not in lowered:
+            return False
+        if "no channel binding" not in lowered:
+            return False
+        for claim in FALSE_GAP_CLAIMS:
+            if claim in lowered:
+                return False
+    return True
+
+def test_the_brief_names_the_recovered_route_at_BOTH_sites():
+    """The product of #572: both answer blocks carry the route that actually works."""
+    text = _rendered_brief()
+    assert len(_answer_route_blocks(text)) == 2, (
+        "the brief must carry the answer instruction twice — head and tail — or a "
+        "classic-leg target reads only one of them"
+    )
+    assert _brief_names_the_recovered_route(text) is True, text[:900]
+
+def test_the_recovered_route_arm_bites_when_the_token_is_struck_out():
+    """MUTATION CONTROL — the predicate must BITE, or the arm above proves nothing.
+
+    Same failure mode the route and read-source arms guard against: an arm that formats
+    the string it just asserted on re-reads its own text. The recovered token is struck
+    out of a copy of the shipped brief and the predicate must return False.
+    """
+    text = _rendered_brief()
+    neutered = "\n".join(
+        line for line in text.splitlines() if "--recovered" not in line
+    )
+    assert "--recovered" not in neutered, "the neutering did not remove the route"
+    assert _brief_names_the_recovered_route(neutered) is False, neutered[:900]
+
+def test_the_predicate_rejects_the_pre_fix_wording():
+    """The predicate is only worth having if it rejects the text that CAUSED #572.
+
+    That sentence — an answer left in the lane's own session "is a gap in the round
+    rather than an answer to it" — is what shipped at both sites, and it is what three
+    lanes read before each of them burned an attempt on a refusal.
+    """
+    text = _rendered_brief()
+    regressed = text.replace(
+        "gap it then reports.\n",
+        "gap it then reports. The collector cannot read your session, so an answer left "
+        "there is a gap in the round rather than an answer to it.\n",
+        1,
+    )
+    assert regressed != text, "the substitution did not apply — this arm would test nothing"
+    assert _brief_names_the_recovered_route(regressed) is False, regressed[:900]
+
+def test_the_predicate_rejects_a_brief_that_fixes_only_the_tail():
+    """A one-site fix is the shape #267 was filed for, and it must not pass.
+
+    Striking `--recovered` from the HEAD block alone leaves the tail correct, so a
+    whole-text search for the token would still find one and call the brief fixed —
+    while every classic-leg target, which sees only the head, reads a route that fails.
+    """
+    text = _rendered_brief()
+    head, tail = text.split(ANSWER_ROUTE_TOKEN, 1)[0], text.split(ANSWER_ROUTE_TOKEN, 1)[1]
+    head_only = head + ANSWER_ROUTE_TOKEN + tail.replace("--recovered", "the collector", 1)
+    assert head_only.count("--recovered") == 1, "the substitution did not hit one site"
+    assert _brief_names_the_recovered_route(head_only) is False, head_only[:900]
+
 def _target(slug: str, session: str) -> dict:
     return {
         "slug": slug,

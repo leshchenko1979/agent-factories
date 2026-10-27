@@ -114,8 +114,11 @@ NOTIFY_FROM_SHORT = re.compile(r"notify from ([0-9a-fA-F]{8}):")
 BRIEF = """Registry re-attestation — {slug} ({stamp})
 
 ANSWER BY session_notify TO THE COLLECTOR — reply to the session id in THIS notify's own
-`from` header, not into your own session. The collector cannot read your session, so an
-answer left there is a gap in the round rather than an answer to it.
+`from` header, not into your own session. If that notify is REFUSED — the collector is a
+cron session with no channel binding, so nothing ever drains its queue — the answer is
+still collectable: leave it in your own session and say so plainly, and it is read back
+with `--recovered <slug>`. A brief whose only named route always fails manufactures the
+gap it then reports.
 
 THREE QUESTIONS — all three need an answer. Each one is spelled out in full below.
 
@@ -241,9 +244,12 @@ QUESTION 3 — YOUR JOB PREFIX AND YOUR CRON ROWS. Confirm the prefix, report wh
 
 ANSWER BY session_notify TO THE COLLECTOR — not in your own session. This brief
 arrived as a notify, so the sender's session id is already in that notify's own `from`
-header; send your answer there, to that id. The collector cannot read your session, so
-an answer left in it is only recovered later by a sweep — a gap in the round rather
-than an answer to it.
+header; send your answer there, to that id. ATTEMPT THAT FIRST. If it is REFUSED — the
+collector is a cron session with no channel binding, so no channel ever claims it and
+nothing can drain its queue — your answer is not lost and it is not a gap: state in your
+own session, plainly, that the answer is there for `--recovered <your-slug>`, and the
+collector reads it out of your store. The recovered leg is a DECLARED input to
+`--collect`, not a fallback nobody mentions.
 
 The registry is a collected document: the collector writes your declared fields back
 verbatim, and re-renders. You author the field; you do not need to edit the file,
