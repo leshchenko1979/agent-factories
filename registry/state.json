@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-27T06:27:47Z",
+  "resolved_at": "2026-10-27T06:46:35Z",
   "fragments": [
     {
       "path": "/tmp/wt-reg-1027/registry/factories/ai-antispam.json",
@@ -1139,7 +1139,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-26T06:27:23Z",
+        "attested_at": "2026-10-27T06:46:32Z",
         "instruments": {
           "ledger": {
             "state": "deferred",
@@ -1758,7 +1758,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Outreach [chat:-1003993000918:topic:10780]",
-      "session_updated_at": 1793082103,
+      "session_updated_at": 1793083405,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2408,7 +2408,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1793082309,
+      "session_updated_at": 1793083508,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2538,7 +2538,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Surveys [chat:-1004497192134:topic:19]",
-      "session_updated_at": 1793082308,
+      "session_updated_at": 1793083174,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2603,7 +2603,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1793082322,
+      "session_updated_at": 1793083404,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2642,7 +2642,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1793082320,
+      "session_updated_at": 1793083264,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2668,7 +2668,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781]",
-      "session_updated_at": 1793017612,
+      "session_updated_at": 1793083018,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3032,7 +3032,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Bot lane — ai-antispam service (Bot topic)",
-      "session_updated_at": 1793081919,
+      "session_updated_at": 1793083429,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3110,7 +3110,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1793082378,
+      "session_updated_at": 1793083559,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3214,7 +3214,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Miidas Factory / HQ [chat:-1003996392908:topic:4]",
-      "session_updated_at": 1793081415,
+      "session_updated_at": 1793083397,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3227,7 +3227,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / HQ [chat:-1003993000918:topic:10782]",
-      "session_updated_at": 1793081094,
+      "session_updated_at": 1793083096,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
@@ -3341,8 +3341,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-27T06:45:00+00:00",
-      "last_run_at": "2026-10-27T06:15:29Z",
+      "next_run_at": "2026-10-27T07:15:00+00:00",
+      "last_run_at": "2026-10-27T06:45:23Z",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "_profile": "ops"
     },
@@ -3431,8 +3431,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-27T06:30:00+00:00",
-      "last_run_at": "2026-10-26T06:30:00Z",
+      "next_run_at": "2026-10-28T06:30:00+00:00",
+      "last_run_at": "2026-10-27T06:30:09Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3461,8 +3461,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-27T06:40:00+00:00",
-      "last_run_at": "2026-10-27T00:40:20Z",
+      "next_run_at": "2026-10-27T12:40:00+00:00",
+      "last_run_at": "2026-10-27T06:40:20Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
@@ -3761,8 +3761,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-27T06:40:00+00:00",
-      "last_run_at": "2026-10-26T06:40:08Z",
+      "next_run_at": "2026-10-28T06:40:00+00:00",
+      "last_run_at": "2026-10-27T06:40:20Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },
