@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-10-27T06:46:35Z",
+  "resolved_at": "2026-10-27T07:08:50Z",
   "fragments": [
     {
       "path": "/tmp/wt-reg-1027/registry/factories/ai-antispam.json",
@@ -762,7 +762,7 @@
             "name": "factory-hq-pacemaker",
             "audience": "agent",
             "entry": "cron factory-hq-pacemaker",
-            "cadence": "weekly, Mon 09:50Z (owner order 2026-10-26); deliver_to session:2646d31a-71ee-49f0-be81-9c8dc32d32fa (HQ lane)"
+            "cadence": "weekly, Mon 09:50Z (cron `50 9 * * Mon`, UTC); deliver_to the HQ lane, resolved live from session_bindings"
           },
           {
             "name": "factory-binding-sync",
@@ -897,7 +897,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-27T06:27:29Z",
+        "attested_at": "2026-10-27T06:49:42Z",
         "instruments": {
           "ledger": {
             "state": "adopted",
@@ -1758,7 +1758,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Outreach [chat:-1003993000918:topic:10780]",
-      "session_updated_at": 1793083405,
+      "session_updated_at": 1793084549,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2408,7 +2408,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1793083508,
+      "session_updated_at": 1793083908,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2642,7 +2642,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1793083264,
+      "session_updated_at": 1793084822,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3084,7 +3084,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1793044836,
+      "session_updated_at": 1793084781,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3110,7 +3110,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1793083559,
+      "session_updated_at": 1793084335,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3201,7 +3201,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1793082371,
+      "session_updated_at": 1793084758,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3356,8 +3356,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-10-27T07:00:00+00:00",
-      "last_run_at": "2026-10-26T07:00:12Z",
+      "next_run_at": "2026-10-28T07:00:00+00:00",
+      "last_run_at": "2026-10-27T07:00:27Z",
       "trigger_cmd": null,
       "_profile": "ops"
     },

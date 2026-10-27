@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-10-27T06:46:35Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-10-27T07:08:50Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-10-27T06:46:35Z` |
+| generated | live reads | resolved `2026-10-27T07:08:50Z` |
 
 ## Announcements
 
@@ -198,7 +198,7 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | `ai-antispam-bot-service-health` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T06:15:00+00:00 | — | — |
 | `ai-antispam-day7-retire-wake` | ops | `15 6 22 9 *` | UTC | **no** | 0 | **absent** | 2027-09-22T06:15:00+00:00 | session:acc3fa9b-cefa-4e35-bf87-422696e558f0 | — |
 | `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-10-27T07:15:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | /usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/… |
-| `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-27T07:00:00+00:00 | — | — |
+| `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-10-28T07:00:00+00:00 | — | — |
 | `ai-antispam-outreach-db-sync` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-10-28T06:15:00+00:00 | — | — |
 | `ai-antispam-outreach-mining-tranche` | ops | `15 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-10-28T06:15:00+00:00 | — | — |
 | `ai-antispam-outreach-stream-joins` | ops | `0 0 * * *` | UTC | yes | 0 | **absent** | 2026-10-28T00:00:00+00:00 | — | — |
@@ -353,7 +353,7 @@ Attribution basis: deliver_to -> chat, name prefix.
 
 | Field | Value |
 |---|---|
-| freshness | ✅ attested 2026-10-27T06:27:29Z |
+| freshness | ✅ attested 2026-10-27T06:49:42Z |
 | purpose | Build, measure and evolve Autonomously Self-Improving Factories: maintain the ASIF template and rulebook that any repository can adopt, and consult member factories on their process health, cadence and autonomy. |
 | profile | `ops` |
 | repo | `/root/agent-factories` |
@@ -361,7 +361,7 @@ Attribution basis: deliver_to -> chat, name prefix.
 | owns | ['the template instrument surface — methodology, development and cross-member deployment (owner-commissioned 2026-09-27)', 'the ASIF template and rulebook (TEMPLATE/ and the derived laws)', 'the fleet registry (registry/)', 'member-factory surveys, scores and the measurement cadence', 'the pacemaker and outer-trigger methodology (P28)', "this factory's own process law (skills/meta-factory/SKILL.md)"] |
 | does not own | ["member factories' products, backlogs, repos and code", "member factories' ontologies and issue boards", 'the OpenCrabs runtime, daemon and core tools - a client-supplier loop, not ownership', 'token provisioning, model routing and inference pricing (InferHub Watch)', 'the tg_* tool surface (fast-mcp-telegram)'] |
 | substrates owned | ['/root/agent-factories', '/root/agent-factories/skills/meta-factory/SKILL.md', '/root/agent-factories/registry/'] |
-| attested at | 2026-10-27T06:27:29Z |
+| attested at | 2026-10-27T06:49:42Z |
 
 **Services**
 
@@ -375,7 +375,7 @@ Attribution basis: deliver_to -> chat, name prefix.
 | factory-registry-attest | agent | cron factory-registry-attest | daily 06:00Z |
 | factory-publish | agent | cron factory-publish | every 6h (UTC) |
 | factory-questions-redeliver | agent | cron factory-questions-redeliver | every 6h at :12 (UTC); fires only when its trigger_cmd exits non-empty |
-| factory-hq-pacemaker | agent | cron factory-hq-pacemaker | weekly, Mon 09:50Z (owner order 2026-10-26); deliver_to session:2646d31a-71ee-49f0-be81-9c8dc32d32fa (HQ lane) |
+| factory-hq-pacemaker | agent | cron factory-hq-pacemaker | weekly, Mon 09:50Z (cron `50 9 * * Mon`, UTC); deliver_to the HQ lane, resolved live from session_bindings |
 | factory-binding-sync | agent | cron factory-binding-sync | every 6h at :20 (UTC); fires only when its trigger_cmd exits non-zero — keeps the law-binding tree at origin/main, REFUSES on unpushed work |
 
 **Announcements reaching this factory**
