@@ -589,6 +589,7 @@
     "tests/test_law_conversion_join.py": "pytest",
     "tests/test_law_coverage.py": "pytest",
     "tests/test_law_mechanism_same_commit.py": "script",
+    "tests/test_law_mechanism_triggers.py": "script",
     "tests/test_law_no_raw_session_uuid.py": "script",
     "tests/test_law_structure.py": "pytest",
     "tests/test_ledger.py": "script",
@@ -702,6 +703,10 @@
     "tests/test_criteria_count.py": {
       "class": "always-satisfiable"
     },
+    "tests/test_criterion_path_exemptions.py": {
+      "class": "exemption-table",
+      "table": "docs/criterion-path-exemptions.json"
+    },
     "tests/test_cron_landing_route.py": {
       "class": "exemption-table",
       "table": "docs/landing-route-debt.json"
@@ -715,10 +720,20 @@
     "tests/test_declared_boundary_census.py": {
       "class": "always-satisfiable"
     },
+    "tests/test_declared_event_population.py": {
+      "class": "always-satisfiable"
+    },
     "tests/test_docs_sync.py": {
       "class": "always-satisfiable"
     },
     "tests/test_duplicate_prose.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_duty_receipt_exemptions.py": {
+      "class": "exemption-table",
+      "table": "docs/duty-receipt-exemptions.json"
+    },
+    "tests/test_gate_direct_invocation.py": {
       "class": "always-satisfiable"
     },
     "tests/test_gate_entry_point_equivalence.py": {
@@ -815,6 +830,9 @@
     "tests/test_law_mechanism_same_commit.py": {
       "class": "always-satisfiable"
     },
+    "tests/test_law_mechanism_triggers.py": {
+      "class": "always-satisfiable"
+    },
     "tests/test_law_no_raw_session_uuid.py": {
       "class": "exemption-table",
       "table": "docs/law-uuid-exemptions.json"
@@ -839,9 +857,6 @@
       "class": "write-path-refusal",
       "refuser": "tools/ledger.py"
     },
-    "tests/test_declared_event_population.py": {
-      "class": "always-satisfiable"
-    },
     "tests/test_ledger_commit_cites_no_rows.py": {
       "class": "exemption-table",
       "table": "docs/ledger-commit-exemptions.json"
@@ -861,6 +876,10 @@
     "tests/test_ledger_no_shrink.py": {
       "class": "exemption-table",
       "table": "docs/ledger-no-shrink-exemptions.json"
+    },
+    "tests/test_ledger_ref_roles.py": {
+      "class": "exemption-table",
+      "table": "docs/ledger-ref-roles-exemptions.json"
     },
     "tests/test_ledger_refs_preflight.py": {
       "class": "write-path-refusal",
@@ -917,10 +936,10 @@
       "class": "write-path-refusal",
       "refuser": "tools/ledger.py"
     },
-    "tests/test_score_artifact_measurable.py": {
+    "tests/test_score_artifact_citations.py": {
       "class": "always-satisfiable"
     },
-    "tests/test_score_artifact_citations.py": {
+    "tests/test_score_artifact_measurable.py": {
       "class": "always-satisfiable"
     },
     "tests/test_score_artifact_sections.py": {
@@ -982,21 +1001,6 @@
       "refuser": "tools/ledger.py"
     },
     "tools/roadmap.py": {
-      "class": "always-satisfiable"
-    },
-    "tests/test_duty_receipt_exemptions.py": {
-      "class": "exemption-table",
-      "table": "docs/duty-receipt-exemptions.json"
-    },
-    "tests/test_ledger_ref_roles.py": {
-      "class": "exemption-table",
-      "table": "docs/ledger-ref-roles-exemptions.json"
-    },
-    "tests/test_criterion_path_exemptions.py": {
-      "class": "exemption-table",
-      "table": "docs/criterion-path-exemptions.json"
-    },
-    "tests/test_gate_direct_invocation.py": {
       "class": "always-satisfiable"
     }
   }

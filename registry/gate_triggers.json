@@ -152,6 +152,19 @@
       "docs/**",
       "skills/**"
     ],
+    "tests/test_duty_receipt_exemptions.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "docs/duty-receipt-exemptions.json",
+      "tools/patrol_host_state.py",
+      "tools/registry*.py"
+    ],
+    "tests/test_gate_direct_invocation.py": [
+      "TEMPLATE/tests/test_*.py",
+      "TEMPLATE/tests/test_gate_direct_invocation.py",
+      "tests/*",
+      "tests/test_*.py",
+      "tests/test_gate_direct_invocation.py"
+    ],
     "tests/test_gate_entry_point_equivalence.py": [
       "registry/gates.json",
       "tests/**",
@@ -419,6 +432,11 @@
       "tools/audit.py",
       "tools/hooks/**"
     ],
+    "tests/test_law_mechanism_triggers.py": [
+      "docs/measurement-procedure.md",
+      "tools/gate_budget_rederive.py",
+      "tests/test_law_mechanism_triggers.py"
+    ],
     "tests/test_law_no_raw_session_uuid.py": [
       "*.md",
       "ONTOLOGY.md",
@@ -531,6 +549,13 @@
       "tools/ledger.py",
       "tools/ledger_declaration.py"
     ],
+    "tests/test_ledger_ref_roles.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "docs/ledger-ref-roles-exemptions.json",
+      "evidence/ledger.jsonl",
+      "tools/patrol_host_state.py",
+      "tools/registry*.py"
+    ],
     "tests/test_ledger_refs_preflight.py": [
       "TEMPLATE/tools/ledger.py",
       "TEMPLATE/tools/ledger_declaration.py",
@@ -559,19 +584,6 @@
       "evidence/factories.md",
       "evidence/rework.md",
       "skills/**"
-    ],
-    "tests/test_duty_receipt_exemptions.py": [
-      "TEMPLATE/tools/patrol_host_state.py",
-      "docs/duty-receipt-exemptions.json",
-      "tools/patrol_host_state.py",
-      "tools/registry*.py"
-    ],
-    "tests/test_ledger_ref_roles.py": [
-      "TEMPLATE/tools/patrol_host_state.py",
-      "docs/ledger-ref-roles-exemptions.json",
-      "evidence/ledger.jsonl",
-      "tools/patrol_host_state.py",
-      "tools/registry*.py"
     ],
     "tests/test_patrol_host_state.py": [
       "TEMPLATE/tools/patrol_host_state.py",
@@ -647,6 +659,14 @@
       "tools/patrol_host_state.py",
       "tools/rule.py"
     ],
+    "tests/test_score_artifact_citations.py": [
+      "docs/ledger-invariants.example.json",
+      "docs/ledger-invariants.json",
+      "docs/measurement-procedure.md",
+      "evidence/scores/**",
+      "tests/ledger_boundary.py",
+      "tests/test_score_artifact_citations.py"
+    ],
     "tests/test_score_artifact_measurable.py": [
       "TEMPLATE/docs/measurement-procedure.md",
       "TEMPLATE/registry/gate_triggers.example.json",
@@ -666,14 +686,6 @@
       "tests/gate_registry.py",
       "tests/test_score_artifact_measurable.py",
       "tools/audit.py"
-    ],
-    "tests/test_score_artifact_citations.py": [
-      "docs/ledger-invariants.example.json",
-      "docs/ledger-invariants.json",
-      "docs/measurement-procedure.md",
-      "evidence/scores/**",
-      "tests/ledger_boundary.py",
-      "tests/test_score_artifact_citations.py"
     ],
     "tests/test_score_artifact_sections.py": [
       "docs/measurement-procedure.md",
@@ -787,13 +799,6 @@
       "docs/products.example.json",
       "docs/products.json",
       "tools/roadmap.py"
-    ],
-    "tests/test_gate_direct_invocation.py": [
-      "TEMPLATE/tests/test_*.py",
-      "TEMPLATE/tests/test_gate_direct_invocation.py",
-      "tests/*",
-      "tests/test_*.py",
-      "tests/test_gate_direct_invocation.py"
     ]
   }
 }

@@ -1468,6 +1468,17 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_law_conversion_join.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_law_conversion_join.py"])
 
+    # 11c. Law/mechanism SOURCE-SET join: every containment source the re-derivation tool
+    #      declares must be named inside `docs/measurement-procedure.md` §5.2 (#576).
+    #      The law enumerated three triggers while the tool applied four, and the pairing
+    #      gate that would normally catch it (`tests/test_shipped_mechanism_law.py`) resolves
+    #      its mechanism under TEMPLATE/, where this tool has no twin - so the live-only tool
+    #      was outside every law join. The set is DERIVED from the tool's own declaration, so
+    #      a fifth source reds without this gate being edited. META-ONLY: it reads the live
+    #      tool and the live procedure, neither of which ships in TEMPLATE/tests.
+    if (repo_root / "tests/test_law_mechanism_triggers.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_law_mechanism_triggers.py"])
+
     # 12. Documentation sync gate: a doc shipped in both trees must not drift
     if (repo_root / "tests/test_docs_sync.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_docs_sync.py"])
