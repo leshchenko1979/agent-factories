@@ -115,32 +115,33 @@
       "margin_x": 4.007,
       "measured_at": "3af21226a0d25f4b44d50b9cd0d1019f424faaef",
       "measured_sec": 108.37,
-      "load_at_measure": 9.01
-    },
-    "tests/test_gate_fixtures_closure.py": {
-      "budget_sec": 38.15,
-      "margin_x": 4.08,
-      "measured_at": "c7773b4e1c4dad54c27981a07959af93075e95ae",
-      "measured_sec": 9.35,
+      "load_at_measure": 9.01,
       "growth_breach": {
-        "sample_sec": 15.51,
-        "sample_revision": "87b5a4a79e4324ef04687f7327608d2479001593",
-        "basis_sec": 9.35,
-        "basis_revision": "c7773b4e1c4dad54c27981a07959af93075e95ae",
-        "declared_sec": 38.15,
-        "derived_sec": 62.79,
-        "growth_x": 1.6588,
-        "derived_over_declared": 1.6459,
-        "round_id": "2026-10-26:87b5a4a79e4324ef04687f7327608d2479001593",
-        "reported_at": "2026-10-28T00:11:59Z"
+        "sample_sec": 165.9,
+        "sample_revision": "5059fa68311f968e07ced06f4415d725672e0af8",
+        "basis_sec": 108.37,
+        "basis_revision": "3af21226a0d25f4b44d50b9cd0d1019f424faaef",
+        "declared_sec": 434.23,
+        "derived_sec": 664.35,
+        "growth_x": 1.5309,
+        "derived_over_declared": 1.5299,
+        "round_id": "2026-10-28:5059fa68311f968e07ced06f4415d725672e0af8",
+        "reported_at": "2026-10-28T06:53:43Z"
       }
     },
+    "tests/test_gate_fixtures_closure.py": {
+      "budget_sec": 68.03,
+      "margin_x": 4.045,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 16.82,
+      "load_at_measure": 4.13
+    },
     "tests/test_gate_registration.py": {
-      "budget_sec": 48.11,
-      "margin_x": 4.063,
-      "measured_at": "4f3937801d9fb8c1d9bc7f6361459ac4ae2ee345",
-      "measured_sec": 11.84,
-      "load_at_measure": 7.33
+      "budget_sec": 38.19,
+      "margin_x": 4.08,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 9.36,
+      "load_at_measure": 4.13
     },
     "tests/test_hq_delegation.py": {
       "budget_sec": 17.87,
@@ -153,7 +154,19 @@
       "load_at_measure": 7.07,
       "margin_x": 4.181,
       "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 4.14
+      "measured_sec": 4.14,
+      "growth_breach": {
+        "sample_sec": 5.51,
+        "sample_revision": "5059fa68311f968e07ced06f4415d725672e0af8",
+        "basis_sec": 4.14,
+        "basis_revision": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+        "declared_sec": 17.31,
+        "derived_sec": 22.79,
+        "growth_x": 1.3309,
+        "derived_over_declared": 1.3166,
+        "round_id": "2026-10-28:5059fa68311f968e07ced06f4415d725672e0af8",
+        "reported_at": "2026-10-28T06:53:43Z"
+      }
     },
     "tests/test_hygiene_declaration_sweep.py": {
       "budget_sec": 20.19,
@@ -267,81 +280,46 @@
       "load_at_measure": 2.0
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 2503.35,
-      "load_at_measure": 7.33,
-      "margin_x": 4.001,
-      "measured_at": "4f3937801d9fb8c1d9bc7f6361459ac4ae2ee345",
-      "measured_sec": 625.65
+      "budget_sec": 1185.31,
+      "load_at_measure": 4.13,
+      "margin_x": 4.003,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 296.14
     },
     "tests/test_reconstructed_claim_declared.py": {
-      "budget_sec": 22.43,
-      "margin_x": 4.138,
-      "measured_at": "8bf30499ae0565e123235d801cd824baab14f84c",
-      "measured_sec": 5.42,
-      "load_at_measure": 1.46,
-      "growth_breach": {
-        "sample_sec": 10.37,
-        "sample_revision": "87b5a4a79e4324ef04687f7327608d2479001593",
-        "basis_sec": 5.42,
-        "basis_revision": "8bf30499ae0565e123235d801cd824baab14f84c",
-        "declared_sec": 22.43,
-        "derived_sec": 42.23,
-        "growth_x": 1.9133,
-        "derived_over_declared": 1.8827,
-        "round_id": "2026-10-26:87b5a4a79e4324ef04687f7327608d2479001593",
-        "reported_at": "2026-10-28T00:11:59Z"
-      }
+      "budget_sec": 30.83,
+      "margin_x": 4.1,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 7.52,
+      "load_at_measure": 4.13
     },
     "tests/test_registry.py": {
-      "budget_sec": 6.87,
-      "margin_x": 4.49,
-      "measured_at": "fdea0dff990cf5e312a431f33e2fc5f254f93cbb",
-      "measured_sec": 1.53,
-      "load_at_measure": 10.93
+      "budget_sec": 6.35,
+      "margin_x": 4.536,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 1.4,
+      "load_at_measure": 4.13
     },
     "tests/test_registry_render.py": {
-      "budget_sec": 36.39,
-      "margin_x": 4.084,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 8.91,
-      "load_at_measure": 7.07
+      "budget_sec": 14.15,
+      "margin_x": 4.224,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 3.35,
+      "load_at_measure": 4.13
     },
     "tests/test_rework.py": {
-      "budget_sec": 12.75,
-      "margin_x": 4.25,
-      "measured_at": "8bf30499ae0565e123235d801cd824baab14f84c",
-      "measured_sec": 3.0,
-      "load_at_measure": 1.46,
-      "growth_breach": {
-        "sample_sec": 3.92,
-        "sample_revision": "87b5a4a79e4324ef04687f7327608d2479001593",
-        "basis_sec": 3.0,
-        "basis_revision": "8bf30499ae0565e123235d801cd824baab14f84c",
-        "declared_sec": 12.75,
-        "derived_sec": 16.43,
-        "growth_x": 1.3067,
-        "derived_over_declared": 1.2886,
-        "round_id": "2026-10-26:87b5a4a79e4324ef04687f7327608d2479001593",
-        "reported_at": "2026-10-28T00:11:59Z"
-      }
+      "budget_sec": 18.63,
+      "margin_x": 4.168,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 4.47,
+      "load_at_measure": 4.13
     },
     "tests/test_rework_declared_landed.py": {
-      "budget_sec": 3.47,
-      "margin_x": 5.103,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "measured_sec": 0.68,
-      "growth_breach": {
-        "sample_sec": 1.99,
-        "sample_revision": "87b5a4a79e4324ef04687f7327608d2479001593",
-        "basis_sec": 0.68,
-        "basis_revision": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-        "declared_sec": 3.47,
-        "derived_sec": 8.71,
-        "growth_x": 2.9265,
-        "derived_over_declared": 2.5101,
-        "round_id": "2026-10-26:87b5a4a79e4324ef04687f7327608d2479001593",
-        "reported_at": "2026-10-28T00:11:59Z"
-      }
+      "budget_sec": 4.19,
+      "margin_x": 4.872,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 0.86,
+      "load_at_measure": 4.13
     },
     "tests/test_rework_relative_revision.py": {
       "budget_sec": 3.07,
@@ -382,23 +360,11 @@
       "measured_sec": 0.2
     },
     "tests/test_skill_version_contract.py": {
-      "budget_sec": 38.63,
-      "margin_x": 4.079,
-      "measured_at": "e013d60fe868a29d99b11c88992e2cc7e9789fff",
-      "measured_sec": 9.47,
-      "load_at_measure": 8.48,
-      "growth_breach": {
-        "sample_sec": 15.49,
-        "sample_revision": "87b5a4a79e4324ef04687f7327608d2479001593",
-        "basis_sec": 9.47,
-        "basis_revision": "e013d60fe868a29d99b11c88992e2cc7e9789fff",
-        "declared_sec": 38.63,
-        "derived_sec": 62.71,
-        "growth_x": 1.6357,
-        "derived_over_declared": 1.6233,
-        "round_id": "2026-10-26:87b5a4a79e4324ef04687f7327608d2479001593",
-        "reported_at": "2026-10-28T00:11:59Z"
-      }
+      "budget_sec": 42.67,
+      "margin_x": 4.072,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 10.48,
+      "load_at_measure": 4.13
     },
     "tests/test_subject_form.py": {
       "budget_sec": 28.91,
@@ -414,22 +380,11 @@
       "measured_sec": 1.32
     },
     "tests/test_telemetry_reader_registry.py": {
-      "budget_sec": 50.47,
-      "margin_x": 4.06,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 12.43,
-      "growth_breach": {
-        "sample_sec": 27.57,
-        "sample_revision": "87b5a4a79e4324ef04687f7327608d2479001593",
-        "basis_sec": 12.43,
-        "basis_revision": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-        "declared_sec": 50.47,
-        "derived_sec": 111.03,
-        "growth_x": 2.218,
-        "derived_over_declared": 2.1999,
-        "round_id": "2026-10-26:87b5a4a79e4324ef04687f7327608d2479001593",
-        "reported_at": "2026-10-28T00:11:59Z"
-      }
+      "budget_sec": 64.63,
+      "margin_x": 4.047,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 15.97,
+      "load_at_measure": 4.13
     },
     "tests/test_template_integrity.py": {
       "budget_sec": 15.03,
@@ -443,19 +398,7 @@
       "margin_x": 4.573,
       "measured_at": "4f3937801d9fb8c1d9bc7f6361459ac4ae2ee345",
       "measured_sec": 1.31,
-      "load_at_measure": 7.33,
-      "growth_breach": {
-        "sample_sec": 1.32,
-        "sample_revision": "87b5a4a79e4324ef04687f7327608d2479001593",
-        "basis_sec": 1.31,
-        "basis_revision": "4f3937801d9fb8c1d9bc7f6361459ac4ae2ee345",
-        "declared_sec": 5.99,
-        "derived_sec": 6.03,
-        "growth_x": 1.0076,
-        "derived_over_declared": 1.0067,
-        "round_id": "2026-10-26:87b5a4a79e4324ef04687f7327608d2479001593",
-        "reported_at": "2026-10-28T00:11:59Z"
-      }
+      "load_at_measure": 7.33
     },
     "tools/hygiene.py": {
       "budget_sec": 29.67,
@@ -478,59 +421,25 @@
       "measured_sec": 0.43
     },
     "tests/test_shipped_audit_runs.py": {
-      "budget_sec": 1008.75,
-      "measured_sec": 252.0,
-      "measured_at": "fc957289c6b587b5e65b6742655163b5e6600e2a",
-      "margin_x": 4.003,
-      "growth_breach": {
-        "sample_sec": 823.73,
-        "sample_revision": "87b5a4a79e4324ef04687f7327608d2479001593",
-        "basis_sec": 252.0,
-        "basis_revision": "fc957289c6b587b5e65b6742655163b5e6600e2a",
-        "declared_sec": 1008.75,
-        "derived_sec": 3295.67,
-        "growth_x": 3.2688,
-        "derived_over_declared": 3.2671,
-        "round_id": "2026-10-26:87b5a4a79e4324ef04687f7327608d2479001593",
-        "reported_at": "2026-10-28T00:11:59Z"
-      }
+      "budget_sec": 3289.07,
+      "measured_sec": 822.08,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "margin_x": 4.001,
+      "load_at_measure": 4.13
     },
     "tests/test_shipped_mechanism_law.py": {
-      "budget_sec": 1.44,
-      "measured_sec": 0.18,
-      "measured_at": "fc957289c6b587b5e65b6742655163b5e6600e2a",
-      "margin_x": 8.0,
-      "growth_breach": {
-        "sample_sec": 0.48,
-        "sample_revision": "87b5a4a79e4324ef04687f7327608d2479001593",
-        "basis_sec": 0.18,
-        "basis_revision": "fc957289c6b587b5e65b6742655163b5e6600e2a",
-        "declared_sec": 1.44,
-        "derived_sec": 2.67,
-        "growth_x": 2.6667,
-        "derived_over_declared": 1.8542,
-        "round_id": "2026-10-26:87b5a4a79e4324ef04687f7327608d2479001593",
-        "reported_at": "2026-10-28T00:11:59Z"
-      }
+      "budget_sec": 1.87,
+      "measured_sec": 0.28,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "margin_x": 6.679,
+      "load_at_measure": 4.13
     },
     "tests/test_questions.py": {
-      "budget_sec": 2543.55,
-      "load_at_measure": 19.2,
+      "budget_sec": 2688.75,
+      "load_at_measure": 4.13,
       "margin_x": 4.001,
-      "measured_at": "49c860e661096edae351e222379933e2b7bbaefc",
-      "measured_sec": 635.7,
-      "growth_breach": {
-        "sample_sec": 1094.09,
-        "sample_revision": "87b5a4a79e4324ef04687f7327608d2479001593",
-        "basis_sec": 635.7,
-        "basis_revision": "49c860e661096edae351e222379933e2b7bbaefc",
-        "declared_sec": 2543.55,
-        "derived_sec": 4377.11,
-        "growth_x": 1.7211,
-        "derived_over_declared": 1.7209,
-        "round_id": "2026-10-26:87b5a4a79e4324ef04687f7327608d2479001593",
-        "reported_at": "2026-10-28T00:11:59Z"
-      }
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 672.0
     }
   },
   "modes": {
