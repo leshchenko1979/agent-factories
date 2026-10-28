@@ -2640,6 +2640,237 @@ def probe_the_not_examined_population_is_rendered_once() -> None:
 # trigger unreachable. The probe is TWO-SIDED: the exhausted gate reaches the population and
 # is NAMED, and a COMPLETED sample inside its cap is not reported as exhausted.
 
+# #564 (ruling n=4308) — THE THIRD SOURCE IS GROWTH, AND IT IS REPORT-FIRST.
+#
+# `stale` answers "does the declared basis still describe the command?", and `exhausted`
+# answers "did the audit kill it at its cap?". Neither can see the live defect this source
+# exists for: the basis still describes the command exactly, and the gate still finishes
+# inside its cap -- but the box, the tree or the work has grown, so the wall is now too tight
+# and the gate will be killed one round later. The measured instance is
+# `tests/test_shipped_audit_runs.py`: declared 1008.75 s over a 252.0 s basis, sampled at
+# 823.73 s. Its own derivation law says 3295.67 s, so the wall it carries is 3.27x too tight
+# and the gate is one loaded round away from a kill.
+#
+# THE POLICY IS REPORT-FIRST, RE-DERIVE ON TREND, and the probe has to be able to fail on
+# both halves or it proves neither. ONE slow round is as likely a loaded box as a grown gate,
+# so a first breach REPORTS the figures and moves NO wall; the second CONSECUTIVE breach
+# re-derives. "Consecutive" is a fact about two rounds, so it is carried in the manifest entry
+# (`growth_breach`) with the ROUND'S OWN IDENTITY -- its date and the tree it ran against --
+# never a timestamp: a re-run of the same report must not read as its own successor, or one
+# breach would derive a wall.
+#
+# THE KILL ARM IS THE ONE THAT KEEPS THE TREND FROM DEADLOCKING. A gate that breaches and is
+# then killed at its wall produces no completed passing sample, so a source that only reads
+# passing samples would report "nothing to see" on the very round the trend needs -- and the
+# wall would never move. So an OUTSTANDING breach plus a round in which the entry was
+# MEASURED but produced no such sample counts as the second breach, and it is sized from the
+# sample the reporting round RECORDED (`n=3984`: never the duration of the failure itself,
+# which is a lower bound on a kill and a refusal speed on a structural failure).
+
+def probe_a_growing_gate_is_reported_first_and_derived_on_the_second_breach() -> None:
+    """#564: growth is a THIRD source; one breach reports, two consecutive derive."""
+    leg = REPO / "tools" / "gate_budget_rederive.py"
+    if not leg.is_file():
+        print("  SKIP  no tools/gate_budget_rederive.py in this tree — the re-derivation leg "
+              "is this factory's standing duty, not yet part of the shipped kit")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, head = _two_commit_repo(root)
+        if base is None or head is None:
+            check("the #564 probe repository could be built and committed", False,
+                  f"base={base} head={head} — this leg could not judge")
+            return
+
+        # THE BASIS IS AT HEAD, so the entry is NOT stale: staleness would own it and growth
+        # would never be consulted. That is the cell this probe needs and the reason it
+        # cannot reuse the #558 fixture, whose basis is deliberately one commit behind.
+        def manifest_at_head() -> Path:
+            return _manifest(root, {"tests/test_moved.py": _basis(head)})
+
+        def entry_of(path: Path) -> dict:
+            return json.loads(path.read_text(encoding="utf-8"))["gates"]["tests/test_moved.py"]
+
+        def report(date: str, *, duration: float, passed: bool = True,
+                   unknown: bool = False) -> Path:
+            path = root / f"audit-{date}-{duration}-{'u' if unknown else ('p' if passed else 'f')}.json"
+            path.write_text(json.dumps({
+                "date": date,
+                "tree": {"head_sha": head, "modified_count": 0},
+                "gates": [{
+                    "gate_key": "tests/test_moved.py", "cmd": "synthetic",
+                    "passed": passed, "unknown": unknown,
+                    "duration_sec": duration, "exit_code": 0 if passed else 1,
+                }],
+            }), encoding="utf-8")
+            return path
+
+        def run(manifest: Path, *extra: str) -> subprocess.CompletedProcess:
+            return _leg_proc("--manifest", str(manifest), "--repo-root", str(root), *extra)
+
+        # ARM (c) — THE MANDATORY ONE: a FIRST breach is REPORTED, and the wall does not move.
+        # It runs WITH `--apply`, and that is the whole point: the policy lives in the
+        # derivation path, so a first-breach round that never reaches it proves nothing. This
+        # arm fails if the leg derives on one breach — `budget_sec` would leave 4.0 for 120.75.
+        first_manifest = manifest_at_head()
+        first_report = report("2026-10-26", duration=30.0)
+        first = run(first_manifest, "--audit-report", str(first_report), "--apply")
+        check("a grown gate is REPORTED by name on its FIRST breach",
+              "[REPORTED] tests/test_moved.py" in first.stdout, first.stdout[:800])
+        check("a first breach derives NOTHING even under --apply",
+              "APPLIED 1" not in first.stdout and "[RE-DERIVED]" not in first.stdout
+              and "REPORTED ONLY 1" in first.stdout, first.stdout[:800])
+        check("a first breach leaves the declared wall UNCHANGED",
+              "UNCHANGED at 4.0 s" in first.stdout and "120.75" in first.stdout,
+              first.stdout[:800])
+        written = entry_of(first_manifest)
+        check("the manifest's wall and basis are byte-unchanged on a first breach",
+              written["budget_sec"] == 4.0 and written["measured_sec"] == 1.0,
+              json.dumps(written))
+        # THE RECORD IS THE MECHANISM: without it the next round cannot tell a trend from a
+        # one-off, and the policy silently degrades to report-only-forever.
+        marker = written.get("growth_breach")
+        check("the breach is RECORDED in the entry, carrying the ROUND's own identity",
+              isinstance(marker, dict)
+              and marker.get("round_id") == f"2026-10-26:{head}"
+              and marker.get("sample_sec") == 30.0
+              and marker.get("derived_sec") == 120.75,
+              json.dumps(marker))
+        check("the report says the record was made, not merely that a breach was seen",
+              "recorded in the manifest" in first.stdout, first.stdout[:800])
+
+        # ... and a RE-RUN OF THE SAME REPORT is the SAME round. If it counted as its own
+        # successor, one breach would re-derive a wall and report-first would be a fiction.
+        rerun = run(first_manifest, "--audit-report", str(first_report), "--apply")
+        check("a re-run of the SAME report does not count as its own successor",
+              "[REPORTED] tests/test_moved.py" in rerun.stdout
+              and "[RE-DERIVED]" not in rerun.stdout and "APPLIED 1" not in rerun.stdout,
+              rerun.stdout[:800])
+        check("... and leaves the recorded marker byte-identical (no churn on a re-run)",
+              entry_of(first_manifest).get("growth_breach") == marker,
+              json.dumps(entry_of(first_manifest).get("growth_breach")))
+
+        # ARM (a) — THE SECOND CONSECUTIVE BREACH RE-DERIVES, and the wall becomes the one
+        # the manifest's own margin law computes from the fresh sample.
+        second = run(first_manifest, "--audit-report", str(report("2026-10-27", duration=30.0)),
+                     "--apply")
+        check("a SECOND consecutive breach RE-DERIVES the wall",
+              "[RE-DERIVED] tests/test_moved.py" in second.stdout and "APPLIED 1" in second.stdout,
+              second.stdout[:800])
+        written = entry_of(first_manifest)
+        check("the re-derived wall is margin_for(30.0) x 30.0 = 120.75 s",
+              written["budget_sec"] == 120.75 and written["measured_sec"] == 30.0,
+              json.dumps(written))
+        check("the streak is CONSUMED by the derivation it produced",
+              "growth_breach" not in written, json.dumps(written))
+
+        # ARM (b) — A ROUND INSIDE THE WALL IS NOT A BREACH, and writes nothing. Without this
+        # arm a leg that reported every entry as growing would pass the two above.
+        quiet_manifest = manifest_at_head()
+        quiet = run(quiet_manifest, "--audit-report", str(report("2026-10-26", duration=0.5)))
+        check("a round INSIDE the declared wall is not a growth breach",
+              "[GROWTH]" not in quiet.stdout and "0 by growth" in quiet.stdout,
+              quiet.stdout[:800])
+        check("... and writes no marker at all",
+              "growth_breach" not in entry_of(quiet_manifest),
+              json.dumps(entry_of(quiet_manifest)))
+
+        # THE KILL ARM — an outstanding breach, then a round in which the gate was MEASURED
+        # and KILLED at its cap. The derivation must be sized from the CARRIED sample (30.0),
+        # never from the killed run's 999.0 s lower bound: 120.75 vs 3996.75 is the whole
+        # difference, so this arm cannot pass by coincidence.
+        kill_manifest = manifest_at_head()
+        run(kill_manifest, "--audit-report", str(report("2026-10-26", duration=30.0)))
+        killed = run(kill_manifest,
+                     "--audit-report", str(report("2026-10-27", duration=999.0,
+                                                  passed=False, unknown=True)),
+                     "--apply")
+        check("a breach that produced NO completed passing sample still advances the trend",
+              "[RE-DERIVED] tests/test_moved.py" in killed.stdout
+              and "CARRIED" in killed.stdout, killed.stdout[:900])
+        written = entry_of(kill_manifest)
+        check("the derivation is sized from the CARRIED sample, never the kill's lower bound",
+              written["budget_sec"] == 120.75 and written["measured_sec"] == 30.0,
+              json.dumps(written))
+        check("... and the wall is NOT the 999.0 s kill re-derived (3996.75)",
+              written["budget_sec"] != 3996.75, json.dumps(written))
+
+        # THE RESET ARM — a round back inside the wall CLEARS the streak, so a one-off breach
+        # cannot be banked and spent on a later, unrelated slow round.
+        reset_manifest = manifest_at_head()
+        run(reset_manifest, "--audit-report", str(report("2026-10-26", duration=30.0)))
+        back = run(reset_manifest, "--audit-report", str(report("2026-10-27", duration=0.5)),
+                   "--apply")
+        check("a round back INSIDE the wall CLEARS the breach streak",
+              "[RESET] tests/test_moved.py" in back.stdout, back.stdout[:800])
+        written = entry_of(reset_manifest)
+        check("... and the wall never moved, because no second breach was reached",
+              written["budget_sec"] == 4.0 and "growth_breach" not in written,
+              json.dumps(written))
+
+        # THE PARTITION ARM — the printed breakdown must SUM to the population it renders.
+        # Stale wins, then growth, then exhausted: the live instance's gate can satisfy two
+        # triggers at once, and a partition that double-counted would render a total its own
+        # parts contradict. One entry per source, and `tests/test_moved.py` is reported UNKNOWN
+        # here as well — growth must claim it, and the exhausted leg must not count it twice.
+        mixed = _manifest(root, {
+            "tests/test_moved.py": _basis(head),
+            "tests/test_runner_moved.py": _basis(base),
+            "tests/test_same.py": _basis(head),
+        })
+        mixed_report = root / "audit-mixed.json"
+        mixed_report.write_text(json.dumps({
+            "date": "2026-10-29",
+            "tree": {"head_sha": head, "modified_count": 0},
+            "gates": [
+                {"gate_key": "tests/test_moved.py", "cmd": "synthetic", "passed": True,
+                 "unknown": False, "duration_sec": 30.0, "exit_code": 0},
+                {"gate_key": "tests/test_runner_moved.py", "cmd": "synthetic", "passed": True,
+                 "unknown": False, "duration_sec": 1.0, "exit_code": 0},
+                {"gate_key": "tests/test_same.py", "cmd": "synthetic", "passed": False,
+                 "unknown": True, "duration_sec": 5.0, "exit_code": 124},
+            ],
+        }), encoding="utf-8")
+        mixed_json = json.loads(run(mixed, "--audit-report", str(mixed_report), "--json").stdout)
+        check("the three sources are DISJOINT, so the printed breakdown sums to the population",
+              len(mixed_json["population"]) == len(mixed_json["stale"])
+              + len(mixed_json["exhausted"]) + len(mixed_json["growth"]),
+              json.dumps({k: mixed_json[k] for k in
+                          ("population", "stale", "exhausted", "growth")}))
+        check("... and each source actually claims its own entry (the partition is not empty)",
+              len(mixed_json["stale"]) == 1 and len(mixed_json["growth"]) == 1
+              and len(mixed_json["exhausted"]) == 1 and len(mixed_json["population"]) == 3,
+              json.dumps({k: mixed_json[k] for k in
+                          ("population", "stale", "exhausted", "growth")}))
+        # PRECEDENCE, MEASURED ON THE ONE ENTRY BOTH TRIGGERS CAN HOLD AT ONCE. Round two
+        # kills `tests/test_moved.py` at its cap while its breach is still outstanding: the
+        # exhausted trigger and the growth source both apply, growth claims the entry, the
+        # record still SAYS it was also UNKNOWN, and the count does not double.
+        killed_mixed = root / "audit-mixed-killed.json"
+        killed_mixed.write_text(json.dumps({
+            "date": "2026-10-30",
+            "tree": {"head_sha": head, "modified_count": 0},
+            "gates": [
+                {"gate_key": "tests/test_moved.py", "cmd": "synthetic", "passed": False,
+                 "unknown": True, "duration_sec": 999.0, "exit_code": 124},
+                {"gate_key": "tests/test_runner_moved.py", "cmd": "synthetic", "passed": True,
+                 "unknown": False, "duration_sec": 1.0, "exit_code": 0},
+                {"gate_key": "tests/test_same.py", "cmd": "synthetic", "passed": False,
+                 "unknown": True, "duration_sec": 5.0, "exit_code": 124},
+            ],
+        }), encoding="utf-8")
+        mixed2 = json.loads(run(mixed, "--audit-report", str(killed_mixed), "--json").stdout)
+        check("an entry that is BOTH growing and reported UNKNOWN is claimed by GROWTH once",
+              [g["key"] for g in mixed2["growth"]] == ["tests/test_moved.py"]
+              and "tests/test_moved.py" not in mixed2["exhausted"]
+              and mixed2["growth"][0]["also_unknown"] is True,
+              json.dumps({"growth": mixed2["growth"], "exhausted": mixed2["exhausted"]}))
+        check("... and the partition still SUMS with one entry claimed twice over",
+              len(mixed2["population"]) == len(mixed2["stale"]) + len(mixed2["exhausted"])
+              + len(mixed2["growth"]) == 3,
+              json.dumps({k: mixed2[k] for k in
+                          ("population", "stale", "exhausted", "growth")}))
+
 def probe_a_budget_exhausted_gate_reaches_the_trigger() -> None:
     """#307: an `unknown` gate reaches the third trigger instead of being dropped first."""
     leg = REPO / "tools" / "gate_budget_rederive.py"
@@ -3166,6 +3397,9 @@ def main() -> int:
     probe_the_not_examined_population_is_rendered_once()
     print("  synthetic probes — #307: a budget-exhausted gate reaches the trigger")
     probe_a_budget_exhausted_gate_reaches_the_trigger()
+
+    print("  synthetic probes — #564: growth is a third source, reported first, derived on trend")
+    probe_a_growing_gate_is_reported_first_and_derived_on_the_second_breach()
 
     print("  synthetic probes — #240: a gate's own cap vs its audit budget")
     probe_a_budget_below_its_gates_own_cap_is_named()
