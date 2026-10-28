@@ -2626,9 +2626,11 @@ def probe_the_not_examined_population_is_rendered_once() -> None:
             mutant.unlink(missing_ok=True)
 
 # --- #307: the exhausted-budget trigger must be REACHABLE ----------------------------------
-# The leg declares THREE containment triggers: leg A (the gate's file moved), leg B (its
-# registered runner form moved), and a measured sample that EXHAUSTED the declared budget --
-# the audit reporting the gate `unknown`. The third trigger was DEAD CODE (#307): a
+# At #307 the leg declared THREE containment triggers: leg A (the gate's file moved), leg B
+# (its registered runner form moved), and a measured sample that EXHAUSTED the declared budget
+# -- the audit reporting the gate `unknown`. (#564 has since added GROWTH as a fourth, below;
+# the count in this paragraph is the state #307 was written against.) The third trigger was
+# DEAD CODE (#307): a
 # budget-exhausted gate is `unknown` by construction, and `_audit_samples` dropped every
 # unknown gate before `containment_population` computed the trigger from the surviving
 # samples. The population was empty for every input, forever, and the file's own

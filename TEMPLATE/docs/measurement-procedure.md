@@ -565,8 +565,8 @@ per-gate `stale_basis` (the legs below) and the whole-command `duration_sec` —
 join. A separate job would split the ONE writer of `registry/gates.json` and re-run gates the
 round has already run.
 
-**THE TRIGGER IS A CONTAINMENT EVENT, NEVER A FRESH SAMPLE.** A basis is re-derived when, and
-only when:
+**THE TRIGGER IS A CONTAINMENT EVENT, NEVER A BARE FRESH SAMPLE.** A basis **ENTERS the
+containment population** when, and only when:
 
 - **leg A — the gate's FILE moved.** Its blob at `measured_at` differs from its blob at HEAD, so
   the basis describes a DIFFERENT test.
@@ -574,11 +574,52 @@ only when:
   target changed while the file stayed byte-identical, so the basis describes a different
   COMMAND (#125; the two legs barely overlap, so a bytes-only read misses leg B entirely).
 - **a measured sample EXHAUSTED the budget** and the audit reported **UNKNOWN**.
+- **a completed PASSING sample GREW past its own derivation** — `margin_for(sample) × sample`
+  now exceeds the declared wall, so the basis describes a gate whose runtime has drifted out
+  from under it however far inside the cap the raw sample still sits (#564, ruling n=4308).
+  This is the ONE sample-driven trigger, and it is gated by the trend rule below rather than
+  firing on a single reading.
 
-A fresh sample that stays INSIDE the cap is **not** a trigger: `margin_x` exists to absorb
-measurement variation, and re-basing on every new maximum would ratchet the cap toward the
-"too high hides a hung gate" direction (#128, ruling n=823 — where a basis was HELD against a
-sample 5.7 % above it).
+A fresh sample that leaves its own derivation INSIDE the declared wall is **not** a trigger:
+`margin_x` exists to absorb measurement variation, and re-basing on every new maximum would
+ratchet the cap toward the "too high hides a hung gate" direction (#128, ruling n=823 — where a
+basis was HELD against a sample 5.7 % above it). That ruling is not overturned by the growth
+trigger; it survives as that trigger's FIRST-BREACH behaviour, below.
+
+**EVERY TRIGGER PUTS A BASIS IN THE POPULATION; NOT EVERY TRIGGER RE-DERIVES ON THE ROUND IT
+FIRES.** Staleness (leg A or leg B) and exhaustion re-derive on the first round they fire.
+Growth does not: it re-derives only on a trend, by the rule immediately below. A lane that reads
+a growth entry as "the wall has moved" is reading the population, not the outcome.
+
+**GROWTH IS REPORT-FIRST, AND RE-DERIVES ONLY ON A TREND (#564).** A wall that followed its own
+sample would be current at every instant, so growth could never read as growth — that is the
+drift guard disarmed by the act that silences it. So the FIRST breach is **REPORTED** and the
+declared wall is left **UNCHANGED**; only a **SECOND CONSECUTIVE** breach re-derives it. An
+outstanding breach plus a round in which the entry **EXHAUSTED** its budget (killed at the cap,
+reported **UNKNOWN**) ALSO counts as the second breach, because the state that most needs the
+remedy is a gate that no longer completes — and the derivation then uses the **CARRIED sample**
+from the round that reported the breach, never the duration of the failure. Two states
+**advance nothing**: an entry the report never invoked has said nothing, and an entry that was
+measured and **REFUSED** measures how fast the gate refused (`#558`), never that it grew. A kill
+alone is not a size signal (n=3984); it becomes one only after growth has already been flagged.
+The streak **RESETS** on any round where the derivation stays inside the declared wall.
+
+**"CONSECUTIVE" IS READ FROM THE MANIFEST, NEVER FROM A LANE'S MEMORY.** The round that reports
+a breach records it **IN THE ENTRY** as `growth_breach`, carrying the sample, the basis, the
+derivation and the round's own identity (the report's `date` and `tree.head_sha`). A fresh
+process holding the manifest and a report therefore reaches the same verdict with no history of
+its own, and a re-run of the SAME round is idempotent because the identity it compares is the
+one the report declares. The marker is the REPORT's durable record and is written whenever the
+leg reports, **with or without `--apply`**; `--apply` remains the only path that changes a WALL.
+
+**PRECEDENCE, WHEN MORE THAN ONE TRIGGER FIRES.** **STALE** outranks growth: a basis whose bytes
+or argv moved describes a DIFFERENT command, and its remedy is a re-derivation from the fresh
+sample whatever that sample's size, so growth never suppresses it. **GROWTH** outranks
+**EXHAUSTED**: an exhausted gate has no completed sample, so the outstanding breach is the only
+size signal left — exactly the deadlock the trend clause exists to break. **Staleness, growth and
+exhaustion are therefore a PARTITION** of the containment population — an entry two legs both see
+is counted once, under the outranking trigger — so the printed breakdown sums to the printed
+total rather than double-counting a basis.
 
 **THE MECHANISM.** For each gate in the containment population: take the **worst COMPLETED**
 whole-command sample as `measured_sec`; derive `margin_x = 4.0 + 0.75 / measured_sec`; set
@@ -601,8 +642,9 @@ held, and an empty population is stated as EMPTY — never silence, so a leg tha
 stays distinguishable from one that never ran.
 
 **PRECEDENT — this leg DECLARES a practice that already ran.** Commit `ee5d885` (2026-10-02,
-Surveys) re-derived the two bases killed in that day's round on exactly the two named triggers
-(leg A + budget exhaustion), using the manifest's own margin law and stating `load_at_measure`.
+Surveys) re-derived the two bases killed in that day's round on exactly the two triggers that
+fired then (leg A + budget exhaustion; growth did not exist until `#564`), using the manifest's
+own margin law and stating `load_at_measure`.
 What was missing was not the mechanism but the DECLARATION: the procedure, the cron table and the
 board each carried no re-derivation step, which is what let the class recur un-cleared (#269).
 ## 5.3 The UNMEASURABLE mechanics — a cell that cannot be measured leaves the family mean, and nothing else
