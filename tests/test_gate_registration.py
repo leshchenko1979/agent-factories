@@ -1010,13 +1010,24 @@ def _basis(measured_at: str) -> dict:
     thing these probes vary is the revision the basis was taken at."""
     return {"budget_sec": 4.0, "measured_sec": 1.0, "margin_x": 4.0, "measured_at": measured_at}
 
-def _manifest(root: Path, gates: dict, default: dict | None = None) -> Path:
+def _manifest(root: Path, gates: dict, default: dict | None = None,
+              name: str = "gates.json") -> Path:
     """Write a throwaway manifest and return its path — never the live store.
 
     `default` is optional so every probe written before #208 keeps the bare default the kit
     ships (`gates.example.json`), which is the shape a factory inherits and must keep loading.
+
+    `name` exists because this helper used to ALWAYS write `root/gates.json`, so a probe that
+    called it twice held ONE file under two names: the second call silently rewrote the first
+    probe's manifest. That is not hypothetical — #578's disjoint partition turned it from a
+    latent trap into a red gate. `probe_a_refused_sample_is_not_a_basis_and_a_passing_one_still_derives`
+    wrote `manifest_b` as "a FRESH manifest", got the same path back, and reset the entry's
+    basis to `base`; the #307 arm that follows then read a STALE entry and could not see
+    EXHAUSTED at all. It passed before only because the OLD code let one entry be claimed by
+    BOTH legs at once, which is precisely the double-count #578 removed. A probe that needs a
+    second manifest names it.
     """
-    path = root / "gates.json"
+    path = root / name
     path.write_text(
         json.dumps({"default": default or {"budget_sec": 120.0}, "gates": gates}),
         encoding="utf-8",
@@ -2394,7 +2405,8 @@ def probe_a_refused_sample_is_not_a_basis_and_a_passing_one_still_derives() -> N
         # declaration differs — so the arm cannot pass on a coincidence of the fixture.
         # A FRESH manifest, because ARM 2's apply left the entry consistent with HEAD and
         # an empty population derives nothing: the arm needs a stale basis to have work.
-        manifest_b = _manifest(root, {"tests/test_moved.py": _basis(base)})
+        manifest_b = _manifest(root, {"tests/test_moved.py": _basis(base)},
+                               name="gates-b.json")
         declared = root / "audit-declared-tree.json"
         declared.write_text(json.dumps({
             "tree": {"head_sha": base, "modified_count": 0},
@@ -2475,7 +2487,7 @@ def probe_the_rederivation_leg_prints_and_bites() -> None:
         unreachable = _manifest(root, {
             "tests/test_moved.py": _basis(base),
             "tests/test_unreachable.py": _basis("0" * 40),
-        })
+        }, name="gates-unreachable.json")
         un_json = _leg_proc("--manifest", str(unreachable), "--repo-root", str(root), "--json")
         try:
             un_payload = json.loads(un_json.stdout)
@@ -2492,7 +2504,7 @@ def probe_the_rederivation_leg_prints_and_bites() -> None:
               f"examined={un_payload.get('examined')!r} declared={un_payload.get('declared')!r}")
 
         # NON-VACUITY: a manifest declaring no basis must reach NO verdict, never a green one.
-        empty = _manifest(root, {})
+        empty = _manifest(root, {}, name="gates-empty.json")
         vacuous = _leg_proc("--manifest", str(empty), "--repo-root", str(root))
         check("a manifest declaring NO basis exits non-zero", vacuous.returncode != 0,
               f"rc={vacuous.returncode}")
@@ -2873,6 +2885,126 @@ def probe_a_growing_gate_is_reported_first_and_derived_on_the_second_breach() ->
               json.dumps({k: mixed2[k] for k in
                           ("population", "stale", "exhausted", "growth")}))
 
+# #578 (ruling n=4459) — THE BREAKDOWN IS A CHECKED PARTITION, NOT A CLAIM IN PROSE.
+#
+# The leg rendered `population: 16 entries in the containment set (5 by a moved basis, 1 by an
+# exhausted budget, 11 by growth)` -- 5 + 1 + 11 = 17 against a total of 16, with
+# `tests/test_ledger_no_shrink.py` printed TWICE, once under [STALE] and again under
+# [EXHAUSTED] (/tmp/rederive_1028.out:6 and :9).
+#
+# THE MECHANISM. `pop.keys` is a SET UNION, so it deduplicates; the breakdown sums three tuple
+# LENGTHS, which does not. `_growth_source` excludes stale keys internally, so growth IS
+# disjoint from stale. But `exhausted` was narrowed against `growth_keys` ONLY, so a key that
+# was BOTH stale and reported UNKNOWN -- a gate whose blob moved AND whose last run died at its
+# wall -- survived in two partitions and was counted twice while the union counted it once.
+#
+# WHY THE GUARD, NOT JUST THE SUBTRACTION. Fixing the subtraction leaves the class intact: the
+# next source added to that union re-opens it silently. `partition_problems()` is what makes
+# the partition a property of the instrument. And the comment that used to sit above the
+# offending line ASSERTED the property that was false -- which is why a defect this visible
+# survived review: a reader who checks the code instead of the output was told it was fine.
+# A comment cannot fail, and that one did not.
+#
+# THE PROBE IS TWO-ARMED, and the second arm is the one that matters: the live cell
+# (stale INTERSECT exhausted) renders a breakdown that SUMS, and a leg with the narrowing
+# REVERTED must REFUSE to render rather than print a breakdown its own parts contradict. The
+# pre-#578 fixture could not catch this because it never built that cell: it had stale-only,
+# exhausted-only, and growth-INTERSECT-exhausted entries, and the overlap that actually
+# occurred was the one shape it omitted.
+
+def probe_the_containment_breakdown_sums_or_refuses() -> None:
+    """#578: the printed breakdown sums to the population it renders, or the run refuses."""
+    leg = REPO / "tools" / "gate_budget_rederive.py"
+    if not leg.is_file():
+        print("  SKIP  no tools/gate_budget_rederive.py in this tree — the re-derivation leg "
+              "is this factory's standing duty, not yet part of the shipped kit")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, head = _two_commit_repo(root)
+        if base is None or head is None:
+            check("#578: the probe repository could be built and committed", False,
+                  f"base={base} head={head} — this leg could not judge")
+            return
+        # THE LIVE CELL, built deliberately: `tests/test_moved.py` has a basis taken at `base`
+        # while its bytes moved to `head` (so it is STALE) AND the audit reports it UNKNOWN
+        # (so it is EXHAUSTED). `tests/test_same.py` is the two-sided control: reached, clean,
+        # and claimed by no source, so a breakdown that counted a phantom would show here.
+        manifest = _manifest(root, {
+            "tests/test_moved.py": _basis(base),
+            "tests/test_same.py": _basis(head),
+        })
+        overlap_report = root / "audit-overlap.json"
+        overlap_report.write_text(json.dumps({
+            "date": "2026-10-28",
+            "tree": {"head_sha": head, "modified_count": 0},
+            "gates": [
+                {"gate_key": "tests/test_moved.py", "cmd": "synthetic", "passed": False,
+                 "unknown": True, "duration_sec": 999.0, "exit_code": 124},
+                {"gate_key": "tests/test_same.py", "cmd": "synthetic", "passed": True,
+                 "unknown": False, "duration_sec": 0.5, "exit_code": 0},
+            ],
+        }), encoding="utf-8")
+
+        text = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                         "--audit-report", str(overlap_report))
+        check("#578: the run over a stale-AND-exhausted entry exits 0",
+              text.returncode == 0, f"rc={text.returncode}: {text.stdout[-400:]}")
+        check("#578: the entry that is both stale and exhausted is claimed by STALE",
+              "[STALE] tests/test_moved.py" in text.stdout, text.stdout[:700])
+        check("#578: ... and it is NOT also printed under [EXHAUSTED] — one partition, one owner",
+              "[EXHAUSTED] tests/test_moved.py" not in text.stdout, text.stdout[:700])
+
+        as_json = json.loads(_leg_proc(
+            "--manifest", str(manifest), "--repo-root", str(root),
+            "--audit-report", str(overlap_report), "--json",
+        ).stdout)
+        parts = len(as_json["stale"]) + len(as_json["growth"]) + len(as_json["exhausted"])
+        check("#578: the breakdown SUMS to the population it renders",
+              parts == len(as_json["population"]),
+              json.dumps({k: as_json[k] for k in
+                          ("population", "stale", "exhausted", "growth")}))
+        check("#578: ... and the population is the one entry, not two",
+              len(as_json["population"]) == 1 and len(as_json["stale"]) == 1
+              and as_json["exhausted"] == [],
+              json.dumps({k: as_json[k] for k in
+                          ("population", "stale", "exhausted", "growth")}))
+
+        # THE MUTATION CONTROL: revert the narrowing to `growth` only — the pre-#578 line — on
+        # a COPY of the leg beside it, and show the run REFUSE instead of rendering 2 against
+        # 1. Unlinked in `finally` so a run leaves no residue.
+        mutant = REPO / "tools" / "_mutant_gate_budget_rederive.py"
+        src = leg.read_text(encoding="utf-8")
+        anchor = (
+            "        stale_keys = {s.key for s in stale}\n"
+            "        exhausted = tuple(\n"
+            "            key for key in exhausted if key not in growth_keys and key not in stale_keys\n"
+            "        )\n"
+        )
+        reverted = "        exhausted = tuple(key for key in exhausted if key not in growth_keys)\n"
+        if anchor not in src:
+            check("#578: the mutation anchor is present in the leg", False,
+                  "the narrowing moved — the mutation control could not judge")
+            return
+        try:
+            mutant.write_text(src.replace(anchor, reverted, 1), encoding="utf-8")
+            mrun = subprocess.run(
+                [sys.executable, str(mutant), "--manifest", str(manifest),
+                 "--repo-root", str(root), "--audit-report", str(overlap_report)],
+                capture_output=True, text=True, timeout=300,
+            )
+            check("#578 MUTATION: with the narrowing reverted the run REFUSES — the guard BITES",
+                  mrun.returncode == 3 and "does not sum" in mrun.stdout,
+                  f"rc={mrun.returncode}\nstdout={mrun.stdout[:500]}\n"
+                  f"stderr={mrun.stderr[-500:]}")
+            check("#578 MUTATION: ... and the refusal NAMES the entry claimed twice over",
+                  "tests/test_moved.py is claimed by 2 partitions" in mrun.stdout,
+                  mrun.stdout[:600])
+            check("#578 MUTATION: ... and NO breakdown is printed beside the refusal",
+                  "in the containment set (" not in mrun.stdout, mrun.stdout[:600])
+        finally:
+            mutant.unlink(missing_ok=True)
+
 def probe_a_budget_exhausted_gate_reaches_the_trigger() -> None:
     """#307: an `unknown` gate reaches the third trigger instead of being dropped first."""
     leg = REPO / "tools" / "gate_budget_rederive.py"
@@ -2889,10 +3021,13 @@ def probe_a_budget_exhausted_gate_reaches_the_trigger() -> None:
             return
         manifest = _manifest(root, {
             # Bytes held AND registration held: this entry reaches the population ONLY if the
-            # exhausted trigger reaches it, so it isolates that one leg.
-            "tests/test_same.py": _basis(base),
+            # exhausted trigger reaches it, so it isolates that one leg. It must be based at
+            # `head` to do that: a basis at `base` would ALSO be stale, and since #578 stale
+            # outranks exhausted, the entry would be claimed by the stale partition and the
+            # exhausted leg would go unexercised while this probe still read green.
+            "tests/test_same.py": _basis(head),
             # The control, whose sample COMPLETED inside its cap.
-            "tests/test_moved.py": _basis(base),
+            "tests/test_moved.py": _basis(head),
         })
         report = root / "audit-report.json"
         report.write_text(json.dumps({"gates": [
@@ -3402,6 +3537,9 @@ def main() -> int:
 
     print("  synthetic probes — #564: growth is a third source, reported first, derived on trend")
     probe_a_growing_gate_is_reported_first_and_derived_on_the_second_breach()
+
+    print("  synthetic probes — #578: the containment breakdown sums, or the run refuses")
+    probe_the_containment_breakdown_sums_or_refuses()
 
     print("  synthetic probes — #240: a gate's own cap vs its audit budget")
     probe_a_budget_below_its_gates_own_cap_is_named()

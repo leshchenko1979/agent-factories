@@ -48,7 +48,9 @@ argv moved describes a DIFFERENT command, and its remedy is a re-derivation from
 sample whatever that sample's size, so growth never suppresses it. GROWTH outranks EXHAUSTED:
 an exhausted gate has no completed sample, so the outstanding breach is the only size signal
 left — exactly the deadlock the trend clause exists to break. The three sources are therefore a
-PARTITION of the population, and the printed breakdown sums to the printed total.
+PARTITION of the population, and `partition_problems()` REFUSES to print a breakdown whose
+parts do not sum to the total it renders (#578) — the property is checked at the point of
+rendering, never asserted here.
 
 THE POPULATION IS PRINTED, ALWAYS, WITH ITS COUNT. The run states how many declared entries
 it examined, how many were stale and by which leg, how many it could not examine at all
@@ -143,9 +145,11 @@ class Population:
     has reached no verdict at all, and `note` says so in the run's own output rather than
     leaving a caller to infer it from an empty tuple.
 
-    The three sources are a PARTITION (#564): `stale` and `exhausted` are read exactly as they
-    always were, and `growth` claims only the entries NEITHER of them owns, so the breakdown
-    printed beside the total sums to that total.
+    The three sources are a PARTITION (#564), and it is CHECKED rather than promised (#578):
+    `stale` is read exactly as it always was, `growth` claims only the entries staleness does
+    not own, and `exhausted` is narrowed against BOTH of them, so the breakdown printed beside
+    the total sums to that total. `partition_problems()` is what refuses a breakdown that does
+    not — this docstring is not what makes it true.
     """
 
     declared: int = 0
@@ -376,9 +380,17 @@ def containment_population(
         growth, reset = _growth_source(entries, {s.key for s in stale}, audit)
         growth_keys = {g.key for g in growth}
         # PRECEDENCE: stale > growth > exhausted. Staleness was excluded inside the growth
-        # read, so the two remaining sets are made disjoint here — one partition, one owner
-        # per entry, and the breakdown therefore SUMS to the population it renders.
-        exhausted = tuple(key for key in exhausted if key not in growth_keys)
+        # read, so BOTH remaining sets are narrowed here against the ones that outrank them:
+        # an entry can be stale AND reported UNKNOWN by the same audit (a gate whose blob
+        # moved and whose last run died at its wall), and narrowing `exhausted` against
+        # `growth` alone left it in two partitions while `pop.keys` -- a set union -- counted
+        # it once. The breakdown then rendered 5 + 1 + 11 against a population of 16, and the
+        # same key printed under [STALE] and again under [EXHAUSTED] (#578, measured at
+        # /tmp/rederive_1028.out:6 and :9, both tests/test_ledger_no_shrink.py).
+        stale_keys = {s.key for s in stale}
+        exhausted = tuple(
+            key for key in exhausted if key not in growth_keys and key not in stale_keys
+        )
         sample_note += (
             f" | growth trigger: {len(growth)} declared entr"
             f"{'y' if len(growth) == 1 else 'ies'} whose own derivation now exceeds the "
@@ -788,8 +800,58 @@ def apply_rederivation(
     )
 
 
+def partition_problems(pop: Population) -> tuple:
+    """The containment set's own arithmetic, CHECKED instead of asserted in prose (#578).
+
+    `pop.keys` is a SET UNION, so it deduplicates; the printed breakdown sums three tuple
+    lengths, which does not. Any entry claimed by two sources therefore makes the breakdown
+    exceed the population it renders, and the same key prints twice under two headings. The
+    narrowing at the read site keeps the three sources disjoint TODAY; this guard is what
+    keeps the PROPERTY, because `Population` carries five further fields (`reported`,
+    `reset`, `not_examined`, `held`, `applied`) and the next source added to that union
+    re-opens the class silently.
+
+    Returns the problems, never raises: a caller states them and refuses. The comment that
+    used to sit above the read site claimed the sum held while it did not, which is why a
+    defect this visible survived review -- a comment cannot fail, and that one did not.
+    """
+    breakdown = len(pop.stale) + len(pop.growth) + len(pop.exhausted)
+    population = len(pop.keys)
+    if breakdown == population:
+        return ()
+    problems = [
+        f"the printed breakdown does not sum to the population it renders: "
+        f"{len(pop.stale)} stale + {len(pop.growth)} growth + {len(pop.exhausted)} exhausted "
+        f"= {breakdown}, against {population} entr{'y' if population == 1 else 'ies'} in the "
+        f"containment set"
+    ]
+    seen: dict = {}
+    for source, keys in (
+        ("stale", [s.key for s in pop.stale]),
+        ("growth", [g.key for g in pop.growth]),
+        ("exhausted", list(pop.exhausted)),
+    ):
+        for key in keys:
+            seen.setdefault(key, []).append(source)
+    for key, sources in sorted(seen.items()):
+        if len(sources) > 1:
+            problems.append(
+                f"{key} is claimed by {len(sources)} partitions ({', '.join(sources)}) — one "
+                f"partition, one owner"
+            )
+    return tuple(problems)
+
+
 def render(pop: Population) -> str:
     """The population, printed with its count — the run's own account of what it examined."""
+    # NO CALLER PRINTS A BREAKDOWN THAT FAILS ITS OWN ARITHMETIC (#578). The check lives here
+    # as well as in `main()` so a future caller cannot bypass it by rendering directly.
+    problems = partition_problems(pop)
+    if problems:
+        raise ValueError(
+            "refusing to render a containment breakdown that does not sum: "
+            + " | ".join(problems)
+        )
     lines = [
         f"Gate-budget re-derivation leg — {pop.declared} declared entr"
         f"{'y' if pop.declared == 1 else 'ies'}, {pop.examined} examined",
@@ -882,6 +944,19 @@ def main(argv: list[str] | None = None) -> int:
     report = Path(args.audit_report) if args.audit_report else None
 
     pop = containment_population(manifest, root, report)
+
+    # THE PARTITION IS CHECKED BEFORE ANYTHING IS PRINTED (#578). Both output paths pass
+    # through here, so neither the human breakdown nor the JSON payload can report a
+    # containment set whose parts contradict its total.
+    partition = partition_problems(pop)
+    if partition:
+        print(
+            "REFUSED — the containment population's own arithmetic does not hold, so this run "
+            "reaches NO verdict and prints no breakdown:"
+        )
+        for problem in partition:
+            print(f"  {problem}")
+        return EXIT_REFUSED
 
     # THE REPORTING PATH WRITES ITS OWN RECORD (#564). Deliberately before `--apply` and not
     # behind it: a first breach is REPORTED, and the record of that report is what lets the
