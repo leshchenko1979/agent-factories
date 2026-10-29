@@ -111,23 +111,11 @@
       "measured_sec": 0.29
     },
     "tests/test_gate_entry_point_equivalence.py": {
-      "budget_sec": 434.23,
-      "margin_x": 4.007,
-      "measured_at": "3af21226a0d25f4b44d50b9cd0d1019f424faaef",
-      "measured_sec": 108.37,
-      "load_at_measure": 9.01,
-      "growth_breach": {
-        "sample_sec": 165.9,
-        "sample_revision": "5059fa68311f968e07ced06f4415d725672e0af8",
-        "basis_sec": 108.37,
-        "basis_revision": "3af21226a0d25f4b44d50b9cd0d1019f424faaef",
-        "declared_sec": 434.23,
-        "derived_sec": 664.35,
-        "growth_x": 1.5309,
-        "derived_over_declared": 1.5299,
-        "round_id": "2026-10-28:5059fa68311f968e07ced06f4415d725672e0af8",
-        "reported_at": "2026-10-28T06:53:43Z"
-      }
+      "budget_sec": 501.11,
+      "margin_x": 4.006,
+      "measured_at": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
+      "measured_sec": 125.09,
+      "load_at_measure": 0.37
     },
     "tests/test_gate_fixtures_closure.py": {
       "budget_sec": 68.03,
@@ -137,11 +125,11 @@
       "load_at_measure": 4.13
     },
     "tests/test_gate_registration.py": {
-      "budget_sec": 38.19,
-      "margin_x": 4.08,
-      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
-      "measured_sec": 9.36,
-      "load_at_measure": 4.13
+      "budget_sec": 45.15,
+      "margin_x": 4.068,
+      "measured_at": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
+      "measured_sec": 11.1,
+      "load_at_measure": 0.37
     },
     "tests/test_hq_delegation.py": {
       "budget_sec": 17.87,
@@ -150,23 +138,11 @@
       "measured_sec": 4.28
     },
     "tests/test_hygiene_build_residue.py": {
-      "budget_sec": 17.31,
-      "load_at_measure": 7.07,
-      "margin_x": 4.181,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 4.14,
-      "growth_breach": {
-        "sample_sec": 5.51,
-        "sample_revision": "5059fa68311f968e07ced06f4415d725672e0af8",
-        "basis_sec": 4.14,
-        "basis_revision": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-        "declared_sec": 17.31,
-        "derived_sec": 22.79,
-        "growth_x": 1.3309,
-        "derived_over_declared": 1.3166,
-        "round_id": "2026-10-28:5059fa68311f968e07ced06f4415d725672e0af8",
-        "reported_at": "2026-10-28T06:53:43Z"
-      }
+      "budget_sec": 20.39,
+      "load_at_measure": 0.37,
+      "margin_x": 4.153,
+      "measured_at": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
+      "measured_sec": 4.91
     },
     "tests/test_hygiene_declaration_sweep.py": {
       "budget_sec": 20.19,
@@ -231,11 +207,11 @@
       "measured_sec": 6.96
     },
     "tests/test_ledger.py": {
-      "budget_sec": 289.75,
-      "load_at_measure": 7.33,
-      "margin_x": 4.01,
-      "measured_at": "4f3937801d9fb8c1d9bc7f6361459ac4ae2ee345",
-      "measured_sec": 72.25
+      "budget_sec": 253.51,
+      "load_at_measure": 0.37,
+      "margin_x": 4.012,
+      "measured_at": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
+      "measured_sec": 63.19
     },
     "tests/test_ledger_close_preflight.py": {
       "budget_sec": 63.95,
@@ -284,7 +260,19 @@
       "load_at_measure": 4.13,
       "margin_x": 4.003,
       "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
-      "measured_sec": 296.14
+      "measured_sec": 296.14,
+      "growth_breach": {
+        "sample_sec": 312.07,
+        "sample_revision": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
+        "basis_sec": 296.14,
+        "basis_revision": "5059fa68311f968e07ced06f4415d725672e0af8",
+        "declared_sec": 1185.31,
+        "derived_sec": 1249.03,
+        "growth_x": 1.0538,
+        "derived_over_declared": 1.0538,
+        "round_id": "2026-10-29:d32e41958f2f5a45358de75eb4a309a787a01c6a",
+        "reported_at": "2026-10-29T06:49:57Z"
+      }
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 30.83,
@@ -305,7 +293,19 @@
       "margin_x": 4.224,
       "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
       "measured_sec": 3.35,
-      "load_at_measure": 4.13
+      "load_at_measure": 4.13,
+      "growth_breach": {
+        "sample_sec": 3.67,
+        "sample_revision": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
+        "basis_sec": 3.35,
+        "basis_revision": "5059fa68311f968e07ced06f4415d725672e0af8",
+        "declared_sec": 14.15,
+        "derived_sec": 15.43,
+        "growth_x": 1.0955,
+        "derived_over_declared": 1.0905,
+        "round_id": "2026-10-29:d32e41958f2f5a45358de75eb4a309a787a01c6a",
+        "reported_at": "2026-10-29T06:49:57Z"
+      }
     },
     "tests/test_rework.py": {
       "budget_sec": 18.63,
@@ -408,11 +408,11 @@
       "measured_sec": 7.23
     },
     "tools/ledger.py": {
-      "budget_sec": 18.11,
-      "margin_x": 4.173,
-      "measured_at": "4f3937801d9fb8c1d9bc7f6361459ac4ae2ee345",
-      "measured_sec": 4.34,
-      "load_at_measure": 7.33
+      "budget_sec": 15.35,
+      "margin_x": 4.205,
+      "measured_at": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
+      "measured_sec": 3.65,
+      "load_at_measure": 0.37
     },
     "tools/roadmap.py": {
       "budget_sec": 2.47,
