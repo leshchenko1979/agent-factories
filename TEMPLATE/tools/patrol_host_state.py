@@ -12319,6 +12319,164 @@ _SCORECARD_CELL_RE = re.compile(
 # THE FLOOR IS THE RULING'S OWN, not this leg's choice (#67): "any criterion score < 3".
 SCORE_FLOOR = 3
 
+# THE ROUTING EPOCH (#580, ruling `n=4448`). The reader judges conversion rows stamped at
+# or after the ruling that required the `board` ref, and NOTHING IS BACKFILLED: the 15 rows
+# that predate the field (`n=3117` … `n=4418`) stay OUTSIDE this population. Without the
+# boundary the leg would red fifteen historical rows forever -- the always-red shape this
+# repo refuses -- and a leg that is always red teaches its next reader to ignore it.
+#
+# IT IS A ROW NUMBER, NOT AN INSTANT, because that is what the ruling declared and because
+# `n` is the ledger's own TOTAL ORDER: a row's `ts` is a WRITE instant and two rows can share
+# one, while no two rows share an `n`.
+CONVERSION_ROUTING_EPOCH = 4448
+
+# THE ROUTING-ITEM DISCRIMINATOR, and it is the CONVENTION the two real routings already
+# use: `#463 "scores(2026-10-10): 4 standing regressions await their conversion"` and `#515`
+# in the same shape. An item whose title does not open with `scores(` or `scores:` is not a
+# routing item however real it is -- #67 is a LAW item and #421 a DEFECT item, so a
+# conversion row naming either routed its round into nothing. This reads the item's CURRENT
+# title, which is the ruling's own stated residual: an item retitled after the row was
+# written flips the verdict, and GitHub carries no structural marker beyond labels, which
+# this population does not use (0 labels on both #463 and #515).
+ROUTING_ITEM_TITLE_RE = re.compile(r"^scores[(:]")
+
+def conversion_routing_problems(
+    rows: list[dict], issues: list[dict] | None, *, predicate=None,
+) -> tuple[list[str], dict]:
+    """Whether each post-epoch conversion row's `board` ref RESOLVES, and its coverage.
+
+    THE FOURTH OF THE FIVE CLAUSES of docs/measurement-procedure.md §5.4, read
+    mechanically (#580, ruling `n=4448`). Item 4
+    makes routing the conversion row's PRECONDITION -- *"It is written when the routing has
+    happened, because the leg reads the ROW and never the board"* -- and until this leg
+    existed nothing read the board either, so "routed" was a claim no surface could check.
+    The write path now refuses a row naming no item; this arm asks whether the item it names
+    is the RIGHT one.
+
+    RESOLUTION NEEDS ALL FOUR, and each is a distinct failure a reader must be able to tell
+    apart: the item EXISTS; it is a ROUTING item, discriminated by the title convention both
+    real routings use; it was CREATED at or before the row's `ts` (a row cannot route into an
+    item that did not exist yet -- that is the future-dated item, and it means the row was
+    written ahead of the act it records); and it was OPEN at the row's `ts` (`state == OPEN`,
+    or `closedAt` later than the row's `ts`). An item closed BEFORE the row was written was
+    not routed into by that row: the round had nowhere to land.
+
+    FAILS OPEN, like every other arm of this leg: with no board injected (`issues is None`)
+    the arm is NOT RUN with its reason rather than reading clean, because "no unresolved
+    routing" and "no board was read" must never render the same (#112).
+
+    THE HISTORICAL POPULATION IS COUNTED, NOT JUDGED: rows below the epoch are counted in
+    `outside` and printed, so a reader can see the boundary did work rather than assume it.
+    """
+    predicate = predicate or field_predicate_readers()
+    coverage: dict = {
+        "epoch": CONVERSION_ROUTING_EPOCH,
+        "judged": 0,
+        "outside": 0,
+        "resolved": [],
+        "unanswered": [],
+        "reason": None,
+    }
+    if issues is None:
+        coverage["reason"] = (
+            "the board was not injected, so a `board` ref cannot be resolved — the "
+            "conversion rows were read for their artifact token only, and a row naming no "
+            "resolvable routing item is invisible to this run"
+        )
+        return [], coverage
+
+    by_number: dict[int, dict] = {}
+    for issue in issues or []:
+        try:
+            by_number[int(issue.get("number"))] = issue
+        except (TypeError, ValueError):
+            continue
+
+    problems: list[str] = []
+    for row in rows:
+        if str(row.get("event") or "") != "conversion":
+            continue
+        try:
+            number = int(row.get("n"))
+        except (TypeError, ValueError):
+            continue
+        if number < CONVERSION_ROUTING_EPOCH:
+            coverage["outside"] += 1
+            continue
+        coverage["judged"] += 1
+        ref = predicate.declared_board_routing(row.get("refs"))
+        if ref is None:
+            coverage["unanswered"].append(number)
+            problems.append(
+                f"conversion row n={number} is stamped at or after the routing epoch "
+                f"(n={CONVERSION_ROUTING_EPOCH}) and carries no well-formed `board:#<n>` "
+                f"ref: the round it converted names no item that routed it, so the "
+                f"routing docs/measurement-procedure.md §5.4 item 4 makes its "
+                f"precondition cannot be read at all (#580)"
+            )
+            continue
+        target = int(ref[1:])
+        issue = by_number.get(target)
+        if issue is None:
+            reason = f"names {ref}, which this board does not carry"
+        elif not ROUTING_ITEM_TITLE_RE.match(str(issue.get("title") or "")):
+            reason = (
+                f"names {ref} ({(str(issue.get('title') or '') or 'untitled')!r}), whose "
+                f"title does not open `scores(` or `scores:` — a routing item carries the "
+                f"round it routed, and a law, defect or intake item routed nothing"
+            )
+        else:
+            try:
+                row_instant = reader_parse_ts(str(row.get("ts") or ""))
+            except (ValueError, TypeError):
+                row_instant = None
+            created = str(issue.get("createdAt") or "")
+            try:
+                created_instant = reader_parse_ts(created) if created else None
+            except (ValueError, TypeError):
+                created_instant = None
+            if row_instant is None:
+                reason = (
+                    f"names {ref}, but its own `ts` cannot be parsed, so no item can be "
+                    f"placed against the act it records"
+                )
+            elif created_instant is None:
+                reason = (
+                    f"names {ref}, whose `createdAt` this read cannot parse "
+                    f"({created or 'absent'}), so the item cannot be placed against the row"
+                )
+            elif created_instant > row_instant:
+                reason = (
+                    f"names {ref}, which was CREATED at {created} — AFTER this row's "
+                    f"ts {row.get('ts')}, so the row was written ahead of the act it "
+                    f"records and routed its round into an item that did not yet exist"
+                )
+            else:
+                closed = str(issue.get("closedAt") or "")
+                try:
+                    closed_instant = reader_parse_ts(closed) if closed else None
+                except (ValueError, TypeError):
+                    closed_instant = None
+                state = str(issue.get("state") or "").upper()
+                if state == "OPEN":
+                    coverage["resolved"].append(number)
+                    continue
+                if closed_instant is not None and closed_instant > row_instant:
+                    coverage["resolved"].append(number)
+                    continue
+                reason = (
+                    f"names {ref}, which was CLOSED at {closed or 'an unreadable instant'} "
+                    f"— not later than this row's ts {row.get('ts')}, so it was not open "
+                    f"when the routing was declared and the round had nowhere to land"
+                )
+        coverage["unanswered"].append(number)
+        problems.append(
+            f"conversion row n={number} {reason} — the routing it declares does not "
+            f"resolve, so its round reads as converted into an item that never carried "
+            f"it (#580, ruling n=4448)"
+        )
+    return problems, coverage
+
 
 def score_artifacts(scores_dir: Path) -> list[tuple[str, Path]]:
     """Every dated survey artifact in `scores_dir`, OLDEST first.
@@ -12507,6 +12665,7 @@ def score_conversion_leg(
     repo: Path = REPO,
     predicate=None,
     scores_dir: Path | None = None,
+    issues: list[dict] | None = None,
 ) -> dict:
     """Every regression in the NEWEST survey artifact, and whether a row ANSWERS it.
 
@@ -12560,6 +12719,12 @@ def score_conversion_leg(
         "unanswered": [],
         "conversion_rows": 0,
         "floor": SCORE_FLOOR,
+        "routing_epoch": CONVERSION_ROUTING_EPOCH,
+        "routing_judged": 0,
+        "routing_outside": 0,
+        "routing_resolved": [],
+        "routing_unanswered": [],
+        "routing_reason": None,
     }
     artifacts = score_artifacts(directory)
     if not artifacts:
@@ -12843,6 +13008,30 @@ def score_conversion_leg(
                 )
     coverage["lapsed"] = lapsed
     coverage["lapsed_examined"] = len(lapsed)
+
+    # THE ROUTING ARM (#580, ruling `n=4448`), and it is the arm
+    # docs/measurement-procedure.md §5.4 item 4 has never had:
+    # the row must name the board item that routed its round, and this asks whether that
+    # item RESOLVES. Its population is BOUNDED at the epoch -- the 15 rows that predate the
+    # field stay outside it -- because a leg that reds fifteen historical rows forever is
+    # the always-red shape this repo refuses.
+    #
+    # IT FAILS OPEN ON A MISSING BOARD, exactly as the artifact arms fail open on a missing
+    # file: with no board injected the arm reports NOT RUN and its reason, so a probe that
+    # injects only a scores directory keeps reading the join it was written to read, and
+    # "no unresolved routing" never renders the same as "no board was read".
+    routing_problems, routing = conversion_routing_problems(
+        rows, issues, predicate=predicate,
+    )
+    problems.extend(routing_problems)
+    coverage.update({
+        "routing_epoch": routing["epoch"],
+        "routing_judged": routing["judged"],
+        "routing_outside": routing["outside"],
+        "routing_resolved": routing["resolved"],
+        "routing_unanswered": routing["unanswered"],
+        "routing_reason": routing["reason"],
+    })
 
     coverage.update({
         "factories": len(blocks),
@@ -14229,6 +14418,26 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{', '.join(cov['answered']) or 'none'}; unanswered: "
                     f"{', '.join(cov['unanswered']) or 'none'}"
                 )
+                # #580: the ROUTING population prints with its boundary, so "no unresolved
+                # routing", "no board read" and "no row at or after the epoch" are three
+                # different lines rather than one clean verdict. The historical count is
+                # printed BESIDE the judged one: a reader must be able to see that the
+                # boundary did work rather than take it on trust.
+                if cov.get("routing_reason"):
+                    lines.append(
+                        f"  routing (epoch n={cov.get('routing_epoch')}): NOT RUN — "
+                        f"{cov['routing_reason']}"
+                    )
+                else:
+                    lines.append(
+                        f"  routing (epoch n={cov.get('routing_epoch')}): "
+                        f"{cov.get('routing_judged', 0)} conversion row(s) judged, "
+                        f"{cov.get('routing_outside', 0)} historical row(s) OUTSIDE the "
+                        f"population — resolved: "
+                        f"{', '.join(f'n={n}' for n in cov.get('routing_resolved') or []) or 'none'}; "
+                        f"UNANSWERED: "
+                        f"{', '.join(f'n={n}' for n in cov.get('routing_unanswered') or []) or 'none'}"
+                    )
                 # #517: the lapsed population prints with its baseline, so "no lapse",
                 # "no baseline" and "no artifact parsed" are three different lines rather
                 # than one clean verdict.
@@ -14966,6 +15175,12 @@ def main(
             # live surface, which is what production wants; `_run` injects an EMPTY
             # directory, so a probe that does not pass one reads NOT RUN with its reason.
             scores_dir=scores_dir_fn() if scores_dir_fn else None,
+            # THE BOARD IS INJECTED FOR THE ROUTING ARM (#580): the `board:#<n>` ref a
+            # conversion row now carries is resolvable only against a real board read, and
+            # `main` has already exited 2 on an unreadable board -- so this is the SAME
+            # read the other board legs use, one call, no second fetch. `None` (the shape a
+            # probe gets when it injects no board) is NOT RUN with its reason, never clean.
+            issues=issues,
         ), read_at),
         leg_guard("dispatch-delivery", lambda: dispatch_delivery_leg(
             rows, read_at=read_at, bound=(delivery_scope_fn or dispatch_delivery_scope)(),

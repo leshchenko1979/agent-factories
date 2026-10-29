@@ -13715,3 +13715,141 @@ def test_the_undispatched_ruling_leg_is_INJECTABLE_and_wired_by_default() -> Non
         "the batch record must be read through tools/ledger_declaration.py, not re-parsed"
     )
 
+
+# ---------------------------------------------------------------------------------------
+# #580 -- the conversion row must name the board item that ROUTED it (ruling n=4448)
+#
+# measurement-procedure.md §5.4 item 4 makes routing the row's precondition, and until
+# this arm "routed" was a claim no surface could check. The write path refuses a row
+# naming NO item; these probes are the other half -- whether the item it names is the RIGHT
+# one. Every arm below therefore differs from a RESOLVING control in exactly one field, so
+# a leg that returned "unresolved" for everything would fail the control and a leg that
+# returned "resolved" for everything would fail the four.
+# ---------------------------------------------------------------------------------------
+_ROUTING_TS = "2026-10-29T00:00:00Z"
+
+
+def _routing_item(number: int, *, title: str = "scores(2026-10-29)",
+                  created: str = "2026-10-28T00:00:00Z", state: str = "OPEN",
+                  closed: str | None = None) -> dict:
+    """A board item shaped like the `gh` read the leg consumes."""
+    return {"number": number, "title": title, "state": state,
+            "createdAt": created, "closedAt": closed}
+
+
+def _probe_routed_row(n: int = 4449, *, board: str | None = "#600",
+                ts: str = _ROUTING_TS) -> dict:
+    """A conversion row at or after the routing epoch, carrying `board` as its only ref."""
+    return {
+        "n": n, "ts": ts, "event": "conversion", "actor": "worker", "subject": "#67",
+        "detail": "converted_from=evidence/scores/2026-10-29.md",
+        "refs": [{"board": board}] if board is not None else [],
+    }
+
+
+def test_the_routing_arm_COUNTS_historical_rows_OUTSIDE_and_judges_none() -> None:
+    """The epoch boundary: rows below it are COUNTED, never silently judged clean.
+
+    The fifteen historical conversion rows name no item at all, and they are not defects --
+    the requirement did not exist when they were written. Counting them as `outside` is what
+    lets a reader see the boundary do work instead of assuming it.
+    """
+    problems, cov = RUNNER.conversion_routing_problems(
+        [_probe_routed_row(3000, board=None)], [_routing_item(600)]
+    )
+    assert problems == [], problems
+    assert cov["outside"] == 1, cov
+    assert cov["judged"] == 0, cov
+    assert cov["resolved"] == [] and cov["unanswered"] == [], cov
+
+
+def test_the_routing_arm_RESOLVES_a_row_naming_an_OPEN_routing_item() -> None:
+    """THE CONTROL. Without it, every arm below could pass on a leg that resolves nothing."""
+    problems, cov = RUNNER.conversion_routing_problems(
+        [_probe_routed_row(4449)], [_routing_item(600)]
+    )
+    assert problems == [], problems
+    assert cov["judged"] == 1, cov
+    assert cov["resolved"] == [4449], cov
+    assert cov["unanswered"] == [], cov
+
+
+def test_the_routing_arm_NAMES_each_unresolvable_case_by_its_OWN_reason() -> None:
+    """FIVE failure modes, five DISTINCT reasons, on one fixture.
+
+    The distinctness is the assertion: a leg that emitted one generic "unresolved" would
+    satisfy every `in problems` check here and still leave a reader unable to tell a row
+    naming no item from a row naming the wrong one. So the reasons are compared to each
+    other, not only to their own phrases.
+    """
+    cases = [
+        ("no ref at all", _probe_routed_row(4450, board=None), [_routing_item(600)],
+         "carries no well-formed `board:#<n>` ref"),
+        ("an item the board does not carry", _probe_routed_row(4451, board="#999"),
+         [_routing_item(600)], "which this board does not carry"),
+        ("an item that is not a routing item", _probe_routed_row(4452),
+         [_routing_item(600, title="a defect that routed nothing")],
+         "does not open `scores(` or `scores:`"),
+        ("an item CREATED after the row", _probe_routed_row(4453),
+         [_routing_item(600, created="2026-10-30T00:00:00Z")],
+         "AFTER this row's ts"),
+        ("an item CLOSED before the row", _probe_routed_row(4454),
+         [_routing_item(600, state="CLOSED", closed="2026-10-27T00:00:00Z")],
+         "not later than this row's ts"),
+    ]
+    reasons: list[str] = []
+    for label, row, issues, phrase in cases:
+        problems, cov = RUNNER.conversion_routing_problems([row], issues)
+        assert len(problems) == 1, f"{label}: {problems}"
+        assert phrase in problems[0], f"{label} — the reason must name its own failure\n" \
+                                     f"{problems[0]}"
+        assert cov["unanswered"] == [row["n"]], f"{label}: {cov}"
+        assert cov["resolved"] == [], f"{label}: {cov}"
+        reasons.append(problems[0])
+    assert len(set(reasons)) == len(reasons), (
+        "every unresolvable case must read DIFFERENTLY; a generic reason is a count, and a "
+        f"count cannot be dispatched\n{reasons}"
+    )
+
+
+def test_the_routing_arm_discriminates_on_the_STATE_of_one_item() -> None:
+    """The SAME item, one field apart: closed after the row resolves, before it does not.
+
+    The row is identical in both arms, so a leg keyed on anything but the item's own window
+    returns the same verdict twice and this pair fails. That is the property a "was it open
+    when the routing was declared" clause has to have.
+    """
+    row = _probe_routed_row(4455)
+    after, cov_after = RUNNER.conversion_routing_problems(
+        [row], [_routing_item(600, state="CLOSED", closed="2026-10-29T06:00:00Z")]
+    )
+    assert after == [] and cov_after["resolved"] == [4455], (after, cov_after)
+    before, cov_before = RUNNER.conversion_routing_problems(
+        [row], [_routing_item(600, state="CLOSED", closed="2026-10-28T06:00:00Z")]
+    )
+    assert len(before) == 1 and cov_before["unanswered"] == [4455], (before, cov_before)
+
+
+def test_the_routing_arm_fails_OPEN_when_no_board_was_injected() -> None:
+    """"No unresolved routing" and "no board was read" must never render the same line."""
+    problems, cov = RUNNER.conversion_routing_problems([_probe_routed_row(4449)], None)
+    assert problems == [], problems
+    assert cov["reason"] and "board was not injected" in cov["reason"], cov
+    assert cov["judged"] == 0, cov
+
+
+def test_the_routing_arm_is_WIRED_and_PRINTS_its_population_beside_its_epoch() -> None:
+    """Driven through the REAL `main()`: a leg the report drops is a verdict nobody reads."""
+    directory = _scores_dir(_score_artifact(total=70, cells=["2", "4"]))
+    rows = [_probe_routed_row(4449)]
+    rc, out, _ = _run([_routing_item(600)], rows, scores_dir=directory)
+    assert "routing (epoch n=4448): 1 conversion row(s) judged" in out, out
+    assert "0 historical row(s) OUTSIDE the population" in out, out
+    assert "resolved: n=4449" in out, out
+    assert "UNANSWERED: none" in out, out
+
+    # ... and the UNANSWERED half renders as loudly as the resolved one.
+    rc, out, _ = _run([_routing_item(600)], [_probe_routed_row(4449, board="#999")],
+                      scores_dir=directory)
+    assert rc == 1, out
+    assert "UNANSWERED: n=4449" in out, out

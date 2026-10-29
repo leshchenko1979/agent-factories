@@ -853,37 +853,62 @@ def check_conversion_vocabulary() -> None:
         cv_ledger = Path(td) / "conversion.jsonl"
         cv_subj = "#9001"
         artifact = "evidence/scores/2026-10-10.md"
+        # THE DECLARATION IS HERMETIC (#580). Both the event and the ref kind the arms
+        # below exercise are pointed at by ENV rather than read from this tree's own
+        # `docs/ledger-refs-kinds.json`: a probe that read the live file would assert this
+        # factory's declarations instead of the write path's behaviour, and a member that
+        # declares `conversion` without `board` would red here for a MISSING DECLARATION
+        # rather than a broken tool (#229). `OC_REFS_KINDS_PATH` is the module's own seam,
+        # the same shape `OC_ACTORS_PATH` already uses inside `run`.
+        decl_file = Path(td) / "refs-kinds.json"
+        decl_file.write_text(json.dumps({
+            "events": ["conversion"], "kinds": ["board"],
+        }), encoding="utf-8")
+        DECL = {"OC_REFS_KINDS_PATH": str(decl_file)}
         run(cv_ledger, "append", "--event", "genesis", "--actor", "owner",
             "--subject", "genesis", "--detail", "genesis: fixture ledger")
 
-        def conversion(detail: str) -> subprocess.CompletedProcess:
+        def conversion(detail: str, *refs: str) -> subprocess.CompletedProcess:
+            extra: list[str] = []
+            for ref in refs:
+                extra += ["--ref", ref]
             return run(cv_ledger, "append", "--event", "conversion", "--actor", "worker",
-                       "--subject", cv_subj, "--detail", detail)
+                       "--subject", cv_subj, "--detail", detail, *extra, extra_env=DECL)
 
-        r = conversion(f"conversion: answered\nconverted_from={artifact}")
-        check("(67a) a conversion naming its artifact is ACCEPTED (the control)",
+        # (67a) THE CONTROL, carrying BOTH fields. #580 made the routing ref the
+        # conversion's SECOND requirement, so a control satisfying only the artifact token
+        # would be asserting a row the write path now refuses.
+        r = conversion(f"conversion: answered\nconverted_from={artifact}", "board:#463")
+        check("(67a) a conversion naming its artifact AND its routing item is ACCEPTED "
+              "(the control)",
               r.returncode == 0, (r.stdout + r.stderr).strip()[-110:])
         n_after_accept = len(rows(cv_ledger))
 
-        r = conversion("conversion: names no artifact")
+        # EVERY ARM BELOW SATISFIES THE FIELD IT IS NOT TESTING. A refusal arm that left
+        # both fields out would pass on either check firing, so it could not tell which
+        # gate refused -- the shape CODE.md records as "the leg passes because an EARLIER
+        # gate refused" (#46). So (67b)-(67f) carry a lawful `board:` ref and vary ONLY the
+        # artifact token, and (580a)/(580b) vary ONLY the routing ref.
+        r = conversion("conversion: names no artifact", "board:#463")
         msg = (r.stdout + r.stderr).strip()
         check("(67b) a conversion naming NO artifact is REFUSED",
               r.returncode != 0 and "must name the score artifact" in msg, msg[-130:])
         check("(67b) and the refusal names the token to write",
               "converted_from=evidence/scores/<date>.md" in msg, msg[-150:])
 
-        r = conversion("conversion: a token that names nothing\nconverted_from=none")
+        r = conversion("conversion: a token that names nothing\nconverted_from=none",
+                       "board:#463")
         msg = (r.stdout + r.stderr).strip()
         check("(67c) `converted_from=none` OCCUPIES the key and is REFUSED",
               r.returncode != 0 and "must name the score artifact" in msg, msg[-130:])
 
-        r = conversion("conversion: a bare key\nconverted_from=")
+        r = conversion("conversion: a bare key\nconverted_from=", "board:#463")
         msg = (r.stdout + r.stderr).strip()
         check("(67d) a bare `converted_from=` is REFUSED",
               r.returncode != 0 and "must name the score artifact" in msg, msg[-130:])
 
         r = conversion("conversion: a path outside the score tree\n"
-                       "converted_from=docs/foo.md")
+                       "converted_from=docs/foo.md", "board:#463")
         msg = (r.stdout + r.stderr).strip()
         check("(67e) a token naming a path OUTSIDE evidence/scores/ is REFUSED",
               r.returncode != 0 and "must name the score artifact" in msg, msg[-130:])
@@ -891,16 +916,51 @@ def check_conversion_vocabulary() -> None:
         # (67f) POSITIONAL. `detail` is free prose that QUOTES trailers as evidence, so a
         # whole-detail scan would let a writer satisfy the refusal by quoting an artifact
         # path while the row's own canonical run declares none.
-        r = conversion(f"conversion: the row must carry converted_from={artifact} somewhere")
+        r = conversion(f"conversion: the row must carry converted_from={artifact} somewhere",
+                       "board:#463")
         msg = (r.stdout + r.stderr).strip()
         check("(67f) the token QUOTED in prose does NOT satisfy the run -- REFUSED",
               r.returncode != 0 and "must name the score artifact" in msg, msg[-130:])
 
-        check("(67g) the refused appends wrote NOTHING",
+        # --- #580: the ROUTING ref, the field measurement-procedure.md §5.4 lacked ------
+        # The artifact token answers WHICH round; it cannot answer WHICH ITEM carries the
+        # regressions. So a conversion must name both, and the refusal must name both --
+        # a writer told half the rule writes half a row.
+        r = conversion(f"conversion: answered\nconverted_from={artifact}")
+        msg = (r.stdout + r.stderr).strip()
+        check("(580a) a conversion carrying the artifact but NO `board:` ref is REFUSED",
+              r.returncode != 0, msg[-160:])
+        # The row HAS its artifact, so the refusal must name the requirement it LACKS --
+        # asserting both strings here was the probe's own error: a refusal that named the
+        # artifact token to a writer who already wrote it would be noise, and the arm would
+        # then be testing my assertion instead of the message.
+        check("(580a) and the refusal names the routing requirement it lacks",
+              "board:#<n>" in msg and "#580" in msg, msg[-320:])
+
+        r = conversion(f"conversion: answered\nconverted_from={artifact}", "board:463")
+        msg = (r.stdout + r.stderr).strip()
+        check("(580b) a MALFORMED `board:` value (no `#`) OCCUPIES the kind and is REFUSED",
+              r.returncode != 0, msg[-160:])
+        check("(580b) and the refusal names the value it read and the form to write",
+              "'463'" in msg and "#<digits>" in msg, msg[-320:])
+
+        # (580d) A ROW MISSING BOTH NAMES BOTH. The refusal's whole value is that a writer
+        # told half the rule writes half a row, so the message must be COMPLETE for the row
+        # carrying neither -- and (580a)/(580b) each carry one field by design, so neither
+        # can show this.
+        r = conversion("conversion: neither field")
+        msg = (r.stdout + r.stderr).strip()
+        check("(580d) a conversion missing BOTH requirements names BOTH in one refusal",
+              r.returncode != 0
+              and "converted_from=evidence/scores/<date>.md" in msg
+              and "board:#<n>" in msg,
+              msg[-400:])
+
+        check("(580c) the refused appends wrote NOTHING",
               len(rows(cv_ledger)) == n_after_accept,
               f"{len(rows(cv_ledger))} row(s)")
 
-        r = run(cv_ledger, "verify")
+        r = run(cv_ledger, "verify", extra_env=DECL)
         out = r.stdout + r.stderr
         check("(67h) `verify` reads a lawful conversion row (the declaration is READ)",
               r.returncode == 0, out[-420:])

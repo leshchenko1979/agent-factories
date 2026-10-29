@@ -720,11 +720,24 @@ the core authorization matrix, so the declaration is its *entire* population, an
 from it is refused at append. A lane that may claim and close a unit but may not declare its
 conversion is a lane that can take work it cannot settle.
 
-**4. Declared, not necessarily repaired.** The declaration records that the round's regressions
-were **routed** — converted into a board item by Triage (P1, P27) — never that they were fixed. It
-is written when the routing has happened, because the leg reads the ROW and never the board: a
+**4. Declared, not necessarily repaired — and the routing it names is a REF.** The declaration
+records that the round's regressions were **routed** — converted into a board item by Triage (P1,
+P27) — never that they were fixed. It is written when the routing has happened, because a
 declaration made ahead of the routing silences the leg over a regression nothing has picked up. The
 row is the run's own statement of what it did, and it is read as exactly that.
+
+The row therefore carries **two fields, and a row carrying one is REFUSED** at the write path:
+`converted_from=evidence/scores/<date>.md` for the **artifact** whose regression it answers, and a
+ref of the declared kind **`board`** — `board:#<n>` — for the **item that routed the round**
+(`#580`, ruling `n=4448`). A typed ref rather than a `routed_to=` prose token, for the reason the
+park transition carries one (`#535`, ruling `n=4007`): a token grepped out of free prose is answered
+by the wrong row, and a conversion row already spends its `subject` ref on the survey unit. The
+reader resolves the ref against the tracker and reports an item that does not exist, is not a
+routing item (its title opens `scores(` or `scores:`), was created after the row, or was closed
+before it, as **UNANSWERED** beside the artifact it examined. Its population is **bounded at the
+ruling that required the field** — the fifteen conversion rows that predate it stay outside — because
+a reader that reds history forever is a reader its next operator learns to ignore, and nothing is
+backfilled.
 
 **5. The declaration is NOT the score row.** A `score` row answers nothing: the leg reads
 `conversion` rows only. *"Declares it on its own score row"* describes a join the instrument does

@@ -144,6 +144,7 @@ AUTHORIZED_ACTORS_BY_EVENT = AUTHORIZED_ACTORS_BY_EVENT
 # a neighbour by that name when it stages a throwaway tree.
 from field_predicate import (
     declared_board_closed,
+    declared_board_routing,
     declared_claim,
     declared_comment_id,
     declared_conversion_source,
@@ -1511,14 +1512,70 @@ def cmd_append(args: argparse.Namespace) -> int:
         # this binds the row ABOUT TO BE WRITTEN, so it can never predate itself. History is
         # the leg's business, and nothing is backfilled -- a token written today for a
         # conversion that predates the rule would be a falsified record, not a repair.
-        if args.event == "conversion" and declared_conversion_source(args.detail) is None:
-            sys.exit(
-                "ledger append refused: a 'conversion' must name the score artifact it "
-                "converted as a canonical-run token "
-                "`converted_from=evidence/scores/<date>.md`. A conversion naming no "
-                "artifact cannot be joined to the regression it answers, so the duty "
-                "reads as unconverted forever (#67)"
-            )
+        # AND IT MUST NAME THE BOARD ITEM IT ROUTED THE ROUND INTO (#580, ruling `n=4448`).
+        #
+        # The artifact token answers "WHICH round"; it cannot answer "which item carries the
+        # regressions". Section 5.4 item 4 made routing the conversion row's PRECONDITION --
+        # *"It is written when the routing has happened"* -- and supplied no field, no
+        # refusal and no reader, so a row could declare `routed` while naming nothing at all.
+        # Measured before the ruling: 15 conversion rows, NOT ONE carrying a board pointer of
+        # any kind, and the last five naming only a LAW item (#67) and a DEFECT item (#421),
+        # neither of which routed a round.
+        #
+        # A REF, NOT A PROSE TOKEN. The filing proposed `routed_to=#<board>`, which is #535's
+        # class exactly: `park:owner:qN` was a string grepped out of free prose and two rows
+        # falsified the scan (`n=3339` names a park in the prose of the row that ENDED it;
+        # `n=2884` names three parks in a ruling about a fourth unit). The routing act is
+        # therefore a ref of the DECLARED kind `board`, and the predicate is the SHARED one
+        # (`declared_board_routing`), so the write path here and the patrol's resolution leg
+        # read one field with one reader.
+        #
+        # `subject` CANNOT carry it: a conversion row already carries `subject:survey-<date>`
+        # naming the survey unit, so one kind would mean two things on the same event -- the
+        # ambiguity that makes a join unreadable.
+        #
+        # BOTH REQUIREMENTS ARE NAMED IN ONE REFUSAL, because a row missing either one is
+        # equally unattributable and a writer told half the rule writes half a row.
+        #
+        # NO BOUNDARY HERE, and the asymmetry is deliberate: this binds the row ABOUT TO BE
+        # WRITTEN, so it can never predate itself. The READER carries the boundary instead
+        # (`CONVERSION_ROUTING_EPOCH` in `tools/patrol_host_state.py`), because history is
+        # the leg's business -- the 15 rows that predate this field stay outside its
+        # population, and nothing is backfilled.
+        if args.event == "conversion":
+            _converted_from = declared_conversion_source(args.detail)
+            _routed_to = declared_board_routing(refs)
+            if _converted_from is None or _routed_to is None:
+                _missing = []
+                if _converted_from is None:
+                    _missing.append(
+                        "the score artifact it converted, as a canonical-run token "
+                        "`converted_from=evidence/scores/<date>.md`"
+                    )
+                if _routed_to is None:
+                    _missing.append(
+                        "the board item that routed the round, as a ref of the declared "
+                        "kind `board` carrying `#<digits>` (`--ref board:#<n>`)"
+                    )
+                _carried = [
+                    str(_ref.get("board")) for _ref in refs
+                    if isinstance(_ref, dict) and "board" in _ref
+                ]
+                sys.exit(
+                    "ledger append refused: a 'conversion' must name "
+                    + " AND ".join(_missing)
+                    + ". A conversion naming no artifact cannot be joined to the regression "
+                    "it answers (#67), and one naming no routing item cannot be told apart "
+                    "from a round nobody picked up -- the duty reads as converted either way "
+                    "(#580)"
+                    + (
+                        f". This row carries a `board` ref whose value is {_carried[0]!r}, "
+                        f"which is not the `#<digits>` form: a ref that occupies the kind "
+                        f"while naming no tracker item is read as absent, exactly as "
+                        f"`converted_from=none` is"
+                        if _carried and _routed_to is None else ""
+                    )
+                )
         # A PARK MUST NAME THE QUESTION IT IS BLOCKED ON, AND AN UNPARK MUST NAME THE PARK
         # IT ENDS (#535, ruling `n=4007`; the remedy the ruling calls for at its leg 1).
         #

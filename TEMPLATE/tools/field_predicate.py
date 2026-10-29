@@ -1096,3 +1096,41 @@ def declared_conversion_source(detail: str) -> str | None:
         if value and CONVERSION_SOURCE_RE.match(value):
             return value
     return None
+
+#
+# THE ROUTING REF (#580, ruling `n=4448`). The conversion's SECOND field, and it is a REF
+# rather than a detail token because #535 measured what a prose token buys: `park:owner:qN`
+# was grepped out of free prose and two rows falsified the scan -- `n=3339` names a park in
+# the prose of the row that ENDED it, and `n=2884` names three parks in a ruling whose
+# subject is a fourth unit. A state is a TRANSITION carried by a typed pointer, never a
+# string present in prose, so the item a conversion routed its round into travels as
+# `board:#<n>`.
+#
+# WELL-FORMED IS THE `#<digits>` FORM ITSELF, for the reason the artifact path is one block
+# up: `board:463` (no hash) and a bare `board:` OCCUPY the kind while naming no tracker
+# item, and the reader that resolves them would be resolving nothing. So the write path
+# refuses them exactly as if the ref were absent, and the leg reads them as absent -- one
+# predicate, two call sites (#297 clause 2's shape, one field over).
+BOARD_REF_KEY = "board"
+
+BOARD_REF_VALUE_RE = re.compile(r"^#\d+$")
+
+def declared_board_routing(refs) -> str | None:
+    """The WELL-FORMED `board:#<n>` ref a row declares, or `None`.
+
+    `None` means the row declares no routing act: either it carries no `board` ref at all
+    or the value it carries is not the `#<digits>` form. The write path refuses that state
+    for a `conversion` row stamped at or after the routing epoch, and the patrol's
+    score-conversion leg reports it as UNANSWERED -- the same two call sites, and the same
+    predicate, as the artifact token above.
+    """
+    for ref in refs or []:
+        if not isinstance(ref, dict):
+            continue
+        value = ref.get(BOARD_REF_KEY)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if BOARD_REF_VALUE_RE.match(text):
+            return text
+    return None
