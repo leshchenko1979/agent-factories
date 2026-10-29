@@ -245,6 +245,22 @@ def _lock_path(root: Path) -> str:
     )
     return proc.stdout.strip()
 
+def _row_identity(root: Path) -> tuple[str, ...]:
+    """The identity field set THE TOOL declares, asked of the staged copy.
+
+    Same discipline as `_lock_path`: a probe that restated the tuple here would agree
+    with itself while the declaration drifted. #573's clause was precisely that
+    `ROW_IDENTITY` appeared nowhere in this gate, so nothing tied the arms to the set
+    the guard actually compares.
+    """
+    proc = subprocess.run(
+        [sys.executable, "-c",
+         "import sys; sys.path.insert(0, 'tools'); import ledger; "
+         "print(','.join(ledger.ROW_IDENTITY))"],
+        cwd=root, capture_output=True, text=True,
+    )
+    return tuple(f.strip() for f in proc.stdout.strip().split(",") if f.strip())
+
 def _vocabulary_size() -> int:
     """How many events THIS tree resolves -- asked of the TOOL, like `_event_is_known`.
 
@@ -478,14 +494,16 @@ def check_worktree_fork_refused() -> None:
         # and the refusal is asserted, not the mere absence of a crash.
         r = run_in_tree(linked, _ledger(linked), "append", "--event", "intake",
                         "--actor", "triage", "--subject", "#1", "--detail", "second row")
-        print(f"  worktree-fork probe: 2 checkout(s) driven, 1 re-mint attempted, "
-              f"{1 if r.returncode != 0 else 0} refused")
         check("(222b) the second checkout's append is REFUSED, not silently forked",
               r.returncode != 0, f"rc={r.returncode} {r.stderr.strip()[:180]}")
-        check("(222b) the refusal is the ledger's own, by name",
-              ("diverges from committed lineage" in r.stderr
-               or "STALE" in r.stderr
-               or "lineage" in r.stderr.lower()),
+        # WHICH leg fired is asserted, not "any of three messages": this arm forges the
+        # fork's precondition (an EMPTY working file against a committed row), so it
+        # exercises the SHORTER-FILE branch and says so. Until #573 the probe accepted
+        # three phrasings, so it could not tell the revert shape from the same-length
+        # shape, from a stale ref, or from an unread one.
+        check("(222b) the refusal is the SHORTER-FILE branch, by name",
+              "working file has 0 row(s)" in r.stderr
+              and "diverges from committed lineage" not in r.stderr,
               r.stderr.strip()[:220])
 
         a_lock, b_lock = _lock_path(a_dir), _lock_path(linked)
@@ -494,6 +512,105 @@ def check_worktree_fork_refused() -> None:
               "TWO lock files means the two checkouts do not serialize, so both can "
               "mint the same n -- this is the fork, not a style point: "
               f"{a_lock!r} vs {b_lock!r}")
+
+        # --- #573: the SAME-LENGTH cases, which the arm above never reaches.
+        #
+        # The collision #573 measured is equal-length: same `n`, same `subject`, same
+        # `event`, differing only in `actor` or in `ts`. The guard compared a hand-picked
+        # triple -- n, subject, event -- so both passed SILENTLY, and the reachability
+        # was ordinary: three same-n collisions happened across four lanes on 2026-10-27
+        # and each one merely happened to differ in a field that was read. That was luck
+        # about which rows collided, not a property of the guard.
+        committed_row = rows(_ledger(a_dir))[0]
+
+        def forge(field: str, value: object) -> subprocess.CompletedProcess:
+            """Write the COMMITTED row with one field changed, then try to append."""
+            forged = dict(committed_row)
+            forged[field] = value
+            _ledger(linked).write_text(json.dumps(forged) + "\n", encoding="utf-8")
+            return run_in_tree(linked, _ledger(linked), "append", "--event", "intake",
+                               "--actor", "triage", "--subject", "#2",
+                               "--detail", "after the forgery")
+
+        actor_arm = forge("actor", "triage")
+        check("(573a) equal rows differing only in ACTOR are REFUSED",
+              actor_arm.returncode != 0, f"rc={actor_arm.returncode}")
+        check("(573a) the refusal NAMES the field that moved",
+              "actor" in actor_arm.stderr and "'triage'" in actor_arm.stderr,
+              actor_arm.stderr.strip()[:220])
+        check("(573a) the refused append wrote nothing",
+              len(rows(_ledger(linked))) == 1, f"{len(rows(_ledger(linked)))} row(s)")
+
+        ts_arm = forge("ts", "2026-01-01T00:00:00Z")
+        check("(573b) equal rows differing only in TS are REFUSED",
+              ts_arm.returncode != 0, f"rc={ts_arm.returncode}")
+        check("(573b) the refusal NAMES the field that moved",
+              "ts" in ts_arm.stderr and "2026-01-01T00:00:00Z" in ts_arm.stderr,
+              ts_arm.stderr.strip()[:220])
+        check("(573b) the refused append wrote nothing",
+              len(rows(_ledger(linked))) == 1, f"{len(rows(_ledger(linked)))} row(s)")
+
+        # EVERY identity field gets an arm, and the set is READ FROM THE TOOL rather
+        # than hand-picked here. The clause that filed #573 observed that ROW_IDENTITY
+        # appeared NOWHERE in this gate -- so the probe could not tell which fields the
+        # guard was supposed to compare, and adding a sixth field to the declaration
+        # would have left the probe passing while covering less. `n` and `event` are
+        # forged too, so the covered set equals the declared set instead of intersecting
+        # it.
+        identity = _row_identity(a_dir)
+        n_arm = forge("n", 2)
+        check("(573d) equal rows differing only in N are REFUSED",
+              n_arm.returncode != 0, f"rc={n_arm.returncode}")
+        check("(573d) the refusal NAMES the field that moved",
+              "n is 2" in n_arm.stderr, n_arm.stderr.strip()[:220])
+
+        event_arm = forge("event", "close")
+        check("(573e) equal rows differing only in EVENT are REFUSED",
+              event_arm.returncode != 0, f"rc={event_arm.returncode}")
+        check("(573e) the refusal NAMES the field that moved",
+              "event" in event_arm.stderr and "'close'" in event_arm.stderr,
+              event_arm.stderr.strip()[:220])
+
+        subject_arm = forge("subject", "#forged")
+        check("(573e) equal rows differing only in SUBJECT are REFUSED",
+              subject_arm.returncode != 0, f"rc={subject_arm.returncode}")
+        check("(573e) the refusal NAMES the field that moved",
+              "subject" in subject_arm.stderr and "'#forged'" in subject_arm.stderr,
+              subject_arm.stderr.strip()[:220])
+
+        # THE NEGATIVE CONTROL, and the reason the guard compares IDENTITY and not the
+        # whole row: `detail` is mutable BY DESIGN, so a lawfully repaired detail must
+        # PASS. Without this arm a full-row comparison would red the very rows
+        # `repair --append-detail` is permitted to produce -- which is exactly why
+        # ruling n=4374 declined Option 1. It runs LAST because a pass writes a row.
+        detail_arm = forge("detail", f"{committed_row.get('detail', '')} [lawfully extended]")
+        check("(573c) a lawfully repaired DETAIL still PASSES (negative control)",
+              detail_arm.returncode == 0, detail_arm.stderr.strip()[:220])
+        after = rows(_ledger(linked))
+        check("(573c) that append LANDED, so the pass is a mint and not a no-op",
+              len(after) == 2 and after[-1].get("n") == 2,
+              f"{len(after)} row(s), last n={after[-1].get('n') if after else None}")
+
+        refused_arms = {
+            "actor": actor_arm, "ts": ts_arm, "n": n_arm, "event": event_arm,
+            "subject": subject_arm,
+        }
+        uncovered = [f for f in identity if f not in refused_arms]
+        check("(573f) EVERY declared identity field has a refusing arm",
+              identity and not uncovered,
+              f"declared {list(identity)}, covered {sorted(refused_arms)}, "
+              f"uncovered {uncovered}")
+        check("(573f) and the arms drove the fields the TOOL declares, not invented ones",
+              set(refused_arms) <= set(identity),
+              f"forged {sorted(refused_arms)} vs declared {list(identity)}")
+        check("(573f) the CONTROL is outside the identity set (it must be mutable)",
+              "detail" not in identity,
+              f"detail is in ROW_IDENTITY {list(identity)}, so the negative control "
+              "would be asserting the guard compares a field it must ignore")
+        print(f"  #573 same-length probe: {len(refused_arms)} refusing arm(s) over "
+              f"{len(identity)} declared identity field(s), "
+              f"{sum(1 for a in refused_arms.values() if a.returncode != 0)} refused, "
+              f"{1 if detail_arm.returncode == 0 else 0} passed")
 
 def check_registered_in_the_audit() -> None:
     """An unregistered gate never runs — assert this one is wired (P29, issue #59)."""
@@ -1923,7 +2040,9 @@ def main() -> int:
         check("the refused append wrote nothing",
               len(rows(guard_ledger)) == 2, f"{len(rows(guard_ledger))} row(s)")
 
-        # Editing already-committed history is the other fatal shape.
+        # Editing a committed row's IDENTITY is the other fatal shape -- and ONLY its
+        # identity: `detail` is mutable by design, so the arm below tampers `subject`,
+        # which is one of ROW_IDENTITY's five fields (#573).
         guard_ledger.write_text("".join(lines), encoding="utf-8")
         mutated = rows(guard_ledger)
         mutated[1]["subject"] = "#tampered"

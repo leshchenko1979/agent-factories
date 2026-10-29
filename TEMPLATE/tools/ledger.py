@@ -915,8 +915,20 @@ def lineage_divergence(
 
     Two shapes, both fatal. The working file is SHORTER than what is committed:
     a revert, and the next append would re-issue a committed `n`. Or a shared row
-    differs: already-committed history was edited. The message names the row and
-    the subject, because "the ledger is inconsistent" is not actionable.
+    differs in one of its IDENTITY fields — `ROW_IDENTITY`, i.e. n, ts, event,
+    actor, subject.
+
+    `detail` is deliberately NOT one of them, and the earlier wording here said
+    otherwise: "already-committed history was edited" is BROADER than the guarantee,
+    because a committed `detail` is mutable BY DESIGN. `repair --append-detail`
+    rewrites one lawfully, refuses if any `ROW_IDENTITY` field would change, and
+    stamps its own audit row beside the edit — so a detail change is a repair, and
+    the audit for it is that row, never this guard (#573, ruling n=4374).
+
+    The message names the row and EVERY identity field that differs, with both
+    values: "the ledger is inconsistent" is not actionable, and a refusal that
+    cannot say WHICH field moved cannot be told apart from the neighbouring legs
+    (a revert, a stale ref, an unread ref) by a reader or by a probe.
     """
     if len(rows) < len(committed_rows):
         i = len(rows)
@@ -927,16 +939,16 @@ def lineage_divergence(
             f"row {i + 1}: committed is n={c.get('n')} subject={c.get('subject')!r}"
         )
     for i, (w, c) in enumerate(zip(rows, committed_rows), 1):
-        if (
-            w.get("n") != c.get("n")
-            or w.get("subject") != c.get("subject")
-            or w.get("event") != c.get("event")
-        ):
+        differing = [field for field in ROW_IDENTITY if w.get(field) != c.get(field)]
+        if differing:
             return (
-                f"row {i} diverges from committed lineage ({ref_name}): working "
-                f"has n={w.get('n')} subject={w.get('subject')!r} "
-                f"event={w.get('event')!r}, committed has n={c.get('n')} "
-                f"subject={c.get('subject')!r} event={c.get('event')!r}"
+                f"row {i} diverges from committed lineage ({ref_name}) in "
+                f"{', '.join(differing)}: "
+                + "; ".join(
+                    f"{field} is {w.get(field)!r} in the working file and "
+                    f"{c.get(field)!r} in {ref_name}"
+                    for field in differing
+                )
             )
     return None
 
