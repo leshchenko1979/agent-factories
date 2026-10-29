@@ -70,7 +70,7 @@ this file's actual intra-repo imports of that kind, in both trees.
 
 Closure: ledger_declaration.py, field_predicate.py, reconstruction.py
 
-Deferred: registry.py, telemetry.py
+Deferred: registry.py, telemetry.py, audit.py
 
 `Closure` modules are imported at MODULE level, so a tree missing one dies at
 import -- copy them with the file. `Deferred` modules are imported INSIDE
@@ -155,6 +155,7 @@ from field_predicate import (
     declared_reclose,
     declared_recurrence_of,
     declared_revision,
+    declared_rework,
     defect_key_problem,
     mentions_reclaim,
     mentions_reclose,
@@ -2114,6 +2115,80 @@ def cmd_append(args: argparse.Namespace) -> int:
                 )
         detail = args.detail
         if args.event == "close":
+            # `rework=` HAS A VOCABULARY, AND THE WRITE PATH BINDS IT (#584, ruling n=4466).
+            #
+            # The field carries the close's rework DISPOSITION, and `audit.rework_bucket`
+            # classifies it into exactly four outcomes: `work_unit` (a `#N` reference),
+            # `none`, `unstated`, and `invalid:<value>` -- the last being a value outside
+            # the domain, REPORTED BY NAME rather than bucketed as a disposition. Until
+            # this refusal nothing bound the domain at the point of writing, so two close
+            # rows shipped values the classifier could only file as invalid: `n=4344` and
+            # `n=4347`, and they are PERMANENT DEBT by construction rather than by choice
+            # -- `repair` has no value-rewrite mode, only `--append-detail`, and #104
+            # refuses a key the run already declares (`tools/ledger.py:2544`), so from the
+            # instant those rows were written no reachable verb could correct them. An
+            # append-only ledger cannot be repaired forward out of a malformed token; it
+            # can only be stopped from accepting the next one.
+            #
+            # THE VOCABULARY IS BOUND, NEVER RE-SPELLED. `rework_bucket` is the one
+            # classifier: it is what `tools/audit.py` counts with and what
+            # `tests/test_rework_declared_landed.py` resolves with, so a second private
+            # copy of the domain here would drift from the counter that reports it -- the
+            # class n=405 PART 5 rules (one field, one predicate). Importing it upward
+            # would invert the dependency (it needs `audit`'s own constants), which is why
+            # the classification lives there and the POSITIONAL read lives in
+            # `field_predicate.declared_rework`. This site imports the classifier, exactly
+            # as the telemetry refusal below imports `extract_task_telemetry`.
+            #
+            # READ THROUGH `declared_rework`, never a substring scan. That predicate is
+            # POSITIONAL -- it reads the canonical TRAILING run -- so a `rework=none`
+            # quoted mid-sentence in prose stays prose and is never refused, and a value
+            # in the trailer is the one a consumer will actually read. A substring test
+            # here would refuse rows for quoting their own history, which is the
+            # prose-as-data class this file has paid for three times (#88, n=405 clause 5).
+            #
+            # CLOSE ROWS ONLY, and that is a statement about the FIELD, not a convenience:
+            # `rework=` is the close row's disposition of the work it settles. A `run` row
+            # carrying the same token is describing something else, so binding it here
+            # would refuse rows the law never asked to carry the field at all.
+            #
+            # NO BOUNDARY AND NO EXEMPTION SURFACE: this refusal binds the row ABOUT TO BE
+            # WRITTEN, so it can reach nothing historical. `n=4344` and `n=4347` stay as
+            # they are -- immutable, unrepairable and unexcludable, which HQ measured and
+            # this comment records so a future reader does not re-open a settled debt.
+            try:
+                from audit import rework_bucket
+            except ImportError:
+                # Same bare-neighbour form and same reason as the telemetry import below:
+                # `python3 tools/ledger.py` puts `tools/` on the path, while a dotted
+                # `tools.audit` import would need the repo root there and
+                # `tools/__init__.py` does not exist. If the classifier genuinely cannot be
+                # reached the guard FAILS OPEN and says so, rather than refusing every
+                # close row in the tree on an import error it cannot attribute -- the
+                # honest state is that the domain was not checked, never that every value
+                # was invalid.
+                rework_bucket = None
+            if rework_bucket is not None:
+                unlawful = [
+                    value
+                    for value in declared_rework(detail)
+                    if rework_bucket(value).startswith("invalid:")
+                ]
+                if unlawful:
+                    sys.exit(
+                        "ledger append refused: a close row's `rework=` must name its "
+                        "disposition in the declared vocabulary -- `rework=#<n>` for the "
+                        "rework entry this close produced, `rework=none` when it produced "
+                        "none, or `rework=unstated` when the disposition is unrecorded -- "
+                        "and this detail declares "
+                        + ", ".join(f"rework={value}" for value in unlawful)
+                        + ", which is outside it. The value is classified by "
+                        "`audit.rework_bucket`, the same classifier that counts these "
+                        "declarations, so no spelling here can disagree with the count "
+                        "(#584, ruling n=4466). Drop the token if the row has nothing to "
+                        "declare, or state one of the three forms. A `rework=` quoted "
+                        "mid-sentence in prose is not a declaration and is not refused."
+                    )
             # `telemetry=` IS TOOL-OWNED: REFUSED AT THE WRITE PATH (#483).
             #
             # #130 part 2 added the provenance token so a consumer can tell a value the

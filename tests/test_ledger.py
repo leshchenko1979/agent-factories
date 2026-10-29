@@ -722,6 +722,182 @@ def check_release_vocabulary() -> None:
                   r.returncode == 0 and "0 terminal by release, 1 open" in r.stdout,
                   r.stdout[-420:])
 
+def check_rework_vocabulary() -> None:
+    """#584's rework arms: the close row's `rework=` is BOUND at the write path.
+
+    The defect this closes is not a missing value, it is a missing DOMAIN. `rework=`
+    carried a disposition and nothing constrained its spelling, so `n=4344` and `n=4347`
+    shipped values `audit.rework_bucket` can only classify as `invalid:<value>` -- and
+    they are PERMANENT DEBT by construction, not by choice: `repair` has no value-rewrite
+    mode, and #104 refuses an appended key the run already declares
+    (`tools/ledger.py:2544`), so from the instant those rows were written no reachable
+    verb could correct them. An append-only ledger cannot be repaired forward out of a
+    malformed token; it can only refuse the next one. That is what these arms judge, and
+    the historical rows are deliberately OUTSIDE their population -- the refusal binds
+    the row about to be written and has no epoch boundary and no exemption surface.
+
+    The arms close each half the ruling names: (a) the control, a lawful token accepted;
+    (b) the unlawful slug REFUSED; (c) the refusal NAMES the three lawful forms; (d) it
+    writes ZERO rows; (e)/(f)/(g) each of `none`, `#<n>` and `unstated` accepted in turn;
+    (h) POSITIONAL -- a slug quoted mid-sentence in prose is not a declaration and is not
+    refused; (i) EVENT-SCOPED -- the field is the close row's, so a `run` row carrying the
+    same token passes; and (j) the MUTATION CONTROL, which is the arm that makes the rest
+    mean something: with the classifier neutered in a staged copy so it can never report
+    `invalid:`, the SAME unlawful close is ACCEPTED and the row LANDS. Without (j) every
+    refusal arm above would pass on a guard that refused nothing, and a leg that has never
+    reddened is indistinguishable from one that cannot.
+
+    Each close arm uses its OWN subject, because a second close of one subject is refused
+    by the reclose leg -- a probe that reused a subject would pass arm (e) while actually
+    tripping a different refusal.
+    """
+    # A fixture revision token, not an identifier assembled here: `head=` is required on a
+    # close row and this probe judges the `rework=` leg, so the token must be well-formed
+    # and carry no other meaning. Whether a head RESOLVES is the close-row-revision gate's
+    # subject, and it judges the LIVE ledger, never a throwaway fixture.
+    HEAD = "0123456789abcdef0123456789abcdef01234567"
+
+    with tempfile.TemporaryDirectory() as td:
+        tdir = Path(td)
+        rw_ledger = tdir / "rework.jsonl"
+        actors = tdir / "actors.txt"
+        actors.write_text("owner\ntriage\nworker\n", encoding="utf-8")
+        db = seed_telemetry_db(tdir / "telemetry.db")
+        ENV = {"OPENCRABS_DB_PATH": str(db)}
+
+        run(rw_ledger, "append", "--event", "genesis", "--actor", "owner",
+            "--subject", "genesis", "--detail", "genesis: fixture ledger",
+            actors=actors, extra_env=ENV)
+
+        def seeded(subject: str) -> None:
+            """An intake and a claim, so a close has a sequence to complete."""
+            run(rw_ledger, "append", "--event", "intake", "--actor", "triage",
+                "--subject", subject, "--detail", f"intake: {subject}",
+                actors=actors, extra_env=ENV)
+            run(rw_ledger, "append", "--event", "claim", "--actor", "worker",
+                "--subject", subject, "--detail", f"claim: {subject}",
+                actors=actors, extra_env=ENV)
+
+        def rows() -> list[dict]:
+            return [json.loads(line) for line in
+                    rw_ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+        def close(subject: str, detail: str) -> subprocess.CompletedProcess:
+            return run(rw_ledger, "append", "--event", "close", "--actor", "worker",
+                       "--subject", subject, "--detail", detail,
+                       actors=actors, extra_env=ENV)
+
+        # (a) THE CONTROL. Without it every refusal arm below would pass on a write path
+        # that refused EVERY close row.
+        seeded("#584a")
+        r = close("#584a", f"board=closed rework=none head={HEAD}")
+        check("(584a) a close row naming `rework=none` is ACCEPTED (the control)",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-110:])
+
+        # (b)/(c)/(d) THE REFUSAL, its text, and the fact that it wrote nothing.
+        seeded("#584b")
+        before = len(rows())
+        r = close("#584b", f"board=closed rework=fixture-clobber head={HEAD}")
+        msg = (r.stdout + r.stderr).strip()
+        after = len(rows())
+        check("(584b) a close row naming a value OUTSIDE the vocabulary is REFUSED",
+              r.returncode != 0, msg[-150:])
+        check("(584c) and the refusal NAMES all three lawful forms",
+              "rework=#<n>" in msg and "rework=none" in msg and "rework=unstated" in msg,
+              msg[-260:])
+        check("(584d) and the refused append wrote ZERO rows",
+              after == before, f"rows {before}->{after}")
+
+        # (e)/(f)/(g) THE THREE LAWFUL FORMS, each on its own subject.
+        for label, subject, token in (
+            ("(584e)", "#584e", "none"),
+            ("(584f)", "#584f", "#580"),
+            ("(584g)", "#584g", "unstated"),
+        ):
+            seeded(subject)
+            r = close(subject, f"board=closed rework={token} head={HEAD}")
+            check(f"{label} `rework={token}` is ACCEPTED", r.returncode == 0,
+                  (r.stdout + r.stderr).strip()[-110:])
+
+        # (h) POSITIONAL. `declared_rework` reads the canonical TRAILING run, so a slug
+        # quoted in prose is history being described, not a value being declared. A
+        # substring test here would refuse rows for quoting their own past -- the
+        # prose-as-data class this file has paid for three times (#88, n=405 clause 5).
+        seeded("#584h")
+        r = close("#584h",
+                  "the earlier row declared rework=fixture-clobber in prose, but this "
+                  f"close carries no disposition at all board=closed head={HEAD}")
+        check("(584h) a slug QUOTED mid-sentence in prose is not a declaration, not refused",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-150:])
+
+        # (i) EVENT-SCOPED. `rework=` is the CLOSE row's disposition of the work it
+        # settles. A `run` row carrying the token is describing something else, so
+        # binding it there would refuse rows the law never asked to carry the field.
+        r = run(rw_ledger, "append", "--event", "run", "--actor", "worker",
+                "--subject", "#584i",
+                "--detail", "a run row describing rework=fixture-clobber as prose",
+                actors=actors, extra_env=ENV)
+        check("(584i) a `run` row carrying the same token is not refused (close-row field)",
+              r.returncode == 0, (r.stdout + r.stderr).strip()[-110:])
+
+        # (j) THE MUTATION CONTROL. Stage the tool's import closure, neuter the ONE
+        # classifier the guard binds to, and re-run the arm (b) detail unchanged: the
+        # unlawful close must now be ACCEPTED and its row must LAND. The mutation is made
+        # in `audit.rework_bucket` rather than in `ledger.py` because the guard is required
+        # to BIND the vocabulary rather than re-spell it -- so neutering the bound
+        # classifier is exactly the mutation that models a guard which stopped checking.
+        mut = tdir / "mut"
+        (mut / "tools").mkdir(parents=True)
+        (mut / "evidence").mkdir()
+        staged = stage_tool(TOOL, mut / "tools", LOCAL_TOOLS)
+        check("(584j-pre) the staged closure carries the classifier the guard binds",
+              any(p.name == "audit.py" for p in staged),
+              f"{len(staged)} module(s) staged")
+        audit_staged = mut / "tools" / "audit.py"
+        src = audit_staged.read_text(encoding="utf-8")
+        # The classifier's `invalid:` verdict is the guard's only trigger. Renaming the
+        # branch's label makes it unreachable while the function still returns a str for
+        # every input -- a semantic neuter, not a syntax error, so the tree still loads.
+        needle = 'return f"invalid:{value}"'
+        if needle not in src:
+            needle = "return 'invalid:' + str(value)"
+        check("(584j-pre) the classifier's invalid branch is reachable in the staged copy",
+              needle in src, f"looked for {needle!r}")
+        audit_staged.write_text(
+            src.replace(needle, 'return "unclassified"'), encoding="utf-8")
+
+        mut_ledger = mut / "evidence" / "ledger.jsonl"
+        mut_actors = mut / "actors.txt"
+        mut_actors.write_text("owner\ntriage\nworker\n", encoding="utf-8")
+
+        def mut_run(*args: str) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                [sys.executable, "-B", str(mut / "tools" / "ledger.py"), *args],
+                capture_output=True, text=True, cwd=str(mut),
+                env={**os.environ, "OC_LEDGER_PATH": str(mut_ledger),
+                     "OC_ACTORS_PATH": str(mut_actors),
+                     "OC_AUTHORIZATIONS_PATH": str(mut / "no-auth.json"),
+                     "OPENCRABS_DB_PATH": str(db)},
+            )
+
+        mut_run("append", "--event", "genesis", "--actor", "owner",
+                "--subject", "genesis", "--detail", "genesis: fixture ledger")
+        mut_run("append", "--event", "intake", "--actor", "triage",
+                "--subject", "#584j", "--detail", "intake: #584j")
+        mut_run("append", "--event", "claim", "--actor", "worker",
+                "--subject", "#584j", "--detail", "claim: #584j")
+        r = mut_run("append", "--event", "close", "--actor", "worker",
+                    "--subject", "#584j",
+                    "--detail", f"board=closed rework=fixture-clobber head={HEAD}")
+        mut_rows = [json.loads(line) for line in
+                    mut_ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+        landed = [row for row in mut_rows if row.get("event") == "close"]
+        check("(584j) MUTANT: with the bound classifier neutered the unlawful close is "
+              "ACCEPTED and its row LANDS -- so arms (b)-(d) can fail",
+              r.returncode == 0 and len(landed) == 1,
+              f"rc={r.returncode} close_rows={len(landed)} :: "
+              + (r.stdout + r.stderr).strip()[-110:])
+
 def check_park_vocabulary() -> None:
     """#535's park arms, driven where the vocabulary exists.
 
@@ -3364,6 +3540,7 @@ def main() -> int:
     check_release_vocabulary()
     check_conversion_vocabulary()
     check_park_vocabulary()
+    check_rework_vocabulary()
 
     print()
     if failures:
