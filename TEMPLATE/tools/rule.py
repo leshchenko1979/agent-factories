@@ -103,6 +103,32 @@ def load_patrol():
     return module
 
 
+def load_ledger_refs():
+    """The ref VOCABULARY's own home, loaded by PATH from `tools/ledger.py` (#585, n=4493).
+
+    The ruling asks for a repeatable `--ref KIND:VALUE` "imported from
+    `docs/ledger-refs-kinds.json` and the append path, never restated in `rule.py`" --
+    restating a vocabulary is this repo's recurring drift class. `parse_refs` is that append
+    path's own validator: it reads the declared kinds through `load_refs_kinds` and REFUSES
+    a malformed or undeclared kind by naming the lawful set. Importing it means the ruling
+    tool and the ledger append cannot disagree about what a lawful ref is, and a kind
+    declared in `docs/ledger-refs-kinds.json` becomes usable here with no edit to this file.
+
+    Loaded by path rather than by import for the reason `load_patrol` and `load_publish`
+    give one screen up: this file is vendored into every member factory, where the layout
+    above it differs (#171).
+
+    The module's own `if __name__ == "__main__"` guard means exec_module defines its
+    functions without running the CLI -- measured, not assumed: `parse_refs` is pure over
+    its argument and touches no surface.
+    """
+    spec = importlib.util.spec_from_file_location("_rule_ledger", LEDGER_TOOL)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise SystemExit(f"rule: cannot load {LEDGER_TOOL} — the ref vocabulary's home")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 def load_publish():
     """The publication predicate's OWN home, loaded by PATH (#441).
 
@@ -335,6 +361,12 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument("--body-file", help="a file holding the ruling body")
     source.add_argument("--body", help="the ruling body as one argument")
     parser.add_argument(
+        "--ref", action="append", default=[], metavar="KIND:VALUE",
+        help="a TYPED pointer this ruling row carries, repeatable (e.g. --ref board:#582). "
+             "Kinds are the declared vocabulary in docs/ledger-refs-kinds.json, read "
+             "through the append path's own validator",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="validate and report what would happen; write NOTHING to either surface",
     )
@@ -356,6 +388,37 @@ def main(argv: list[str] | None = None) -> int:
         print(f"rule refused (nothing posted, nothing stamped): {problem}", file=sys.stderr)
         return 2
 
+    # THE REFS ARE VALIDATED HERE, BEFORE EITHER SURFACE IS TOUCHED (#585, ruling n=4493).
+    # The validator is the append path's own `parse_refs`, imported -- so a kind this
+    # factory has not declared, or a `KIND:VALUE` that is not one, is refused by the SAME
+    # predicate that would refuse it at append, one step EARLIER: at this point nothing has
+    # been posted, so the refusal is free. Refusing at append instead would leave the tool
+    # to delete a comment it had already published, which is the rollback path rather than
+    # the clean one.
+    #
+    # `parse_refs` exits by `sys.exit(<message>)`; that is caught and re-emitted as THIS
+    # tool's refusal so the operator reads one voice and one exit code (2 = refused before
+    # any write), rather than the ledger's prefix escaping through a ruling invocation.
+    refs: list[str] = []
+    if args.ref:
+        try:
+            parsed = load_ledger_refs().parse_refs(list(args.ref))
+        except SystemExit as exc:
+            reason = exc.code if isinstance(exc.code, str) else "a --ref was refused"
+            # The append path's own prefix is stripped, not kept: the sentence already
+            # carries this tool's refusal framing, and "rule refused …: ledger append
+            # refused …" reads as two actors refusing when one predicate spoke.
+            reason = reason.replace("ledger append refused: ", "", 1)
+            print(
+                f"rule refused (nothing posted, nothing stamped): {reason}",
+                file=sys.stderr,
+            )
+            return 2
+        # REBUILT from the parsed form, never from `args.ref`: the value the append receives
+        # is then the one the validator APPROVED, so a normalisation inside `parse_refs` can
+        # never make the written ref differ from the checked one.
+        refs = [f"{kind}:{value}" for ref in parsed for kind, value in ref.items()]
+
     if args.dry_run:
         # HERMETIC: the dry run touches neither surface AND resolves nothing external --
         # no `gh`, no `git remote`, and (since #441) no fetch either. A validation step that
@@ -367,7 +430,13 @@ def main(argv: list[str] | None = None) -> int:
             f"{where}#{args.issue} and stamp `ruling` for '#{args.issue}' carrying "
             f"{PAIRING_KEY}=<id>; wrote NOTHING\n"
             f"  citation state NOT resolved (hermetic): the live run would name the "
-            f"publication of the {len(cited_rows(body))} ledger row(s) this body mentions"
+            f"publication of the {len(cited_rows(body))} ledger row(s) this body mentions\n"
+            f"  refs: {', '.join(refs) if refs else 'NONE declared'}"
+            + (
+                f" — the row would resolve to its primary issue PLUS "
+                f"{len(patrol.named_issues_from_row({'refs': parsed}))} named item(s)"
+                if refs else ""
+            )
         )
         return 0
 
@@ -410,11 +479,19 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # ---- leg 2: the ledger row ----------------------------------------------------
-    appended = _run(
-        [sys.executable, str(LEDGER_TOOL), "append",
-         "--event", "ruling", "--subject", f"#{args.issue}",
-         "--detail", build_detail(posted_body, comment_id)]
-    )
+    append_cmd = [
+        sys.executable, str(LEDGER_TOOL), "append",
+        "--event", "ruling", "--subject", f"#{args.issue}",
+        "--detail", build_detail(posted_body, comment_id),
+    ]
+    # THE TYPED EDGE TRAVELS IN THE SAME ACT AS THE COMMENT (#585, ruling n=4493). A ref
+    # stamped in a SECOND invocation could fail on its own, leaving a ruling whose ordered
+    # mechanisms nobody named -- exactly the half-ruling this tool exists to prevent, one
+    # field over. So the refs go on THIS append, and a refusal here rolls the comment back
+    # with the rest.
+    for ref in refs:
+        append_cmd.extend(["--ref", ref])
+    appended = _run(append_cmd)
     if appended.returncode != 0:
         rolled_back = delete_comment(repo, comment_id)
         state = (
@@ -437,6 +514,7 @@ def main(argv: list[str] | None = None) -> int:
         f"  comment: https://github.com/{repo}/issues/{args.issue}"
         f"#issuecomment-{comment_id}\n"
         f"  row:     n={row} ({PAIRING_KEY}={comment_id})\n"
+        f"  refs:    {', '.join(refs) if refs else 'none'}\n"
         f"  {citation_acknowledgement(row, cited, state)}"
     )
     return 0

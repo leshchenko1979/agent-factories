@@ -1221,35 +1221,44 @@ def _names_row_as_ref(detail: str, n: int) -> bool:
             return True
     return re.search(rf"{re.escape(RULING_GOVERNS_KEY)}{n}\b", detail) is not None
 
-def resolve_ruling_issue(
+def named_issues_from_row(ruling: dict) -> list[int]:
+    """The board items a ruling row NAMES through a typed `board` ref, in ROW ORDER.
+
+    This is the fourth arm's own reader (#585, ruling n=4493). A ruling that ORDERS several
+    mechanisms names them as refs of the declared kind `board`; the resolver returned exactly
+    ONE issue on every arm, so a ruling about `#579` that ordered `#582` and `#583` resolved
+    to `#579` alone and both mechanisms read as unruled.
+
+    THE REF IS THE ONLY ADMISSION, and that is the whole point of the typed edge: the issue
+    proposed reading "any item a ruling row names", which would have let a PROSE mention
+    confer ownership -- the exact reading `n=4157`/`#551` spent a narrowing to remove (a bare
+    `n=<M>` is evidence, never ownership). Measured before the fix: `n=4460` mentions `#582`
+    and `#583` three times each in prose, carries `refs=None` and zero `governs=`, so no
+    mention of it can be a name. The well-formedness test is the SHARED predicate's
+    (`field_predicate.declared_board_routings`), never a private parse here: one field, one
+    predicate, or the reader and the conversion write path drift apart.
+    """
+    refs = ruling.get("refs") or []
+    if not refs:
+        return []
+    found: list[int] = []
+    for value in field_predicate_readers().declared_board_routings(refs):
+        digits = value.lstrip("#")
+        if digits.isdigit():
+            number = int(digits)
+            if number not in found:
+                found.append(number)
+    return found
+
+def _resolve_ruling_issue_primary(
     ruling: dict, rows: list[dict], predicate
 ) -> tuple[int | None, str, dict | None]:
-    """`(issue, arm, bridge)` for a ruling row — the arm NAMED and its SOURCE row named too.
+    """The arms that answer with ONE issue, in precedence order — the pre-#585 body.
 
-    `arm` is `"strict"`, `"declared"` (`governs=`), `"bridged"` or `"unbridgeable"`. The
-    tier is reported rather than implied, the same discipline the canonicality ladder uses:
-    a resolution that does not say how it was reached cannot be re-litigated when the
-    vocabulary moves.
-
-    `bridge` is the row that SUPPLIED a `"bridged"` resolution — `{"n": ..., "event": ...}`
-    — and `None` for every other arm (#551, ruling n=4157). The third element exists
-    because the arm alone says HOW a resolution was reached and nothing about WHAT reached
-    it: the bridge is any OTHER row whose `detail` merely MENTIONS `n=<this row>`, so to
-    this predicate ownership and evidence are the same substring. Measured before the fix:
-    16 of 28 bridged rulings attribute to an issue their own detail never names (`n=826`
-    bridges to `#453` while naming `#129`). Naming the source row turns an implied
-    attribution into one a reader can re-litigate row by row. It landed ALONE first, so
-    that the population it exposed was measurable before anything moved it (remedy 1).
-
-    REMEDY 2 has since landed (same ruling): a bare `n=<M>` mention is now admitted only
-    when the citing row carries a TYPED pointer to this ruling — `ref row:<M>` (the ledger's
-    own declared ref form) or `governs=<M>`. Measured over 4,167 rows before narrowing:
-    `strict 626 / bridged 28 / unbridgeable 12`, and after: `strict 626 / bridged 0 /
-    unbridgeable 40`. The narrowing costs NO reachability — `set(issues_before) -
-    set(issues_after)` is EMPTY, because every one of the 28 also carries a strict ruling,
-    which is the ruling's own Correction 2 confirmed against the live ledger rather than
-    taken on trust. What it buys is that an arm printed as auditable no longer counts
-    evidence as ownership.
+    Split out so `resolve_ruling_issues` can ADD the named arm's items without changing what
+    any existing arm answers, which is the ruling's own constraint: `strict` still answers
+    for a row whose subject is the item in question, because a ruling about `#579` is about
+    `#579`.
     """
     own = issue_from_row(ruling, predicate)
     if own is not None:
@@ -1281,6 +1290,63 @@ def resolve_ruling_issue(
                 }
 
     return None, "unbridgeable", None
+
+def resolve_ruling_issues(
+    ruling: dict, rows: list[dict], predicate
+) -> tuple[list[int], str, dict | None]:
+    """`(issues, arm, bridge)` — EVERY issue a ruling row resolves to, primary first.
+
+    The plural is the resolver (#585, ruling n=4493). `issues` is the primary arm's answer
+    followed by every item the row NAMES through a typed `board` ref, de-duplicated in that
+    order; empty when no arm answers and no ref names an item.
+
+    `arm` is the arm that answered the PRIMARY, or `"named"` when no other arm answered and
+    the board refs alone placed the row. The tier is reported rather than implied, the same
+    discipline the canonicality ladder uses: a resolution that does not say how it was
+    reached cannot be re-litigated when the vocabulary moves.
+
+    WHY ADDITIVE AND NOT AN ALTERNATIVE. The defect is that a ruling ORDERS mechanisms it
+    does not rule ON: `n=4460` is a ruling about `#579` that orders `#582` and `#583`. If the
+    named refs only answered when no other arm did, the ordering ruling would still resolve
+    to `#579` alone and the defect would survive its own fix. So the arms keep their
+    precedence for the PRIMARY answer and the named items are added to it — measured, this
+    costs nothing: every one of the 701 live `ruling` rows carries zero `board` refs, so the
+    plural equals the singular on the whole population today and the widening can only add.
+
+    `bridge` is the row that SUPPLIED a `"bridged"` resolution — `{"n": ..., "event": ...}`
+    — and `None` for every other arm (#551, ruling n=4157).
+    """
+    primary, arm, bridge = _resolve_ruling_issue_primary(ruling, rows, predicate)
+    named = named_issues_from_row(ruling)
+    issues: list[int] = []
+    if primary is not None:
+        issues.append(primary)
+    for number in named:
+        if number not in issues:
+            issues.append(number)
+    if primary is None and issues:
+        arm = "named"
+    return issues, arm, bridge
+
+def resolve_ruling_issue(
+    ruling: dict, rows: list[dict], predicate
+) -> tuple[int | None, str, dict | None]:
+    """`(issue, arm, bridge)` — the PRIMARY issue, for a caller that asks about ONE unit.
+
+    An ADAPTER over `resolve_ruling_issues`, kept because two questions are genuinely
+    singular: the debt leg asks which unit a row belongs to, and the standing-item leg asks
+    whether a named ruling row resolves to the item it excuses. Both want the primary, and
+    neither should inherit a list it would have to guess the first element of.
+
+    A leg whose question is "is this item RULED" must call the plural instead, or it keeps
+    the #585 defect it is being fixed for. `board_unruled_leg` and `board_ruling_leg` do.
+
+    The tier is reported rather than implied, the same discipline the canonicality ladder
+    uses: a resolution that does not say how it was reached cannot be re-litigated when the
+    vocabulary moves.
+    """
+    issues, arm, bridge = resolve_ruling_issues(ruling, rows, predicate)
+    return (issues[0] if issues else None), arm, bridge
 
 RULING_HEADINGS = ("## RULED", "## RULING", "## Amendment")
 """The heads a ruling comment OPENS with — widened to the spellings the board uses (#245).
@@ -1613,13 +1679,19 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
     exempt, exempt_problems = load_ruling_exemptions(exemptions_path)
 
     ruled: set[int] = set()
-    arms = {"strict": 0, "declared": 0, "bridged": 0}
+    arms = {"strict": 0, "declared": 0, "bridged": 0, "named": 0}
     unbridgeable: list[dict] = []
     # THE BRIDGES ARE NAMED, NOT COUNTED (#551, ruling n=4157): the `bridged` arm says HOW a
     # resolution was reached and, until this list existed, nothing about WHAT reached it, so
     # a resolution could not be re-litigated row by row. Every bridge carries the resolving
     # ruling's `n`, the row that supplied the mention, and that row's `event`.
     bridges: list[dict] = []
+    # THE NAMED ITEMS ARE NAMED TOO (#585, ruling n=4493). A ruling row resolves to its
+    # primary issue AND to every board item it orders, so `ruled` grows by more than one per
+    # row and `resolved_rows` no longer bounds `len(ruled)` from above in the obvious way.
+    # Printing the attribution keeps the population re-litigable: the reader sees which row
+    # added which item, rather than a distinct count nobody can trace back.
+    named: list[dict] = []
     # TWO COUNTERS, because `len(ruled)` answers neither question (#545, ruling n=4096).
     # `ruling_rows` is the ROWS READ — a field named `rulings_read` must be the rows the
     # ledger handed this leg, never a sum derived from the sets it built. `resolved_rows`
@@ -1631,19 +1703,41 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
     # dropping them would falsify the history to tidy an arithmetic line.
     ruling_rows = 0
     resolved_rows = 0
+    issue_resolves = 0
     for row in rows:
         if row.get("event") != "ruling":
             continue
         ruling_rows += 1
-        number, arm, bridge = resolve_ruling_issue(row, rows, predicate)
-        if number is not None:
-            ruled.add(number)
+        resolved, arm, bridge = resolve_ruling_issues(row, rows, predicate)
+        if resolved:
+            for number in resolved:
+                ruled.add(number)
             resolved_rows += 1
+            # ISSUE-RESOLVES, beside the ROW counter (#585, ruling n=4493). A row that
+            # ORDERS mechanisms resolves to several issues, so `resolved_rows - len(ruled)`
+            # is no longer the repeated count -- it can go NEGATIVE, which is a partition
+            # that does not close. The additive quantity is the number of issues this row
+            # resolved to, summed: every one of them lands in `ruled`, so
+            # `issue_resolves - len(ruled)` is exactly the resolves that hit an issue
+            # already counted, and it cannot be negative.
+            issue_resolves += len(resolved)
             arms[arm] = arms.get(arm, 0) + 1
+            # A row that NAMES more items than its primary answer is printed by name
+            # (#585, ruling n=4493). The arm alone would say `strict` for a ruling that
+            # also orders two mechanisms, and a reader could not tell which two.
+            if len(resolved) > 1:
+                named.append(
+                    {
+                        "ruling_n": row.get("n"),
+                        "primary": resolved[0],
+                        "named": resolved[1:],
+                        "arm": arm,
+                    }
+                )
             if bridge is not None:
                 bridges.append(
                     {
-                        "issue": number,
+                        "issue": resolved[0],
                         "ruling_n": row.get("n"),
                         "via_n": bridge.get("n"),
                         "via_event": bridge.get("event"),
@@ -1804,7 +1898,15 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             "unmatched_heads": unmatched,
             "rulings_read": ruling_rows,
             "rulings_resolved_rows": resolved_rows,
-            "rulings_repeated": resolved_rows - len(ruled),
+            # THE PARTITION IS OVER ISSUE-RESOLVES, NOT ROWS (#585, ruling n=4493). One row
+            # that names three mechanisms resolves to three issues, so `resolved_rows` no
+            # longer bounds `len(ruled)` and the old subtraction could read NEGATIVE -- a
+            # partition that does not close is a problem, never a printout. Every resolved
+            # issue is added to `ruled`, so `issue_resolves - len(ruled)` is exactly the
+            # resolves that landed on an issue already counted, and it cannot be negative.
+            "rulings_issue_resolves": issue_resolves,
+            "rulings_repeated": issue_resolves - len(ruled),
+            "rulings_named": len(named),
             "rulings_resolved": len(ruled),
             "rulings_unbridgeable": len(unbridgeable),
             "resolution_arms": arms,
@@ -1813,6 +1915,8 @@ def board_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
             # the arm alone says HOW, and a reader who cannot see WHAT reached the verdict
             # cannot re-litigate it row by row.
             "bridged_via": bridges,
+            # WHICH ITEMS A ROW NAMED BESIDE ITS PRIMARY ANSWER (#585, ruling n=4493).
+            "named_via": named,
             "bound": bound_text,
             "bound_refusal": bound_refusal,
             "bound_key": RULING_BOUNDARY_KEY,
@@ -9690,34 +9794,59 @@ def board_unruled_leg(
 
     ruling_rows = 0
     resolved_rows = 0
+    issue_resolves = 0
     ruled: set[int] = set()
-    arms = {"strict": 0, "declared": 0, "bridged": 0}
+    arms = {"strict": 0, "declared": 0, "bridged": 0, "named": 0}
     unbridgeable: list[dict] = []
     # Named, never merely counted — the same attribution the board-ruling leg carries, so
     # the two legs cannot disagree about how a bridge was sourced (#551, ruling n=4157).
     bridges: list[dict] = []
+    # And the NAMED items by name (#585, ruling n=4493), for the same reason: `ruled` now
+    # grows by more than one per row, so the distinct count alone cannot be traced back.
+    named: list[dict] = []
     for row in rows:
         if str(row.get("event") or "") != "ruling":
             continue
         ruling_rows += 1
-        number, arm, bridge = resolve_ruling_issue(row, rows, predicate)
-        if number is None:
+        # THE PLURAL IS THIS LEG'S FIX (#585, ruling n=4493). The question here is "is this
+        # item RULED", so a ruling that ORDERS a mechanism settles it: reading the singular
+        # adapter would resolve `n=4460` to `#579` alone and keep firing on `#582`/`#583`,
+        # which is the defect demonstrating itself on its own leg. `intake` stays singular
+        # below, deliberately: an intake row's subject IS the item, and letting a stray
+        # board ref add to `intake_numbers` would break the agreement check against the
+        # predicate's own `intaken_numbers`.
+        resolved, arm, bridge = resolve_ruling_issues(row, rows, predicate)
+        if not resolved:
             unbridgeable.append(
                 {"n": row.get("n"), "subject": str(row.get("subject") or "")}
             )
         else:
-            ruled.add(number)
+            for number in resolved:
+                ruled.add(number)
             # A ROW-RESOLVE, counted per row and never folded into `len(ruled)` (#545,
             # ruling n=4096): a re-ruling is the append-only ledger working, so one issue
             # number can be resolved many times. `rulings_resolved` stays DISTINCT because
             # it feeds the population predicate below; `rulings_resolved_rows` and
             # `rulings_repeated` name the bucket that the two numbers alone hide.
             resolved_rows += 1
+            # ISSUE-RESOLVES beside the row counter, for the reason the board-ruling leg
+            # states: a named row adds several issues, so the repeated count is
+            # `issue_resolves - len(ruled)` and never `resolved_rows - len(ruled)`.
+            issue_resolves += len(resolved)
             arms[arm] = arms.get(arm, 0) + 1
+            if len(resolved) > 1:
+                named.append(
+                    {
+                        "ruling_n": row.get("n"),
+                        "primary": resolved[0],
+                        "named": resolved[1:],
+                        "arm": arm,
+                    }
+                )
             if bridge is not None:
                 bridges.append(
                     {
-                        "issue": number,
+                        "issue": resolved[0],
                         "ruling_n": row.get("n"),
                         "via_n": bridge.get("n"),
                         "via_event": bridge.get("event"),
@@ -9864,12 +9993,17 @@ def board_unruled_leg(
             "intake_numbers_agree": intake_numbers_agree,
             "ruling_rows_read": ruling_rows,
             "rulings_resolved_rows": resolved_rows,
-            "rulings_repeated": resolved_rows - len(ruled),
+            # ISSUE-RESOLVES, not rows (#585, ruling n=4493) -- see the board-ruling leg's
+            # coverage for why the row counter can no longer carry this subtraction.
+            "rulings_issue_resolves": issue_resolves,
+            "rulings_repeated": issue_resolves - len(ruled),
+            "rulings_named": len(named),
             "rulings_resolved": len(ruled),
             "rulings_unbridgeable": len(unbridgeable),
             "unbridgeable_rows": unbridgeable,
             "resolution_arms": arms,
             "bridged_via": bridges,
+            "named_via": named,
             "population_unruled": len(population),
             "items_owed_ruling": len(owed),
             "owed": [entry["issue"] for entry in owed],
@@ -14111,11 +14245,13 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             # against the ledger by a reader. Both closures are visible here, on the run.
             lines.append(
                 f"  ledger side: {cov['rulings_read']} ruling row(s) read — "
-                f"{cov['rulings_resolved_rows']} resolved to an issue, over "
+                f"{cov['rulings_resolved_rows']} resolved to "
+                f"{cov['rulings_issue_resolves']} issue-resolve(s), over "
                 f"{cov['rulings_resolved']} DISTINCT issue(s); {cov['rulings_repeated']} "
-                f"are REPEATED re-rulings the append-only ledger keeps (a later ruling "
-                f"supersedes an earlier one — NOT de-duplicated, and never a defect); "
-                f"{cov['rulings_unbridgeable']} unbridgeable"
+                f"landed on an issue already counted (the append-only ledger keeps every "
+                f"re-ruling — NOT de-duplicated, and never a defect); "
+                f"{cov['rulings_named']} row(s) NAMED extra item(s) beside their primary "
+                f"answer; {cov['rulings_unbridgeable']} unbridgeable"
             )
             # The clause that keeps the alternation honest (#245). The count is printed
             # BESIDE the verdict and the lines follow, so a spelling the predicate could not
@@ -14471,19 +14607,30 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
             lines.append(
                 f"  ruling rows read: {cov['ruling_rows_read']} "
-                f"({cov['rulings_resolved_rows']} resolved to an issue, over "
+                f"({cov['rulings_resolved_rows']} resolved to "
+                f"{cov['rulings_issue_resolves']} issue-resolve(s), over "
                 f"{cov['rulings_resolved']} DISTINCT issue(s) "
                 f"[strict {cov['resolution_arms']['strict']}, declared "
                 f"{cov['resolution_arms']['declared']}, bridged "
-                f"{cov['resolution_arms']['bridged']}]; {cov['rulings_repeated']} are "
-                f"REPEATED re-rulings of an issue already ruled, which the append-only "
-                f"ledger keeps and this leg does NOT de-duplicate; "
-                f"{cov['rulings_unbridgeable']} unbridgeable)"
+                f"{cov['resolution_arms']['bridged']}, named "
+                f"{cov['resolution_arms']['named']}]; {cov['rulings_repeated']} landed on an "
+                f"issue already ruled, which the append-only ledger keeps and this leg does "
+                f"NOT de-duplicate; {cov['rulings_named']} row(s) NAMED extra item(s) beside "
+                f"their primary answer; {cov['rulings_unbridgeable']} unbridgeable)"
             )
             for entry in cov.get("bridged_via", []):
                 lines.append(
                     f"    BRIDGED #{entry['issue']} via ruling n={entry['ruling_n']} "
                     f"-- supplied by row n={entry['via_n']} ({entry['via_event']})"
+                )
+            # A NAMED item is printed by name, never only counted (#585, ruling n=4493):
+            # the arm alone would read `strict` for a ruling that also ORDERS mechanisms,
+            # and the reader could not tell which ones it settled.
+            for entry in cov.get("named_via", []):
+                lines.append(
+                    f"    NAMED #{', #'.join(str(n) for n in entry['named'])} via ruling "
+                    f"n={entry['ruling_n']} (primary #{entry['primary']}, arm "
+                    f"{entry['arm']})"
                 )
             lines.append(
                 f"  population (OPEN, intake row, NO ruling row): "

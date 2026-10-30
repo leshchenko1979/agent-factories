@@ -1115,15 +1115,17 @@ BOARD_REF_KEY = "board"
 
 BOARD_REF_VALUE_RE = re.compile(r"^#\d+$")
 
-def declared_board_routing(refs) -> str | None:
-    """The WELL-FORMED `board:#<n>` ref a row declares, or `None`.
+def declared_board_routings(refs) -> list[str]:
+    """EVERY well-formed `board:#<n>` ref a row declares, in ROW ORDER.
 
-    `None` means the row declares no routing act: either it carries no `board` ref at all
-    or the value it carries is not the `#<digits>` form. The write path refuses that state
-    for a `conversion` row stamped at or after the routing epoch, and the patrol's
-    score-conversion leg reports it as UNANSWERED -- the same two call sites, and the same
-    predicate, as the artifact token above.
+    The PLURAL home, and the singular below is defined through it so the two cannot
+    disagree about what a lawful board ref is (#585, ruling n=4493). The conversion path
+    needs exactly one -- a round routes into one item -- while a ruling that ORDERS several
+    mechanisms names several, and the resolver that reads it must not be capped at one:
+    the arity was the defect. A `board` value that is not the `#<digits>` form names no
+    tracker item, so it is dropped here rather than carried as a name.
     """
+    found: list[str] = []
     for ref in refs or []:
         if not isinstance(ref, dict):
             continue
@@ -1132,5 +1134,23 @@ def declared_board_routing(refs) -> str | None:
             continue
         text = str(value).strip()
         if BOARD_REF_VALUE_RE.match(text):
-            return text
-    return None
+            found.append(text)
+    return found
+
+def declared_board_routing(refs) -> str | None:
+    """The FIRST WELL-FORMED `board:#<n>` ref a row declares, or `None`.
+
+    `None` means the row declares no routing act: either it carries no `board` ref at all
+    or the value it carries is not the `#<digits>` form. The write path refuses that state
+    for a `conversion` row stamped at or after the routing epoch, and the patrol's
+    score-conversion leg reports it as UNANSWERED -- the same two call sites, and the same
+    predicate, as the artifact token above.
+
+    THE PLURAL IS THE PREDICATE and this is its first element (#585, ruling n=4493). Written
+    as a delegation rather than a second loop, because a copy of the well-formedness test
+    one function down is the drift class this file exists to prevent: the reader that
+    resolves a ruling's named mechanisms and the writer that refuses a malformed conversion
+    routing must agree on which values are names at all.
+    """
+    found = declared_board_routings(refs)
+    return found[0] if found else None

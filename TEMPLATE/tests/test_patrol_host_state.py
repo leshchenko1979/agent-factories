@@ -14136,5 +14136,227 @@ def test_586_the_standing_declaration_REFUSES_a_malformed_entry() -> None:
         581: {"issue": 581, "ruling_row": 4472, "reason": "permanent state"}
     }
 
+
+# --- #585: the TYPED edge — a ruling NAMES the mechanisms it orders ---------------------
+#
+# Ruled at ledger n=4493. The defect: `resolve_ruling_issue` returned exactly ONE issue on
+# every arm, so a ruling whose subject is `#579` and which ORDERS `#582` and `#583` resolved
+# to `#579` alone and both mechanisms read as unruled — the leg firing on items a published
+# ruling created. The fix is a FOURTH arm fed by a typed `board` ref, never by prose: shape 1
+# read literally ("any item a ruling row names") would have let a mention confer ownership,
+# which is the reading `n=4157`/`#551` spent a narrowing to remove.
+
+def test_probe_the_NAMED_arm_returns_every_board_ref_in_row_order() -> None:
+    """The arm itself, on the shape the defect was filed for.
+
+    `#579` is the ruling's own subject, so `strict` answers for it — and the two mechanisms
+    it ORDERS are ADDED, not substituted. That additivity is the ruling's own constraint: if
+    the named refs only answered when no other arm did, the ordering ruling would still
+    resolve to `#579` alone and the defect would survive its own fix.
+    """
+    pred = RUNNER.load_predicate()
+    ruling = {"n": 4460, "event": "ruling", "subject": "#579",
+              "detail": "orders the mechanisms #582 and #583",
+              "refs": [{"board": "#583"}, {"board": "#582"}]}
+
+    issues, arm, bridge = RUNNER.resolve_ruling_issues(ruling, [ruling], pred)
+    # ROW ORDER, not sorted order: the row is the record, and re-ordering it here would
+    # print a sequence the ledger does not carry.
+    assert issues == [579, 583, 582], issues
+    assert (arm, bridge) == ("strict", None), (arm, bridge)
+
+    # The SINGULAR adapter still answers the primary, so the two callers that ask about one
+    # unit are not handed a list they would have to guess the first element of.
+    assert RUNNER.resolve_ruling_issue(ruling, [ruling], pred) == (579, "strict", None)
+
+def test_probe_PROSE_mentions_confer_NOTHING_on_the_named_arm() -> None:
+    """The line the ruling drew, and the reason the edge is TYPED.
+
+    The issue's own premise was that "the creating ruling already names #582 and #583 in its
+    refs". Measured, it does not: `n=4460` mentions each three times in PROSE, carries
+    `refs=None` and zero `governs=`. This probe holds that measurement as a fixture — a
+    row identical to the one above but with the prose and WITHOUT the refs resolves to its
+    subject alone. Without this leg the named arm could be implemented as a text scan and
+    every other probe here would still pass.
+    """
+    pred = RUNNER.load_predicate()
+    prose_only = {"n": 4460, "event": "ruling", "subject": "#579",
+                  "detail": "#582 and #583 are ordered here; #582 again, and #583 again."}
+
+    issues, arm, _bridge = RUNNER.resolve_ruling_issues(prose_only, [prose_only], pred)
+    assert issues == [579], issues
+    assert arm == "strict", arm
+
+    # ...and a row whose ONLY placement is prose resolves to NOTHING, so the arm cannot be
+    # reached through a mention even when no other arm answers.
+    slug_with_prose = {"n": 4461, "event": "ruling", "subject": "a-concern",
+                       "detail": "orders #582 and #583"}
+    issues, arm, _bridge = RUNNER.resolve_ruling_issues(slug_with_prose, [slug_with_prose], pred)
+    assert (issues, arm) == ([], "unbridgeable"), (issues, arm)
+
+def test_probe_a_NAMED_only_row_reports_the_arm_it_was_reached_by() -> None:
+    """Arm 4 is NAMED in the report, never implied.
+
+    A resolution that does not say how it was reached cannot be re-litigated when the
+    vocabulary moves — the same discipline the canonicality ladder uses. So a row placed by
+    its board refs alone reports `"named"`, and a row placed by any other arm reports THAT
+    arm even when it also names items.
+
+    The malformed values are the point of the second half: `board:463` (no hash) and a bare
+    `board:` OCCUPY the kind while naming no tracker item, so the shared predicate drops
+    them and the row names nothing. Reading them as names would resolve to `463` and `""`.
+    """
+    pred = RUNNER.load_predicate()
+    named_only = {"n": 1, "event": "ruling", "subject": "a-concern",
+                  "detail": "no issue number anywhere in this detail",
+                  "refs": [{"board": "#7"}, {"board": "#7"}, {"board": "463"}, {"board": ""}]}
+    issues, arm, _bridge = RUNNER.resolve_ruling_issues(named_only, [named_only], pred)
+    assert (issues, arm) == ([7], "named"), (issues, arm)
+    # The duplicate `#7` is collapsed ONCE, in first-seen order.
+    assert RUNNER.resolve_ruling_issue(named_only, [named_only], pred)[:2] == (7, "named")
+
+def test_probe_board_unruled_STOPS_firing_on_a_mechanism_its_ruling_ORDERS() -> None:
+    """THE DEFECT ITSELF, driven through the leg that reported it.
+
+    `board_unruled_leg`'s question is "is this item RULED", so a ruling that ORDERS a
+    mechanism settles it. Before the fix this fixture reds on `#582`/`#583`: both carry an
+    intake row, both are OPEN, and neither had a `ruling` row of its own. That is the
+    self-demonstration the issue is — the leg firing on items a published ruling created.
+
+    NON-VACUITY: the same fixture WITHOUT the `board` refs still reds on both, so the green
+    above is attributable to the typed edge and not to a leg that stopped judging.
+    """
+    pred = RUNNER.load_predicate()
+    issues = [
+        _issue_with_comments(579, "OPEN", "## RULED — orders two mechanisms.\n"),
+        _issue_with_comments(582, "OPEN", "## A mechanism item.\n"),
+        _issue_with_comments(583, "OPEN", "## A mechanism item.\n"),
+    ]
+    ruling = {"n": 4460, "event": "ruling", "subject": "#579",
+              "detail": "orders the mechanisms #582 and #583",
+              "refs": [{"board": "#582"}, {"board": "#583"}]}
+    # THE INTAKE ROWS CARRY A DATED `ts`, and the probe would be VACUOUS without one: the
+    # leg excuses an intake row it cannot date ("NOT JUDGED") instead of calling it owed, so
+    # an undated fixture reads `owed == []` for the refs case AND for the control alike and
+    # the non-vacuity arm below proves nothing. Seven hours back is past the 6.0 h threshold
+    # at `read_at`, which is what makes the stripped-refs arm red.
+    stamp = _plus(_CLOSE_TS, -7.0)
+    rows = [ruling,
+            {"n": 4472, "event": "intake", "subject": "#579", "detail": "intake", "ts": stamp},
+            {"n": 4473, "event": "intake", "subject": "#582", "detail": "intake", "ts": stamp},
+            {"n": 4474, "event": "intake", "subject": "#583", "detail": "intake", "ts": stamp}]
+
+    leg = RUNNER.board_unruled_leg(issues, rows, read_at=_plus(_CLOSE_TS, 1.0), predicate=pred)
+    assert leg["coverage"]["items_owed_ruling"] == 0, leg["coverage"]["owed"]
+    assert leg["coverage"]["population_unruled"] == 0, leg["coverage"]["population"]
+    # NON-VACUITY OF THE GREEN ITSELF: nothing was excused, so the zero above is the typed
+    # edge doing the work and not the leg declining to judge an undated row.
+    assert leg["excused"] == [], leg["excused"]
+    cov = leg["coverage"]
+    assert cov["resolution_arms"]["named"] == 0, cov["resolution_arms"]
+    assert cov["rulings_named"] == 1, cov
+    assert cov["named_via"] == [
+        {"ruling_n": 4460, "primary": 579, "named": [582, 583], "arm": "strict"}
+    ], cov["named_via"]
+
+    # THE PARTITION STILL CLOSES, over ISSUE-RESOLVES rather than rows: one row added three
+    # issues, so `resolved_rows - len(ruled)` would read 1 - 3 = -2. A negative repeat count
+    # is the arithmetic telling the reader the partition does not close.
+    assert cov["rulings_resolved_rows"] == 1, cov
+    assert cov["rulings_issue_resolves"] == 3, cov
+    assert cov["rulings_resolved"] == 3, cov
+    assert cov["rulings_repeated"] == 0, cov
+    assert cov["rulings_repeated"] >= 0, cov
+
+    # NON-VACUITY: strip ONLY the refs and both mechanisms go back to owing a ruling.
+    bare = dict(ruling)
+    bare.pop("refs")
+    without = RUNNER.board_unruled_leg(issues, [bare] + rows[1:],
+                                       read_at=_plus(_CLOSE_TS, 1.0), predicate=pred)
+    assert without["coverage"]["items_owed_ruling"] == 2, without["coverage"]["owed"]
+    assert sorted(without["coverage"]["owed"]) == [582, 583], without["coverage"]["owed"]
+    assert without["coverage"]["rulings_named"] == 0, without["coverage"]
+    assert without["excused"] == [], without["excused"]
+
+def test_probe_board_ruling_is_not_disturbed_by_the_widened_arity() -> None:
+    """THE CONTROL THE RULING OWES (#585 clause 4).
+
+    `board_ruling_leg` consumes the same resolver, so the landing owes a probe that the
+    widened arity turns neither a ruled item into an unruled one nor the reverse on THAT
+    leg. The leg's population is "every board issue carrying a ruling COMMENT", so a named
+    ref must add to its `rulings_resolved` count and change nothing else: no problem, no
+    unbridgeable row, the paired act still paired.
+    """
+    pred = RUNNER.load_predicate()
+    issues = [
+        _issue_with_comments(579, "OPEN", "## RULED — orders two mechanisms.\n"),
+        _issue_with_comments(582, "OPEN", "## A mechanism item.\n"),
+    ]
+    ruling = {"n": 4460, "event": "ruling", "subject": "#579",
+              "detail": f"orders #582; comment={_comment_numeric(579)}",
+              "refs": [{"board": "#582"}]}
+    leg = RUNNER.board_ruling_leg(issues, [ruling], read_at="probe", predicate=pred,
+                                  scope=RUNNER.UNBOUNDED_SCOPE,
+                                  exemptions_path=_NO_RULING_EXEMPTIONS)
+    cov = leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+    assert cov["rulings_unbridgeable"] == 0, cov
+    assert cov["unbridgeable_rows"] == [], cov["unbridgeable_rows"]
+    assert cov["rulings_paired"] == 1, cov
+    assert cov["rulings_resolved_rows"] == 1, cov
+    assert cov["rulings_issue_resolves"] == 2, cov
+    assert cov["rulings_resolved"] == 2, cov
+    assert cov["rulings_repeated"] == 0, cov
+    assert cov["rulings_named"] == 1, cov
+    assert cov["named_via"] == [
+        {"ruling_n": 4460, "primary": 579, "named": [582], "arm": "strict"}
+    ], cov["named_via"]
+
+    # CONTROL: the SAME row without its refs reads ONE issue and one fewer resolve, and the
+    # rest of the leg's verdict is untouched — so the delta is the ref and nothing else.
+    bare = dict(ruling)
+    bare.pop("refs")
+    plain = RUNNER.board_ruling_leg(issues, [bare], read_at="probe", predicate=pred,
+                                    scope=RUNNER.UNBOUNDED_SCOPE,
+                                    exemptions_path=_NO_RULING_EXEMPTIONS)
+    pcov = plain["coverage"]
+    assert plain["problems"] == [], plain["problems"]
+    assert pcov["rulings_resolved"] == 1, pcov
+    assert pcov["rulings_issue_resolves"] == 1, pcov
+    assert pcov["rulings_named"] == 0, pcov
+    assert pcov["rulings_paired"] == 1, pcov
+
+def test_probe_the_plural_never_LOSES_an_issue_the_singular_found() -> None:
+    """REACHABILITY, as the ruling defines it (#585 clause 3).
+
+    `set(issues_before) - set(issues_after)` must be EMPTY: widening may ADD items and must
+    cost no existing one, the discipline `n=4157` used. Asserted here over every arm's
+    fixture — strict, declared, bridged and unbridgeable — because the whole-ledger proof is
+    a one-off measurement and a fixture-level invariant is what keeps it true afterwards.
+    """
+    pred = RUNNER.load_predicate()
+    cases = [
+        # strict, with and without refs
+        {"n": 1, "event": "ruling", "subject": "#42", "detail": "ruled"},
+        {"n": 1, "event": "ruling", "subject": "#42", "detail": "ruled",
+         "refs": [{"board": "#9"}, {"board": "#10"}]},
+        # declared
+        {"n": 900, "event": "ruling", "subject": "a-concern", "detail": "governs=1234"},
+        # bridged
+        {"n": 545, "event": "ruling", "subject": "a-slug", "detail": "ruled"},
+        # unbridgeable
+        {"n": 901, "event": "ruling", "subject": "no-issue-anywhere", "detail": "nothing"},
+    ]
+    bridge_row = {"n": 546, "event": "dispatch", "subject": "#85",
+                  "detail": "Ruling n=545 ref row:545"}
+    rows = cases + [bridge_row]
+    for row in cases:
+        before = RUNNER.resolve_ruling_issue(row, rows, pred)[0]
+        after_issues = RUNNER.resolve_ruling_issues(row, rows, pred)[0]
+        if before is not None:
+            assert before in after_issues, (row.get("n"), before, after_issues)
+        else:
+            assert after_issues == [] or row.get("refs"), (row.get("n"), after_issues)
+
 if __name__ == "__main__":
     raise SystemExit(main())
