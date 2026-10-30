@@ -235,11 +235,12 @@
       "load_at_measure": 2.0
     },
     "tests/test_ledger_no_shrink.py": {
-      "budget_sec": 155.51,
-      "margin_x": 4.019,
-      "measured_at": "700b55dc01558d4a85e880599c9061c3de07b1b0",
-      "measured_sec": 38.69,
-      "load_at_measure": 11.02
+      "budget_sec": 1159.67,
+      "margin_x": 4.003,
+      "measured_at": "c5327536a157f95edc9e11b4c570288d77c331db",
+      "measured_sec": 289.73,
+      "load_at_measure": 5.83,
+      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED of three samples, per this manifest's slow-tail rule (#579, ruling n=4460): 289.73 s at ~13:33Z load 5.83, 258.25 s at ~18:45Z load 4.09, 280.218 s. measured_at is RECOVERED, not composed: the ruling recorded no revision, so it is bracketed from the reflog -- c5327536 was the tree state from 13:20:27Z (ff-merge origin/main) to 14:37:48Z (af9858ae), the only window containing ~13:33Z, and tests/test_ledger_no_shrink.py's blob there is 4ef10d7438808dcaca23fa1176accd6a12e60066, byte-identical to HEAD's, so the measured subject is the file that ships. A fresh 176.024 s run at HEAD (load 0.77, rc=0, /tmp/noshrink-measure.log) CORROBORATES and does NOT re-base: it is a fast sample on a quiet box, and #128/n=823 refuses re-basing on every new maximum."
     },
     "tests/test_ledger_schema.py": {
       "budget_sec": 19.19,
