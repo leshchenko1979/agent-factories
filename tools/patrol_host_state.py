@@ -6974,6 +6974,148 @@ def field_predicate_readers():
     spec.loader.exec_module(module)
     return module
 
+# ---- the duty-receipt PROSE leg (#587, ruled at n=4483) --------------------------------
+#
+# #498 closed on 2026-10-16 ordering a writer-side rule: a duty receipt declares its token
+# in the CANONICAL TRAILER, where `declared_duty` reads it. The rule landed nowhere a
+# receipt author reads, and the population says so: measured on this tree at 4486 rows, 26
+# `run` rows on a declared receipt stem carry the token in PROSE while their canonical
+# trailer declares NOTHING.
+#
+# WHY NO EXISTING LEG SEES THEM. `duty_receipt_leg` judges CRON ROWS (does the prompt
+# declare a stem?), never the receipts those rounds write. `judge_round` does judge a
+# round's receipts, but its malformed branch fires only when the round carries NO declaring
+# receipt -- measured, 16 of the 26 sit in rounds that DO carry one, so it is structurally
+# blind to them, and the other 10 it already reports. A CENSUS is therefore the missing
+# reader, and it is deliberately READ-SIDE: the rows are append-only and NO BACKFILL is
+# ordered, so a writer fix alone would govern only the future and leave the population
+# invisible.
+#
+# THE VERDICT SPLITS AT THE INSTANT THE RULE WAS ORDERED, and that split is the whole
+# design. Findings stamped on/after DUTY_RECEIPT_WRITER_RULE_SINCE are PROBLEMS -- the rule
+# was in force when they were written. Findings before it are EXCUSED and printed as
+# visible debt. Without the split the leg is un-greenable by construction: 8 of the 26
+# predate the rule and no backfill may repair them, so it would be red forever -- the "red
+# that teaches lanes to ignore red" that ruling n=1579 declined.
+DUTY_RECEIPT_WRITER_RULE_SINCE = "2026-10-16"
+
+
+def duty_receipt_prose_leg(rows: list[dict], cron_rows: list[dict], *,
+                           read_at: str = "", predicate=None,
+                           since: str = DUTY_RECEIPT_WRITER_RULE_SINCE) -> dict:
+    """The duty-receipt PROSE census: receipts whose token a reader cannot see (#587).
+
+    POPULATION, in the order it is printed: every `run` row on a DECLARED receipt stem
+    (the stems are read from the enabled cron prompts' own `receipt_subject:` lines, the
+    same canonical reader `duty_receipt_leg` uses -- never a second parse of that field),
+    then those whose CANONICAL TRAILER declares no duty, then those that carry the `duty`
+    KEY in prose. The last set is the finding; the middle set is printed beside it because
+    an empty trailer with NO token anywhere is not a malformed receipt -- it is a row that
+    never claimed a duty at all, and reporting those as findings would inflate the count
+    with rows no writer rule can reach (measured: 136 empty, 26 with a prose token).
+
+    THE PREDICATE IS THE SHARED PAIR, never a private `split("=")` (SKILL.md section 11):
+    `declared_duty` for the VERDICT and `mentions_duty` only to say WHY the verdict is
+    empty. That ordering matters -- a lexical test must never SATISFY the field, so
+    `mentions_duty` is asked only of a row whose trailer already declared nothing, and the
+    token it finds is by construction OUTSIDE the run.
+
+    INJECTED READERS like every other leg here: `predicate` so a probe drives its own
+    field reader, `since` so a probe can pin the split without waiting for the calendar.
+    """
+    if predicate is None:
+        predicate = field_predicate_readers()
+    stems = sorted({
+        stem
+        for stem in (
+            declared_receipt_stem(str(row.get("prompt") or "")) for row in cron_rows
+        )
+        if stem and stem != RECEIPT_OWES_NONE_TOKEN
+    })
+    if not stems:
+        # NOT RUN, never a clean pass: with no declared stem this leg has no population to
+        # census, and a zero from a filter that cannot see the class is the defect (#587).
+        return no_prefixes_leg("duty-receipt-prose", population=len(rows), unit="row(s)",
+                               read_at=read_at, read_count=len(rows))
+    pattern = re.compile(
+        r"^(?:%s)-\d{4}-\d{2}-\d{2}" % "|".join(re.escape(stem) for stem in stems)
+    )
+    on_stem = [
+        row for row in rows
+        if str(row.get("event") or "") == "run"
+        and pattern.match(str(row.get("subject") or ""))
+    ]
+    empty = [
+        row for row in on_stem
+        if not predicate.declared_duty(str(row.get("detail") or ""))
+    ]
+    findings = [
+        row for row in empty
+        if predicate.mentions_duty(str(row.get("detail") or ""))
+    ]
+    # THE CLASS IS BIGGER THAN THIS LEG'S POPULATION, and the difference is PRINTED rather
+    # than left to be inferred (#587, HQ's coverage gap). The same predicate run over every
+    # `run` row in the ledger finds rows on stems this factory does not declare -- 7 of them
+    # on this tree, all before the writer rule -- and over every EVENT finds rows that are
+    # not receipts at all (11: claim, close, dispatch, intake, ruling, score). A reader who
+    # saw `prose_token 26` alone would read 26 as the size of the class, so both boundaries
+    # travel in the coverage and are named in the verdict.
+    off_stem = [
+        row for row in rows
+        if str(row.get("event") or "") == "run"
+        and not pattern.match(str(row.get("subject") or ""))
+        and not predicate.declared_duty(str(row.get("detail") or ""))
+        and predicate.mentions_duty(str(row.get("detail") or ""))
+    ]
+    not_a_receipt = [
+        row for row in rows
+        if str(row.get("event") or "") != "run"
+        and not predicate.declared_duty(str(row.get("detail") or ""))
+        and predicate.mentions_duty(str(row.get("detail") or ""))
+    ]
+    problems: list[str] = []
+    excused: list[str] = []
+    for row in findings:
+        stamp = str(row.get("ts") or "")
+        line = (
+            f"n={row.get('n')} ({row.get('actor') or 'unstated actor'}) "
+            f"{row.get('subject')}: the receipt carries its duty token in PROSE while the "
+            f"canonical trailer declares NOTHING -- `declared_duty` reads [] and its author "
+            f"is told the duty is undeclared (#587; writer rule ordered by #498)"
+        )
+        if stamp >= since:
+            problems.append(line)
+        else:
+            excused.append(
+                f"{line} -- written {stamp or 'at an unstated instant'}, BEFORE the rule was "
+                f"ordered ({since}); append-only and NO BACKFILL, so this is visible debt, "
+                f"never a red"
+            )
+    return {
+        "name": "duty-receipt-prose",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": excused,
+        "coverage": {
+            "read_at": read_at,
+            "since": since,
+            "stems_declared": stems,
+            "stems_declared_count": len(stems),
+            "run_rows_read": len(rows),
+            "run_rows_on_stem": len(on_stem),
+            "canonical_empty": len(empty),
+            "prose_token": len(findings),
+            "prose_token_off_stem": len(off_stem),
+            "prose_token_not_a_receipt": len(not_a_receipt),
+            "prose_token_off_stem_since": sum(
+                1 for row in off_stem if str(row.get("ts") or "") >= since
+            ),
+            "findings_since": len(problems),
+            "findings_before": len(findings) - len(problems),
+        },
+    }
+
+
 # ---- the ledger ref-role leg (#330, ruled at n=3362) ----------------------------------
 #
 # A receipt's PROSE asserts a ROLE for a named row -- "intake row n=2374", "dispatch row
@@ -13135,6 +13277,11 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
         if leg["status"] == "NOT RUN" and leg["name"] in (
             "cron-thinness", "pacemaker-presence", "notify-receipt", "duty-receipt",
             "score-conversion",
+            # #587: the census returns `no_prefixes_leg`'s shape when this factory declares
+            # no receipt stem, and that shape carries none of the ASSERTED-only keys its own
+            # branch reads -- so it renders here, where every coverage counter travels with
+            # the reason instead of raising a KeyError in the report.
+            "duty-receipt-prose",
         ):
             # A leg that examined NOTHING must never render as one that examined the
             # population and found it clean (#242). Its reason is printed, and its
@@ -14480,6 +14627,43 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"PROBLEM)"
             )
             lines.append(f"  read at {cov['read_at']}")
+        elif leg["name"] == "duty-receipt-prose":
+            # #587: the POPULATION is printed BESIDE the verdict, in the order the census
+            # narrows it. A bare finding count cannot tell a round that examined 400 rows
+            # from one whose stem set resolved to nothing, and the empty-but-tokenless set
+            # is named so it is never read as a malformed receipt.
+            lines.append(
+                f"  population: {cov['run_rows_on_stem']} run row(s) on "
+                f"{cov['stems_declared_count']} declared receipt stem(s), of "
+                f"{cov['run_rows_read']} row(s) read — {cov['canonical_empty']} declare NO "
+                f"duty in the canonical trailer, of which {cov['prose_token']} carry the "
+                f"token in PROSE (the finding) and "
+                f"{cov['canonical_empty'] - cov['prose_token']} carry no token anywhere "
+                f"(not a receipt, never a finding)"
+            )
+            lines.append(
+                f"  verdict split at {cov['since']} (#498 ordered the writer rule): "
+                f"{cov['findings_since']} finding(s) written ON/AFTER it are PROBLEMS, "
+                f"{cov['findings_before']} written BEFORE it are visible debt — append-only "
+                f"and NO BACKFILL, so they can never be repaired and never red"
+            )
+            lines.append(
+                f"  stems: {', '.join(cov['stems_declared']) or 'none declared'} — read at "
+                f"{cov['read_at'] or 'unstated'}"
+            )
+            # THE BOUNDARY IS STATED, never inferred (#587). The verdict above counts this
+            # leg's POPULATION; the same predicate outside it is a different fact, and a
+            # reader must not have to subtract to learn the size of the class.
+            lines.append(
+                f"  class boundary: the same predicate outside this population finds "
+                f"{cov['prose_token_off_stem']} `run` row(s) on NON-declared stems "
+                f"({cov['prose_token_off_stem_since']} written on/after {cov['since']}, so "
+                f"none is withheld from the red) and "
+                f"{cov['prose_token_not_a_receipt']} row(s) that are not receipts at all "
+                f"(claim/close/dispatch/intake/ruling/score) — this leg judges "
+                f"{cov['prose_token']}, and that is its population, not the size of the class"
+            )
+
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -15136,6 +15320,15 @@ def main(
             exemptions_fn=duty_exemptions_fn,
         ), read_at),
         leg_guard("canonicality-tier", lambda: canonicality_leg(rows, read_at=read_at), read_at),
+        # #587: the census of receipts whose duty token sits in PROSE, so `declared_duty`
+        # reads [] -- the class no existing leg can see (see the leg's own header for the
+        # partition against `judge_round`). Read-side over the ledger rows this round
+        # already holds, and handed the SAME cron rows the two receipt legs above take, so
+        # the stems come from one canonical reader and no second database is opened.
+        leg_guard("duty-receipt-prose", lambda: duty_receipt_prose_leg(
+            rows, cron_rows, read_at=read_at,
+        ), read_at),
+
         leg_guard("ledger-ref-roles", lambda: ledger_ref_roles_leg(
             rows, read_at=read_at,
             # #330: injected so no probe's verdict is decided by this factory's own

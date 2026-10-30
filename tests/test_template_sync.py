@@ -789,6 +789,10 @@ PAIRS = [
     # receipt path are written down nowhere a caller reads, and one that took the contract
     # without the tool would carry law about a mechanism it does not have.
     ("docs/instruments/binding-sync.md", "TEMPLATE/docs/instruments/binding-sync.md"),
+    # #587: the duty-receipt writer rule. Paired for the same reason as every other
+    # instrument doc -- a member factory that ships the reader without the rule keeps
+    # writing prose tokens the census then reports against it.
+    ("docs/instruments/duty-receipt.md", "TEMPLATE/docs/instruments/duty-receipt.md"),
 ]
 
 def main() -> int:

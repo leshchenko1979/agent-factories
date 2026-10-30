@@ -11596,6 +11596,118 @@ def test_the_ROUTING_role_predicate_states_each_measured_shape() -> None:
         "silently demote a genuine dispatch"
     )
 
+def test_587_the_duty_receipt_PROSE_census_reports_its_population_and_splits_the_verdict() -> None:
+    """#587, ruled at n=4483: the writer rule has no READER for its own failure class.
+
+    ARM 1 IS THE POSITIVE CONTROL and it is the one that matters. A synthetic `run` row on
+    a declared stem whose canonical trailer declares NOTHING while its prose carries
+    `duty=completed` must be a PROBLEM. The defect #587 names is a filter that cannot see
+    the class and reports 0, which reads exactly like a clean tree -- so arms that only
+    assert the leg runs, or only assert a count of zero somewhere, prove nothing.
+
+    ARM 2 is its negative control, and it is deliberately the SAME row with only the token's
+    POSITION changed: a leg that red on any row mentioning `duty` would pass arm 1 and fail
+    here, which is the "prose must not satisfy a field" damage (#88, n=405 clause 5).
+    """
+    predicate = RUNNER.field_predicate_readers()
+    since = "2026-10-16"
+    cron = [{"name": "probe-patrol", "prompt": "receipt_subject: patrol-verify\n"}]
+
+    def row(n, detail, ts="2026-10-20T00:00:00Z"):
+        return {"n": n, "ts": ts, "event": "run", "actor": "triage",
+                "subject": "patrol-verify-2026-10-20T00", "detail": detail}
+
+    prose = "patrol round. The receipt declares duty=completed in its TEXT."
+    canonical = "patrol round. The receipt carries the terminal run.\nduty=completed"
+
+    # ARM 1 -- POSITIVE CONTROL: prose token, empty canonical trailer -> a PROBLEM.
+    leg = RUNNER.duty_receipt_prose_leg(
+        [row("9001", prose)], cron, read_at="2026-10-30T00:00:00Z",
+        predicate=predicate, since=since)
+    assert leg["status"] == "ASSERTED", leg["status"]
+    assert leg["coverage"]["run_rows_on_stem"] == 1, leg["coverage"]
+    assert leg["coverage"]["prose_token"] == 1, leg["coverage"]
+    assert len(leg["problems"]) == 1, leg
+    assert "n=9001" in leg["problems"][0], leg["problems"][0]
+    assert leg["excused"] == [], leg["excused"]
+
+    # ARM 2 -- NEGATIVE CONTROL: the SAME row, token in the CANONICAL TRAILER. It must be
+    # invisible to this leg: not a finding, and not even in the empty set.
+    leg = RUNNER.duty_receipt_prose_leg(
+        [row("9002", canonical)], cron, read_at="2026-10-30T00:00:00Z",
+        predicate=predicate, since=since)
+    assert leg["coverage"]["run_rows_on_stem"] == 1, leg["coverage"]
+    assert leg["coverage"]["canonical_empty"] == 0, leg["coverage"]
+    assert leg["coverage"]["prose_token"] == 0, leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+
+    # ARM 3 -- THE SPLIT. The same prose row stamped BEFORE the rule is visible debt, never
+    # a red: no backfill is ordered, so an all-red leg would be red forever and un-greenable.
+    leg = RUNNER.duty_receipt_prose_leg(
+        [row("9003", prose, ts="2026-10-01T12:00:00Z")], cron,
+        read_at="2026-10-30T00:00:00Z", predicate=predicate, since=since)
+    assert leg["problems"] == [], leg["problems"]
+    assert len(leg["excused"]) == 1, leg["excused"]
+    assert "BEFORE the rule was ordered" in leg["excused"][0], leg["excused"][0]
+
+    # ARM 4 -- an EMPTY-TRAILER row with NO token anywhere is not a receipt and must never
+    # be reported: that population is 110 of the 136 empty rows on this tree, and counting
+    # it as findings would triple the red with rows no writer rule can reach.
+    leg = RUNNER.duty_receipt_prose_leg(
+        [row("9004", "patrol round, nothing declared at all.")], cron,
+        read_at="2026-10-30T00:00:00Z", predicate=predicate, since=since)
+    assert leg["coverage"]["canonical_empty"] == 1, leg["coverage"]
+    assert leg["coverage"]["prose_token"] == 0, leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+
+    # ARM 5 -- NO DECLARED STEM is NOT RUN, never a clean pass: a zero from a filter with
+    # no population is the exact shape #587 exists to kill (#242).
+    leg = RUNNER.duty_receipt_prose_leg(
+        [row("9005", prose)], [], read_at="2026-10-30T00:00:00Z",
+        predicate=predicate, since=since)
+    assert leg["status"] == "NOT RUN", leg["status"]
+
+    # ARM 6 -- THE CLASS BOUNDARY IS COUNTED, not left to be inferred. A finding on a stem
+    # this factory does NOT declare is outside the verdict, and a finding on a NON-`run`
+    # event is not a receipt at all; both must appear in the coverage beside the population,
+    # so `prose_token` is never read as the size of the class.
+    off = dict(row("9006", prose), subject="undeclared-stem-2026-10-20T00")
+    not_receipt = dict(row("9007", prose), event="close")
+    leg = RUNNER.duty_receipt_prose_leg(
+        [row("9008", prose), off, not_receipt], cron,
+        read_at="2026-10-30T00:00:00Z", predicate=predicate, since=since)
+    assert leg["coverage"]["prose_token"] == 1, leg["coverage"]
+    assert leg["coverage"]["prose_token_off_stem"] == 1, leg["coverage"]
+    assert leg["coverage"]["prose_token_not_a_receipt"] == 1, leg["coverage"]
+    assert len(leg["problems"]) == 1, leg["problems"]
+
+    # ARM 7 -- BOTH SHAPES RENDER. The leg's ASSERTED coverage and `no_prefixes_leg`'s NOT
+    # RUN coverage are different dicts, and the report reads keys that only one of them
+    # carries: without this arm the NOT RUN shape raises a KeyError inside `render` and takes
+    # the whole round down. Measured, this is not hypothetical -- the first run of this change
+    # failed `test_538_the_render_PRINTS_the_scoping_and_the_board_it_read` with
+    # `KeyError: 'run_rows_on_stem'`, and the leg-level arms above were all green.
+    for arm in (
+        RUNNER.duty_receipt_prose_leg([row("9009", prose)], cron,
+                                      read_at="2026-10-30T00:00:00Z",
+                                      predicate=predicate, since=since),
+        RUNNER.duty_receipt_prose_leg([row("9010", prose)], [],
+                                      read_at="2026-10-30T00:00:00Z",
+                                      predicate=predicate, since=since),
+    ):
+        text = RUNNER.render([arm], [], slug="probe", read_at="2026-10-30T00:00:00Z",
+                             issues=[])
+        assert "LEG duty-receipt-prose" in text, text
+    # and the ASSERTED arm's population line names the number, never a bare count.
+    asserted = RUNNER.duty_receipt_prose_leg([row("9011", prose)], cron,
+                                             read_at="2026-10-30T00:00:00Z",
+                                             predicate=predicate, since=since)
+    text = RUNNER.render([asserted], [], slug="probe", read_at="2026-10-30T00:00:00Z",
+                         issues=[])
+    assert "class boundary" in text, text
+    assert "1 run row(s) on 1 declared receipt stem(s)" in text, text
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
 
