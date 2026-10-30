@@ -1237,6 +1237,127 @@ def probe_every_read_a_gate_opens_is_declared() -> None:
         f"declares={[f['declares'] for f in dir_findings]}",
     )
 
+# --- #583: ONE declared wall on every sanctioned path --------------------------------
+#
+# The audit applies a per-gate wall; this selector applied NONE, so the SAME gate ran
+# unbounded here and the two receipts disagreed about whether it had finished -- the patrol
+# read `34 ran, 0 failed` for a gate the audit recorded as `exit 124`/UNKNOWN. Three arms:
+# the table is read from the JUDGED tree (where this broke), the wall is ENFORCED (a gate
+# past it is a NO VERDICT, never a FAIL), and a table that cannot be read is a DECLARED
+# EXEMPTION naming what is missing rather than an AttributeError naming a NoneType.
+
+class _StubBudgets:
+    """One wall, so the enforcement arm never depends on a live measurement."""
+
+    default_sec = 0.25
+    gates: dict = {}
+
+    def resolve(self, key: str) -> tuple[float, str]:
+        return self.default_sec, "declared"
+
+
+def probe_the_wall_is_read_from_the_judged_tree() -> None:
+    """ARM 1 — the base path, which is exactly where this mechanism broke.
+
+    `gate_budget.py` derives `GATES_MANIFEST_PATH` from its own `__file__`, so loading the
+    module from the repo ROOT instead of `<root>/tools` reads NO manifest, and every gate
+    silently becomes an exemption -- 33 of them in one patrol receipt, which is a receipt
+    about the loader and not about the gates. The discriminating assertions are the COUNT
+    and the SOURCE: a table that really loaded carries the declared entries and names this
+    tree's own registry. Asserting only `not None` would pass on an empty fallback.
+    """
+    sel = _selector()
+    budgets, note = sel.declared_budget_table(REPO)
+    check("the budget table loads with no exemption note", note == "", note)
+    check("the budget table is not None", budgets is not None)
+    if budgets is None:
+        return
+    check(
+        "the table carries the declared entries, not an empty fallback",
+        len(budgets.gates) > 50,
+        f"{len(budgets.gates)} declared entries",
+    )
+    check(
+        "the manifest read is THIS tree's, resolved through <root>/tools",
+        str(REPO / "registry" / "gates.json") in budgets.default_source,
+        budgets.default_source,
+    )
+    # THE ABSENT-MODULE ARM MUST NAME THE PATH. An AttributeError here is the printed
+    # mystery this factory keeps paying for: it blames NoneType instead of the directory.
+    missing, reason = sel.declared_budget_table(Path(tempfile.gettempdir()) / "no-such-tree")
+    check("an unreadable table is None", missing is None)
+    check(
+        "the reason names the missing module AND its directory",
+        "gate_budget.py" in reason and "no-such-tree" in reason,
+        reason,
+    )
+    check(
+        "the reason is not an AttributeError about a NoneType",
+        "NoneType" not in reason and "AttributeError" not in reason,
+        reason,
+    )
+
+
+def probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared() -> None:
+    """ARM 2 and 3 — the wall is ENFORCED, and its absence is PRINTED.
+
+    `run_gates` called `subprocess.run` with no `timeout`, so a gate that never returned
+    read as a pass one layer up. Arm 2's discriminator is the BUCKET: the killed gate must
+    land in `no_verdicts` and NOT in `failures` (#544), because a wall WE imposed is the
+    same absence of a verdict as a child self-limiting at the kill code. Arm 3's
+    discriminator is that the exemption NAMES the gate and the reason -- an unprinted
+    absence is indistinguishable from a gate whose bound was met.
+    """
+    sel = _selector()
+    slow = [sys.executable, "-c", "import time; time.sleep(30)"]
+    quick = [sys.executable, "-c", "raise SystemExit(0)"]
+    saved_commands, saved_table = sel.registered_commands, sel.declared_budget_table
+    try:
+        sel.registered_commands = lambda root: {
+            "tests/slow.py": slow,
+            "tests/quick.py": quick,
+        }
+        sel.declared_budget_table = lambda root: (_StubBudgets(), "")
+        run = sel.run_gates(REPO, ["tests/slow.py", "tests/quick.py"])
+        check("the fast gate under a wall is not a failure", not run.failures, str(run.failures))
+        check(
+            "the gate past its wall is a NO VERDICT, never a FAIL",
+            len(run.no_verdicts) == 1 and "tests/slow.py" in run.no_verdicts[0],
+            str(run.no_verdicts),
+        )
+        check(
+            "the kill names the budget it died at",
+            any("0.25" in killed for killed in run.no_verdicts),
+            str(run.no_verdicts),
+        )
+        check("a run under a wall declares no exemption", not run.exemptions, str(run.exemptions))
+        check(
+            "the exit code separates a kill from a clean run",
+            sel.run_exit_code(run) != 0,
+            f"rc={sel.run_exit_code(run)}",
+        )
+        # ARM 3 — no readable table: the gate still RUNS, and the receipt says so.
+        sel.declared_budget_table = lambda root: (
+            None,
+            "gate_budget.py not found under /nope/tools",
+        )
+        unbounded = sel.run_gates(REPO, ["tests/quick.py"])
+        check(
+            "an unreadable table exempts the gate BY NAME with its reason",
+            len(unbounded.exemptions) == 1
+            and "tests/quick.py" in unbounded.exemptions[0]
+            and "/nope/tools" in unbounded.exemptions[0],
+            str(unbounded.exemptions),
+        )
+        check(
+            "an exempted gate still runs rather than being skipped",
+            not unbounded.failures and not unbounded.no_verdicts,
+            f"failures={unbounded.failures} no_verdicts={unbounded.no_verdicts}",
+        )
+    finally:
+        sel.registered_commands, sel.declared_budget_table = saved_commands, saved_table
+
+
 PROBES = (
     probe_every_registered_gate_is_covered,
     probe_every_map_key_is_registered,
@@ -1253,6 +1374,8 @@ PROBES = (
     probe_the_range_fails_a_gate_the_clean_checkout_cannot_materialise,
     probe_a_kill_is_not_a_failure,
     probe_a_failed_receipt_carries_the_childs_word,
+    probe_the_wall_is_read_from_the_judged_tree,
+    probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared,
 )
 
 
@@ -1487,6 +1610,12 @@ def test_probe_the_run_mode_executes_gates_with_the_interpreter() -> None:
 def test_probe_a_run_states_its_own_outcome() -> None:
     _assert_probe(probe_a_run_STATES_its_own_outcome)
     _assert_probe(probe_a_run_STATES_its_own_outcome)
+
+def test_probe_the_wall_is_read_from_the_judged_tree() -> None:
+    _assert_probe(probe_the_wall_is_read_from_the_judged_tree)
+
+def test_probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared() -> None:
+    _assert_probe(probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared)
 
 if __name__ == "__main__":
     sys.exit(main())

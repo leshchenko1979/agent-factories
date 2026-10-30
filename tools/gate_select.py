@@ -189,6 +189,63 @@ def declared_kill_code() -> int:
 
 TIMEOUT_EXIT_CODE = declared_kill_code()
 
+def declared_budget_table(root: Path) -> tuple[object | None, str]:
+    """The declared walls, read ONCE per run, or the reason they could not be.
+
+    ONE WALL, TWO PATHS (#583). The audit resolves a wall per gate and hands it to
+    `run_gate(timeout=budget_sec)`, so a hung gate dies at its declared budget. This
+    selector called `subprocess.run` with NO timeout at all, so the same gate ran
+    unbounded here and the two sanctioned paths disagreed about whether it had finished:
+    patrol receipts read `34 ran, 0 failed` for a gate the audit records as `exit 124`
+    /UNKNOWN. A reader holding the green receipt concludes the gate passed; it never
+    returned.
+
+    THE WALL IS THE RESOLVED `budget_sec` — declared where the manifest declares one, and
+    the manifest's own `default_sec` where it does not. What it is NEVER is
+    `margin_for(measured_sec)` computed again here: the margin is already inside the
+    declared value (`margin_x x measured_sec` is how the entry was derived), so re-applying
+    it would make this path's wall LARGER than the audit's and re-create the disagreement
+    one arithmetic layer down. Resolve the same key, take the same number.
+
+    A DEFAULT-ORIGIN WALL IS NOT A MEASURED ONE, and this paragraph said "the declared
+    `budget_sec` VERBATIM" until the population was counted: 53 of 109 gates have no entry
+    and fall through to `default_sec` (69.27 s), so for those the wall is the DEFAULT's own
+    derivation rather than a measurement of that gate. That is still the audit's number for
+    the gate — which is all #583 requires, since the two paths must agree — but a reader who
+    takes "declared" to mean "measured for THIS gate" is reading a claim the manifest does
+    not make. The audit prints the fall-through population separately (`[DEFAULT]`).
+
+    THE BASE IS `<root>/tools`, NOT `<root>` (#583). `gate_budget.py` declares
+    `GATES_MANIFEST_PATH` as `Path(__file__).resolve().parent.parent / "registry" /
+    "gates.json"`, so the directory the module is loaded FROM decides WHICH manifest is
+    read. Loading it from the repo root misses the file entirely — `<root>/gate_budget.py`
+    does not exist — and `_load_module` returns None for a missing source, which read as
+    "no declared wall could be read" for EVERY gate: 33 exemptions in one patrol receipt,
+    which is a receipt about the loader, not about the gates. The tree under judgement
+    supplies both the code and its registry, so a worktree is judged by its own manifest.
+
+    The KEY comes from `gate_budget.gate_key_for_cmd`, the audit's own derivation, because
+    `registered_commands` already keys by it: one lookup, two callers, no drift.
+
+    A manifest that cannot be read is NOT permission to run unbounded silently. The caller
+    records a DECLARED EXEMPTION naming the gate and this reason, so the receipt says what
+    it did. An unprinted absence is the bug class; a printed one is a record.
+    """
+    source_dir = root / "tools"
+    module = _load_module(source_dir, BUDGET_MODULE, "oc_gate_budget_table")
+    # THE TWO ARMS ARE DIFFERENT CAUSES AND MUST SAY SO (#583). `_load_module` answers None
+    # for a source that is not there; reaching into that None raises AttributeError
+    # ('NoneType' object has no attribute 'load_gate_budgets'), and a receipt carrying THAT
+    # names the object that broke rather than the path that is missing — a printed mystery
+    # where a printed absence was owed. So the absent module is reported as an absent module,
+    # and only a module that LOADED and then failed reports the exception.
+    if module is None:
+        return None, f"{BUDGET_MODULE} not found under {source_dir}"
+    try:
+        return module.load_gate_budgets(repo_root=root), ""
+    except Exception as exc:  # noqa: BLE001 — any failure here means "no declared wall"
+        return None, f"{type(exc).__name__}: {exc}"
+
 class GateRun(NamedTuple):
     """What a gate set produced: failures AND kills, kept apart on purpose (#544).
 
@@ -201,6 +258,11 @@ class GateRun(NamedTuple):
 
     failures: list[str]
     no_verdicts: list[str]
+    # A THIRD BUCKET, never a silent omission (#583). A gate that ran with no wall because
+    # the manifest could not be read is neither a pass nor a failure — it is a run whose
+    # bound was ABSENT, and a caller that cannot see that reads a green receipt for a gate
+    # nobody bounded. Defaulted so a caller that predates the field still constructs one.
+    exemptions: tuple[str, ...] = ()
 
 def run_exit_code(run: GateRun) -> int:
     """The run's exit code, from its own two counts, in precedence order (#544).
@@ -408,10 +470,32 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
     The gate already writes `UNMEASURED` or `DISAGREE` there, and this function used to
     discard it -- so "a peer was running the audit" and "your change broke this gate"
     arrived as the same string, which is the whole of the filing.
+
+    EVERY GATE RUNS UNDER ITS DECLARED WALL (#583). The audit resolves `budget_sec` per gate
+    and passes it to `run_gate`, so a hung gate dies there. This function called
+    `subprocess.run` with no `timeout` at all, so the SAME gate ran unbounded here while the
+    audit killed it: the patrol receipt read `34 ran, 0 failed` for a gate the audit records
+    as `exit 124`/UNKNOWN, and the reader holding the green receipt concludes it passed.
+    A gate that never returns is not a slow gate; it is an absent verdict, and the receipt
+    must say so.
+
+    THE WALL IS THE RESOLVED `budget_sec` — the entry where the manifest declares one, the
+    manifest's own `default_sec` where it does not — and never `margin_for(measured_sec)`
+    computed again here. The margin is already inside the resolved number, so re-applying it
+    would make this path's wall larger than the audit's and re-open the same disagreement one
+    arithmetic layer down. One key (`gate_budget.gate_key_for_cmd`, the audit's own), one
+    lookup (`GateBudgets.resolve`), one wall.
+
+    A KILLED GATE LANDS IN `no_verdicts`, NOT `failures` — the #544 separation, unchanged.
+    Whether the kill came from our own `timeout=` or from the child self-limiting at
+    `TIMEOUT_EXIT_CODE` is not the caller's question: both are absent verdicts, and the two
+    arrive in the same bucket so no caller can read one and believe it has the other.
     """
     commands = registered_commands(root)
+    budgets, budget_note = declared_budget_table(root)
     failures: list[str] = []
     no_verdicts: list[str] = []
+    exemptions: list[str] = []
     for gate in gates:
         if tree_label != "worktree" and not (root / gate).is_file():
             failures.append(f"{gate} — selected, but not present in the {tree_label}")
@@ -420,10 +504,23 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
         if argv is None:
             failures.append(f"{gate} — no registered argv in {AUDIT_RELATIVE}")
             continue
+        if budgets is None:
+            timeout = None
+            exemptions.append(
+                f"{gate} — ran UNBOUNDED: no declared wall could be read ({budget_note})"
+            )
+        else:
+            timeout = budgets.resolve(gate)[0]
         try:
             proc = subprocess.run(
-                list(argv), cwd=str(root), capture_output=True, text=True
+                list(argv), cwd=str(root), capture_output=True, text=True, timeout=timeout
             )
+        except subprocess.TimeoutExpired:
+            no_verdicts.append(
+                f"{gate} — killed at its declared budget ({timeout:.2f}s); "
+                f"it neither passed nor failed"
+            )
+            continue
         except OSError as exc:
             failures.append(f"{gate} — could not execute: {exc}")
             continue
@@ -437,7 +534,7 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
             failures.append(
                 f"{gate} — rc={proc.returncode}" + (f": {cause}" if cause else "")
             )
-    return GateRun(failures, no_verdicts)
+    return GateRun(failures, no_verdicts, tuple(exemptions))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -558,6 +655,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"gate-select: FAILED {failure}", file=sys.stderr)
         for killed in run.no_verdicts:
             print(f"gate-select: NO VERDICT {killed}", file=sys.stderr)
+        # A PATH THAT DELIBERATELY RUNS UNBOUNDED MUST SAY SO (#583). When the declared
+        # wall cannot be read at all, the gate still runs -- refusing would take the whole
+        # selection down over a missing manifest -- but silence is the bug class this unit
+        # removes: an unprinted absence reads exactly like a gate that ran under its wall.
+        # So each such gate gets its own line naming the gate and the load failure, and the
+        # word EXEMPTION is used rather than "warning" because it is a declared departure
+        # from the registered wall, not an accident.
+        for exempt in run.exemptions:
+            print(f"gate-select: DECLARED EXEMPTION {exempt}", file=sys.stderr)
         # THE EXIT CODE CARRIES THE DISTINCTION (#544). A run is not a pass just because
         # nothing failed: if a gate was killed, no verdict was taken on it, and rc=0 would
         # report a clean bill for work that never happened. The codes, in precedence order:
