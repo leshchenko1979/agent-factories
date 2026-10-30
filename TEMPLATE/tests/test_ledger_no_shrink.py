@@ -91,6 +91,7 @@ Exit: 0 clean or fully accounted, 1 on any unaccounted row removal.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -104,6 +105,9 @@ EXEMPTIONS_PATH = "docs/ledger-no-shrink-exemptions.json"
 PRIMARY_REF = "origin/main"
 FALLBACK_REF = "HEAD"
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
+# A DIGEST is 64 hex, not 40: `identity_digest` is a sha256, and testing it with FULL_SHA
+# would fail on every correct record (#582 probe caught this by reading its own output).
+DIGEST_SHA = re.compile(r"^[0-9a-f]{64}$")
 
 # The #52 clause 1 identity tuple. A row is identified by these five fields; a commit that
 # alters any of them removes the old identity and adds a new one.
@@ -543,8 +547,17 @@ def surviving_problems(surviving: set[tuple], tip_rows: list[dict]) -> list[str]
     ]
 
 def resolvable(ref: str, cwd: Path) -> bool:
-    """True when a ref resolves — the `origin/main` -> `HEAD` degradation (clause 4)."""
-    rc, out, _ = _git("rev-parse", "--verify", "--quiet", ref, cwd=cwd)
+    """True when a ref resolves to a real COMMIT — the `origin/main` -> `HEAD` degradation.
+
+    The `^{commit}` suffix is load-bearing and was missing (#582). Bare `rev-parse --verify`
+    echoes any 40-hex string back at rc=0 whether or not that object exists -- measured on
+    an all-zeros sha in a repo that has no such object, rc=0 with the zeros echoed -- so a
+    checkpoint naming a sha this repo has never had would pass the "resolvable" leg and be
+    refused one leg later as NOT AN ANCESTOR, a message that blames a rewritten history for
+    what is actually an absent object. Asking for the commit form makes the leg mean what
+    its name says, and the checkpoint's UNRESOLVABLE note then names the true cause.
+    """
+    rc, out, _ = _git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", cwd=cwd)
     return rc == 0 and bool(out.strip())
 
 
@@ -560,7 +573,7 @@ _WALK_CACHE: dict[tuple, tuple] = {}
 
 
 def history_entries(
-    ref: str, rel_path: str, cwd: Path
+    ref: str, rel_path: str, cwd: Path, base: str | None = None
 ) -> tuple[list[dict] | None, str]:
     """`([{sha, subject, added, deleted}], error)` for commits touching `rel_path`.
 
@@ -592,7 +605,7 @@ def history_entries(
     with `build_transitions`' `before = rows_at(f"{sha}^")` -- `^` IS the first parent,
     so the diffstat and the before-side now describe the same comparison.
     """
-    _key = ("history", ref, rel_path, str(cwd))
+    _key = ("history", ref, rel_path, str(cwd), base)
     if _key in _WALK_CACHE:
         return _WALK_CACHE[_key]
 
@@ -601,7 +614,7 @@ def history_entries(
         "--diff-merges=first-parent",
         "--numstat",
         "--format=%x01%H%x01%s",
-        ref,
+        f"{base}..{ref}" if base else ref,
         "--",
         rel_path,
         cwd=cwd,
@@ -700,8 +713,204 @@ def commit_parents(sha: str, cwd: Path) -> list[str]:
     return parts[1:] if parts else []
 
 
+# ── THE INCREMENTAL SCAN CHECKPOINT (#582, ruling n=4473) ───────────────────────────────
+#
+# The walk's cost is O(commits x filesize) and BOTH terms grow, so any fixed wall goes stale
+# by construction. Measured 2026-10-30 on this tree (2162 commits, 4501 rows, 9.72 MB): the
+# `git log --numstat` walk 190.31 s, the 164 `git show`s 20.42 s, the 164 full-file parses
+# 19.48 s. The WALK is the whole cost, and it re-reads history that has not changed since the
+# last completed scan.
+#
+# The ordered shape (n=4473) is an INCREMENTAL scan whose cost is proportional to the NEW
+# commits since the last completed scan, with FULL COVERAGE preserved. A bounded WINDOW is
+# refused, and that refusal is load-bearing: a no-shrink check that cannot see before its
+# window reports GREEN on exactly the class it exists to catch.
+#
+# Coverage is preserved because the checkpoint is a CHAIN, not a window. Every commit is
+# scanned exactly once, by the run that first sees it: a run walks `<checkpoint>..<ref>`, and
+# the NEXT run starts where that one stopped. Nothing is skipped -- only history a previous
+# run already compared. The predicate itself needs NO change: the first commit in the range
+# has the checkpoint sha as its first parent, so `rows_at(f"{sha}^")` resolves the before-side
+# through the ordinary path.
+#
+# The checkpoint is verified against the IMMUTABLE BLOB at its own sha, so it cannot describe
+# content that never existed there: `identity_digest` is recomputed from
+# `git show <sha>:<ledger>` (~120 ms, one parse) and any mismatch falls back to the full walk.
+# It records the identity SET, never a "trust me" flag.
+#
+# RESIDUAL, stated rather than hidden. The checkpoint is a CACHE, and its trust model is the
+# gate file's: a writer able to rewrite it could equally delete this gate. What the digest
+# check buys is that a checkpoint cannot silently describe content that never existed at its
+# sha; what it cannot buy is a guarantee against a writer who deletes a row and then writes a
+# checkpoint claiming that commit was scanned. That writer has to write the GIT COMMON DIR,
+# which is part of no commit -- so the class this gate exists to detect, a REPO-COMMITTING
+# writer, never touches it. Same posture as `<git-common-dir>/publish-receipt.json`
+# (SKILL.md §State — every surface has one writer): one record per repository, outside every commit.
+#
+# STALE IS NOT A DEFECT -- `evidence/.ledger-index.sqlite` is declared the same way. The
+# checkpoint is deletable at any instant, and its absence costs a full walk, never a verdict.
+SCAN_CHECKPOINT_NAME = "ledger-no-shrink-scan.json"
+
+
+def common_dir(cwd: Path) -> Path | None:
+    """The repository's git COMMON dir, shared by every worktree, or None.
+
+    Common rather than `--git-dir` on purpose: a worktree's `.git` is a FILE pointing into
+    `<main>/.git/worktrees/<name>`, so a per-worktree record would give each checkout its own
+    checkpoint and each checkout would re-walk the same immutable history.
+    """
+    rc, out, _ = _git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=cwd)
+    return Path(out.strip()) if rc == 0 and out.strip() else None
+
+
+def identity_digest(rows: list[dict]) -> str:
+    """A stable sha256 over a row list's IDENTITY SET -- order-independent, content-blind.
+
+    Identity only, because identity is what this gate guards: a commit that rewrites a
+    row's `detail` while preserving the #52 tuple is a CONTENT change and out of scope, so
+    hashing `detail` would make the checkpoint invalidate on the one class the gate ignores.
+    """
+    payload = json.dumps(sorted(json.dumps(list(identity_of(r))) for r in rows))
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
+def load_scan_checkpoint(cwd: Path) -> dict | None:
+    """The checkpoint, or None when it is absent OR unreadable -- never an error.
+
+    Absent and malformed are the same ANSWER here (fall back to the full walk) but they are
+    not the same MESSAGE: `incremental_base` prints which one it got, so a checkpoint that
+    keeps failing to load is visible rather than silently costing every run a full walk.
+    """
+    root = common_dir(cwd)
+    if root is None:
+        return None
+    target = root / SCAN_CHECKPOINT_NAME
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def save_scan_checkpoint(cwd: Path, payload: dict) -> str:
+    """Write the checkpoint atomically; return a one-line note for the run's own output."""
+    root = common_dir(cwd)
+    if root is None:
+        return "scan checkpoint: NOT WRITTEN -- no git common dir resolved"
+    target = root / SCAN_CHECKPOINT_NAME
+    tmp = target.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(payload, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        tmp.replace(target)
+    except OSError as exc:
+        return f"scan checkpoint: NOT WRITTEN -- {exc}"
+    return (
+        f"scan checkpoint: WRITTEN -- scanned through {str(payload.get('scanned_through'))[:12]} "
+        f"({payload.get('commits')} commit(s), {payload.get('rows')} row(s)); the next run "
+        f"walks only what lands after it"
+    )
+
+
+def incremental_base(ref: str, rel_path: str, cwd: Path) -> tuple[str | None, str]:
+    """`(base_sha_or_None, note)` -- where an incremental run may start, and why.
+
+    EVERY rejection falls back to the full walk and says which check failed. A checkpoint is
+    honoured only when all six legs hold: the same ref, a well-formed sha, a resolvable sha,
+    a sha that is an ANCESTOR of the ref (so a rewritten history cannot serve a checkpoint
+    from a line that no longer exists), a readable ledger at that sha, and a digest that
+    recomputes to what the checkpoint recorded.
+    """
+    cp = load_scan_checkpoint(cwd)
+    if not cp:
+        return None, "scan checkpoint: ABSENT -- full walk (nothing has been scanned here yet)"
+    if cp.get("ref") != ref:
+        return None, (
+            f"scan checkpoint: STALE -- recorded for ref {cp.get('ref')!r}, this run reads "
+            f"{ref!r} -- full walk"
+        )
+    sha = cp.get("scanned_through")
+    if not isinstance(sha, str) or not FULL_SHA.match(sha):
+        return None, "scan checkpoint: MALFORMED -- `scanned_through` is not a 40-hex sha -- full walk"
+    if not resolvable(sha, cwd):
+        return None, f"scan checkpoint: UNRESOLVABLE -- {sha[:12]} does not resolve here -- full walk"
+    rc, _, _ = _git("merge-base", "--is-ancestor", sha, ref, cwd=cwd)
+    if rc != 0:
+        return None, (
+            f"scan checkpoint: NOT AN ANCESTOR -- {sha[:12]} is not in {ref}'s history, so the "
+            f"line it describes was rewritten -- full walk"
+        )
+    rows = rows_at(sha, rel_path, cwd)
+    if rows is None:
+        return None, f"scan checkpoint: UNREADABLE -- no {rel_path} at {sha[:12]} -- full walk"
+    got = identity_digest(rows)
+    if cp.get("identity_digest") != got:
+        return None, (
+            f"scan checkpoint: DIGEST MISMATCH -- {sha[:12]} recomputes to {got[:12]} but the "
+            f"checkpoint records {str(cp.get('identity_digest'))[:12]}; it does not describe "
+            f"that blob -- full walk"
+        )
+    return sha, (
+        f"scan checkpoint: HIT -- {sha[:12]} verified (identity digest {got[:12]}, "
+        f"{len(rows)} row(s); {cp.get('commits')} commit(s) already scanned) -- INCREMENTAL, "
+        f"walking {sha[:12]}..{ref}"
+    )
+
+
+def record_scan_checkpoint(
+    ref: str, cwd: Path, base: str | None, entries: list[dict]
+) -> str:
+    """Record a COMPLETED scan; return a one-line note for the run's own output.
+
+    Called only on an `rc=0` run -- a run that FAILED must leave the previous checkpoint in
+    place, because advancing it past commits the run rejected would hide exactly the removals
+    that failed it.
+
+    THE RECORDED SHA IS THE ONE THE WALK ACTUALLY READ, never `rev-parse ref` at write time.
+    `ref` is MOVABLE: a peer pushing mid-run moves it between the walk and this call, and a
+    checkpoint written from the later value would claim commits the run never examined --
+    which is this gate's own defect class, an anti-deletion guard going blind on the window it
+    skipped. `entries` is `git log`'s output, newest first, so its first sha IS the tip the
+    walk saw; the digest is then recomputed from that blob, and the two describe one state.
+
+    `commits` accumulates across runs so the checkpoint describes the whole chain rather than
+    just this leg of it. The instant is READ from git, never composed: a `written_at` this
+    file invented would be indistinguishable from a verified one.
+    """
+    if not entries:
+        # Nothing touches the ledger since the base. Advancing is impossible without inventing
+        # a tip, and leaving the record alone costs the next run one cheap `git log`.
+        return (
+            f"scan checkpoint: UNCHANGED -- no commit touches {LEDGER_PATH} since "
+            f"{str(base)[:12]}, so there is nothing to advance"
+        )
+    sha = str(entries[0].get("sha") or "")
+    if not FULL_SHA.match(sha):
+        return f"scan checkpoint: NOT WRITTEN -- the walk's tip {sha[:12]!r} is not a 40-hex sha"
+    rows = rows_at(sha, LEDGER_PATH, cwd)
+    if rows is None:
+        return f"scan checkpoint: NOT WRITTEN -- no {LEDGER_PATH} at {sha[:12]}"
+    rc, instant, _ = _git("log", "-1", "--format=%cI", sha, cwd=cwd)
+    previous = 0
+    if base:
+        try:
+            previous = int((load_scan_checkpoint(cwd) or {}).get("commits") or 0)
+        except (TypeError, ValueError):
+            previous = 0
+    return save_scan_checkpoint(
+        cwd,
+        {
+            "ref": ref,
+            "scanned_through": sha,
+            "identity_digest": identity_digest(rows),
+            "rows": len(rows),
+            "commits": previous + len(entries),
+            "written_at": instant.strip() if rc == 0 and instant.strip() else "unread",
+        },
+    )
+
+
 def iter_transitions(
-    ref: str, rel_path: str, cwd: Path
+    ref: str, rel_path: str, cwd: Path, base: str | None = None
 ) -> tuple[Iterator[dict] | None, list[dict] | None, str]:
     """`(transition_stream, entries, error)` — one transition per commit that deleted a line.
 
@@ -724,7 +933,7 @@ def iter_transitions(
     (rc=124 against a 200 s cap, 2026-09-28). The ROWS walk is deliberately NOT cached:
     that cache WAS the memory, and there is exactly one consumer pass over the stream.
     """
-    entries, err = history_entries(ref, rel_path, cwd)
+    entries, err = history_entries(ref, rel_path, cwd, base=base)
     if entries is None:
         return None, None, err
     # THE CACHE LIVES FOR EXACTLY ONE WALK. Inside a walk every key is an immutable sha
@@ -1457,6 +1666,210 @@ def probe_a_SINGLE_PARENT_removal_needs_the_re_mint_signature() -> list[str]:
         )
     return fails
 
+def _synthetic_repo_with_a_ledger_history(root: Path) -> tuple[Path, list[str]]:
+    """A throwaway repo with TWO clean ledger commits; `(cwd, [sha_first, sha_second])`.
+
+    The checkpoint functions all take `cwd`, which is the seam (#169, ruling n=1128): the
+    repo is an INPUT, so the mechanism is provable without touching the live tree and without
+    a refactor. No deletion here on purpose -- these probes are about WHERE a scan may start,
+    and a deletion would put the walker's own verdict in the way of that question.
+    """
+    import subprocess
+
+    ledger = root / LEDGER_PATH
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+
+    def git(*args: str) -> str:
+        proc = subprocess.run(
+            ["git", "-c", "user.email=probe@example.invalid", "-c", "user.name=probe",
+             "-c", "commit.gpgsign=false", "-c", "init.defaultBranch=main", *args],
+            cwd=root, capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
+        return proc.stdout.strip()
+
+    git("init", "-q")
+    shas: list[str] = []
+    for n in (1, 2):
+        ledger.write_text(
+            "".join(
+                f'{{"n": {i}, "event": "claim", "ts": "2026-01-01T00:0{i}:00Z", '
+                f'"actor": "probe", "subject": "#{i}"}}\n'
+                for i in range(1, n + 1)
+            ),
+            encoding="utf-8",
+        )
+        git("add", "-A")
+        git("commit", "-q", "-m", f"ledger row {n}")
+        shas.append(git("rev-parse", "HEAD"))
+    return root, shas
+
+def probe_incremental_base_HONOURS_a_verified_checkpoint_and_REFUSES_every_bad_one() -> list[str]:
+    """`incremental_base` is the WHOLE safety of the incremental scan (#582).
+
+    A checkpoint that is honoured when it should not be turns this gate blind for exactly the
+    window it skipped -- an anti-deletion guard reporting GREEN on the class it exists to
+    catch. So every refusal leg is exercised here, and each one must fall back to the FULL
+    walk (`base is None`) while SAYING which leg failed: a silent fallback is a cache nobody
+    can tell is broken, and it costs every run a full walk invisibly.
+
+    Legs, in the order `incremental_base` checks them: ABSENT, STALE ref, MALFORMED sha,
+    UNRESOLVABLE sha, NOT AN ANCESTOR (a rewritten line), UNREADABLE ledger at the sha, and
+    a DIGEST MISMATCH (a record that does not describe that blob).
+    """
+    import tempfile
+
+    fails: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        cwd, shas = _synthetic_repo_with_a_ledger_history(Path(tmp))
+
+        base, note = incremental_base("HEAD", LEDGER_PATH, cwd)
+        if base is not None or "ABSENT" not in note:
+            fails.append(f"an absent checkpoint did not report ABSENT: {base!r} {note!r}")
+
+        entries, err = history_entries("HEAD", LEDGER_PATH, cwd)
+        if entries is None:
+            return [f"the probe could not walk its own repo: {err}"]
+        recorded = record_scan_checkpoint("HEAD", cwd, None, entries)
+        if "WRITTEN" not in recorded:
+            fails.append(f"recording a completed scan failed: {recorded!r}")
+
+        base, note = incremental_base("HEAD", LEDGER_PATH, cwd)
+        if base != shas[-1] or "HIT" not in note or "INCREMENTAL" not in note:
+            fails.append(
+                f"a verified checkpoint was not honoured (want {shas[-1][:12]}): {base!r} {note!r}"
+            )
+
+        good = load_scan_checkpoint(cwd)
+        if not good:
+            return fails + ["the checkpoint was not readable after it was written"]
+
+        def tamper(**overrides) -> tuple[str | None, str]:
+            """Rewrite ONE leg of the checkpoint and re-ask, restoring the good record."""
+            payload = dict(good, **overrides)
+            save_scan_checkpoint(cwd, payload)
+            answer = incremental_base("HEAD", LEDGER_PATH, cwd)
+            save_scan_checkpoint(cwd, good)
+            return answer
+
+        base, note = tamper(ref="origin/somewhere-else")
+        if base is not None or "STALE" not in note:
+            fails.append(f"a checkpoint for another ref was honoured: {base!r} {note!r}")
+
+        base, note = tamper(scanned_through="not-a-sha")
+        if base is not None or "MALFORMED" not in note:
+            fails.append(f"a malformed sha was honoured: {base!r} {note!r}")
+
+        base, note = tamper(scanned_through="0" * 40)
+        if base is not None or "UNRESOLVABLE" not in note:
+            fails.append(f"an unresolvable sha was honoured: {base!r} {note!r}")
+
+        # A commit that is NOT in this ref's history: the line the checkpoint describes was
+        # rewritten away, so honouring it would resume from a state this tree never had.
+        orphan = _orphan_commit(cwd)
+        base, note = tamper(scanned_through=orphan)
+        if base is not None or "NOT AN ANCESTOR" not in note:
+            fails.append(f"a non-ancestor sha was honoured: {base!r} {note!r}")
+
+        # The digest leg, asked through a DIFFERENT rel_path: every earlier leg holds, and the
+        # ledger at that sha is unreadable, so this is the UNREADABLE arm rather than a digest
+        # question -- both are refusals, and the note must name which.
+        base, note = incremental_base("HEAD", "evidence/absent.jsonl", cwd)
+        if base is not None or "UNREADABLE" not in note:
+            fails.append(f"an unreadable ledger at the sha was honoured: {base!r} {note!r}")
+
+        base, note = tamper(identity_digest="f" * 64)
+        if base is not None or "DIGEST MISMATCH" not in note:
+            fails.append(
+                f"a checkpoint whose digest does not describe the blob was honoured: "
+                f"{base!r} {note!r}"
+            )
+    return fails
+
+def _orphan_commit(cwd: Path) -> str:
+    """A commit that exists in the repo but is NOT in `HEAD`'s history."""
+    import subprocess
+
+    def git(*args: str) -> str:
+        proc = subprocess.run(
+            ["git", "-c", "user.email=probe@example.invalid", "-c", "user.name=probe",
+             "-c", "commit.gpgsign=false", *args],
+            cwd=cwd, capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
+        return proc.stdout.strip()
+
+    # Capture where we came FROM before moving: `git checkout -` reads OLDPWD, which a
+    # scripted repo never sets (the first version of this helper did exactly that and died
+    # on `pathspec '-' did not match`). A detached restore is also wrong -- the probe then
+    # walks a HEAD that is no longer a branch -- so the branch name is preferred.
+    original_ref = git("rev-parse", "--abbrev-ref", "HEAD")
+    if original_ref == "HEAD":  # detached: no branch to return to, fall back to the sha
+        original_ref = ""
+    original_sha = git("rev-parse", "HEAD")
+    git("checkout", "-q", "--orphan", "probe-side")
+    git("commit", "-q", "--allow-empty", "-m", "an unrelated line of history")
+    sha = git("rev-parse", "HEAD")
+    git("checkout", "-q", "--force", original_ref or original_sha)
+    if original_ref:
+        git("branch", "-q", "-D", "probe-side")
+    return sha
+
+def probe_record_scan_checkpoint_advances_to_the_SHA_THE_WALK_READ() -> list[str]:
+    """The recorded tip is the WALK'S tip, never `rev-parse ref` at write time (#582).
+
+    `ref` is MOVABLE. A peer pushing between the walk and the write moves it, and a record
+    taken from the later value would claim commits this run never examined -- the gate's own
+    defect class, blind on exactly the window it skipped. `entries` is `git log`'s output,
+    newest first, so its first sha is the state the walk actually read.
+
+    An EMPTY range must not advance either: there is no tip to record, and inventing one from
+    the ref would do the same thing one degree worse.
+
+    NOT PROBED, and stated rather than implied: that a FAILED run leaves the checkpoint
+    untouched is a property of `main`'s CONTROL FLOW -- the failure `return 1` sits above the
+    record call -- and `main` reads the live tree, so no synthetic repo can reach it. The
+    ordering is the guarantee; this probe cannot stand in for it.
+    """
+    import tempfile
+
+    fails: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        cwd, shas = _synthetic_repo_with_a_ledger_history(Path(tmp))
+        first, second = shas
+
+        # An incremental walk from the first commit sees exactly the second.
+        entries, err = history_entries("HEAD", LEDGER_PATH, cwd, base=first)
+        if entries is None:
+            return [f"the probe could not walk its own range: {err}"]
+        if [e["sha"] for e in entries] != [second]:
+            fails.append(f"the ranged walk returned {[e['sha'][:8] for e in entries]}, want one")
+        recorded = record_scan_checkpoint("HEAD", cwd, first, entries)
+        if "WRITTEN" not in recorded:
+            fails.append(f"recording an incremental scan failed: {recorded!r}")
+        cp = load_scan_checkpoint(cwd) or {}
+        if cp.get("scanned_through") != second:
+            fails.append(
+                f"the checkpoint recorded {str(cp.get('scanned_through'))[:12]}, want "
+                f"{second[:12]}"
+            )
+        if cp.get("commits") != 1:
+            fails.append(f"commits should be 1 for a one-commit leg, got {cp.get('commits')!r}")
+        if not DIGEST_SHA.match(str(cp.get("identity_digest") or "")):
+            fails.append("the checkpoint carries no identity digest")
+
+        # An EMPTY range: nothing to advance, and the previous record must survive intact.
+        before = json.dumps(cp, sort_keys=True)
+        note = record_scan_checkpoint("HEAD", cwd, second, [])
+        after = json.dumps(load_scan_checkpoint(cwd) or {}, sort_keys=True)
+        if "UNCHANGED" not in note:
+            fails.append(f"an empty range did not report UNCHANGED: {note!r}")
+        if after != before:
+            fails.append(f"an empty range REWROTE the checkpoint: {before} -> {after}")
+    return fails
+
 def probe_a_SAME_n_re_stamp_is_a_re_mint_but_a_published_one_still_bites() -> list[str]:
     """#569: the ts-only re-stamp, and the arm that keeps it from being a blanket excuse.
 
@@ -1556,7 +1969,7 @@ def probe_a_SAME_n_re_stamp_is_a_re_mint_but_a_published_one_still_bites() -> li
     return fails
 
 
-def report_the_live_history_walk() -> str:
+def report_the_live_history_walk(base: str | None = None) -> str:
     """The live-history walk, REPORTED and never asserted (#169, ruling n=1128).
 
     It is kept because it is the only arm that reads THIS repo, and a walker that works
@@ -1577,20 +1990,34 @@ def report_the_live_history_walk() -> str:
     """
     cwd = repo_toplevel() or REPO
     ref = PRIMARY_REF if resolvable(PRIMARY_REF, cwd) else FALLBACK_REF
-    entries, err = history_entries(ref, LEDGER_PATH, cwd)
+    entries, err = history_entries(ref, LEDGER_PATH, cwd, base=base)
     if entries is None:
         return f"FAIL the live walk errored: {err}"
-    if not entries:
-        return "FAIL the live walk found zero commits touching the ledger"
     with_deletions = sum(1 for e in entries if e["deleted"] > 0)
+    span = f"{base[:12]}..{ref}" if base else ref
+    if not entries:
+        # An EMPTY range is a FAIL only on a FULL walk, where zero commits touching the ledger
+        # means the walker read nothing. Under a checkpoint it is the STEADY STATE -- nothing
+        # landed since the last completed scan -- and failing on it would make a quiet tree
+        # red, which is the instrument reporting its own success as a defect.
+        if base:
+            return (f"REPORTED no commit touches {LEDGER_PATH} in {span} -- nothing has "
+                    f"landed since the checkpoint, the steady state of an incremental scan")
+        return "FAIL the live walk found zero commits touching the ledger"
     if not with_deletions:
-        return (f"REPORTED {len(entries)} live commit(s) touch the ledger and none "
+        return (f"REPORTED {len(entries)} live commit(s) touch the ledger in {span} and none "
                 f"carries a deletion -- shallow history, not a defect")
-    return (f"REPORTED {len(entries)} live commit(s) touch the ledger, "
+    return (f"REPORTED {len(entries)} live commit(s) touch the ledger in {span}, "
             f"{with_deletions} carry a deletion")
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    # `--full` ignores the checkpoint for THIS run and rewrites it on success. It exists
+    # because the staleness legs below are properties of the WHOLE history and an incremental
+    # run cannot evaluate them: without this, the one run shape that can audit the declaration
+    # files would be unreachable except by deleting the cache by hand.
+    force_full = "--full" in args
     print("ledger no-shrink — a pushed row is never removed (P11, issue #58)")
     fails: list[str] = []
     print("  synthetic probes")
@@ -1612,6 +2039,8 @@ def main() -> int:
         probe_a_removal_only_on_the_MERGED_IN_line_is_DETECTED,
         probe_a_SINGLE_PARENT_removal_needs_the_re_mint_signature,
         probe_a_SAME_n_re_stamp_is_a_re_mint_but_a_published_one_still_bites,
+        probe_incremental_base_HONOURS_a_verified_checkpoint_and_REFUSES_every_bad_one,
+        probe_record_scan_checkpoint_advances_to_the_SHA_THE_WALK_READ,
     )
     # The probe set is PRINTED, by count and by name, so a probe deleted from this tuple is
     # VISIBLE: a run that silently stops exercising a leg reads exactly like one that
@@ -1621,12 +2050,6 @@ def main() -> int:
         for line in probe():
             fails.append(f"{probe.__name__}: {line}")
 
-    live = report_the_live_history_walk()
-    if live.startswith("FAIL"):
-        fails.append(f"report_the_live_history_walk: {live[5:].strip()}")
-    else:
-        print(f"  {live}")
-
     cwd = repo_toplevel() or REPO
     exemptions, problems = load_exemptions(cwd / EXEMPTIONS_PATH)
 
@@ -1634,7 +2057,28 @@ def main() -> int:
     if ref != PRIMARY_REF:
         print(f"  note: {PRIMARY_REF} is unreadable here — degrading to {FALLBACK_REF}")
 
-    stream, entries, err = iter_transitions(ref, LEDGER_PATH, cwd)
+    # WHERE THIS RUN STARTS (#582). Every rejection prints the leg that failed: a checkpoint
+    # that silently costs a full walk on every run is a cache nobody can see is broken, and
+    # its absence must read as ABSENT rather than as a fast, green run.
+    base, base_note = incremental_base(ref, LEDGER_PATH, cwd)
+    if force_full:
+        base, base_note = None, (
+            f"scan checkpoint: IGNORED — --full was passed; walking all of {ref} and "
+            f"rewriting the checkpoint on success"
+        )
+    print(f"  {base_note}")
+
+    # ONE WALK, TWO CONSUMERS. The report and the transition pass share a `_WALK_CACHE` entry
+    # only when they ask for the SAME range, so both take `base`: passing it to one and not
+    # the other buys a full walk and an incremental walk, i.e. the whole cost this item exists
+    # to remove, plus a report describing a different population than the one judged.
+    live = report_the_live_history_walk(base)
+    if live.startswith("FAIL"):
+        fails.append(f"report_the_live_history_walk: {live[5:].strip()}")
+    else:
+        print(f"  {live}")
+
+    stream, entries, err = iter_transitions(ref, LEDGER_PATH, cwd, base=base)
     counts = {"transitions": 0, "content_only": 0}
 
     def _counted(rows: Iterator[dict]) -> Iterator[dict]:
@@ -1659,10 +2103,15 @@ def main() -> int:
     if stream is None:
         problems.append(f"could not read {LEDGER_PATH}'s committed history from {ref}: {err}")
     elif not entries:
-        problems.append(
-            f"no commit touches {LEDGER_PATH} on {ref} — a gate examining zero commits is "
-            f"indistinguishable from one that examines zero commits and passes"
-        )
+        # ZERO NEW COMMITS IS A VERDICT, NOT AN ABSENCE (#582). Under a checkpoint the range
+        # is empty whenever nothing has landed since the last completed scan -- the steady
+        # state, and the proof the cache is doing its job. On a FULL walk it stays a FAIL:
+        # there, zero commits touching the ledger means the walker read nothing at all.
+        if not base:
+            problems.append(
+                f"no commit touches {LEDGER_PATH} on {ref} — a gate examining zero commits is "
+                f"indistinguishable from one that examines zero commits and passes"
+            )
     else:
         # The reconciliation declarations are read from the ledger's OWN rows at the ref
         # under examination — the ledger is the store, so a reconciliation needs no second
@@ -1685,23 +2134,44 @@ def main() -> int:
             print(f"  excused: {line}")
         for line in reconciled:
             print(f"  reconciled: {line}")
-        for sha in stale:
-            problems.append(
-                f"exemption {sha} matches no row removal on {ref} — a stale exemption "
-                f"excuses nothing; remove it or correct the sha"
+        # THE STALENESS LEGS ARE PROPERTIES OF THE WHOLE HISTORY (#582). An incremental run
+        # walks only `<base>..<ref>`, so an exemption or reconciliation naming a commit from
+        # before the checkpoint matches nothing in THIS range and reads stale -- a false red,
+        # and the exact class that teaches lanes to ignore red (n=1579). So they are NOT RUN
+        # here and SAID to be not run, never silently clean: the full walk (`--full`, or any
+        # run whose checkpoint is absent or invalid) still audits them.
+        if base:
+            print(
+                f"  stale-exemption check: NOT RUN — staleness is a property of the whole "
+                f"history and this run walked only {base[:12]}..{ref} "
+                f"({len(stale)} exemption(s) and {len(stale_declarations)} reconciliation(s) "
+                f"matched nothing IN RANGE, which is what an out-of-range declaration looks "
+                f"like); a full walk (--full) audits it"
             )
-        for key in stale_declarations:
-            problems.append(
-                f"a reconciliation row declares n={key[0]} ({key[2]} {key[3]} {key[4]}) "
-                f"removed, but no commit on {ref} removes that identity — a false record "
-                f"accounts for nothing; correct the declaration or remove it"
-            )
+        else:
+            for sha in stale:
+                problems.append(
+                    f"exemption {sha} matches no row removal on {ref} — a stale exemption "
+                    f"excuses nothing; remove it or correct the sha"
+                )
+            for key in stale_declarations:
+                problems.append(
+                    f"a reconciliation row declares n={key[0]} ({key[2]} {key[3]} {key[4]}) "
+                    f"removed, but no commit on {ref} removes that identity — a false record "
+                    f"accounts for nothing; correct the declaration or remove it"
+                )
 
-    if stream is not None and entries:
+    span = f"{base[:12]}..{ref}" if base else ref
+    if stream is not None:
+        # THE POPULATION PRINTS EVEN WHEN IT IS ZERO (#112, P29). An incremental run whose
+        # range is empty examined NOTHING, and a summary line that vanishes there leaves a
+        # "clean" verdict with no population beside it -- the exact shape that reads the same
+        # as a gate which examined everything and found nothing.
         print(
-            f"ledger no-shrink: examined {len(entries)} commit(s) on {ref}, "
+            f"ledger no-shrink: examined {len(entries or ())} commit(s) on {span}, "
             f"{counts['transitions']} carrying deletions, "
             f"{counts['content_only']} of them content-only"
+            + ("" if entries else " — an EMPTY range, so this verdict speaks only for it")
         )
 
     if problems or fails:
@@ -1722,8 +2192,19 @@ def main() -> int:
             f"ledger no-shrink: accounted — {', '.join(parts)} removal(s) on {ref}; "
             f"this is a visible accounting, not a clean run"
         )
+    elif base:
+        print(
+            f"ledger no-shrink: clean — no commit removes a row identity in {span} "
+            f"(0 commit(s) since {base[:12]}; everything before it was verified by the scan "
+            f"this checkpoint records, not re-examined here)"
+        )
     else:
-        print("ledger no-shrink: clean — no commit removes a row identity")
+        print(f"ledger no-shrink: clean — no commit removes a row identity on {ref}")
+
+    # ADVANCE THE CHAIN, and only here: a run that FAILED returns above with the previous
+    # checkpoint untouched, because recording commits a run rejected would hide exactly the
+    # removals that failed it.
+    print(f"  {record_scan_checkpoint(ref, cwd, base, entries)}")
     return 0
 
 
