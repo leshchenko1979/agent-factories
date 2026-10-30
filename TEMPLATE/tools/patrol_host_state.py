@@ -9953,6 +9953,36 @@ def undispatched_batches_fn(repo: Path | None = None) -> dict:
         return {"batches": {}, "batch_refusal": f"UNREADABLE: {exc}"}
     return {"batches": batches, "batch_refusal": ""}
 
+def declared_standing_items_fn(repo: Path | None = None) -> dict:
+    """`{"standing": ..., "standing_refusal": ...}` — the declared standing items, or its refusal.
+
+    The declared excuse surface for PERMANENT-STATE board items (#586, ruling n=4478), and
+    the second declaration this leg reads. Injected as a KEYWORD ARGUMENT for the same reason
+    `undispatched_batches_fn` is: a probe must never have its verdict decided by whichever
+    standing items the live factory happens to have declared. This function is the LIVE
+    default for that injection.
+
+    ABSENT and MALFORMED are mapped apart, and the split is the point: ABSENT is a legitimate
+    state (a factory with no permanent-state item has declared none) and resolves nothing
+    while saying so in `standing_refusal`, which the leg prints. MALFORMED is a DEFECT in a
+    declaration that exists, and it also resolves nothing — but it must never read as "no
+    standing items exist", because excusing a population is exactly the act the declaration's
+    own reader refuses to do on an empty map.
+
+    WHAT THIS FUNCTION DOES NOT DO: it does not check that a declared `ruling_row` names a
+    `ruling` row, nor that the row resolves to the declared issue. Both are questions about
+    the LEDGER, and the leg holds the rows — so the refusal lands there, printed beside the
+    item it failed to excuse, and the item stays OWED.
+    """
+    reader = declaration_reader()
+    try:
+        standing = reader.load_standing_items(repo if repo is not None else REPO)
+    except reader.DeclarationUnavailable as exc:
+        return {"standing": {}, "standing_refusal": f"ABSENT: {exc}"}
+    except reader.DeclarationUnreadable as exc:
+        return {"standing": {}, "standing_refusal": f"UNREADABLE: {exc}"}
+    return {"standing": standing, "standing_refusal": ""}
+
 MENTION_CONTEXT_CHARS = 40
 
 # A NUMBER THAT IS NOT AN ISSUE (#534). The token accepts the bare digits as well as the
@@ -10034,20 +10064,40 @@ def mention_evidence_text(mention: dict) -> str:
     )
 
 def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: str,
-                            predicate=None, batches: dict,
-                            batch_refusal: str = "") -> dict:
+                            predicate=None, batches: dict, standing: dict,
+                            batch_refusal: str = "",
+                            standing_refusal: str = "") -> dict:
     """OPEN board items carrying a `ruling` row and NO `dispatch` row naming them (#519).
 
     Population: every item the board calls OPEN, that carries a `ruling` row resolving to
     it, and that carries no `claim` and no `close` row — the work is ruled, not started, and
     not done. That is the state a dispatch is owed in. Each member is then placed in exactly
-    one bucket, and the three predicates are disjoint by construction:
+    one bucket, and the four predicates are disjoint by construction:
 
       * `named_in_subject` — a dispatch row's SUBJECT resolves to it: dispatched, and
         outside the reported population entirely.
       * `resolved_by_batch` — a declared batch record names it: EXCUSED, with the batch row
         and the declaration instant printed, because a batch act is a dispatch that happened.
-      * `owed_dispatch` — named by nothing and declared by no batch: the PROBLEM.
+      * `excused_standing` — a DECLARED standing item names it AND its `ruling_row` resolves
+        to that same issue (#586, ruling n=4478): EXCUSED, with the ruling row printed. A
+        permanent-state item is not work, so the population's own premise — "the state a
+        dispatch is owed in" — is false for it, and every one of the four exits above would
+        be a FALSE RECORD: a `claim` asserts work nobody started, a `close` breaks the
+        conversion leg that tests the item's state at the row's own `ts`, a subject
+        `dispatch` claims work owed to a lane, and a batch asserts an act that never happened.
+      * `owed_dispatch` — named by nothing, declared by no batch, standing by no VALID
+        entry: the PROBLEM.
+
+    A declared entry whose `ruling_row` is not a `ruling` row, or whose row resolves to a
+    DIFFERENT issue, does NOT excuse: it is placed in `refused_standing`, printed with its
+    reason BESIDE the item, and the item stays OWED. A stale or mistyped declaration must
+    never silently clear a real debt, which is the same split `undispatched_batches_fn`
+    makes between an ABSENT declaration and a MALFORMED one.
+
+    PROSE INFERENCE IS REFUSED (#586): teaching this leg to read a ruling's TEXT for a phrase
+    like "permanent state" would decide a debt question by matching text, which is the class
+    #467 and #556 each settled — a mention is not a dispatch, and a token a coincidence can
+    satisfy is not an excuse.
 
     A dispatch row's BODY carrying the token is NOT a bucket and NOT an excuse (#556, ruling
     n=4194). It is an ANNOTATION on the owed entry: `named_in_body_only` counts the mentions
@@ -10153,13 +10203,73 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
                 "declared_at": str(entry.get("recorded_at") or ""),
             })
 
+    # THE STANDING DECLARATION IS VALIDATED AGAINST THE LEDGER, and an entry that does not
+    # check out REFUSES rather than excuses (#586, ruling n=4478). The reader has already
+    # checked the SHAPE (positive issue, positive ruling_row, non-empty reason); what is left
+    # is a question only the rows can answer: does `ruling_row` name a `ruling` row, and does
+    # that row's own resolution land on the issue the entry claims? A stale or mistyped entry
+    # that silently excused would clear a real debt, so the two failure modes are kept apart
+    # from an absent declaration exactly as `undispatched_batches_fn` keeps them apart.
+    standing_ok: dict[int, dict] = {}
+    standing_refused: list[dict] = []
+    by_row_n: dict[int, dict] = {}
+    for number in (standing or {}):
+        ruling_row = (standing or {})[number].get("ruling_row")
+        if ruling_row not in by_row_n:
+            for row in rows:
+                if row.get("n") == ruling_row:
+                    by_row_n[ruling_row] = row
+                    break
+    for number in sorted(standing or {}):
+        entry = standing[number]
+        ruling_row = entry.get("ruling_row")
+        reason = entry.get("reason") or ""
+        row = by_row_n.get(ruling_row)
+        if row is None:
+            standing_refused.append({
+                "issue": number, "ruling_row": ruling_row, "reason": reason,
+                "refusal": f"ledger row n={ruling_row} does not exist",
+            })
+            continue
+        event = str(row.get("event") or "")
+        if event != "ruling":
+            standing_refused.append({
+                "issue": number, "ruling_row": ruling_row, "reason": reason,
+                "refusal": (
+                    f"ledger n={ruling_row} is a `{event or 'eventless'}` row, not a `ruling` "
+                    f"row — a standing item is made by a ruling, and nothing else"
+                ),
+            })
+            continue
+        resolved, _arm, _bridge = resolve_ruling_issue(row, rows, predicate)
+        if resolved != number:
+            standing_refused.append({
+                "issue": number, "ruling_row": ruling_row, "reason": reason,
+                "refusal": (
+                    f"ledger n={ruling_row} resolves to "
+                    f"{'no issue' if resolved is None else f'#{resolved}'}, not #{number} — "
+                    f"an entry that names another unit's ruling excuses nothing"
+                ),
+            })
+            continue
+        standing_ok[number] = {
+            "issue": number,
+            "ruling_row": ruling_row,
+            "ruling_at": str(row.get("ts") or ""),
+            "reason": reason,
+        }
+
     population: list[int] = sorted(
         n for n in open_numbers
         if n in ruled and n not in started and n not in done and n not in in_subject
     )
     owed: list[dict] = []
     excused_batch: list[dict] = []
+    excused_standing_items: list[dict] = []
     mentioned: list[dict] = []
+    refused_by_issue: dict[int, list[dict]] = {}
+    for entry in standing_refused:
+        refused_by_issue.setdefault(int(entry["issue"]), []).append(entry)
     for number in population:
         if number in declared:
             entry = dict(declared[number])
@@ -10168,11 +10278,25 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
                 # because every exemption shows what it matched (#556 step 3).
                 entry["mention"] = in_body_only[number]
             excused_batch.append(entry)
+        elif number in standing_ok:
+            # A VALID standing entry is an excuse of its own kind (#586): the item is
+            # permanent state, not work, so no dispatch is owed and none will ever be.
+            entry = dict(standing_ok[number])
+            if number in in_body_only:
+                entry["mention"] = in_body_only[number]
+            excused_standing_items.append(entry)
         else:
             # A MENTION DOES NOT EXCUSE (#556 step 1): the item is OWED, and the mention
             # rides BESIDE it as its own class (#556 step 2), so a reader sees "owed, and a
-            # prose mention exists" instead of a zero.
-            owed.append({"issue": number, "mention": in_body_only.get(number)})
+            # prose mention exists" instead of a zero. A REFUSED standing entry rides there
+            # for the same reason (#586): the declaration exists, it does not check out, and
+            # the item is still owed — hiding the refusal would make a broken declaration
+            # indistinguishable from no declaration.
+            owed.append({
+                "issue": number,
+                "mention": in_body_only.get(number),
+                "standing_refusals": refused_by_issue.get(number) or [],
+            })
 
     # DERIVED from the owed set, never computed beside it: a mention that is not printed
     # beside an owed entry cannot exist, so the count and the entries cannot disagree.
@@ -10182,9 +10306,15 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
     for entry in owed:
         line = (
             f"#{entry['issue']} is OPEN on the board and carries a `ruling` row, and no "
-            f"`dispatch` row names it in its subject, and no declared batch resolves it "
+            f"`dispatch` row names it in its subject, and no declared batch resolves it, "
+            f"and no VALID standing declaration excuses it "
             f"(board read at {read_at})"
         )
+        for refusal in entry.get("standing_refusals") or []:
+            line += (
+                f" — a standing declaration NAMES it (ruling_row n={refusal['ruling_row']}) "
+                f"and is REFUSED: {refusal['refusal']}. A refused entry excuses nothing"
+            )
         if entry.get("mention"):
             line += (
                 f" — and a prose MENTION exists: {mention_evidence_text(entry['mention'])}. "
@@ -10202,6 +10332,22 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
             f"(ledger n={entry['batch_row']}, declared {entry['declared_at'] or 'undated'}) "
             f"— a batch act is a dispatch that happened, and NO BACKFILL bars the per-item "
             f"row"
+        )
+        if entry.get("mention"):
+            line += (
+                f" [a prose mention also exists: {mention_evidence_text(entry['mention'])} "
+                f"— it excused nothing, the declaration did]"
+            )
+        excused.append(line)
+    for entry in excused_standing_items:
+        # A STANDING ITEM IS EXCUSED BY A DECLARATION THAT NAMES ITS RULING ROW, and the row
+        # and its instant are printed so a reader can open the ruling and check the claim
+        # (#586). The reason is printed too: an exemption that cannot say why the item is
+        # permanent state is indistinguishable from one that hopes nobody looks.
+        line = (
+            f"#{entry['issue']}: DECLARED standing item — permanent state, not work "
+            f"(ruling n={entry['ruling_row']}, {entry['ruling_at'] or 'undated'}): "
+            f"{entry['reason']}"
         )
         if entry.get("mention"):
             line += (
@@ -10237,6 +10383,11 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
             "items_resolved_by_batch": len(excused_batch),
             "resolved_by_batch": excused_batch,
             "batch_refusal": batch_refusal,
+            "items_excused_standing": len(excused_standing_items),
+            "excused_standing": excused_standing_items,
+            "items_refused_standing": len(standing_refused),
+            "refused_standing": standing_refused,
+            "standing_refusal": standing_refusal,
             "population_predicate": (
                 "OPEN on the board, carries a `ruling` row resolving to it, carries no "
                 "`claim` and no `close` row, and no `dispatch` row resolves to it by subject"
@@ -10250,6 +10401,12 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
             "batch_predicate": (
                 "the unit is named in `dispatch_batches` in docs/ledger-invariants.json, the "
                 "declared record of a batch act whose per-item rows NO BACKFILL bars"
+            ),
+            "standing_predicate": (
+                "the unit is named in `standing_items` in docs/ledger-invariants.json AND its "
+                "declared `ruling_row` is a real `ruling` row whose resolution lands on that "
+                "same issue — a permanent-state item is not work, so no dispatch is owed; an "
+                "entry that fails either check is REFUSED, printed, and excuses nothing"
             ),
             "board_read_at": read_at,
         },
@@ -14366,6 +14523,14 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     )
                 else:
                     lines.append(f"    OWED #{entry['issue']}")
+                # A REFUSED STANDING ENTRY IS PRINTED BESIDE THE ITEM IT FAILED TO EXCUSE
+                # (#586): a declaration that exists and does not check out is a defect a
+                # reader must see, and it is not the same fact as no declaration at all.
+                for refusal in entry.get("standing_refusals") or []:
+                    lines.append(
+                        f"      STANDING DECLARATION REFUSED (ruling_row "
+                        f"n={refusal['ruling_row']}): {refusal['refusal']}"
+                    )
             lines.append(
                 f"  named only in a dispatch row's BODY (#467): "
                 f"{cov['items_named_in_body_only']} item(s) -- a mention is not a dispatch, "
@@ -14380,6 +14545,33 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             # factory that has declared no batch, unreadable is a defect in one that exists.
             lines.append(
                 f"  batch declaration: {cov['batch_refusal'] or 'READ'}"
+            )
+            # THE STANDING DECLARATION PRINTS ITS POPULATION, ITS REFUSALS AND ITS OWN STATE
+            # (#586). An excused item is NOT silently removed: it is counted here with the
+            # ruling row that makes it standing, so `0 owed` is readable as "every member was
+            # either dispatched, batch-resolved, or DECLARED permanent state" rather than as a
+            # population that shrank for no stated reason.
+            lines.append(
+                f"  excused as DECLARED standing items: "
+                f"{cov['items_excused_standing']} item(s) -- {cov['standing_predicate']}"
+            )
+            for entry in cov.get("excused_standing") or []:
+                lines.append(
+                    f"    STANDING #{entry['issue']} — ruling n={entry['ruling_row']} "
+                    f"({entry['ruling_at'] or 'undated'}): {entry['reason']}"
+                )
+            lines.append(
+                f"  standing declarations REFUSED: "
+                f"{cov['items_refused_standing']} entry(ies) -- a refused entry excuses "
+                f"nothing and its item is OWED above"
+            )
+            for entry in cov.get("refused_standing") or []:
+                lines.append(
+                    f"    REFUSED #{entry['issue']} (ruling_row n={entry['ruling_row']}): "
+                    f"{entry['refusal']}"
+                )
+            lines.append(
+                f"  standing declaration: {cov['standing_refusal'] or 'READ'}"
             )
             lines.append(f"  board read at {cov['board_read_at']}")
         elif leg["name"] == "dispatch-delivery":
@@ -15072,6 +15264,11 @@ def main(
     # batches the live factory happens to have declared, and a probe that CANNOT drive a
     # declaration cannot prove the leg resolves anything at all.
     dispatch_batches_fn=None,
+    # #586: the standing-item declaration, injected for the same reason the batch one is --
+    # a probe must never have its verdict decided by whichever standing items the live factory
+    # happens to have declared, and a probe that CANNOT drive a declaration cannot prove the
+    # leg refuses an invalid entry.
+    standing_items_fn=None,
     board_scope_fn=None,
     duty_scope_fn=None,
     # #506: the declared-exemption store is injected for the sixth time and the same reason
@@ -15352,6 +15549,7 @@ def main(
         leg_guard("undispatched-ruling", lambda: undispatched_ruling_leg(
             issues, rows, read_at=read_at, predicate=predicate,
             **(dispatch_batches_fn or undispatched_batches_fn)(),
+            **(standing_items_fn or declared_standing_items_fn)(),
         ), read_at),
         leg_guard("criterion-paths", lambda: criterion_path_leg(
             issues, read_at=read_at,

@@ -540,3 +540,107 @@ def load_dispatch_batches(repo: Path) -> dict:
     if problems:
         raise DeclarationUnreadable(problems)
     return batches
+
+
+def load_standing_items(repo: Path) -> dict[int, dict]:
+    """The declared `standing_items` list, keyed by issue, or its refusal (#586).
+
+    THE FIFTH DECLARATION in the same file, on the same ground as the four above: it is
+    FACTORY DATA, so it does not ship and the skeleton does. It exists because a class of
+    board item is PERMANENT STATE rather than work — `#581` is the standing routing item
+    that `conversion_routing_problems` requires a conversion row to cite, so every one of
+    `undispatched-ruling`'s four exits is a FALSE record for it: a `claim` asserts work
+    nobody started, a `close` breaks the conversion leg (which tests the item's state at
+    the row's own `ts`, so closing it makes every future conversion row citing it read
+    UNANSWERED, including the one at `n=4456` that already cites it), a subject-`dispatch`
+    claims work owed to a lane when the ruling at `n=4472` states none is, and a declared
+    batch asserts a dispatch act that never happened. Ruling `n=4478`.
+
+    Shape: a LIST of `{"issue": <board number>, "ruling_row": <ledger n of the ruling that
+    makes it standing>, "reason": "<prose>"}`.
+
+    This reader validates the SHAPE ONLY, deliberately. Whether `ruling_row` really names a
+    `ruling` row and whether that row's resolution lands on `issue` is a question about the
+    LEDGER, and the leg that holds the rows answers it — so a stale or mistyped entry is
+    REFUSED there, printed with its reason, and the item stays OWED. Splitting it that way
+    keeps this reader free of the ledger and keeps the refusal beside the population it
+    affects.
+
+    ABSENT is a legitimate state — a factory with no permanent-state item has declared none
+    — and resolves nothing while saying so. MALFORMED is a DEFECT in a declaration that
+    exists: an empty list, a non-integer issue, a non-positive `ruling_row` or an empty
+    `reason` is a FAILURE, not a skip, because an empty declaration is the absent one
+    wearing a key and it would excuse a whole population on no evidence at all.
+    """
+    path = repo / DECLARATION_REL
+    if not path.is_file():
+        raise DeclarationUnavailable(
+            f"no {DECLARATION_REL} — a standing item is DECLARED factory data, and this "
+            f"tree has declared none; the skeleton is {DECLARATION_EXAMPLE_REL}"
+        )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise DeclarationUnreadable([f"{DECLARATION_REL} exists but cannot be read: {exc}"]) from exc
+    except json.JSONDecodeError as exc:
+        raise DeclarationUnreadable([f"{DECLARATION_REL} is not valid JSON: {exc}"]) from exc
+
+    if not isinstance(payload, dict):
+        raise DeclarationUnreadable([f"{DECLARATION_REL} must be a JSON object"])
+    declared = payload.get("standing_items")
+    if declared is None:
+        raise DeclarationUnavailable(
+            f"{DECLARATION_REL} declares no `standing_items` list — no permanent-state item "
+            f"has been recorded in this factory, so there is nothing to resolve against; the "
+            f"skeleton is {DECLARATION_EXAMPLE_REL}"
+        )
+    if not isinstance(declared, list):
+        raise DeclarationUnreadable([
+            f"{DECLARATION_REL}: `standing_items` must be a LIST of "
+            f"{{issue, ruling_row, reason}} objects"
+        ])
+    if not declared:
+        raise DeclarationUnreadable([
+            f"{DECLARATION_REL}: `standing_items` is an EMPTY list — an empty declaration is "
+            f"the absent one wearing a key, and it would excuse a population on no evidence"
+        ])
+
+    problems: list[str] = []
+    items: dict[int, dict] = {}
+    for index, entry in enumerate(declared):
+        where = f"{DECLARATION_REL}: `standing_items[{index}]`"
+        if not isinstance(entry, dict):
+            problems.append(f"{where} must be an object")
+            continue
+        issue = entry.get("issue")
+        if not isinstance(issue, int) or isinstance(issue, bool) or issue < 1:
+            problems.append(f"{where}.issue must be a positive board issue number, found {issue!r}")
+            continue
+        ruling_row = entry.get("ruling_row")
+        if not isinstance(ruling_row, int) or isinstance(ruling_row, bool) or ruling_row < 1:
+            problems.append(
+                f"{where}.ruling_row must be the positive ledger row number of the ruling "
+                f"that makes #{issue} standing, found {ruling_row!r}"
+            )
+            continue
+        reason = entry.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            problems.append(
+                f"{where}.reason must be non-empty prose — an entry that cannot say why the "
+                f"item is permanent state is not a declaration, it is a hole"
+            )
+            continue
+        if issue in items:
+            problems.append(
+                f"{where}: #{issue} is declared twice — one item, one entry, so a reader can "
+                f"tell which ruling makes it standing"
+            )
+            continue
+        items[int(issue)] = {
+            "issue": int(issue),
+            "ruling_row": int(ruling_row),
+            "reason": reason.strip(),
+        }
+    if problems:
+        raise DeclarationUnreadable(problems)
+    return items

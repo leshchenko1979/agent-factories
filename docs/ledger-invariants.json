@@ -140,5 +140,12 @@
       "recorded_at": "2026-10-21T07:50:00Z",
       "basis": "Review cycle 20260927-c1's dispatch receipt, ledger n=2446 (event `run`, actor `methodology`, subject `review-dispatch-20260927-c1`): 116 findings fanned out to their owner lanes by session_notify with confirm=true, partition committed at reviews/20260927-c1/routes/ (13 files, one per lane, commit dcbe0b6). NO BACKFILL (n=1596) bars the per-item `dispatch` rows this batch act would otherwise have written, so this declaration records that the batch happened -- which is true and dated -- rather than reconstructing 72 rows after the fact. THE UNITS ARE READ FROM THE BATCH'S OWN FOOTPRINT, never from the leg's population: each of these is a unit whose own `ruling` row cites ledger n=2446 verbatim as its routing authority, which is the only machine-readable trace the batch left (the cycle's `codification_plan` carries no issue field, and its route files name findings by lens and F-number). Six of them (#348, #349, #350, #392, #415, #416) have since been claimed and four closed; they are declared because the batch DID dispatch them, and a declaration that named only the still-unstarted remainder would be derived from the very population it is meant to excuse."
     }
+  },
+  "standing_items": [
+    {
+      "issue": 581,
+    "ruling_row": 4472,
+    "reason": "#581 is the STANDING ROUTING ITEM for score-regression conversions, not a unit of work: `conversion_routing_problems` requires every conversion row to cite a board item whose title opens `scores(`, so the item is the routing TARGET the conversion leg tests and nothing ever completes it. Ruling n=4472 states in terms that it stays OPEN by design; closing it would make every future conversion row citing it read UNANSWERED, including the conversion at n=4456 that already cites it. All four of `undispatched-ruling`'s exits are therefore false records here -- a `claim` asserts work nobody started, a `close` breaks the conversion leg, a subject `dispatch` claims work owed to a lane when the ruling says none is, and a declared batch asserts a dispatch act that never happened -- so the item is excused by THIS DECLARATION, which names the ruling that makes it permanent state (ruling n=4478 orders the surface)."
   }
+]
 }

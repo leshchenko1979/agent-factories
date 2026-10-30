@@ -299,7 +299,8 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          shared_tree_fn=None, duty_scope=None, publish_fn=None, worktree_fn=None,
          duty_exemptions=None, ref_role_exemptions_path=None,
          criterion_exemptions_path=None, driverless_goals=None,
-         driverless_turn_open=None, dispatch_batches=None, questions_homes=None):
+         driverless_turn_open=None, dispatch_batches=None, questions_homes=None,
+         standing_items=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -478,6 +479,17 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
             (lambda: {"batches": {}, "batch_refusal": "ABSENT: probe: no batch declared"})
             if dispatch_batches is None
             else (lambda: {"batches": dispatch_batches, "batch_refusal": ""})
+        ),
+
+        # #586: the STANDING declaration is injected for the same reason and one sharper
+        # one. A probe that read the live `docs/ledger-invariants.json` would be asserting
+        # whichever permanent-state item THIS factory happens to have declared, so the
+        # default is the ABSENT declaration with its own reason -- the state a factory that
+        # has none is in. A probe that asserts the resolution passes its own map.
+        standing_items_fn=(
+            (lambda: {"standing": {}, "standing_refusal": "ABSENT: probe: none declared"})
+            if standing_items is None
+            else (lambda: {"standing": standing_items, "standing_refusal": ""})
         ),
 
         # #530: the questions-homes leg RUNS a gate against a tree, so a probe must
@@ -11708,8 +11720,6 @@ def test_587_the_duty_receipt_PROSE_census_reports_its_population_and_splits_the
     assert "1 run row(s) on 1 declared receipt stem(s)" in text, text
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
 
 
 # --- #506: a duty's declaration is PROSE, so its SHAPE is load-bearing ---------------
@@ -13425,7 +13435,7 @@ def test_the_undispatched_ruling_leg_BITES_and_discriminates_on_every_bucket() -
         "basis": "probe: one run receipt fanned the round out, so no per-item row is owed",
     }}
 
-    leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches=batches)
+    leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches=batches, standing={})
     named = "\n".join(leg["problems"])
     assert "#931" in named, f"the ruled-but-undispatched item must be NAMED\n{named}"
     for quiet in ("#932", "#934", "#935", "#936", "#937"):
@@ -13520,7 +13530,7 @@ def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> 
         "basis": "probe: a batch act dispatched this unit, so no per-item row is owed",
     }}
 
-    leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches=batches)
+    leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches=batches, standing={})
     cov = leg["coverage"]
     assert cov["items_owed_dispatch"] == len(all_numbers), (
         f"all seven are OWED: a mention clears nothing, and a REFUSED token was never a "
@@ -13586,7 +13596,7 @@ def test_a_prose_MENTION_does_not_EXCUSE_a_debt_and_prints_WHAT_it_matched() -> 
                                      detail="covering other units entirely"))
         n += 2
     quiet = RUNNER.undispatched_ruling_leg(
-        [_issue(x, "OPEN") for x in all_numbers], quiet_rows, read_at=read_at, batches={})
+        [_issue(x, "OPEN") for x in all_numbers], quiet_rows, read_at=read_at, batches={}, standing={})
     assert quiet["coverage"]["owed"] == all_numbers, (
         f"the debt must not depend on the mention: the same seven are owed with no mention "
         f"present at all\n{quiet['coverage']}"
@@ -13686,7 +13696,7 @@ def test_a_ROW_NUMBER_and_a_FILE_LINE_are_NOT_issue_references() -> None:
         # ... and a SUBJECT that names it -> ROUTED, out of the population entirely
         _stall_row(808, "dispatch", "#537", 1.9, now=now),
     ]
-    leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches={})
+    leg = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches={}, standing={})
     cov = leg["coverage"]
     named = "\n".join(leg["problems"])
 
@@ -13743,7 +13753,7 @@ def test_an_ABSENT_batch_declaration_RESOLVES_NOTHING_and_SAYS_SO() -> None:
     rows = [_stall_row(41, "ruling", "#941", 2, now=now)]
 
     absent = RUNNER.undispatched_ruling_leg(
-        issues, rows, read_at=read_at, batches={},
+        issues, rows, read_at=read_at, batches={}, standing={},
         batch_refusal="ABSENT: no docs/ledger-invariants.json in this tree",
     )
     assert absent["coverage"]["items_owed_dispatch"] == 1, absent["coverage"]
@@ -13755,6 +13765,7 @@ def test_an_ABSENT_batch_declaration_RESOLVES_NOTHING_and_SAYS_SO() -> None:
         issues, rows, read_at=read_at,
         batches={"probe-batch": {"row": 41, "units": [941],
                                  "recorded_at": "2026-10-21T00:00:00Z", "basis": "probe"}},
+        standing={},
     )
     assert resolved["coverage"]["items_owed_dispatch"] == 0, resolved["coverage"]
     assert resolved["coverage"]["items_resolved_by_batch"] == 1, resolved["coverage"]
@@ -13785,7 +13796,7 @@ def test_the_undispatched_ruling_leg_REFUSES_a_call_that_omits_the_declaration()
     # ... and the discriminating control: the SAME call, one keyword supplied, returns a
     # leg. If this arm read the same as the one above, the TypeError would prove nothing
     # about the argument -- it would only prove the call is broken.
-    control = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches={})
+    control = RUNNER.undispatched_ruling_leg(issues, rows, read_at=read_at, batches={}, standing={})
     assert control["status"] == "ASSERTED", control
     assert control["coverage"]["items_owed_dispatch"] == 1, (
         f"an absent declaration resolves NOTHING, so the one ruled unit is OWED\n"
@@ -13965,3 +13976,165 @@ def test_the_routing_arm_is_WIRED_and_PRINTS_its_population_beside_its_epoch() -
                       scores_dir=directory)
     assert rc == 1, out
     assert "UNANSWERED: n=4449" in out, out
+
+def test_586_a_DECLARED_standing_item_is_EXCUSED_and_a_REFUSED_one_stays_OWED() -> None:
+    """#586, ruled at n=4478: a PERMANENT-STATE item has no honest exit from this leg.
+
+    `undispatched-ruling` reports items that are ruled, open, unclaimed and undispatched.
+    For a standing item every one of those four exits is a FALSE RECORD: a `claim` asserts
+    work nobody started, a `close` breaks the leg that tests the item's state at a row's own
+    `ts`, a subject `dispatch` claims work owed to a lane, and a batch asserts an act that
+    never happened. So the item was OWED forever and the only ways to clear it were lies.
+
+    ARM 1 IS THE POSITIVE CONTROL and ARM 2 is its discriminating twin: the SAME board item
+    and the SAME ruling row, one declaration apart. A leg that excused without a declaration
+    would pass arm 1 and fail arm 2, which is the "an excuse must be DECLARED" property.
+    ARM 3 and ARM 4 are the refusal pair, and they are the reason the entry is validated
+    against the LEDGER rather than trusted: a stale or mistyped declaration must never
+    silently clear a real debt.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # #581's real shape: a `ruling` row that resolves to it, and nothing else at all.
+    rows = [_stall_row(4472, "ruling", "#581", 1, now=now)]
+    issues = [_issue(581, "OPEN")]
+    declared = {581: {"issue": 581, "ruling_row": 4472, "reason": "permanent state, probe"}}
+
+    # ARM 1 -- POSITIVE CONTROL: a VALID declaration excuses, and says which ruling did it.
+    leg = RUNNER.undispatched_ruling_leg(
+        issues, rows, read_at=read_at, batches={},
+        standing=declared)
+    cov = leg["coverage"]
+    assert leg["status"] == "ASSERTED", leg["status"]
+    assert leg["problems"] == [], leg["problems"]
+    assert cov["population_undispatched"] == 1, cov
+    assert cov["items_owed_dispatch"] == 0, cov
+    assert cov["items_excused_standing"] == 1, cov
+    assert [e["issue"] for e in cov["excused_standing"]] == [581], cov["excused_standing"]
+    assert cov["excused_standing"][0]["ruling_row"] == 4472, cov["excused_standing"]
+    assert len(leg["excused"]) == 1, leg["excused"]
+    assert "DECLARED standing item" in leg["excused"][0], leg["excused"][0]
+    assert "ruling n=4472" in leg["excused"][0], leg["excused"][0]
+
+    # ARM 2 -- NEGATIVE CONTROL: the SAME item, the SAME rows, NO declaration. It must be
+    # OWED. Without this arm a leg that excused everything would pass arm 1.
+    leg = RUNNER.undispatched_ruling_leg(
+        issues, rows, read_at=read_at, batches={}, standing={})
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "#581 is OPEN" in leg["problems"][0], leg["problems"][0]
+    assert leg["coverage"]["items_excused_standing"] == 0, leg["coverage"]
+
+    # ARM 3 -- REFUSAL, wrong EVENT: `ruling_row` names a row that is not a `ruling` row.
+    # The item is in the population (n=4472 really does rule it) and the declaration points
+    # at the INTAKE row instead. It stays OWED and the refusal prints BESIDE it, so a broken
+    # declaration is never indistinguishable from no declaration.
+    with_intake = rows + [_stall_row(4480, "intake", "#581", 1, now=now)]
+    wrong_event = {581: {"issue": 581, "ruling_row": 4480, "reason": "permanent state, probe"}}
+    leg = RUNNER.undispatched_ruling_leg(
+        issues, with_intake, read_at=read_at, batches={},
+        standing=wrong_event)
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "#581 is OPEN" in leg["problems"][0], leg["problems"][0]
+    assert "REFUSED" in leg["problems"][0], leg["problems"][0]
+    assert "not a `ruling` row" in leg["problems"][0], leg["problems"][0]
+    assert leg["coverage"]["items_refused_standing"] == 1, leg["coverage"]
+    assert leg["coverage"]["items_excused_standing"] == 0, leg["coverage"]
+
+    # ARM 4 -- REFUSAL, wrong ISSUE: a real `ruling` row, but it resolves to a DIFFERENT
+    # unit. An entry that names another unit's ruling excuses nothing.
+    other_ruling = rows + [_stall_row(4473, "ruling", "#999", 1, now=now)]
+    wrong_issue = {581: {"issue": 581, "ruling_row": 4473, "reason": "permanent state, probe"}}
+    leg = RUNNER.undispatched_ruling_leg(
+        issues, other_ruling, read_at=read_at, batches={},
+        standing=wrong_issue)
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "resolves to #999" in leg["problems"][0], leg["problems"][0]
+    assert leg["coverage"]["items_refused_standing"] == 1, leg["coverage"]
+
+    # ARM 5 -- ABSENT is a legitimate state and is NOT the same output as a refusal: the
+    # population is still owed, and the reason rides in `standing_refusal` so a reader sees
+    # "nothing declared" rather than an inference.
+    leg = RUNNER.undispatched_ruling_leg(
+        issues, rows, read_at=read_at, batches={},
+        standing={}, standing_refusal="ABSENT: probe: none declared")
+    assert leg["coverage"]["standing_refusal"].startswith("ABSENT"), leg["coverage"]
+    assert leg["coverage"]["items_refused_standing"] == 0, leg["coverage"]
+    assert len(leg["problems"]) == 1, leg["problems"]
+
+    # ARM 6 -- THE RENDER, through the REAL `main()`: a leg whose numbers are right and
+    # whose report still reads `0 owed` with no standing line would have fixed nothing a
+    # lane can see. The declaration is INJECTED, so no probe reads the live one.
+    _rc, out, _err = _run(issues, rows, standing_items=declared)
+    assert "excused as DECLARED standing items: 1 item(s)" in out, out
+    assert "STANDING #581 — ruling n=4472" in out, out
+    assert "standing declaration: READ" in out, out
+
+    # ... and a REFUSED entry renders as loudly as an excused one, with its reason.
+    _rc, out, _err = _run(issues, with_intake, standing_items=wrong_event)
+    assert "standing declarations REFUSED: 1 entry(ies)" in out, out
+    assert "REFUSED #581 (ruling_row n=4480)" in out, out
+    assert "OWED #581" in out, out
+
+    # ARM 7 -- the LIVE default is a real parameter of `main()`, and the reader exists on
+    # the module the runner reaches: a wiring that dropped either would leave production
+    # reading the absent declaration forever while every probe above stayed green.
+    import inspect
+    params = set(inspect.signature(RUNNER.main).parameters)
+    assert "standing_items_fn" in params, sorted(params)
+    reader = RUNNER.declaration_reader()
+    assert hasattr(reader, "load_standing_items"), dir(reader)
+
+
+def test_586_the_standing_declaration_REFUSES_a_malformed_entry() -> None:
+    """MALFORMED is a DEFECT, never a skip — an empty declaration would excuse a population.
+
+    Every arm below is a shape that would resolve to `{}` if the reader were lenient, and an
+    empty map is exactly what excuses nothing while looking like a declaration that checked
+    out. So each one must RAISE, and the message must name the entry so the fix is obvious.
+    """
+    root = _scratch()
+    reader = RUNNER.declaration_reader()
+    doc = root / "docs"
+    doc.mkdir()
+    path = doc / "ledger-invariants.json"
+
+    def raises(payload, needle):
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        try:
+            reader.load_standing_items(root)
+        except reader.DeclarationUnreadable as exc:
+            joined = " ".join(str(p) for p in exc.args)
+            assert needle in joined, joined
+            return
+        raise AssertionError(f"a declaration {needle!r} must be UNREADABLE, not resolved")
+
+    # ABSENT is NOT a failure: a factory with no permanent-state item has declared none.
+    try:
+        reader.load_standing_items(root)
+    except reader.DeclarationUnavailable as exc:
+        assert "DECLARED factory data" in str(exc), str(exc)
+    else:
+        raise AssertionError("no declaration file must be UNAVAILABLE, not an empty map")
+
+    raises({"standing_items": []}, "EMPTY list")
+    raises({"standing_items": [{"issue": "581", "ruling_row": 1, "reason": "x"}]},
+           "positive board issue number")
+    raises({"standing_items": [{"issue": 581, "ruling_row": 0, "reason": "x"}]},
+           "positive ledger row number")
+    raises({"standing_items": [{"issue": 581, "ruling_row": 4472, "reason": "   "}]},
+           "non-empty prose")
+    raises({"standing_items": [
+        {"issue": 581, "ruling_row": 4472, "reason": "a"},
+        {"issue": 581, "ruling_row": 4473, "reason": "b"},
+    ]}, "declared twice")
+
+    # ... and the shape that DOES check out resolves to a map keyed by issue.
+    path.write_text(json.dumps({"standing_items": [
+        {"issue": 581, "ruling_row": 4472, "reason": "permanent state"}]}), encoding="utf-8")
+    assert reader.load_standing_items(root) == {
+        581: {"issue": 581, "ruling_row": 4472, "reason": "permanent state"}
+    }
+
+if __name__ == "__main__":
+    raise SystemExit(main())
