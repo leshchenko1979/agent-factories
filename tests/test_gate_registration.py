@@ -80,6 +80,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import re
 import subprocess
 import json
@@ -1141,6 +1142,131 @@ def probe_the_margin_law_still_raises() -> None:
             raised = str(exc)
         check("a budget that is not margin_x x measured_sec still raises",
               "is not margin_x x measured_sec" in raised, raised[:120] or "nothing was raised")
+
+def probe_a_non_regular_file_at_the_manifest_path_is_refused() -> None:
+    """#588: a directory is PRESENT, so it can never be read as an ABSENT manifest.
+
+    The defect was the presence test. `Path.is_file()` is False for a directory, so a
+    directory took the ABSENT branch and the reader printed "no manifest at <path>" while
+    that exact path held a directory -- and the caps it returned were indistinguishable
+    from a real absence for any caller that only sees caps.
+
+    Both spellings are exercised: a bare directory (`.`) and a directory whose NAME looks
+    like a manifest (`*.json`). The second is the one that reaches the parse in the wild,
+    because nothing about the name says "this is not a file".
+    """
+    module = _gate_budget_module()
+    raised = ""
+    try:
+        module.load_gate_budgets(path=Path("."))
+    except module.GateBudgetManifestError as exc:
+        raised = str(exc)
+    check("a bare directory (`.`) at the manifest path raises rather than reading as absent",
+          bool(raised), raised[:130] or "nothing was raised")
+    check("the message names the path it refused", "." in raised, raised[:130])
+    check("the message says it is not a regular file",
+          "not a regular file" in raised, raised[:130])
+    check("the message does NOT reprint the false-absence phrase it removes",
+          "no manifest at" not in raised, raised[:130])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp) / "gates.json"
+        target.mkdir()
+        raised = ""
+        try:
+            module.load_gate_budgets(path=target)
+        except module.GateBudgetManifestError as exc:
+            raised = str(exc)
+        check("a DIRECTORY named *.json raises identically, not as a fallback",
+              bool(raised) and "not a regular file" in raised and "no manifest at" not in raised,
+              raised[:130] or "nothing was raised")
+        check("and it is identified as a directory, so the reader knows which shape it met",
+              "a directory" in raised, raised[:130])
+
+
+def probe_a_dangling_symlink_at_the_manifest_path_is_refused() -> None:
+    """#588, the subtler half: presence is `lexists()`, never `exists()`.
+
+    `exists()` FOLLOWS symlinks, so a link whose target has vanished reports False and would
+    take the ABSENT branch -- printing "no manifest at <path>" while a link with that exact
+    name sits there. That is the same false-absence claim one level down, and a manifest
+    whose target disappeared is precisely when the caller must be told rather than reassured.
+    """
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        link = root / "gates.json"
+        link.symlink_to(root / "vanished.json")  # the target is never created
+        check("the fixture really is a DANGLING link — exists() cannot see it, lexists() can",
+              link.is_symlink() and not link.exists() and os.path.lexists(link),
+              f"is_symlink={link.is_symlink()} exists={link.exists()} "
+              f"lexists={os.path.lexists(link)}")
+        raised = ""
+        try:
+            module.load_gate_budgets(path=link)
+        except module.GateBudgetManifestError as exc:
+            raised = str(exc)
+        check("a dangling symlink at the manifest path raises", bool(raised),
+              raised[:130] or "nothing was raised — the absent branch was taken")
+        check("and it says the target does not resolve, rather than claiming absence",
+              "does not resolve" in raised and "no manifest at" not in raised, raised[:130])
+
+
+def probe_the_env_override_is_the_live_vector() -> None:
+    """#588: `gates_manifest_path()` honours an env override, so a directory reaches the
+    reader through the ENVIRONMENT as well as through the `path=` argument.
+
+    This is the vector that matters in production: the direct argument is a probe's route,
+    the override is how a real run gets pointed at a path. The variable is restored in a
+    `finally` so the probe cannot leak into any later one.
+    """
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp) / "gates.json"
+        target.mkdir()
+        previous = os.environ.get(module.GATES_MANIFEST_ENV)
+        os.environ[module.GATES_MANIFEST_ENV] = str(target)
+        try:
+            raised = ""
+            try:
+                module.load_gate_budgets()  # no path= at all: the override must be honoured
+            except module.GateBudgetManifestError as exc:
+                raised = str(exc)
+        finally:
+            if previous is None:
+                os.environ.pop(module.GATES_MANIFEST_ENV, None)
+            else:
+                os.environ[module.GATES_MANIFEST_ENV] = previous
+        check("a directory reaching the reader through the ENV override raises too",
+              bool(raised), raised[:130] or "nothing was raised")
+        check("and the refusal names the OVERRIDE path, so the environment was read",
+              str(target) in raised, raised[:130])
+        check("and the variable was restored, so the probe leaks nothing",
+              os.environ.get(module.GATES_MANIFEST_ENV) == previous,
+              f"left as {os.environ.get(module.GATES_MANIFEST_ENV)!r}")
+
+
+def probe_an_absent_manifest_is_still_the_declared_fallback() -> None:
+    """The control, and it must be BYTE-IDENTICAL: NOTHING at the path is a real absence.
+
+    Without this the three refusals above could be satisfied by refusing everything, which
+    would break every bootstrapped factory -- the kit ships `gates.example.json` and no live
+    manifest, so the absent branch is the NORMAL path, not an edge case.
+    """
+    module = _gate_budget_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        target = Path(tmp) / "nothing-here.json"
+        budgets = module.load_gate_budgets(path=target)
+        check("an absent manifest still returns the declared fallback, never a raise",
+              budgets.default_sec == module.FALLBACK_DEFAULT_SEC and budgets.gates == {},
+              f"default_sec={budgets.default_sec} gates={budgets.gates}")
+        check("and its default_source is BYTE-IDENTICAL to the shipped wording",
+              budgets.default_source == f"no manifest at {target} — declared fallback",
+              budgets.default_source)
+        check("and its stale_note is too, so nothing else moved in the absent branch",
+              budgets.stale_note == f"no manifest at {target} — nothing declared to sweep",
+              budgets.stale_note)
+
 
 def probe_the_live_sweep_states_its_own_account() -> None:
     """On the live manifest: a count that travels with the population it was taken over.
@@ -3489,6 +3615,11 @@ def main() -> int:
     probe_a_tree_without_a_resolvable_head_is_not_read_as_clean()
     probe_a_malformed_entry_still_raises()
     probe_the_margin_law_still_raises()
+    print("  synthetic probes — #588: a PRESENT path that is not a manifest is refused")
+    probe_a_non_regular_file_at_the_manifest_path_is_refused()
+    probe_a_dangling_symlink_at_the_manifest_path_is_refused()
+    probe_the_env_override_is_the_live_vector()
+    probe_an_absent_manifest_is_still_the_declared_fallback()
     print("  synthetic probes — #93: a timeout is UNKNOWN, never a 0.0s FAIL")
     timed_out = probe_a_timeout_carries_true_elapsed_and_a_distinct_exit_code()
     probe_the_retry_is_bounded_and_recorded(timed_out)

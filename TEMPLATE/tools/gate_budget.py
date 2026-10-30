@@ -146,7 +146,18 @@ GIT_TIMEOUT_SEC = 20
 
 
 class GateBudgetManifestError(Exception):
-    """The gate-budget manifest exists but is unparseable or incomplete."""
+    """A path that must hold the gate-budget manifest cannot be read as one.
+
+    Two cases, both defects. Something is PRESENT at the path but is not a regular file --
+    a directory, or a symlink whose target does not resolve -- so a manifest cannot have
+    been read from it. Or it is a regular file that is unparseable or incomplete.
+
+    An ABSENT path is NOT this error: that is the declared fallback, and the distinction is
+    the whole point, because the two are otherwise the same output for a caller that only
+    sees caps (#588). The presence test is `os.path.lexists()`, never `Path.exists()` --
+    `exists()` follows symlinks, so a DANGLING link reports False and would take the absent
+    branch while a link of that name sits at the path.
+    """
 
 
 @dataclass(frozen=True)
@@ -647,8 +658,11 @@ def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -
     """Read the gate-budget manifest. Raises `GateBudgetManifestError` on a malformed one.
 
     An ABSENT manifest is not a defect and returns the declared fallback with an
-    empty table; a manifest that exists and cannot be read is a defect and raises,
-    because the two are otherwise the same output for a caller that only sees caps.
+    empty table. Anything PRESENT at the path that cannot be read as a manifest is a
+    defect and raises -- including a path that is not a regular file at all (a directory,
+    a dangling symlink), because the two are otherwise the same output for a caller that
+    only sees caps (#588). Presence is `os.path.lexists()`, so a dangling link is PRESENT
+    and is refused rather than being reported as an absence.
 
     Every declared entry is then swept against its OWN `measured_at` (#125), and the
     findings and the sweep's account come back with the caps. A malformed entry still
@@ -656,13 +670,23 @@ def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -
     is what this module owes its caller.
     """
     target = path or gates_manifest_path()
-    if not target.is_file():
+    if not os.path.lexists(target):
         return GateBudgets(
             default_sec=FALLBACK_DEFAULT_SEC,
             default_source=f"no manifest at {target} — declared fallback",
             gates={},
             stale=(),
             stale_note=f"no manifest at {target} — nothing declared to sweep",
+        )
+    if not target.is_file():
+        kind = (
+            "a directory" if target.is_dir()
+            else "a symlink whose target does not resolve" if target.is_symlink()
+            else "an unreadable file type"
+        )
+        raise GateBudgetManifestError(
+            f"{target}: the manifest path is present but is not a regular file ({kind}) — "
+            "refusing to report an absent manifest over a path that exists (#588)"
         )
     try:
         raw = target.read_text(encoding="utf-8")
