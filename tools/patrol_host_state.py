@@ -6983,7 +6983,7 @@ def field_predicate_readers():
 # trailer declares NOTHING.
 #
 # WHY NO EXISTING LEG SEES THEM. `duty_receipt_leg` judges CRON ROWS (does the prompt
-# declare a stem?), never the receipts those rounds write. `judge_round` does judge a
+# declare a stem?), never the receipts those rounds write. `duty_round_finding` does judge a
 # round's receipts, but its malformed branch fires only when the round carries NO declaring
 # receipt -- measured, 16 of the 26 sit in rounds that DO carry one, so it is structurally
 # blind to them, and the other 10 it already reports. A CENSUS is therefore the missing
@@ -15322,7 +15322,7 @@ def main(
         leg_guard("canonicality-tier", lambda: canonicality_leg(rows, read_at=read_at), read_at),
         # #587: the census of receipts whose duty token sits in PROSE, so `declared_duty`
         # reads [] -- the class no existing leg can see (see the leg's own header for the
-        # partition against `judge_round`). Read-side over the ledger rows this round
+        # partition against `duty_round_finding`). Read-side over the ledger rows this round
         # already holds, and handed the SAME cron rows the two receipt legs above take, so
         # the stems come from one canonical reader and no second database is opened.
         leg_guard("duty-receipt-prose", lambda: duty_receipt_prose_leg(

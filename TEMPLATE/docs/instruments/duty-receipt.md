@@ -57,12 +57,12 @@ was owed:
 
 | reader | population | sees a prose token when |
 |---|---|---|
-| `judge_round` | one round's receipts, judged per fire | the round carries **no** declaring receipt |
+| `duty_round_finding` | one round's receipts, judged per fire | the round carries **no** declaring receipt |
 | `duty_receipt_leg` | the CRON ROWS — does the prompt declare a stem at all | never: it judges declarations, not receipts |
 | `duty-receipt-prose` | every `run` row on a DECLARED stem, census-wide | always |
 
 Measured on this tree: of the 26 prose-token rows, **16 sit in rounds that DO carry a declaring
-receipt**, so `judge_round`'s malformed branch is structurally blind to them (it requires
+receipt**, so `duty_round_finding`'s malformed branch is structurally blind to them (it requires
 `not receipts`), and the other 10 it already reports. The census is the reader that sees all of
 them, and it is READ-SIDE on purpose: the ledger is append-only and **no backfill is ordered**,
 so a writer fix alone would govern only the future and leave the population invisible.
