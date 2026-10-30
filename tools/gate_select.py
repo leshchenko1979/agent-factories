@@ -38,6 +38,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import NamedTuple
 
@@ -263,6 +264,13 @@ class GateRun(NamedTuple):
     # bound was ABSENT, and a caller that cannot see that reads a green receipt for a gate
     # nobody bounded. Defaulted so a caller that predates the field still constructs one.
     exemptions: tuple[str, ...] = ()
+    # A RETRY MUST BE VISIBLE OR IT HIDES A SLOW GATE (#590, ruling n=4521 clause 1). A gate
+    # killed once and passing on the bounded retry produces NO failure and NO no-verdict, so
+    # without this bucket the retry would be invisible and "it passed" would be the whole
+    # receipt -- indistinguishable from a gate that never came near its wall. A gate killed
+    # AGAIN is already described in `no_verdicts`, which names both attempts.
+    # Defaulted so a caller that predates the field still constructs one.
+    retried: tuple[str, ...] = ()
 
 def run_exit_code(run: GateRun) -> int:
     """The run's exit code, from its own two counts, in precedence order (#544).
@@ -490,12 +498,25 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
     Whether the kill came from our own `timeout=` or from the child self-limiting at
     `TIMEOUT_EXIT_CODE` is not the caller's question: both are absent verdicts, and the two
     arrive in the same bucket so no caller can read one and believe it has the other.
+
+    ONE BOUNDED RETRY, and ONLY for a timeout (#590, ruling n=4521 clause 1). This path
+    appended to `no_verdicts` and moved on, while `audit.py:828` retried once per #93 ruling
+    n=574 PART 4 — so the SAME gate on the SAME box at the SAME instant read PASS from the
+    audit and NO VERDICT from this selector. A load-dependent timeout is transient by
+    nature, so a single retry distinguishes a flake from a gate that is genuinely too slow;
+    a SECOND timeout is the no-verdict it always was. The retry is bounded to exactly one
+    and its occurrence is RECORDED in the no-verdict string, naming the first attempt's
+    elapsed time, because an unrecorded retry becomes a way to hide a gate that is genuinely
+    too slow. A non-zero exit is a VERDICT and is never retried; a child that self-kills at
+    `TIMEOUT_EXIT_CODE` exits NORMALLY and is not retried either — the audit does not retry
+    it and neither does this path, so both surfaces keep agreeing about what a verdict is.
     """
     commands = registered_commands(root)
     budgets, budget_note = declared_budget_table(root)
     failures: list[str] = []
     no_verdicts: list[str] = []
     exemptions: list[str] = []
+    retried: list[str] = []
     for gate in gates:
         if tree_label != "worktree" and not (root / gate).is_file():
             failures.append(f"{gate} — selected, but not present in the {tree_label}")
@@ -511,18 +532,32 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
             )
         else:
             timeout = budgets.resolve(gate)[0]
-        try:
-            proc = subprocess.run(
-                list(argv), cwd=str(root), capture_output=True, text=True, timeout=timeout
-            )
-        except subprocess.TimeoutExpired:
-            no_verdicts.append(
-                f"{gate} — killed at its declared budget ({timeout:.2f}s); "
-                f"it neither passed nor failed"
-            )
-            continue
-        except OSError as exc:
-            failures.append(f"{gate} — could not execute: {exc}")
+        attempts = 0
+        first_attempt_sec: float | None = None
+        proc: subprocess.CompletedProcess[str] | None = None
+        while True:
+            attempts += 1
+            started = time.monotonic()
+            try:
+                proc = subprocess.run(
+                    list(argv), cwd=str(root), capture_output=True, text=True, timeout=timeout
+                )
+            except subprocess.TimeoutExpired:
+                elapsed = time.monotonic() - started
+                if attempts == 1:
+                    first_attempt_sec = round(elapsed, 2)
+                    continue
+                no_verdicts.append(
+                    f"{gate} — killed at its declared budget ({timeout:.2f}s) after "
+                    f"running {elapsed:.2f}s, and killed AGAIN on the one bounded retry "
+                    f"(first attempt {first_attempt_sec}s); it neither passed nor failed"
+                )
+                proc = None
+            except OSError as exc:
+                failures.append(f"{gate} — could not execute: {exc}")
+                proc = None
+            break
+        if proc is None:
             continue
         if proc.returncode == TIMEOUT_EXIT_CODE:
             no_verdicts.append(
@@ -534,7 +569,19 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
             failures.append(
                 f"{gate} — rc={proc.returncode}" + (f": {cause}" if cause else "")
             )
-    return GateRun(failures, no_verdicts, tuple(exemptions))
+        if attempts == 2 and proc.returncode != TIMEOUT_EXIT_CODE:
+            # A GATE THAT NEEDED ITS RETRY STILL PASSES -- AND MUST SAY SO (#590). Without
+            # this line the retry is invisible whenever it works, which is exactly the case
+            # it exists for: "it passed" would then be indistinguishable from a gate that
+            # never came near its wall, and the retry would become a way to hide a gate
+            # that is genuinely too slow. The killed-AGAIN case is NOT recorded here: its
+            # no-verdict string already names both attempts, and repeating it in two
+            # buckets would make one gate read as two.
+            retried.append(
+                f"{gate} — killed at its declared budget on the first attempt "
+                f"({first_attempt_sec}s), produced its verdict on the one bounded retry"
+            )
+    return GateRun(failures, no_verdicts, tuple(exemptions), tuple(retried))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -664,6 +711,13 @@ def main(argv: list[str] | None = None) -> int:
         # from the registered wall, not an accident.
         for exempt in run.exemptions:
             print(f"gate-select: DECLARED EXEMPTION {exempt}", file=sys.stderr)
+        # A RETRY THAT WORKED IS STILL A FACT ABOUT THE GATE (#590). It produced a verdict,
+        # so it is neither a failure nor a no-verdict -- but silence here would make "it
+        # passed" the whole receipt, indistinguishable from a gate that never approached its
+        # wall. Printed for a clean run too, and BEFORE the summary line, so the last word
+        # stays the verdict.
+        for retry in run.retried:
+            print(f"gate-select: RETRIED {retry}", file=sys.stderr)
         # THE EXIT CODE CARRIES THE DISTINCTION (#544). A run is not a pass just because
         # nothing failed: if a gate was killed, no verdict was taken on it, and rc=0 would
         # report a clean bill for work that never happened. The codes, in precedence order:

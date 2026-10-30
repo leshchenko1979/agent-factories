@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -1247,10 +1248,21 @@ def probe_every_read_a_gate_opens_is_declared() -> None:
 # EXEMPTION naming what is missing rather than an AttributeError naming a NoneType.
 
 class _StubBudgets:
-    """One wall, so the enforcement arm never depends on a live measurement."""
+    """One wall, so the enforcement arm never depends on a LIVE measurement.
 
-    default_sec = 0.25
+    The wall is a PARAMETER, never a literal (#589, ruling n=4521 clause C2). A hardcoded
+    0.25 s was a wall on this box at the load it was written at, and the arm it guards has
+    a python-interpreter START as its control -- 0.02-0.05 s idle, seconds under
+    contention. On a loaded box the control was itself killed at the wall, so the probe
+    reddened over the box's load and not over the mechanism it tests, which is the #544
+    class one layer up: a kill is not a failure. The caller measures the baseline in the
+    same run and passes `10x` it, floored at 0.25 s.
+    """
+
     gates: dict = {}
+
+    def __init__(self, default_sec: float = 0.25) -> None:
+        self.default_sec = default_sec
 
     def resolve(self, key: str) -> tuple[float, str]:
         return self.default_sec, "declared"
@@ -1307,17 +1319,59 @@ def probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared() ->
     same absence of a verdict as a child self-limiting at the kill code. Arm 3's
     discriminator is that the exemption NAMES the gate and the reason -- an unprinted
     absence is indistinguishable from a gate whose bound was met.
+
+    THE WALL IS DERIVED HERE, IN THIS RUN (#589, ruling n=4521 clause C2). It used to be
+    the literal 0.25 s, which made the arm's CONTROL -- a bare interpreter start -- the
+    thing most likely to be killed on a busy box: the control then landed in
+    `no_verdicts` beside the slow gate, `len(run.no_verdicts) == 1` went red, and the
+    probe blamed the selector for the box's load. The baseline is measured here, the wall
+    is 10x it with a 0.25 s floor, and both numbers are PRINTED so a reader can see what
+    the arm actually ran under. Clause C3: if the control still cannot finish inside the
+    derived wall, the arm states the skip with its numbers and appends NOTHING to
+    FAILURES -- a verdict this box cannot support is not a finding about the code.
     """
     sel = _selector()
     slow = [sys.executable, "-c", "import time; time.sleep(30)"]
     quick = [sys.executable, "-c", "raise SystemExit(0)"]
+
+    samples = []
+    for _ in range(3):
+        started = time.monotonic()
+        subprocess.run(quick, cwd=str(REPO), capture_output=True, text=True, timeout=120)
+        samples.append(time.monotonic() - started)
+    baseline = min(samples)
+    wall = max(0.25, round(baseline * 10.0, 2))
+    print(
+        f"NOTE -- #589 wall derived in-run: baseline={baseline:.3f}s "
+        f"(min of {len(samples)}: {', '.join(f'{s:.3f}' for s in samples)}), "
+        f"wall={wall:.2f}s, margin=10x, floor=0.25s"
+    )
+
+    # C3 -- the control's own check, taken BEFORE any verdict is asked of the arm.
+    control_started = time.monotonic()
+    control = subprocess.run(quick, cwd=str(REPO), capture_output=True, text=True, timeout=120)
+    control_sec = time.monotonic() - control_started
+    if control.returncode != 0 or control_sec >= wall:
+        try:
+            load = ", ".join(f"{v:.2f}" for v in os.getloadavg())
+        except OSError:
+            load = "unavailable"
+        print(
+            f"STATED SKIP -- #589 the control gate cannot finish inside the derived wall, "
+            f"so arm 2's verdict is NOT taken on this box: baseline={baseline:.3f}s "
+            f"wall={wall:.2f}s control={control_sec:.3f}s rc={control.returncode} "
+            f"loadavg=({load}) load_failed={'yes' if control_sec >= wall else 'no'}. "
+            f"Nothing is appended to FAILURES."
+        )
+        return
+
     saved_commands, saved_table = sel.registered_commands, sel.declared_budget_table
     try:
         sel.registered_commands = lambda root: {
             "tests/slow.py": slow,
             "tests/quick.py": quick,
         }
-        sel.declared_budget_table = lambda root: (_StubBudgets(), "")
+        sel.declared_budget_table = lambda root: (_StubBudgets(wall), "")
         run = sel.run_gates(REPO, ["tests/slow.py", "tests/quick.py"])
         check("the fast gate under a wall is not a failure", not run.failures, str(run.failures))
         check(
@@ -1327,8 +1381,15 @@ def probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared() ->
         )
         check(
             "the kill names the budget it died at",
-            any("0.25" in killed for killed in run.no_verdicts),
-            str(run.no_verdicts),
+            any(f"{wall:.2f}" in killed for killed in run.no_verdicts),
+            f"wall={wall:.2f} killed={run.no_verdicts}",
+        )
+        # A KILLED-TWICE GATE IS NOT A RETRY SUCCESS (#590). It is already described in
+        # `no_verdicts`; recording it in `retried` too would make one gate read as two.
+        check(
+            "a gate killed twice is NOT reported as a retry that produced a verdict",
+            not run.retried,
+            str(run.retried),
         )
         check("a run under a wall declares no exemption", not run.exemptions, str(run.exemptions))
         check(
@@ -1336,7 +1397,7 @@ def probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared() ->
             sel.run_exit_code(run) != 0,
             f"rc={sel.run_exit_code(run)}",
         )
-        # ARM 3 — no readable table: the gate still RUNS, and the receipt says so.
+        # ARM 3 -- no readable table: the gate still RUNS, and the receipt says so.
         sel.declared_budget_table = lambda root: (
             None,
             "gate_budget.py not found under /nope/tools",
@@ -1358,6 +1419,135 @@ def probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared() ->
         sel.registered_commands, sel.declared_budget_table = saved_commands, saved_table
 
 
+def probe_a_killed_gate_gets_one_bounded_retry_and_says_so() -> None:
+    """#590, ruling n=4521 clause 1 — the selector retries a TIMEOUT exactly once.
+
+    This path appended to `no_verdicts` on the first kill and moved on, while
+    `audit.py:828` retried once per #93 ruling n=574 PART 4 -- so the SAME gate on the SAME
+    box at the SAME instant read PASS from the audit and NO VERDICT from this selector. A
+    load-dependent timeout is transient, so one retry separates a flake from a gate that is
+    genuinely too slow.
+
+    THREE ARMS, and the third is the one that makes the first honest. A retry that WORKS
+    leaves no failure and no no-verdict, so without a receipt of its own "it passed" is
+    indistinguishable from a gate that never approached its wall -- the retry would become
+    a way to hide a slow gate. So the pass-on-retry arm asserts the RECEIPT names the gate
+    and the first attempt's elapsed time, not merely that it passed. And a retry must never
+    spread to a real verdict: a gate that exits non-zero is a FINDING and is not retried,
+    and a child that self-limits at `TIMEOUT_EXIT_CODE` exits NORMALLY, so it is not
+    retried either -- the audit does not retry it, and the two surfaces must agree about
+    what a verdict is. Both are counted by INVOCATION, from a file the child appends to,
+    because asserting the bucket alone would pass on a path that ran the gate twice.
+    """
+    sel = _selector()
+    root = Path(tempfile.mkdtemp(prefix="oc590_"))
+
+    flaky_dir = root / "flaky"
+    flaky_dir.mkdir()
+    flaky = flaky_dir / "flaky_gate.py"
+    flaky.write_text(
+        "import pathlib, time\n"
+        "marker = pathlib.Path(__file__).with_suffix('.ran')\n"
+        "if not marker.exists():\n"
+        "    marker.write_text('1')\n"
+        "    time.sleep(30)\n"
+        "raise SystemExit(0)\n"
+    )
+
+    die_dir = root / "die"
+    die_dir.mkdir()
+    die = die_dir / "die_gate.py"
+    die.write_text(
+        "import pathlib\n"
+        "log = pathlib.Path(__file__).with_suffix('.log')\n"
+        "log.write_text((log.read_text() if log.exists() else '') + 'run\\n')\n"
+        "raise SystemExit(1)\n"
+    )
+
+    kill_dir = root / "selfkill"
+    kill_dir.mkdir()
+    selfkill = kill_dir / "selfkill_gate.py"
+    selfkill.write_text(
+        "import pathlib\n"
+        f"log = pathlib.Path(__file__).with_suffix('.log')\n"
+        f"log.write_text((log.read_text() if log.exists() else '') + 'run\\n')\n"
+        f"raise SystemExit({sel.TIMEOUT_EXIT_CODE})\n"
+    )
+
+    saved_commands, saved_table = sel.registered_commands, sel.declared_budget_table
+    try:
+        sel.registered_commands = lambda r: {
+            "tests/flaky_gate.py": [sys.executable, str(flaky)],
+            "tests/die_gate.py": [sys.executable, str(die)],
+            "tests/selfkill_gate.py": [sys.executable, str(selfkill)],
+        }
+        sel.declared_budget_table = lambda r: (_StubBudgets(0.25), "")
+
+        # ARM 1 — killed once, then passes.
+        run = sel.run_gates(root, ["tests/flaky_gate.py"])
+        check(
+            "a gate killed once then passing is not a failure",
+            not run.failures,
+            str(run.failures),
+        )
+        check(
+            "a gate killed once then passing is not a no-verdict either",
+            not run.no_verdicts,
+            str(run.no_verdicts),
+        )
+        check(
+            "the retry is RECORDED rather than hidden by the pass",
+            len(run.retried) == 1 and "tests/flaky_gate.py" in run.retried[0],
+            str(run.retried),
+        )
+        check(
+            "the retry receipt names the first attempt's elapsed time",
+            bool(run.retried) and "first attempt" in run.retried[0],
+            str(run.retried),
+        )
+        check(
+            "a pass on retry still exits zero",
+            sel.run_exit_code(run) == 0,
+            f"rc={sel.run_exit_code(run)}",
+        )
+
+        # ARM 2 — a NON-ZERO exit is a verdict and is never retried.
+        died = sel.run_gates(root, ["tests/die_gate.py"])
+        die_runs = (die_dir / "die_gate.log").read_text().split()
+        check(
+            "a non-zero exit is a FAILURE, not a no-verdict",
+            len(died.failures) == 1 and not died.no_verdicts,
+            f"failures={died.failures} no_verdicts={died.no_verdicts}",
+        )
+        check(
+            "a non-zero exit is run EXACTLY ONCE, never retried",
+            len(die_runs) == 1,
+            f"{len(die_runs)} invocation(s)",
+        )
+        check("a non-zero exit is not reported as a retry", not died.retried, str(died.retried))
+
+        # ARM 3 — a child that self-limits at the kill code is NOT retried either.
+        limited = sel.run_gates(root, ["tests/selfkill_gate.py"])
+        kill_runs = (kill_dir / "selfkill_gate.log").read_text().split()
+        check(
+            "a child self-limiting at the kill code is a NO VERDICT",
+            len(limited.no_verdicts) == 1 and not limited.failures,
+            f"failures={limited.failures} no_verdicts={limited.no_verdicts}",
+        )
+        check(
+            "a child self-limiting at the kill code is run EXACTLY ONCE, never retried",
+            len(kill_runs) == 1,
+            f"{len(kill_runs)} invocation(s)",
+        )
+        check(
+            "a child self-limiting at the kill code is not reported as a retry",
+            not limited.retried,
+            str(limited.retried),
+        )
+    finally:
+        sel.registered_commands, sel.declared_budget_table = saved_commands, saved_table
+        shutil.rmtree(root, ignore_errors=True)
+
 PROBES = (
     probe_every_registered_gate_is_covered,
     probe_every_map_key_is_registered,
@@ -1376,6 +1566,7 @@ PROBES = (
     probe_a_failed_receipt_carries_the_childs_word,
     probe_the_wall_is_read_from_the_judged_tree,
     probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared,
+    probe_a_killed_gate_gets_one_bounded_retry_and_says_so,
 )
 
 
@@ -1616,6 +1807,9 @@ def test_probe_the_wall_is_read_from_the_judged_tree() -> None:
 
 def test_probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared() -> None:
     _assert_probe(probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared)
+
+def test_probe_a_killed_gate_gets_one_bounded_retry_and_says_so() -> None:
+    _assert_probe(probe_a_killed_gate_gets_one_bounded_retry_and_says_so)
 
 if __name__ == "__main__":
     sys.exit(main())
