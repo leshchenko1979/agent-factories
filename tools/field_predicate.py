@@ -1154,3 +1154,45 @@ def declared_board_routing(refs) -> str | None:
     """
     found = declared_board_routings(refs)
     return found[0] if found else None
+
+# THE REPOSITORY REF (#592, ruling `n=4551`). A `ruling` row's `subject` is a bare `#NNN`
+# with NO repo qualifier, and this ledger carries rulings about other repositories' issues,
+# so `n=433` -- a ruling on `opencrabs#366` -- satisfied `agent-factories#366` for 26 days
+# while the item had never been ruled in this repo's life. The discriminator cannot be read
+# from the row's TEXT: `n=433` and `n=4279` are structurally identical prose and one is
+# foreign while the other is ours, and a `--repo` substring test flagged 40 rows of which 39
+# were false positives. So the WRITER declares it, because the lane that stamps the row is
+# the only place the fact exists.
+#
+# ABSENT MEANS THIS FACTORY. That default is what preserves the meaning of all 702
+# historical ruling rows and needs no backfill, and it is why this reader returns only the
+# WELL-FORMED values: a malformed value names no repository, so it cannot be evidence of a
+# foreign one.
+REPO_REF_KEY = "repo"
+
+REPO_REF_VALUE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9._-]+$")
+
+def declared_repo_refs(refs) -> list[str]:
+    """EVERY well-formed `repo:<owner>/<name>` ref a row declares, in ROW ORDER.
+
+    Plural for the same reason `declared_board_routings` is: a row may name more than one,
+    and a reader capped at one would silently drop the rest. The leg that consumes this
+    treats a value OTHER than this factory's own as a foreign row, so a dropped value would
+    be a foreign row read as ours -- the exact defect the ref exists to remove.
+
+    WELL-FORMED IS `owner/name` AND NOTHING ELSE, on the `board` precedent one field over:
+    `repo:opencrabs` and a bare `repo:` OCCUPY the kind while naming no repository, so they
+    are dropped here rather than carried as a name -- and the write path refuses them for
+    this kind, so the two sites cannot disagree about what a name is.
+    """
+    found: list[str] = []
+    for ref in refs or []:
+        if not isinstance(ref, dict):
+            continue
+        value = ref.get(REPO_REF_KEY)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if REPO_REF_VALUE_RE.match(text):
+            found.append(text)
+    return found

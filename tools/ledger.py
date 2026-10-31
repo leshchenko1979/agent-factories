@@ -154,6 +154,7 @@ from field_predicate import (
     declared_reclaim,
     declared_reclose,
     declared_recurrence_of,
+    declared_repo_refs,
     declared_revision,
     declared_rework,
     defect_key_problem,
@@ -164,6 +165,9 @@ from field_predicate import (
     split_canonical_run,
     token_key,
     trailer_tokens,
+    # The `repo` kind's own key, so the write path's form refusal below and the reader that
+    # the patrol's leg calls cannot drift about which value is a name (#592, ruling n=4551).
+    REPO_REF_KEY,
 )
 
 # The reconstruction predicate — which rows are reconstructed claims and the interval
@@ -273,6 +277,21 @@ def parse_refs(values: list[str]) -> list[dict]:
                 f"DECLARED, not invented: add it to the `kinds` list in "
                 f"docs/ledger-refs-kinds.json (a factory's own file; nothing in this module "
                 f"changes)"
+            )
+        # THE `repo` KIND IS THE ONE VALUE WITH A DECLARED FORM (#592, ruling n=4551), and
+        # the form is refused HERE for the same reason the KIND check is: a malformed value
+        # is refused as if the ref were absent, and ABSENT MEANS THIS FACTORY -- so
+        # `repo:opencrabs` would silently claim the row is about agent-factories, which is
+        # the false-absence class one level down from the defect the ref removes. The test
+        # is the SHARED reader's, never a private regex, so the writer and the patrol's leg
+        # cannot disagree about which value is a name.
+        if kind == REPO_REF_KEY and not declared_repo_refs([{kind: value}]):
+            sys.exit(
+                f"ledger append refused: --ref {raw!r} names the kind 'repo' but "
+                f"{value!r} is not `owner/name` (e.g. "
+                f"--ref repo:leshchenko1979/opencrabs). A row declaring no `repo` ref is "
+                f"read as being about THIS factory, so a malformed value would silently "
+                f"claim a foreign ruling as ours"
             )
         refs.append({kind: value})
     return refs

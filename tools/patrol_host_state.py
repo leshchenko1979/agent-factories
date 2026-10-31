@@ -9745,6 +9745,7 @@ def board_unruled_leg(
     read_at: str,
     threshold_hours: float = BOARD_UNRULED_THRESHOLD_HOURS,
     predicate=None,
+    own_repo: str | None = None,
 ) -> dict:
     """Open board items carrying an `intake` row and NO `ruling` row, past the threshold.
 
@@ -9785,6 +9786,19 @@ def board_unruled_leg(
     in either direction, so it is COUNTED as unresolved rather than folded into the
     population; a ruling row whose three arms all fail is LISTED, because dropping it would
     report a smaller ruled set than was read and fire on an item that is in fact ruled.
+
+    A FOREIGN RULING DOES NOT RULE THIS BOARD (#592, ruling n=4551). `subject` is a bare
+    `#NNN` with no repo qualifier, so `n=433` -- a ruling whose own detail reads
+    `gh issue view 366 --repo leshchenko1979/opencrabs` -- satisfied `agent-factories#366`
+    for 26 days while that item had never been ruled in this repo's life, and this leg
+    printed `problems: 0` over it. A `ruling` row declaring a `repo` ref OTHER than this
+    factory's is EXCLUDED from `ruled` and every exclusion is PRINTED by row number and
+    repo. ABSENT MEANS THIS FACTORY, which keeps all 702 historical ruling rows meaning what
+    they meant and needs no backfill -- and it is why the discriminator is a WRITER
+    declaration and never a read over the detail: `n=433` and `n=4279` are structurally
+    identical prose, one foreign and one ours, and a `--repo` substring test flagged 40 rows
+    of which 39 were false positives. `own_repo` is injectable for the reason every other
+    dependency is: a probe must not read this checkout's remote.
     """
     predicate = predicate or load_predicate()
 
@@ -9804,10 +9818,43 @@ def board_unruled_leg(
     # And the NAMED items by name (#585, ruling n=4493), for the same reason: `ruled` now
     # grows by more than one per row, so the distinct count alone cannot be traced back.
     named: list[dict] = []
+    # THE FOREIGN ROWS ARE NAMED, NOT COUNTED (#592, ruling n=4551). `subject` is a bare
+    # `#NNN` with no repo qualifier, so `n=433` -- a ruling whose own detail reads
+    # `gh issue view 366 --repo leshchenko1979/opencrabs` -- satisfied `agent-factories#366`
+    # for 26 days while that item had never been ruled in this repo's life, and this leg
+    # printed `problems: 0` over it. A row declaring a `repo` ref OTHER than this factory's
+    # is excluded from `ruled` and PRINTED by row number and repo: an instrument that
+    # removes a row from a population must say which, or the exclusion is the same silent
+    # drop turned around. `own` is resolved LAZILY -- a ledger carrying no `repo` ref costs
+    # no `git remote` call at all, which is every run until a writer declares one.
+    foreign: list[dict] = []
+    own = own_repo
     for row in rows:
         if str(row.get("event") or "") != "ruling":
             continue
         ruling_rows += 1
+        # A FOREIGN RULING IS NOT A RULING ON THIS BOARD (#592, ruling n=4551). THE REF IS
+        # THE ONLY ADMISSION, exactly as `named_issues_from_row` reads `board` refs and never
+        # a prose mention: a detail naming another repository is evidence, not a declaration,
+        # and `n=4279` is this factory's own ruling that merely QUOTES a command against
+        # `inferhub-watch#550`. ABSENT MEANS THIS FACTORY, which is what keeps all 702
+        # historical ruling rows meaning what they meant and needs no backfill.
+        declared_repos = field_predicate_readers().declared_repo_refs(row.get("refs"))
+        if declared_repos:
+            if own is None:
+                own = own_repo or remote_slug()
+            elsewhere = [repo for repo in declared_repos if repo != own]
+            if elsewhere:
+                foreign.append(
+                    {
+                        "ruling_n": row.get("n"),
+                        "repo": elsewhere[0],
+                        "repos": declared_repos,
+                        "subject": str(row.get("subject") or ""),
+                        "own_repo": own,
+                    }
+                )
+                continue
         # THE PLURAL IS THIS LEG'S FIX (#585, ruling n=4493). The question here is "is this
         # item RULED", so a ruling that ORDERS a mechanism settles it: reading the singular
         # adapter would resolve `n=4460` to `#579` alone and keep firing on `#582`/`#583`,
@@ -10001,6 +10048,12 @@ def board_unruled_leg(
             "rulings_resolved": len(ruled),
             "rulings_unbridgeable": len(unbridgeable),
             "unbridgeable_rows": unbridgeable,
+            # THE FOREIGN ROWS, NAMED (#592, ruling n=4551). Excluded from `ruled` and
+            # printed, never dropped: the count says how many, the list says WHICH -- and
+            # `foreign_rows` carries the repo each one declares, so a reader can re-litigate
+            # the exclusion rather than trust it.
+            "rulings_foreign": len(foreign),
+            "foreign_rows": foreign,
             "resolution_arms": arms,
             "bridged_via": bridges,
             "named_via": named,
@@ -14616,8 +14669,18 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['resolution_arms']['named']}]; {cov['rulings_repeated']} landed on an "
                 f"issue already ruled, which the append-only ledger keeps and this leg does "
                 f"NOT de-duplicate; {cov['rulings_named']} row(s) NAMED extra item(s) beside "
-                f"their primary answer; {cov['rulings_unbridgeable']} unbridgeable)"
+                f"their primary answer; {cov['rulings_unbridgeable']} unbridgeable; "
+                f"{cov.get('rulings_foreign', 0)} FOREIGN repo row(s) EXCLUDED, printed "
+                f"below)"
             )
+            # PRINTED, never dropped (#592, ruling n=4551): this leg REMOVED these rows from
+            # the `ruled` population, so it must say which ones and which repo each names.
+            for entry in cov.get("foreign_rows", []):
+                lines.append(
+                    f"    FOREIGN ruling row n={entry['ruling_n']} declares repo "
+                    f"{entry['repo']} (this factory is {entry['own_repo']}), so it does NOT "
+                    f"rule subject {entry['subject'] or '(none)'} on this board"
+                )
             for entry in cov.get("bridged_via", []):
                 lines.append(
                     f"    BRIDGED #{entry['issue']} via ruling n={entry['ruling_n']} "

@@ -1438,9 +1438,32 @@ def probe_a_killed_gate_gets_one_bounded_retry_and_says_so() -> None:
     retried either -- the audit does not retry it, and the two surfaces must agree about
     what a verdict is. Both are counted by INVOCATION, from a file the child appends to,
     because asserting the bucket alone would pass on a path that ran the gate twice.
+
+    THE WALL IS DERIVED HERE TOO (#591, the residual #589 missed). This probe used the
+    literal 0.25 s, and under the audit's own six-worker pool a fixture child's interpreter
+    START alone costs p50 0.215 s / max 0.355 s -- measured. So the child was killed
+    before it could reach its own `SystemExit`, the ONE BOUNDED RETRY above ran it a
+    second time, and "run EXACTLY ONCE" reddened over the box's load rather than over the
+    retry's scope. Two of six weighted trials reproduced it; solo, never. The baseline is
+    therefore measured in this run and the wall is 10x it, floored at 0.25 s -- the same
+    shape as the arm above, because the defect was the same shape at the second site.
     """
     sel = _selector()
     root = Path(tempfile.mkdtemp(prefix="oc590_"))
+
+    probe_start = [sys.executable, "-c", "raise SystemExit(0)"]
+    samples = []
+    for _ in range(3):
+        started = time.monotonic()
+        subprocess.run(probe_start, cwd=str(REPO), capture_output=True, text=True, timeout=120)
+        samples.append(time.monotonic() - started)
+    baseline = min(samples)
+    wall = max(0.25, round(baseline * 10.0, 2))
+    print(
+        f"NOTE -- #591 wall derived in-run: baseline={baseline:.3f}s "
+        f"(min of {len(samples)}: {', '.join(f'{s:.3f}' for s in samples)}), "
+        f"wall={wall:.2f}s, margin=10x, floor=0.25s"
+    )
 
     flaky_dir = root / "flaky"
     flaky_dir.mkdir()
@@ -1474,6 +1497,34 @@ def probe_a_killed_gate_gets_one_bounded_retry_and_says_so() -> None:
         f"raise SystemExit({sel.TIMEOUT_EXIT_CODE})\n"
     )
 
+    # C3 -- the control, in the CHILDREN'S OWN SHAPE (interpreter start + a script), taken
+    # immediately before the arms rather than at the top of the probe: the filer's bound is
+    # that a start measured early does not predict a start 37 s into a loaded run.
+    control_dir = root / "control"
+    control_dir.mkdir()
+    control_script = control_dir / "control_gate.py"
+    control_script.write_text("raise SystemExit(0)\n")
+    control_started = time.monotonic()
+    control = subprocess.run(
+        [sys.executable, str(control_script)],
+        cwd=str(REPO), capture_output=True, text=True, timeout=120,
+    )
+    control_sec = time.monotonic() - control_started
+    if control.returncode != 0 or control_sec >= wall:
+        try:
+            load = ", ".join(f"{v:.2f}" for v in os.getloadavg())
+        except OSError:
+            load = "unavailable"
+        print(
+            f"STATED SKIP -- #591 a fixture child cannot reach its own exit inside the "
+            f"derived wall, so the retry-scope arms' verdicts are NOT taken on this box: "
+            f"baseline={baseline:.3f}s wall={wall:.2f}s control={control_sec:.3f}s "
+            f"rc={control.returncode} loadavg=({load}). "
+            f"Nothing is appended to FAILURES."
+        )
+        shutil.rmtree(root, ignore_errors=True)
+        return
+
     saved_commands, saved_table = sel.registered_commands, sel.declared_budget_table
     try:
         sel.registered_commands = lambda r: {
@@ -1481,7 +1532,7 @@ def probe_a_killed_gate_gets_one_bounded_retry_and_says_so() -> None:
             "tests/die_gate.py": [sys.executable, str(die)],
             "tests/selfkill_gate.py": [sys.executable, str(selfkill)],
         }
-        sel.declared_budget_table = lambda r: (_StubBudgets(0.25), "")
+        sel.declared_budget_table = lambda r: (_StubBudgets(wall), "")
 
         # ARM 1 — killed once, then passes.
         run = sel.run_gates(root, ["tests/flaky_gate.py"])

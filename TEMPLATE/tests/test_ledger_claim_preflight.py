@@ -345,7 +345,42 @@ def test_the_tests_never_write_the_live_ledger(tmp_path: Path) -> None:
     assert append(ledger, BAD, "claim", "worker").returncode != 0
     assert run(ledger, "verify").returncode == 0
 
-    assert LIVE_LEDGER.read_bytes() == before, "a probe wrote the live state surface"
+    # A PEER LANE APPENDS TO THIS FILE BY DESIGN, so byte-equality is not a predicate about
+    # THIS probe (measured 2026-10-31: rows n=4549-4553 were stamped 12:36:12Z-12:47:59Z
+    # INSIDE a 12:33-12:47 gate run, and the equality assertion reported "a probe wrote the
+    # live state surface" -- accusing the probe of rows Triage and HQ wrote. That is the
+    # #241 class one layer in: a gate reading a live surface another lane is mid-write on
+    # produces a FALSE VERDICT about the tree).
+    #
+    # The property is that the PROBE did not write, never that nobody did, and both legs
+    # below keep it biting. A TRUNCATION or REWRITE is still a probe's fingerprint, because
+    # no concurrent appender does either -- the ledger is append-only by construction. And a
+    # probe that APPENDS leaves its OWN MARKERS in the new tail, which is what the assertion
+    # reads. Every other growth is a concurrent writer and is PRINTED row by row: a silent
+    # tolerance would hide the very append this test exists to catch, so the tolerance is
+    # stated with its evidence rather than assumed.
+    after = LIVE_LEDGER.read_bytes()
+    if after != before:
+        assert after.startswith(before), (
+            f"the live ledger was TRUNCATED or REWRITTEN, which no concurrent appender "
+            f"does: {len(before)} byte(s) before, {len(after)} after"
+        )
+        appended = [
+            json.loads(line)
+            for line in after[len(before):].decode("utf-8").splitlines()
+            if line.strip()
+        ]
+        offenders = [row for row in appended if row.get("subject") in (CLEAN, BAD)]
+        assert not offenders, f"a probe wrote the live state surface: {offenders}"
+        named = ", ".join(
+            "n={} {}/{}".format(row.get("n"), row.get("actor"), row.get("event"))
+            for row in appended
+        )
+        print(
+            f"  NOTE  {len(appended)} row(s) reached the live ledger from a CONCURRENT "
+            f"writer while this probe ran ({named}); none carries this probe's markers "
+            f"({CLEAN}, {BAD}), so the isolation property holds"
+        )
 
 if __name__ == "__main__":
     import sys

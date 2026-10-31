@@ -14358,5 +14358,100 @@ def test_probe_the_plural_never_LOSES_an_issue_the_singular_found() -> None:
         else:
             assert after_issues == [] or row.get("refs"), (row.get("n"), after_issues)
 
+def test_probe_a_FOREIGN_ruling_does_not_rule_this_board() -> None:
+    """THE DEFECT ITSELF, driven through the leg that reported it (#592, ruling n=4551).
+
+    `subject` is a bare `#NNN` with NO repo qualifier, so `n=433` -- a ruling whose own
+    detail reads `gh issue view 366 --repo leshchenko1979/opencrabs` -- satisfied
+    `agent-factories#366` for 26 DAYS while that item had never been ruled in this repo's
+    life, and the leg printed `problems: 0` over it.
+
+    THE DISCRIMINATOR IS THE WRITER'S TYPED `repo` REF, never a read over the detail:
+    `n=433` and `n=4279` are structurally identical prose and one is foreign while the
+    other is ours. Case 4 is the probe that proves it -- it is this factory's own ruling on
+    #561 that merely QUOTES a command against `inferhub-watch#550`, and it must stay GREEN
+    because a detail is evidence and never a declaration.
+
+    THE FOUR CASES THE RULING REQUIRES, in ONE fixture so they cannot drift apart:
+      1. a ruling declaring a FOREIGN repo does NOT rule a same-numbered local item;
+      2. a ruling declaring NO repo still rules -- all 702 historical rows must not move;
+      3. a ruling declaring THIS factory's repo still rules;
+      4. `n=4279` still rules, and the SAME detail carrying a foreign ref stops ruling.
+
+    `own_repo` is injected rather than read: a probe must not depend on this checkout's
+    remote, and the leg's own docstring says so.
+    """
+    pred = RUNNER.load_predicate()
+    own = "leshchenko1979/agent-factories"
+    # The intake row is DATED, or the leg excuses it as NOT JUDGED and every case below
+    # reads `owed == []` for the same reason -- the vacuity trap the #585 probe names.
+    stamp = _plus(_CLOSE_TS, -7.0)
+
+    def read(ruling: dict, issue_no: int = 366):
+        issues = [_issue_with_comments(issue_no, "OPEN", "## An item.\n")]
+        rows = [ruling,
+                {"n": 9001, "event": "intake", "subject": f"#{issue_no}",
+                 "detail": "intake", "ts": stamp}]
+        leg = RUNNER.board_unruled_leg(
+            issues, rows, read_at=_plus(_CLOSE_TS, 1.0), predicate=pred, own_repo=own
+        )
+        return leg, issues
+
+    # CASE 1 -- THE DEFECT. A foreign ruling, structurally identical to a local one.
+    foreign = {"n": 433, "event": "ruling", "subject": "#366",
+               "detail": "ruled; measured with `gh issue view 366 --repo "
+                         "leshchenko1979/opencrabs`",
+               "refs": [{"repo": "leshchenko1979/opencrabs"}]}
+    leg, issues = read(foreign)
+    cov = leg["coverage"]
+    assert cov["items_owed_ruling"] == 1, cov["owed"]
+    assert cov["owed"] == [366], cov["owed"]
+    # AND THE EXCLUSION IS NAMED, not merely counted: an instrument that removes a row from
+    # a population must say which row and which repo, or the silent drop is the same defect
+    # turned around.
+    assert cov["rulings_foreign"] == 1, cov
+    assert cov["foreign_rows"] == [
+        {"ruling_n": 433, "repo": "leshchenko1979/opencrabs",
+         "repos": ["leshchenko1979/opencrabs"], "subject": "#366", "own_repo": own}
+    ], cov["foreign_rows"]
+    # PRINTED, in the report, with the row number and the repo.
+    text = RUNNER.render([leg], [], slug=own, read_at="probe", issues=issues)
+    assert "FOREIGN ruling row n=433" in text, text
+    assert "leshchenko1979/opencrabs" in text, text
+    assert "1 FOREIGN repo row(s) EXCLUDED" in text, text
+
+    # CASE 2 -- ABSENT MEANS THIS FACTORY. The same row with no `repo` ref rules, which is
+    # what keeps all 702 historical ruling rows meaning what they meant with no backfill.
+    bare = dict(foreign)
+    bare.pop("refs")
+    leg, _ = read(bare)
+    assert leg["coverage"]["items_owed_ruling"] == 0, leg["coverage"]["owed"]
+    assert leg["coverage"]["rulings_foreign"] == 0, leg["coverage"]
+
+    # CASE 3 -- THIS FACTORY'S OWN REPO still resolves.
+    ours = dict(foreign)
+    ours["refs"] = [{"repo": own}]
+    leg, _ = read(ours)
+    assert leg["coverage"]["items_owed_ruling"] == 0, leg["coverage"]["owed"]
+    assert leg["coverage"]["rulings_foreign"] == 0, leg["coverage"]
+
+    # CASE 4 -- n=4279, the case a text heuristic breaks. This factory's own ruling on #561
+    # QUOTES a command against inferhub-watch#550; the quote is evidence, not a declaration.
+    quoting = {"n": 4279, "event": "ruling", "subject": "#561",
+               "detail": "ruled here; the measurement used `gh issue view 550 --repo "
+                         "leshchenko1979/inferhub-watch`"}
+    leg, _ = read(quoting, issue_no=561)
+    assert leg["coverage"]["items_owed_ruling"] == 0, leg["coverage"]["owed"]
+    assert leg["coverage"]["rulings_foreign"] == 0, leg["coverage"]
+    # NON-VACUITY OF CASE 4: the SAME detail with a foreign `repo` ref stops ruling, so the
+    # green above is the ref's doing and not a leg that stopped judging prose.
+    quoting_foreign = dict(quoting)
+    quoting_foreign["refs"] = [{"repo": "leshchenko1979/inferhub-watch"}]
+    leg, _ = read(quoting_foreign, issue_no=561)
+    assert leg["coverage"]["items_owed_ruling"] == 1, leg["coverage"]["owed"]
+    assert leg["coverage"]["owed"] == [561], leg["coverage"]["owed"]
+    assert leg["coverage"]["foreign_rows"][0]["repo"] == "leshchenko1979/inferhub-watch"
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

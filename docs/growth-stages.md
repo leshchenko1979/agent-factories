@@ -156,7 +156,7 @@ A new factory operates in **Stage 0 or 1** mode initially, but inherits the guar
    - AI AntiSpam has Postgres transaction safety for outreach, but requires the repo-level single-writer ledger to complete Stage 2 transition.
 
 4. **Stage 3 (Self-Auditing Quality Loops): 66.7% Active / Piloted (4/6 active).**
-   - **Meta-factory & OpenCrabs dev:** Full Stage 3 maturity. Meta-factory runs 8 deterministic gates via `tools/audit.py`, measuring lead times, yields, and automated issue generation (P1/P27). OpenCrabs dev enforces a 4-leg smoke verification rubric before any harvest PR.
+   - **Meta-factory & OpenCrabs dev:** Full Stage 3 maturity. Meta-factory runs the mechanical gates registered in `registry/gates.json` via `tools/audit.py`, measuring lead times, yields, and automated issue generation (P1/P27). OpenCrabs dev enforces a 4-leg smoke verification rubric before any harvest PR.
    - **Miidas & InferHub Watch:** Piloting Stage 3. Miidas runs 8 green audit gates and maintains `rework.md`; InferHub Watch runs 762 automated pytests and hourly self-audits.
    - **Infra Factory:** Initial Stage 3 loops deployed with 5 mechanical audit gates.
 
