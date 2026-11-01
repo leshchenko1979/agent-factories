@@ -11,15 +11,21 @@ loaded `state.md` at `8d354b69d8ac` against `a93fe1d4600f`, and its own
 crons (`factory-insights-weekly`, `factory-template-weekly`) resolve their REPO from
 `__file__`, so both computed against a stale ledger.
 
-THE PREDICATE, in three outcomes and nothing else.
+THE PREDICATE, in four outcomes and nothing else.
 
   LEVEL        HEAD == the remote tip, read from the REMOTE this round. No action.
   FAST-FORWARD the tree is CLEAN and BEHIND: no local commits, no path differing from
                HEAD, and `origin/main` strictly ahead. `git merge --ff-only` moves it.
-  REFUSE       the tree carries work not in `origin/main` -- any local-only commit, any
-               path differing from HEAD (staged, unstaged or untracked), a detached
-               HEAD, or a HEAD that is neither level, behind nor ahead. It changes
-               NOTHING and names what it found.
+  HELD         the tree is CLEAN and AHEAD by commits whose OLDEST is younger than the
+               pusher's own grace window -- `tools/publish.py`'s DEFAULT_GRACE_SECS,
+               imported rather than restated, because the window that decides "too young
+               to have been published" and the window this tool holds on must be one
+               number. It changes NOTHING and exits 0: a commit that young has not been
+               given its chance yet, and the pusher publishes on that same clock.
+  REFUSE       the tree carries work not in `origin/main` -- any local-only commit older
+               than that window, any path differing from HEAD (staged, unstaged or
+               untracked), a detached HEAD, or a HEAD that is neither level, behind nor
+               ahead. It changes NOTHING and names what it found.
 
 A DESTRUCTIVE SYNC IS WORSE THAN A STALE ONE. The refusal is the point of the tool: the
 2026-10-17 reconciliation of that tree was done by hand because a reset would have
@@ -38,12 +44,22 @@ refuses on. The file sits in the COMMON dir so every worktree reads one record, 
 records the CHECKOUT that wrote it.
 
 THE BOUND, stated not hidden. The tool cannot tell a lane's abandoned work from a lane's
-work in flight; both read as REFUSE. That is deliberate -- the cron reports the paths and
-a human or a lane decides. It also does not decide whether the declaration still names
-this repository: it reports the binding rows it resolved and prints NOT RUN with its
-reason when the declaration is absent, so an unbound tree is visible rather than clean.
+work in flight by INSPECTION -- it tells them by AGE, and age is a proxy. A commit younger
+than the pusher's grace window is treated as in flight and HELD; one older is REFUSE. So a
+lane that commits and walks away reads as in flight for one window and as abandoned after
+it, which is the intended reading rather than a limitation: the pusher publishes on that
+same clock, so a commit still inside it genuinely has not had its chance. Three things stay
+deliberate. A DIRTY tree is NEVER held -- the pusher publishes commits, not worktree paths,
+so no window can resolve a path that differs from HEAD. The OLDEST commit decides, because
+a newest-only test would let a commit train hold the sync silent forever. And an
+UNMEASURABLE age refuses rather than holding: a date-only or absent committer instant
+cannot bound the age from below, and guessing one would make a fixture's verdict an
+accident of the reader's timezone. Beyond that the tool still does not decide whether the
+declaration names this repository: it reports the binding rows it resolved and prints NOT
+RUN with its reason when the declaration is absent, so an unbound tree is visible rather
+than clean.
 
-Exit codes: 0 = level or moved, 3 = refused, 2 = could not read the facts at all.
+Exit codes: 0 = level, moved or held, 3 = refused, 2 = could not read the facts at all.
 """
 
 from __future__ import annotations
@@ -53,11 +69,23 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 REMOTE = "origin"
 BRANCH = "main"
+
+# The grace window is the PUSHER'S, IMPORTED rather than restated (#594). A second copy of a
+# constant the pusher owns is exactly the drift class this factory keeps filing: the window
+# that decides "this commit is too young to have been published yet" and the window this tool
+# holds on must be one number, and reading the one definition is the only way to guarantee it.
+# `publish.py` is imported for this constant alone -- it is module-level constants with no
+# import side effects, and no stdlib module of that name shadows it.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from publish import DEFAULT_GRACE_SECS  # noqa: E402  (after the sys.path insertion above)
+
+GRACE_SECS = DEFAULT_GRACE_SECS
 DECLARATION = "docs/harness-bindings.json"
 RECEIPT_NAME = "binding-sync-receipt.json"
 SYMLINK_MODE = "120000"
@@ -218,7 +246,7 @@ def gather(repo: Path, remote: str = REMOTE, branch: str = BRANCH,
     facts["current_branch"] = _out(_git(repo, "rev-parse", "--abbrev-ref", "HEAD")) or None
     facts["local_only"] = [
         line.split("\t", 2)
-        for line in _out(_git(repo, "log", "--format=%H%x09%cs%x09%s",
+        for line in _out(_git(repo, "log", "--format=%H%x09%cI%x09%s",
                               f"{remote}/{branch}..HEAD")).splitlines()
         if line.strip()
     ]
@@ -233,8 +261,27 @@ def gather(repo: Path, remote: str = REMOTE, branch: str = BRANCH,
     return facts
 
 
+def _instant(text: str) -> datetime | None:
+    """Parse a full ISO 8601 instant; None when the value cannot bound an age.
+
+    `%cI` always carries an offset, so a measurable committer instant is aware. A DATE-ONLY
+    value ("2026-10-17") parses but comes back NAIVE, and it is deliberately reported as
+    unmeasurable rather than read as midnight: midnight is a guess about the reader's
+    timezone, and a guess there would turn a fixture's verdict into an accident of where
+    the box sits. An absent or malformed value is unmeasurable for the same reason (#594).
+    """
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed
+
 def assess(facts: dict) -> dict:
-    """PURE over the facts: level, fast-forward, or refuse -- with the reasons named."""
+    """PURE over the facts: level, fast-forward, held, or refuse -- with the reasons named."""
     if not facts.get("head") or not facts.get("remote_tip"):
         return {"action": "refuse", "reasons": ["cannot read HEAD or the remote tip"]}
     if facts.get("current_branch") != facts.get("branch"):
@@ -247,6 +294,43 @@ def assess(facts: dict) -> dict:
     reasons: list[str] = []
     local_only = facts.get("local_only") or []
     dirty = facts.get("dirty") or []
+
+    # HELD (#594). A commit younger than the pusher's own window is IN FLIGHT, not abandoned,
+    # and the refusal reasons below are exactly what a fresh commit produces -- so this arm is
+    # evaluated FIRST and returns before them, or the false "abandoned" reading survives in a
+    # different place. Two guards are load-bearing. A DIRTY tree is never held: the pusher
+    # publishes commits, not worktree paths, so a path differing from HEAD is not something
+    # any window resolves. And the OLDEST commit is the one tested: a newest-only test would
+    # let a commit train hold the sync silent forever behind one fresh tip.
+    if local_only and not dirty:
+        stamped = [(row[0], _instant(row[1] if len(row) > 1 else "")) for row in local_only]
+        unmeasurable = [sha[:8] for sha, when in stamped if when is None]
+        read_at = _instant(facts.get("read_at", ""))
+        if unmeasurable:
+            reasons.append(
+                "cannot measure the age of local-only commit(s) "
+                f"{', '.join(unmeasurable)}: their committer instant is absent or is not a "
+                "full ISO 8601 instant, so the in-flight window cannot be applied"
+            )
+        elif read_at is None:
+            reasons.append(
+                "cannot measure the age of the local-only commit(s): the read instant is "
+                "absent or unparseable"
+            )
+        else:
+            oldest_sha, oldest_at = min(stamped, key=lambda pair: pair[1])
+            age_secs = (read_at - oldest_at).total_seconds()
+            if age_secs < GRACE_SECS:
+                return {
+                    "action": "held",
+                    "reasons": [],
+                    "oldest": oldest_sha,
+                    "oldest_at": oldest_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "age_secs": round(age_secs, 1),
+                    "grace_secs": GRACE_SECS,
+                    "local_only": len(local_only),
+                }
+
     if local_only:
         named = ", ".join(sha[:8] for sha, *_ in local_only[:MAX_NAMED])
         more = f" (+{len(local_only) - MAX_NAMED} more)" if len(local_only) > MAX_NAMED else ""
@@ -314,9 +398,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="print the result as JSON")
     args = parser.parse_args(argv)
 
-    import datetime
     repo = Path(args.repo)
-    read_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    read_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     if not (repo / ".git").exists() and not _out(_git(repo, "rev-parse", "--git-dir")):
         print(f"NOT RUN -- {repo} is not a git repository")
@@ -361,6 +444,12 @@ def main(argv: list[str] | None = None) -> int:
         "loaded": facts.get("loaded"),
         "action": decision["action"],
         "reasons": decision.get("reasons", []),
+        # The held arm's own evidence, so a receipt carries the age and the window it was
+        # compared against rather than only the verdict word (#594 criterion 1).
+        "grace_secs": decision.get("grace_secs"),
+        "oldest_local_only": decision.get("oldest"),
+        "oldest_local_only_at": decision.get("oldest_at"),
+        "oldest_local_only_age_secs": decision.get("age_secs"),
         "move": moved,
         "applied": bool(args.apply),
     }
@@ -389,7 +478,8 @@ def main(argv: list[str] | None = None) -> int:
         if decision["action"] == "fast-forward" and not args.apply:
             verb = "WOULD MOVE"
         else:
-            verb = {"level": "LEVEL", "fast-forward": "MOVED", "refuse": "REFUSED"}[decision["action"]]
+            verb = {"level": "LEVEL", "fast-forward": "MOVED", "refuse": "REFUSED",
+                    "held": "HELD"}[decision["action"]]
         print(f"{verb} -- binding sync of {facts['repo']} at {read_at}")
         print(f"  before {str(before)[:8]}  after {str(after)[:8]}  "
               f"remote {str(facts.get('remote_tip'))[:8]}  behind {facts.get('behind')}")
@@ -397,6 +487,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  WOULD fast-forward to {facts['remote_tip'][:8]} (no --apply)")
         elif decision["action"] == "fast-forward":
             print(f"  {moved}")
+        elif decision["action"] == "held":
+            # HELD must NAME the age and the window it was compared against, or the outcome
+            # is indistinguishable from a refusal that says nothing (#594 criterion 1).
+            print(f"  HELD -- the oldest local-only commit {str(decision['oldest'])[:8]} is "
+                  f"{decision['age_secs']:.1f}s old, inside the {decision['grace_secs']}s "
+                  f"window the pusher holds a fresh commit for")
+            print(f"  {decision['local_only']} local-only commit(s); the pusher publishes "
+                  f"them on its own clock, so this is in flight, not abandoned")
         for reason in decision.get("reasons", []):
             print(f"  REFUSED -- {reason}")
         if binding_rows:

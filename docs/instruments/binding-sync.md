@@ -1,6 +1,6 @@
 # The binding sync
 
-**Owns:** the sync's own law — its three outcomes, its exit codes, its receipt, and the one
+**Owns:** the sync's own law — its four outcomes, its exit codes, its receipt, and the one
 move it may make. It owns **no** cross-instrument definition; those live in
 `template-instruments.md`, the frame, which this file cites and never restates.
 **Writer:** the Worker lane. **Authority:** **HQ retains cross-factory authority** — any clause
@@ -28,18 +28,32 @@ The executable is `tools/sync_binding.py`, shipped as a byte-gated pair with
 `TEMPLATE/tools/sync_binding.py`. Its gate is `tests/test_binding_sync.py`, paired for the same
 reason and REQUIRED in `gate_registry.REQUIRED_GATES`.
 
-## 2. The three outcomes
+## 2. The four outcomes
 
-A run always ends in exactly one of these. There is no fourth and no partial move.
+A run always ends in exactly one of these. There is no fifth and no partial move.
 
 | outcome | exit | what it means |
 |---|---|---|
 | `level` | 0 | HEAD equals the remote tip, read from the REMOTE this round. Nothing to do. |
 | `fast-forward` | 0 | the tree is CLEAN and BEHIND: no local-only commit, no path differing from HEAD, and `origin/main` strictly ahead. `--apply` moves it with `git merge --ff-only`. |
-| `refuse` | 3 | the tree carries work not in `origin/main`. **Nothing is changed**, and every reason found is named. |
+| `held` | 0 | the tree is CLEAN and AHEAD, and its **OLDEST** local-only commit is younger than the pusher's grace window: the work is IN FLIGHT, so nothing is moved and nothing is refused. The age and the window are both printed. |
+| `refuse` | 3 | the tree carries work not in `origin/main` that the window cannot excuse. **Nothing is changed**, and every reason found is named. |
 
-`2` is the fourth exit and not an outcome: the tree could not be read at all (not a git
+`2` is the fifth exit and not an outcome: the tree could not be read at all (not a git
 repository, or `HEAD`/the remote tip unresolvable). A broken read is never a clean one.
+
+**The grace window is IMPORTED, never restated.** `GRACE_SECS` is `publish.DEFAULT_GRACE_SECS`,
+read from the module that owns it. A second copy of that number here would be the drift class
+this factory keeps filing: the pusher's window would move and the sync's copy would go on
+excusing work the pusher had already given up on. The two clocks are the same clock.
+
+**An unmeasurable instant refuses.** `%cI` gives a strict ISO-8601 committer instant; a
+date-only or otherwise unparseable stamp cannot be aged, so it is treated as NOT inside the
+window and the run refuses. The window is an excuse, and an excuse must be measurable to be
+granted.
+
+**A dirty tree is NEVER held.** The pusher publishes COMMITS, not worktree paths, so a
+path differing from HEAD is work the window says nothing about.
 
 **`--ff-only` is the ONLY move this tool may make.** It is not a flag a caller can widen:
 there is no `--reset`, no `--force`, and no `--hard` in the argument parser, so the destructive
@@ -48,9 +62,15 @@ gate, whose third leg asserts that a refused run leaves HEAD exactly where it wa
 
 ## 3. What counts as work
 
-Five conditions, each of which alone forces `refuse`:
+Five conditions, each of which forces `refuse`. Only the first is qualified by age, by the
+grace window stated in §2:
 
 - **a local-only commit** — anything in `origin/main..HEAD`. Named by sha, up to eight of them.
+  Alone among these five, this one is QUALIFIED by age: a clean tree whose OLDEST local-only
+  commit is younger than the pusher's grace window is `held`, not refused, because a commit
+  inside the window is work in flight rather than work abandoned. The test is on the OLDEST
+  commit, never the newest — a newest-only test would let a commit TRAIN hold the sync silent
+  for as long as it kept being extended.
 - **a path differing from HEAD** — `git status --porcelain`, which includes STAGED, UNSTAGED
   and UNTRACKED. Untracked counts on purpose: a lane's scratch file is that lane's work, and a
   fast-forward over a dirty tree either aborts halfway or silently carries the file forward.
@@ -70,8 +90,10 @@ Five conditions, each of which alone forces `refuse`:
   hashing through it would report every correct link as stale (measured on this tree: 8 of
   11 bound files, all symlinked instrument docs, on a level HEAD).
 
-**The bound, stated not hidden.** The tool cannot tell a lane's abandoned work from a lane's
-work in flight; both read as `refuse`. That is deliberate — the cron reports the paths and a
+**The bound, stated not hidden.** Age is a PROXY for intent, and it is the only one available
+to a tool that reads git. Inside the window the sync treats a clean-ahead tree as work in
+flight; past it, the tool still cannot tell a lane's abandoned work from a lane's work in
+flight, and both read as `refuse`. That is deliberate — the cron reports the paths and a
 human or a lane decides. It also does not decide whether the declaration still names this
 repository: it reports the binding rows it resolved and prints `NOT RUN` with its reason when
 none resolves, so an unbound tree is VISIBLE rather than clean.
@@ -91,7 +113,8 @@ statement of intent, never a load path that could be stale.
 ## 5. The receipt
 
 `<git-common-dir>/binding-sync-receipt.json` — `{read_at, repo, checkout, binding_rows,
-before, after, remote_tip, behind, local_only, dirty, loaded, action, reasons, move, applied}`.
+before, after, remote_tip, behind, local_only, dirty, loaded, action, reasons, move, applied,
+grace_secs, oldest_local_only, oldest_local_only_at, oldest_local_only_age_secs}`.
 
 **Only an `--apply` round records.** A read reports to stdout and writes nothing, because this
 file is the mechanism's only durable evidence and it is deliberately never committed (below).
@@ -126,7 +149,7 @@ prompt declares `receipt_subject: none`, because the receipt is the JSON file ab
 ledger row.
 
 **What upholds it.** `tests/test_binding_sync.py` proves the TOOL — every branch of the
-predicate on a synthetic facts dict, then all three outcomes through `main()` on a real
+predicate on a synthetic facts dict, then all four outcomes through `main()` on a real
 repository under a temp directory, with the discriminating pair (the same facts minus
 `local_only` must flip to `fast-forward`) so a predicate that refused everything cannot pass.
 It does NOT prove the cron: the job lives in the harness `cron_jobs` table, and a suite that

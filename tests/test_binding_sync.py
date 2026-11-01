@@ -11,11 +11,11 @@ mechanism; this file is the proof that it cannot do the one thing that would be 
 staying stale -- destroy a lane's unpushed work.
 
 WHY THE PREDICATE IS PURE AND THE LAST PROBE IS NOT. `assess()` takes a FACTS dict and
-returns one of three outcomes, so a synthetic dict probes every branch without a repository.
+returns one of FOUR outcomes, so a synthetic dict probes every branch without a repository.
 That is the load-bearing half: the refusal is the point of the tool, and a refusal that has
 never refused is a comment. But purity alone cannot prove the tool is WIRED -- a perfect
 predicate whose `main()` returned 0 on every path would pass every pure probe -- so the
-final leg drives a REAL repository through all three outcomes and reads the exit code and
+final leg drives a REAL repository through all FOUR outcomes and reads the exit code and
 the moved HEAD.
 
 THE DISCRIMINATING PAIR. `test_local_only_is_the_discriminating_fact` feeds the SAME facts
@@ -35,9 +35,11 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -122,6 +124,103 @@ def test_local_only_is_the_discriminating_fact() -> None:
     control = module.assess(_facts(remote_tip="b" * 40, behind=2))
     assert refused["action"] == "refuse", refused
     assert control["action"] == "fast-forward", control
+
+
+# --- #594: the fourth outcome, HELD ------------------------------------------------------
+# A clean tree AHEAD by commits whose OLDEST is younger than the pusher's own grace window is
+# work IN FLIGHT, not abandoned. The read instant below is 2026-10-17T00:00:00Z, so the two
+# fixtures are 60 s and 2 h before it -- one inside the window, one well outside.
+_YOUNG = "2026-10-16T23:59:00+00:00"
+_OLD = "2026-10-16T22:00:00+00:00"
+
+def _held_facts(**overrides) -> dict:
+    """A clean tree, AHEAD, carrying one young local-only commit."""
+    base = {"remote_tip": "b" * 40, "behind": 2, "local_only": [["c" * 40, _YOUNG, "wip"]]}
+    base.update(overrides)
+    return _facts(**base)
+
+def test_a_young_local_only_commit_is_held() -> None:
+    """Criterion 1: a fresh local commit is HELD, and the outcome NAMES the age and window."""
+    module = _module()
+    decision = module.assess(_held_facts())
+    assert decision["action"] == "held", decision
+    assert decision["age_secs"] == 60.0, decision
+    assert decision["grace_secs"] == module.GRACE_SECS, decision
+    assert decision["oldest"] == "c" * 40, decision
+    assert decision["oldest_at"] == "2026-10-16T23:59:00Z", decision
+    assert decision["reasons"] == [], decision
+
+def test_an_old_local_only_commit_still_refuses() -> None:
+    """Criterion 2, the positive control: past the window the refusal is UNCHANGED.
+
+    Without this arm, a predicate that returned `held` for every local-only commit would
+    pass the probe above -- the guard would be deleted and still read green.
+    """
+    decision = _module().assess(
+        _facts(remote_tip="b" * 40, behind=2, local_only=[["c" * 40, _OLD, "wip"]])
+    )
+    assert decision["action"] == "refuse", decision
+    assert "c" * 8 in " ".join(decision["reasons"]), decision
+
+def test_a_dirty_tree_is_never_held() -> None:
+    """Criterion 3: the pusher publishes COMMITS, so a differing path is never in flight.
+
+    The SAME young commit is held in `test_a_young_local_only_commit_is_held`; adding one
+    dirty path must flip the outcome, which is what proves `dirty` is the discriminator.
+    """
+    module = _module()
+    held = module.assess(_held_facts())
+    dirty = module.assess(_held_facts(dirty=[" M tools/notes.py"]))
+    assert held["action"] == "held", held
+    assert dirty["action"] == "refuse", dirty
+    assert "tools/notes.py" in " ".join(dirty["reasons"]), dirty
+
+def test_the_oldest_commit_decides_not_the_newest() -> None:
+    """Criterion 4: one old commit in the train refuses, however fresh the tip is.
+
+    A newest-only test would let a commit train hold the sync silent forever behind one
+    fresh tip, which is the failure this arm exists to prevent.
+    """
+    module = _module()
+    mixed = module.assess(_held_facts(local_only=[
+        ["d" * 40, _YOUNG, "fresh tip"],
+        ["c" * 40, _OLD, "the oldest"],
+    ]))
+    control = module.assess(_held_facts())
+    assert mixed["action"] == "refuse", mixed
+    assert control["action"] == "held", control
+
+def test_an_unmeasurable_instant_refuses() -> None:
+    """A date-only committer instant cannot bound an age, so it refuses rather than guesses.
+
+    `%cs` produced exactly this shape, and reading "2026-10-17" as midnight would make the
+    verdict an accident of the box's timezone (#594's own `%cI` defect, one level down).
+    """
+    module = _module()
+    decision = module.assess(
+        _facts(remote_tip="b" * 40, behind=2, local_only=[["c" * 40, "2026-10-17", "wip"]])
+    )
+    assert decision["action"] == "refuse", decision
+    assert "cannot measure the age" in " ".join(decision["reasons"]), decision
+
+def test_the_held_receipt_names_the_age_and_the_window(tmp_path, capsys) -> None:
+    """Criterion 1 end-to-end: the PAYLOAD carries age + window, not just the verdict word."""
+    module = _module()
+    _, _, tree = _scratch(tmp_path)
+    subprocess.run(["git", "-C", str(tree), "config", "user.email", "t@t.t"], check=True)
+    subprocess.run(["git", "-C", str(tree), "config", "user.name", "T"], check=True)
+    (tree / "wip.md").write_text("wip")
+    subprocess.run(["git", "-C", str(tree), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(tree), "commit", "-q", "-m", "fresh wip"], check=True)
+
+    rc = module.main(["--repo", str(tree), "--json"])
+    receipt = json.loads(capsys.readouterr().out)
+    assert rc == 0, f"held must exit 0, got {rc}"
+    assert receipt["action"] == "held", receipt["action"]
+    assert receipt["grace_secs"] == module.GRACE_SECS, receipt
+    assert receipt["oldest_local_only"], receipt
+    assert receipt["oldest_local_only_at"], receipt
+    assert receipt["oldest_local_only_age_secs"] is not None, receipt
 
 
 def test_detached_head_refuses() -> None:
@@ -279,21 +378,37 @@ def test_the_binding_reader_uses_the_declared_schema(tmp_path, monkeypatch) -> N
     assert reason, "an unbound tree reported no reason, so it reads as a clean verdict"
 
 
+def _older_than_window(extra_secs: int = 3600) -> str:
+    """A committer instant comfortably BEYOND the pusher's window, in `%cI` shape.
+
+    Derived from the tool's OWN imported constant, never a literal 900: a second copy of a
+    window the pusher owns is the drift class this file exists to catch (#594).
+    """
+    window = _module().GRACE_SECS
+    return (datetime.now(timezone.utc) - timedelta(seconds=window + extra_secs)).strftime(
+        "%Y-%m-%dT%H:%M:%S+00:00"
+    )
+
+
 def test_exit_codes_and_the_actual_move(tmp_path) -> None:
-    """All three outcomes through `main()` on a REAL repository: rc 0 / 0 / 3, and a move."""
+    """All FOUR outcomes through `main()` on a REAL repository: rc 0 / 0 / 0 / 3, and a move."""
     origin = tmp_path / "origin.git"
     subprocess.run(["git", "init", "--bare", "-q", "-b", "main", str(origin)], check=True)
     seed = tmp_path / "seed"
     subprocess.run(["git", "clone", "-q", str(origin), str(seed)], check=True,
                    capture_output=True)
 
-    def _commit(repo: Path, name: str, text: str) -> None:
+    def _commit(repo: Path, name: str, text: str, when: str | None = None) -> None:
         (repo / name).write_text(text)
         subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+        env = dict(os.environ)
+        if when:
+            env["GIT_COMMITTER_DATE"] = when
+            env["GIT_AUTHOR_DATE"] = when
         subprocess.run(
             ["git", "-C", str(repo), "-c", "user.email=t@t.t", "-c", "user.name=T",
              "commit", "-q", "-m", text],
-            check=True,
+            check=True, env=env,
         )
 
     _commit(seed, "state.md", "v1")
@@ -322,15 +437,28 @@ def test_exit_codes_and_the_actual_move(tmp_path) -> None:
     assert moved == tip, f"tree at {moved[:8]}, origin/main at {tip[:8]}"
     assert (tree / "state.md").read_text() == "v2"
 
-    # leg 3: a LOCAL-ONLY commit -> rc 3, and nothing moves
+    # leg 3: a FRESH local-only commit on a CLEAN tree -> HELD, rc 0, and nothing moves.
+    # This is the leg #594 added. The same commit that used to read "abandoned" is work IN
+    # FLIGHT while the pusher's window is still open, so refusing it was the false reading.
     _commit(tree, "local.md", "wip")
+    before = subprocess.run(["git", "-C", str(tree), "rev-parse", "HEAD"],
+                            capture_output=True, text=True).stdout.strip()
+    assert module.main(["--repo", str(tree), "--apply"]) == 0
+    after = subprocess.run(["git", "-C", str(tree), "rev-parse", "HEAD"],
+                           capture_output=True, text=True).stdout.strip()
+    assert after == before, "the held run moved HEAD"
+    assert level != moved, "leg 2 did not move the tree, so leg 3 proves nothing"
+
+    # leg 4: the SAME shape, but the OLDEST local-only commit is past the window -> rc 3 and
+    # nothing moves. Without this leg a predicate that held EVERY local-only commit would
+    # pass leg 3, which is the deleted-guard-wearing-a-passing-receipt shape #594 rejected.
+    _commit(tree, "local.md", "wip-old", when=_older_than_window())
     before = subprocess.run(["git", "-C", str(tree), "rev-parse", "HEAD"],
                             capture_output=True, text=True).stdout.strip()
     assert module.main(["--repo", str(tree), "--apply"]) == 3
     after = subprocess.run(["git", "-C", str(tree), "rev-parse", "HEAD"],
                            capture_output=True, text=True).stdout.strip()
     assert after == before, "the refused run moved HEAD"
-    assert level != moved, "leg 2 did not move the tree, so leg 3 proves nothing"
 
 def _scratch(tmp_path):
     """A bare origin, a seed clone, and a tree clone that starts LEVEL.

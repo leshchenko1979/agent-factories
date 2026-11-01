@@ -785,7 +785,7 @@ PAIRS = [
     ("tools/sync_binding.py", "TEMPLATE/tools/sync_binding.py"),
     ("tests/test_binding_sync.py", "TEMPLATE/tests/test_binding_sync.py"),
     # The instrument's own law, paired for the reason `publish.md` is: a factory that took the
-    # tool without its contract would carry an executable whose three outcomes, exit codes and
+    # tool without its contract would carry an executable whose four outcomes, exit codes and
     # receipt path are written down nowhere a caller reads, and one that took the contract
     # without the tool would carry law about a mechanism it does not have.
     ("docs/instruments/binding-sync.md", "TEMPLATE/docs/instruments/binding-sync.md"),
