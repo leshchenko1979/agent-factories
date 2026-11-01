@@ -162,6 +162,15 @@ class Population:
     not_examined: tuple = ()
     held: tuple = ()
     applied: tuple = ()
+    # The stale entries whose growth marker THIS run cleared, because it moved their wall
+    # (#593). A marker describes the wall it was recorded against, so a re-derivation makes
+    # it a description of a wall that no longer exists -- and `_growth_source` sizes the
+    # streak from marker PRESENCE alone, so a surviving marker arms the entry to move its
+    # wall again on the very next SINGLE sample. That is precisely what the report-first
+    # rule exists to prevent. Reported in the STALE arm, never folded into `reset`: an entry
+    # reset by a round INSIDE the wall is a different event from one re-derived because its
+    # basis moved.
+    cleared: tuple = ()
     note: str = ""
     extras: dict = field(default_factory=dict)
 
@@ -688,6 +697,15 @@ def apply_rederivation(
     The result is re-read through `load_gate_budgets()` BEFORE it is written. The manifest's
     loader refuses a stated derivation its own numbers contradict, so a re-derivation that
     would land an inconsistent manifest is caught here rather than by the next audit round.
+
+    IT ALSO CLEARS THE GROWTH MARKER OF EVERY ENTRY WHOSE WALL IT MOVES (#593). A marker
+    records the wall it was taken against; `_growth_source` sizes the streak from marker
+    PRESENCE alone, so a marker left behind a moved wall makes the NEXT round read as a
+    SECOND consecutive breach and re-derive on one sample -- the report-first rule defeated by
+    a record of a breach that has already been repaired. The growth branch has always done
+    this; the ordinary branch did not, and a STALE entry only ever takes the ordinary branch.
+    A run WITHOUT `--apply` moves no wall and therefore clears nothing: the marker there still
+    describes a live breach, and the STALE arm says so by omitting the clear.
     """
     samples: dict = pop.extras.get("samples") or {}
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -699,7 +717,9 @@ def apply_rederivation(
     applied: list = []
     reported: list = []
     held: list = []
+    cleared: list = []
     growth_keys = {g.key for g in pop.growth}
+    stale_keys = {s.key for s in pop.stale}
     for growth in pop.growth:
         entry = entries.get(growth.key)
         if not isinstance(entry, dict):
@@ -759,6 +779,17 @@ def apply_rederivation(
         entry["measured_at"] = measured_at
         if load is not None:
             entry["load_at_measure"] = load
+        # THE MARKER DIES WITH THE WALL IT DESCRIBED (#593). A stale entry reaches this arm
+        # because its BASIS moved, and its remedy is a re-derivation whatever the sample's
+        # size -- so the wall below really does move, and a marker left behind would describe
+        # a wall that no longer exists. `_growth_source` sizes the streak from marker PRESENCE
+        # alone (`consecutive=2 if marker is not None and not _same_round(...)`), so a
+        # surviving marker arms this entry to re-derive again on the NEXT SINGLE sample: the
+        # report-first rule defeated by a record of a breach that has already been repaired.
+        # The growth branch above has always popped for exactly this reason; this arm is the
+        # one that did not.
+        if key in stale_keys and entry.pop(GROWTH_MARKER, None) is not None:
+            cleared.append(key)
         applied.append(key)
 
     if applied:
@@ -776,6 +807,7 @@ def apply_rederivation(
                 applied=(),
                 reported=tuple(reported),
                 held=tuple(held),
+                cleared=(),
                 note=(
                     f"REFUSED — the re-derived manifest does not read back with all "
                     f"{len(entries)} declared entries, so it was NOT written; "
@@ -795,6 +827,7 @@ def apply_rederivation(
         applied=tuple(applied),
         reported=tuple(reported),
         held=tuple(held),
+        cleared=tuple(cleared),
         note=pop.note,
         extras=pop.extras,
     )
@@ -861,8 +894,18 @@ def render(pop: Population) -> str:
         f"({len(pop.stale)} by a moved basis, {len(pop.exhausted)} by an exhausted budget, "
         f"{len(pop.growth)} by growth)",
     ]
+    cleared_keys = set(pop.cleared)
     for stale in pop.stale:
-        lines.append(f"    [STALE] {stale.key} — legs {', '.join(stale.legs)}: {stale.detail}")
+        line = f"    [STALE] {stale.key} — legs {', '.join(stale.legs)}: {stale.detail}"
+        if stale.key in cleared_keys:
+            # REPORTED IN THE STALE ARM (#593): the entry is already named here, so the clear
+            # costs no new population. Never folded into [RESET], which states a round that
+            # came back INSIDE the wall -- a different event from a re-derivation.
+            line += (
+                "; its growth marker was CLEARED by this run's re-derivation — the wall it "
+                "described has moved, so it no longer arms the next single sample"
+            )
+        lines.append(line)
     for key in pop.exhausted:
         lines.append(
             f"    [EXHAUSTED] {key} — the audit reported it UNKNOWN: its declared budget was "
@@ -1013,6 +1056,7 @@ def main(argv: list[str] | None = None) -> int:
                     "failed_only": list(pop.extras.get("failed_only") or ()),
                     "sample_revision": pop.extras.get("sample_revision"),
                     "applied": list(pop.applied),
+                    "cleared": list(pop.cleared),
                     "held": [{"key": k, "why": w} for k, w in pop.held],
                     "note": pop.note,
                 },

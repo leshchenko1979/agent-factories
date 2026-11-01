@@ -2561,6 +2561,117 @@ def probe_a_refused_sample_is_not_a_basis_and_a_passing_one_still_derives() -> N
               and "[NOT DERIVABLE] tests/test_moved.py" not in kept.stdout,
               kept.stdout[:600])
 
+# #593 — A GROWTH MARKER MUST DIE WITH THE WALL IT DESCRIBED.
+#
+# `_growth_source` sizes the streak from marker PRESENCE alone: `consecutive = 2 if (marker
+# is not None and not _same_round(marker, audit.round_id)) else 1`. So a marker that survives
+# a re-derivation makes the NEXT round read as a SECOND consecutive breach and re-derive on
+# ONE sample — the report-first rule (#564 clause 2) defeated by a record of a breach that has
+# already been repaired.
+#
+# `apply_rederivation`'s growth branch has always popped the marker under a comment stating
+# that invariant. The ORDINARY branch did not, and a STALE entry only ever takes the ordinary
+# branch: `_growth_source` excludes stale keys outright (`if key in stale_keys: continue`), so
+# a stale entry can never enter `reset` either — `record_growth_state`'s only clearer. Net: a
+# stale entry's marker was cleared by NO run, with or without `--apply`.
+#
+# THE ARMS. A is the negative control: a run that moves no wall must clear nothing, because
+# the marker still describes a LIVE breach there. B is the fix: the wall moves, so the marker
+# goes — and the STALE arm SAYS SO, since a silent exclusion is the same defect mirrored. C is
+# the MECHANISM: after the clear, one growth sample must be REPORTED, not applied. D keeps C
+# from being vacuous: a genuine SECOND round still re-derives, so the fix does not disable the
+# trend clause it sits beside.
+
+def probe_a_stale_entries_growth_marker_dies_with_its_wall() -> None:
+    """Four arms over one synthetic history: keep, clear+report, no single-sample arm, trend."""
+    leg = REPO / "tools" / "gate_budget_rederive.py"
+    if not leg.is_file():
+        print("  SKIP  no tools/gate_budget_rederive.py in this tree — the re-derivation leg "
+              "is this factory's standing duty, not yet part of the shipped kit")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, head = _two_commit_repo(root)
+        if base is None or head is None:
+            check("the #593 probe repository could be built and committed", False,
+                  f"base={base} head={head} — this leg could not judge")
+            return
+        # A marker of the shape `record_growth_state` writes, recorded against the OLD wall.
+        entry = dict(_basis(base))
+        entry["growth_breach"] = {
+            "sample_sec": 9.0, "sample_revision": base, "basis_sec": 1.0,
+            "basis_revision": base, "declared_sec": 4.0, "derived_sec": 36.0,
+            "growth_x": 9.0, "derived_over_declared": 9.0,
+            "round_id": f"2026-10-29T00:00:00Z:{base}", "reported_at": "2026-10-29T00:00:00Z",
+        }
+        manifest = _manifest(root, {"tests/test_moved.py": entry})
+
+        def report(name: str, duration: float, date: str) -> Path:
+            path = root / name
+            path.write_text(json.dumps({
+                "date": date,
+                "tree": {"head_sha": head, "modified_count": 0},
+                "gates": [{
+                    "gate_key": "tests/test_moved.py", "cmd": "synthetic",
+                    "passed": True, "unknown": False, "duration_sec": duration, "exit_code": 0,
+                }],
+            }), encoding="utf-8")
+            return path
+
+        def state() -> dict:
+            return json.loads(
+                manifest.read_text(encoding="utf-8")
+            )["gates"]["tests/test_moved.py"]
+
+        passing = report("audit-pass.json", 30.0, "2026-10-30T00:00:00Z")
+
+        # ARM A — A RUN THAT MOVES NO WALL CLEARS NOTHING. The fixture's own control: the
+        # entry must be STALE, or none of the arms below exercise the ordinary branch at all.
+        dry = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                        "--audit-report", str(passing))
+        check("the #593 fixture is STALE — the arm exercises the ordinary branch",
+              "[STALE] tests/test_moved.py" in dry.stdout, dry.stdout[:600])
+        check("a report-only run leaves the stale entry's growth marker INTACT — it moves no wall",
+              "growth_breach" in state(), json.dumps(state())[:200])
+        check("and it does not CLAIM a clear it did not perform",
+              "CLEARED" not in dry.stdout, dry.stdout[:600])
+
+        # ARM B — THE FIX.
+        applied = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                            "--audit-report", str(passing), "--apply")
+        check("--apply re-derives the stale entry", "APPLIED 1" in applied.stdout,
+              applied.stdout[:600])
+        check("the re-derivation REMOVES the growth marker it invalidated",
+              "growth_breach" not in state(), json.dumps(state())[:200])
+        check("and the STALE arm REPORTS the clear rather than dropping it silently",
+              "[STALE] tests/test_moved.py" in applied.stdout and "CLEARED" in applied.stdout,
+              applied.stdout[:700])
+        cleared_wall = state()["budget_sec"]
+
+        # ARM C — THE MECHANISM. One growth sample in a NEW round: with the marker gone the
+        # streak is 1, so the wall must NOT move. On the parent commit the surviving marker
+        # made this a SECOND breach and re-derived from this single sample.
+        growth_one = report("audit-growth-1.json", 40.0, "2026-10-31T00:00:00Z")
+        first = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                          "--audit-report", str(growth_one), "--apply")
+        check("ONE growth sample after the clear moves NO wall — the streak restarts at 1",
+              "APPLIED" not in first.stdout
+              and "[REPORTED] tests/test_moved.py" in first.stdout,
+              first.stdout[:700])
+        check("and the wall is exactly where the re-derivation left it",
+              state()["budget_sec"] == cleared_wall, json.dumps(state())[:200])
+
+        # ARM D — THE CONTROL that keeps ARM C from being vacuous: a genuine SECOND round
+        # still re-derives. Without it, "never applies" would pass as a fix.
+        growth_two = report("audit-growth-2.json", 40.0, "2026-11-01T00:00:00Z")
+        second = _leg_proc("--manifest", str(manifest), "--repo-root", str(root),
+                           "--audit-report", str(growth_two), "--apply")
+        check("a SECOND consecutive round still re-derives — the trend clause survives the fix",
+              "APPLIED 1" in second.stdout, second.stdout[:700])
+        check("and that wall is the second round's own derivation",
+              state()["measured_sec"] == 40.0 and state()["budget_sec"] > cleared_wall,
+              json.dumps(state())[:200])
+
 def probe_the_rederivation_leg_prints_and_bites() -> None:
     """Two-sided over one synthetic history: the moved base is reported, the held one is not."""
     leg = REPO / "tools" / "gate_budget_rederive.py"
@@ -3659,6 +3770,7 @@ def main() -> int:
 
     print("  synthetic probes — #269: the re-derivation leg bites, and its population is printed")
     probe_a_refused_sample_is_not_a_basis_and_a_passing_one_still_derives()
+    probe_a_stale_entries_growth_marker_dies_with_its_wall()
     probe_the_rederivation_leg_prints_and_bites()
     probe_the_live_rederivation_leg_is_non_vacuous()
     print("  synthetic probes — #442: the not-examined population is rendered once")
