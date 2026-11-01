@@ -111,23 +111,11 @@
       "measured_sec": 0.29
     },
     "tests/test_gate_entry_point_equivalence.py": {
-      "budget_sec": 501.11,
+      "budget_sec": 539.59,
       "margin_x": 4.006,
-      "measured_at": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
-      "measured_sec": 125.09,
-      "load_at_measure": 0.37,
-      "growth_breach": {
-        "sample_sec": 307.13,
-        "sample_revision": "4f3192c462cef02a29ba59b05e6bb206c02cb25c",
-        "basis_sec": 125.09,
-        "basis_revision": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
-        "declared_sec": 501.11,
-        "derived_sec": 1229.27,
-        "growth_x": 2.4553,
-        "derived_over_declared": 2.4531,
-        "round_id": "2026-10-30:4f3192c462cef02a29ba59b05e6bb206c02cb25c",
-        "reported_at": "2026-10-30T08:29:30Z"
-      }
+      "measured_at": "25344213fb851e1d345474ac7ca0adb983ccff12",
+      "measured_sec": 134.71,
+      "load_at_measure": 2.92
     },
     "tests/test_gate_fixtures_closure.py": {
       "budget_sec": 68.03,
@@ -252,19 +240,7 @@
       "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
       "measured_sec": 2.66,
       "load_at_measure": 5.69,
-      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED of three samples, per this manifest's slow-tail rule (#579, ruling n=4460): 289.73 s at ~13:33Z load 5.83, 258.25 s at ~18:45Z load 4.09, 280.218 s. measured_at is RECOVERED, not composed: the ruling recorded no revision, so it is bracketed from the reflog -- c5327536 was the tree state from 13:20:27Z (ff-merge origin/main) to 14:37:48Z (af9858ae), the only window containing ~13:33Z, and tests/test_ledger_no_shrink.py's blob there is 4ef10d7438808dcaca23fa1176accd6a12e60066, byte-identical to HEAD's, so the measured subject is the file that ships. A fresh 176.024 s run at HEAD (load 0.77, rc=0, /tmp/noshrink-measure.log) CORROBORATES and does NOT re-base: it is a fast sample on a quiet box, and #128/n=823 refuses re-basing on every new maximum.",
-      "growth_breach": {
-        "sample_sec": 414.43,
-        "sample_revision": "4f3192c462cef02a29ba59b05e6bb206c02cb25c",
-        "basis_sec": 289.73,
-        "basis_revision": "c5327536a157f95edc9e11b4c570288d77c331db",
-        "declared_sec": 1159.67,
-        "derived_sec": 1658.47,
-        "growth_x": 1.4304,
-        "derived_over_declared": 1.4301,
-        "round_id": "2026-10-30:4f3192c462cef02a29ba59b05e6bb206c02cb25c",
-        "reported_at": "2026-10-30T08:29:30Z"
-      }
+      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED of three samples, per this manifest's slow-tail rule (#579, ruling n=4460): 289.73 s at ~13:33Z load 5.83, 258.25 s at ~18:45Z load 4.09, 280.218 s. measured_at is RECOVERED, not composed: the ruling recorded no revision, so it is bracketed from the reflog -- c5327536 was the tree state from 13:20:27Z (ff-merge origin/main) to 14:37:48Z (af9858ae), the only window containing ~13:33Z, and tests/test_ledger_no_shrink.py's blob there is 4ef10d7438808dcaca23fa1176accd6a12e60066, byte-identical to HEAD's, so the measured subject is the file that ships. A fresh 176.024 s run at HEAD (load 0.77, rc=0, /tmp/noshrink-measure.log) CORROBORATES and does NOT re-base: it is a fast sample on a quiet box, and #128/n=823 refuses re-basing on every new maximum."
     },
     "tests/test_ledger_schema.py": {
       "budget_sec": 19.19,
@@ -281,11 +257,11 @@
       "load_at_measure": 2.0
     },
     "tests/test_patrol_host_state.py": {
-      "budget_sec": 1245.11,
-      "load_at_measure": 5.69,
+      "budget_sec": 1647.35,
+      "load_at_measure": 2.92,
       "margin_x": 4.002,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 311.09,
+      "measured_at": "25344213fb851e1d345474ac7ca0adb983ccff12",
+      "measured_sec": 411.65,
       "growth_breach": {
         "sample_sec": 312.07,
         "sample_revision": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
@@ -421,11 +397,11 @@
       "measured_sec": 7.23
     },
     "tools/ledger.py": {
-      "budget_sec": 20.35,
-      "margin_x": 4.153,
-      "measured_at": "4f3192c462cef02a29ba59b05e6bb206c02cb25c",
-      "measured_sec": 4.9,
-      "load_at_measure": 10.93
+      "budget_sec": 14.19,
+      "margin_x": 4.223,
+      "measured_at": "25344213fb851e1d345474ac7ca0adb983ccff12",
+      "measured_sec": 3.36,
+      "load_at_measure": 2.92
     },
     "tools/roadmap.py": {
       "budget_sec": 2.47,
