@@ -13187,7 +13187,7 @@ def test_arm15_a_STRANDED_commit_is_named_by_path_and_sha() -> None:
     repo has never seen).
 
     It carries NO problem: a registration ahead of base is the DESIGNED state for a lane
-    worktree (SKILL.md §4), so STRANDED is a naming and the reader decides (#559 ruling
+    worktree (SKILL.md §Briefing and dispatch), so STRANDED is a naming and the reader decides (#559 ruling
     n=4232). The finding is a fact about reachability, not a verdict about the lane.
     """
     stranded_entry = {

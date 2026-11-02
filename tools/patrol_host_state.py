@@ -11870,7 +11870,7 @@ def registration_findings(
 
     NOTHING HERE IS A `problem`. #559's ruling (n=4232) is that this leg NAMES and the
     reader decides, and a registration ahead of the base is the DESIGNED state for a lane's
-    worktree (SKILL.md §4 — work happens in a worktree). What is worth naming is narrower:
+    worktree (SKILL.md §Briefing and dispatch — work happens in a worktree). What is worth naming is narrower:
     a HEAD no ref carries, and a directory that is the only copy of one.
     """
     rows_off_base: list[dict] = []
@@ -12192,7 +12192,7 @@ def render_row_set(read: dict) -> list[str]:
     # ledger half (rows at a registration's HEAD that the base does not carry)
     # and the commit half (a registration's HEAD the base does not contain, and
     # whether ANY ref carries it). A registration ahead of the base is the
-    # DESIGNED state for a lane worktree (SKILL.md §4), so nothing below is a
+    # DESIGNED state for a lane worktree (SKILL.md §Briefing and dispatch), so nothing below is a
     # problem line: #559 ruling n=4232 makes this leg a NAMING and the reader
     # decides.
     #
