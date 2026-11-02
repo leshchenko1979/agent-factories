@@ -204,14 +204,14 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-27T06:27:29Z",
+  "attested_at": "2026-11-02T06:03:18Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
       "green": true,
       "behind_by": 0,
       "measured_at": "2026-09-27T20:24Z",
-      "reason": "behind_by counts UNDECLARED lag only, not a declared fork. Measured 2026-09-27T20:24Z against the eleven rows of docs/instruments/pacemaker.md section 2, comparing each path byte-for-byte (sha256) with git show HEAD:TEMPLATE/<path> in leshchenko1979/agent-factories: 9 identical, 2 differ, 0 absent. Both differing paths are declared forks in registry/kit-exemptions.json - tests/test_close_board_recorded.py (own INVARIANT_LANDED anchor plus the #59 exemption surface) and tests/test_board_intake_recorded.py (ADAPTED: the live population is legitimately empty, so the loud-fail-on-zero form is wrong here and the probe proves the predicate instead). The pin gate reads both as declared exempt (5 exempt, every carried path matches the pin). Gate receipts: tools/patrol_host_state.py rc=0, 102 checks; tests/test_cron_thinness.py rc=0."
+      "reason": "behind_by counts UNDECLARED lag only, not a declared fork. Measured 2026-09-27T20:24Z against the eleven rows of docs/instruments/pacemaker.md section 2, comparing each path byte-for-byte (sha256) with git show HEAD:TEMPLATE/<path> in leshchenko1979/agent-factories: 9 identical, 2 differ, 0 absent. Both differing paths are declared forks in registry/kit-exemptions.json - tests/test_close_board_recorded.py (own INVARIANT_LANDED anchor plus the #59 exemption surface) and tests/test_board_intake_recorded.py (ADAPTED: the live population is legitimately empty, so the loud-fail-on-zero form is wrong here and the probe proves the predicate instead). The pin gate reads both as declared exempt (5 exempt at that 2026-09-27T20:24Z reading, every carried path matches the pin \u2014 the exemption count has since risen to SIX, measured 2026-11-02T06:03Z by this factory's own lane, and the 5 is left standing because it is what the 09-27 reading RETURNED, not because it is current: rewriting it would attribute a measurement to an instant that never took it). Gate receipts: tools/patrol_host_state.py rc=0, 102 checks; tests/test_cron_thinness.py rc=0."
     },
     "ledger": {
       "state": "partial",

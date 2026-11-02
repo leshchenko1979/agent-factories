@@ -9,7 +9,7 @@
     "owns": [
       "/root/miidas platform repo (agent, manager, cdp components; landing/ is RETIRED in this repo, retained only as the claim contract landing/cgi/claim.sh and its test landing/tests/test_claim.sh) and its deploys to agents-old (89.125.120.5:52676); the apps copy is retained as the rollback",
       "leshchenko1979/miidas and leshchenko1979/miidas-template",
-      "per-client slot state: pool/slots/miidas-*.env on agents-old \u2014 platform root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ \u2014 plus the miidas-* container and miidas_* volume namespaces: agents-old holds both (6 running containers, 2 volumes), apps holds the volume namespace only (1 orphaned volume, 0 containers) as of 2026-10-09T06:07:21Z",
+      "per-client slot state: pool/slots/miidas-*.env on agents-old \u2014 platform root /data/projects/miidas/, so the live path is /data/projects/miidas/pool/slots/ \u2014 plus the miidas-* container and miidas_* volume namespaces: agents-old holds 6 running containers and 2 volumes; apps holds 1 running container (miidas-ru-proxy, compose project ru-proxy) and the volume miidas_maple-c23a-data as of 2026-11-02T06:45Z",
       "the Miidas Factory Telegram chat (-1003996392908) and its topics",
       "/root/miidas/SKILL.md \u2014 the live skill path is a symlink to it, so the repo file is the single writer",
       "cron miidas-hq-daily-trigger",
@@ -67,12 +67,12 @@
     "leshchenko1979/miidas-template",
     "leshchenko1979/miidas-landing",
     "/root/miidas/SKILL.md (live skill path is a symlink to it)",
-    "agents-old: /data/projects/miidas/ (compose/, pool/slots/miidas-*.env, .master.env) and the miidas-* compose stack \u2014 the live set. apps: the repo copy, the images and one orphaned volume (miidas_maple-c23a-data) remain; no miidas container runs or rests there as of 2026-10-04T06:11Z"
+    "agents-old: /data/projects/miidas/ (compose/, pool/slots/miidas-*.env, .master.env) and the miidas-* compose stack \u2014 the live set. apps: the repo copy, the images and one volume (miidas_maple-c23a-data) remain; since 2026-10-30T11:53:56Z one miidas container also RUNS there \u2014 miidas-ru-proxy, compose project ru-proxy, built from /data/projects/miidas/ru-proxy/"
   ],
   "announcements": [
     {
       "id": "miidas-volume-namespace-on-apps",
-      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. agents-old holds 6 RUNNING containers and 2 volumes matching ^miidas_ (miidas_maple-c23a-data, miidas_linden-6c4a-data); apps holds 1 such volume and 0 containers. Read 2026-10-09T06:07:21Z.",
+      "text": "The miidas_* Docker volume namespace and the miidas-* container namespace belong to the MIIDAS factory. A peer reclaiming or pruning must match ^miidas_ and never a bare substring: miidas-pixel-data belongs to another project and is not ours. agents-old holds 6 RUNNING containers and 2 volumes matching ^miidas_ (miidas_maple-c23a-data, miidas_linden-6c4a-data); apps holds 1 such volume (miidas_maple-c23a-data) and, since 2026-10-30T11:53:56Z, 1 RUNNING container \u2014 miidas-ru-proxy (compose project ru-proxy). Read 2026-11-02T06:45Z.",
       "severity": "warning",
       "since": "2026-09-13T09:56:00Z",
       "affects": [
@@ -185,6 +185,17 @@
       ],
       "since": "2026-10-22",
       "evidence": "leshchenko1979/opencrabs#784 (open, unassigned, no PR); miidas#118 and #119 closed 2026-10-22; root cause in /root/miidas/evidence/2026-10-21-client-config-alert-loop.md (commit e5638bb). Measured 2026-10-22T06:24:47Z: alert pair landed in the client group, restored 5 s later."
+    },
+    {
+      "id": "miidas-apps-ru-proxy-unmanaged",
+      "text": "apps (163.5.41.61) runs miidas-ru-proxy from /data/projects/miidas/ru-proxy/, a tree with no counterpart in the /root/miidas repo \u2014 the host-side copy is the only source, so a redeploy from the repo will not recreate it.",
+      "severity": "warning",
+      "since": "2026-11-02",
+      "affects": [
+        "miidas"
+      ],
+      "scope": "factory",
+      "evidence": "docker ps on apps: miidas-ru-proxy Up 2 days (healthy), created 2026-10-30T11:53:56Z, compose project ru-proxy; `git ls-files | grep -c '^ru-proxy/'` = 0 at repo HEAD d3a1b34; the host tree holds Dockerfile, docker-compose.yml, entrypoint.sh, wg0.conf"
     }
   ],
   "lanes": [
@@ -220,7 +231,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-10-27T06:46:32Z",
+  "attested_at": "2026-11-02T06:03:18Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
