@@ -11409,7 +11409,12 @@ WORKTREE_HAZARD_CLASSES = (
 WORKTREE_BASE_REF = "origin/main"
 """The base a tree's own commits are judged against — the same ref the ruling used."""
 
-_WORKTREE_FIELD = re.compile(r"^([a-z-]+)(?: (.*))?$")
+# #595: the field name is NOT lowercase-only. `git worktree list --porcelain` emits
+# `HEAD <sha>` in UPPERCASE, so a `[a-z-]+` class silently dropped every sha -- 31
+# worktrees with no `head` key, and the `elif key in ("HEAD", "branch")` branch below
+# was DEAD CODE for HEAD the whole time. A parser that cannot match its own input
+# fails silently, which is why this was misattributed to a caller for several turns.
+_WORKTREE_FIELD = re.compile(r"^([A-Za-z-]+)(?: (.*))?$")
 
 
 # ---------------------------------------------------------------------------
@@ -11733,6 +11738,249 @@ def row_set_remote(
     return row_set_numbers(out.stdout), None
 
 
+REGISTRATION_LEDGER = ROW_SET_LEDGER
+"""The path whose row numbers are read at a registration's HEAD (#595)."""
+
+def registration_head_rows(
+    path: str, sha: str, *, repo: Path = REPO, ledger: str = REGISTRATION_LEDGER,
+) -> tuple[list[int], str | None]:
+    """The ledger row numbers AT a registration's HEAD, read from the OBJECT.
+
+    The SHA is the one the census recorded, not a second `HEAD` lookup: a registration whose
+    HEAD moves between the census and this read would otherwise be reported against a commit
+    the census never saw, which is the kind of un-recheckable receipt this leg exists to end.
+
+    The directory is used as the git context while it still exists, which also proves the
+    object is reachable from THAT registration; the repository answers when it does not,
+    because an absent directory cannot and its object may still be there. Both forms read
+    `<sha>:<path>` — the object — and never the worktree's working file, which may be dirty
+    or mid-write and would report a lane's uncommitted append as its HEAD's contents.
+    """
+    target = Path(path) if path and Path(path).is_dir() else Path(repo)
+    out, error = _git_read(target, ["show", f"{sha}:{ledger}"])
+    if error:
+        return [], f"{path or '<no path>'} at {sha[:12]}: {error}"
+    return row_set_numbers(out or ""), None
+
+def registration_is_ancestor(repo: Path, sha: str, base: str) -> tuple[bool | None, str | None]:
+    """`(True|False|None, error)` — the ruling's own predicate, asked directly.
+
+    Asked with `merge-base --is-ancestor` rather than inferred from an ahead count: exit 1
+    is git's own "no" and exit 2 is "could not ask", and collapsing those two into one falsy
+    value is how a broken instrument reads as a finding. The count cannot answer this
+    question at all — `base..sha` is non-empty for a tree that has DIVERGED from the base as
+    well as for one that is ahead of it, and those are different facts.
+    """
+    env = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo), "merge-base", "--is-ancestor", sha, base],
+            capture_output=True, text=True, env=env, timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"`git merge-base --is-ancestor {sha[:12]} {base}` could not run: {exc}"
+    if proc.returncode == 0:
+        return True, None
+    if proc.returncode == 1:
+        return False, None
+    detail = (proc.stderr or proc.stdout).strip().splitlines()
+    return None, (
+        f"`git merge-base --is-ancestor {sha[:12]} {base}` exited {proc.returncode}"
+        + (f" — {detail[0][:160]}" if detail else "")
+    )
+
+def registration_ahead(repo: Path, sha: str, base: str) -> tuple[int | None, str | None]:
+    """How many commits `sha` carries that `base` does not — `None` when unreadable."""
+    out, error = _git_read(repo, ["rev-list", "--count", f"{base}..{sha}"])
+    if error:
+        return None, error
+    text = (out or "").strip()
+    if not text.isdigit():
+        return None, f"`git rev-list --count {base}..{sha[:12]}` was not an integer: {text[:80]!r}"
+    return int(text), None
+
+def registration_oldest_unpushed(
+    repo: Path, sha: str, base: str,
+) -> tuple[dict | None, str | None]:
+    """The OLDEST commit `sha` carries that `base` does not: its sha, subject and date.
+
+    `--reverse` and take the first, because the question a reader has to answer is whether
+    the work at the BOTTOM of the train is still wanted: the newest commit of a stranded
+    train is the one a lane would have re-made, and it is the oldest that is only there.
+    """
+    out, error = _git_read(repo, ["rev-list", "--reverse", f"{base}..{sha}"])
+    if error:
+        return None, error
+    shas = [line.strip() for line in (out or "").splitlines() if line.strip()]
+    if not shas:
+        return None, None
+    oldest = shas[0]
+    detail, detail_error = _git_read(repo, ["show", "-s", "--format=%H%x09%cI%x09%s", oldest])
+    if detail_error:
+        return {"sha": oldest, "committed_at": None, "subject": None}, detail_error
+    parts = (detail or "").rstrip("\n").split("\t", 2)
+    return {
+        "sha": parts[0] if parts else oldest,
+        "committed_at": parts[1] if len(parts) > 1 else None,
+        "subject": parts[2] if len(parts) > 2 else None,
+    }, None
+
+def registration_refs_containing(repo: Path, sha: str) -> tuple[list[str] | None, str | None]:
+    """Every ref that CONTAINS `sha` — the discriminator between stranded and in flight.
+
+    An EMPTY LIST is a real answer ("no ref carries this commit") and is kept distinct from
+    `None` ("the question could not be asked"), because they lead to opposite findings: the
+    first is the #595 class, the second is a stated inability. A leg that rendered both as
+    "nothing" would report a broken instrument as a clean box, which is the defect this
+    whole leg was built against.
+    """
+    out, error = _git_read(repo, ["for-each-ref", "--contains", sha, "--format=%(refname)"])
+    if error:
+        return None, error
+    return [line.strip() for line in (out or "").splitlines() if line.strip()], None
+
+def _same_checkout(path: str, repo: Path) -> bool:
+    """Whether a registration IS the checkout the pusher publishes from (#445's `--repo`)."""
+    if not path:
+        return False
+    try:
+        return Path(path).resolve() == Path(repo).resolve()
+    except OSError:
+        return False
+
+def registration_findings(
+    records: list[dict],
+    base_rows: set[int],
+    *,
+    repo: Path = REPO,
+    base: str = ROW_SET_BASE_REF,
+    ledger: str = REGISTRATION_LEDGER,
+) -> dict:
+    """BOTH findings from ONE enumeration of the registrations (#595).
+
+    THE LEDGER HALF: for each registration, the row numbers at its HEAD — read from the
+    object — minus the base's set. A row that exists only at a registration's HEAD is a row
+    no reader of the base can see, and the shared tree's own file cannot show it because the
+    append was never committed there.
+
+    THE COMMIT HALF: every registration whose HEAD is not an ancestor of the base, with its
+    ahead count, its OLDEST unpushed commit and whether ANY ref contains it. A stranded
+    commit carrying no ledger row is still stranded, which is why both halves share this one
+    walk: two walks of one surface are two chances to disagree about the population.
+
+    NOTHING HERE IS A `problem`. #559's ruling (n=4232) is that this leg NAMES and the
+    reader decides, and a registration ahead of the base is the DESIGNED state for a lane's
+    worktree (SKILL.md §4 — work happens in a worktree). What is worth naming is narrower:
+    a HEAD no ref carries, and a directory that is the only copy of one.
+    """
+    rows_off_base: list[dict] = []
+    ahead: list[dict] = []
+    loss_risk: list[dict] = []
+    errors: list[str] = []
+    probed = 0
+
+    for record in records:
+        path = str(record.get("path") or "")
+        sha = str(record.get("head") or "")
+        if not sha:
+            errors.append(f"{path or '<no path>'}: the registration carries no HEAD")
+            continue
+        probed += 1
+        present = bool(path) and Path(path).is_dir()
+
+        numbers, rows_error = registration_head_rows(path, sha, repo=repo, ledger=ledger)
+        if rows_error:
+            errors.append(rows_error)
+        else:
+            off = sorted(set(numbers) - base_rows)
+            if off:
+                rows_off_base.append({
+                    "path": path,
+                    "sha": sha,
+                    "rows": off,
+                    "count": len(off),
+                    "directory_present": present,
+                })
+
+        ancestor, ancestor_error = registration_is_ancestor(repo, sha, base)
+        if ancestor_error:
+            errors.append(f"{path or '<no path>'}: {ancestor_error}")
+            continue
+        if ancestor:
+            continue
+
+        count, count_error = registration_ahead(repo, sha, base)
+        if count_error:
+            errors.append(f"{path or '<no path>'}: {count_error}")
+        oldest, oldest_error = registration_oldest_unpushed(repo, sha, base)
+        if oldest_error:
+            errors.append(f"{path or '<no path>'}: {oldest_error}")
+        carriers, carriers_error = registration_refs_containing(repo, sha)
+        if carriers_error:
+            errors.append(f"{path or '<no path>'}: {carriers_error}")
+
+        entry = {
+            "path": path,
+            "sha": sha,
+            "ahead": count,
+            "oldest_sha": (oldest or {}).get("sha"),
+            "oldest_subject": (oldest or {}).get("subject"),
+            "oldest_committed_at": (oldest or {}).get("committed_at"),
+            "contained_by": carriers,
+            "ref_count": None if carriers is None else len(carriers),
+            "directory_present": present,
+            "pusher_checkout": _same_checkout(path, repo),
+            # STRANDED is the ruling's discriminator: no ref carries it. `None` is NOT
+            # stranded — it is unasked, and unasked renders as an inability.
+            "stranded": carriers is not None and not carriers,
+            # LOSS RISK is #595's measured shape: ahead, and the only copy of the commit is
+            # a directory one `git worktree prune` away from being gone.
+            "loss_risk": not present,
+        }
+        ahead.append(entry)
+        if entry["loss_risk"]:
+            loss_risk.append({"path": path, "sha": sha, "ahead": count})
+
+    stranded = [e for e in ahead if e["stranded"]]
+    return {
+        "registrations": len(records),
+        "registrations_probed": probed,
+        "rows_off_base": rows_off_base,
+        "rows_off_base_count": sum(e["count"] for e in rows_off_base),
+        "ahead_of_base": ahead,
+        "ahead_of_base_count": len(ahead),
+        "stranded": stranded,
+        "stranded_count": len(stranded),
+        "loss_risk": loss_risk,
+        "loss_risk_count": len(loss_risk),
+        "errors": errors,
+    }
+
+def row_set_registrations(
+    repo: Path, base: str, base_rows: set[int], *, ledger: str = REGISTRATION_LEDGER,
+) -> tuple[dict | None, str | None]:
+    """Enumerate the registrations ONCE, then report both findings from that one walk.
+
+    The census is `git worktree list --porcelain` — git's own instrument, never a glob over
+    `/tmp`, because a glob cannot tell a registered worktree from an abandoned directory and
+    the two are the whole subject here.
+
+    An empty census is an INSTRUMENT FAILURE, not a repository with no registrations: a
+    repository always carries at least its main worktree. That distinction is stated rather
+    than assumed, because "0 found" and "0 looked at" are the same number and different
+    facts.
+    """
+    records, error = worktree_records(repo)
+    if error:
+        return None, f"the registration census could not be read — {error}"
+    if not records:
+        return None, (
+            "`git worktree list --porcelain` returned no record(s); a repository always "
+            "carries at least its main worktree, so this is an instrument failure and NOT "
+            "a repository with no registrations"
+        )
+    return registration_findings(records, base_rows, repo=repo, base=base, ledger=ledger), None
+
 def row_set_leg(
     *,
     read_at: str,
@@ -11742,16 +11990,26 @@ def row_set_leg(
     level_fn=None,
     tree_fn=None,
     remote_fn=None,
+    registrations_fn=None,
 ) -> dict:
     """The tree's ledger rows against the base ref's — the level count's own contradiction.
 
     A REPORT, not a verdict: see the block comment above for the measurement that decides
     that, and for why a problem line here would be red on a healthy shared tree.
 
-    Three dependencies are injected for the reason every leg here has them: a probe must
+    Four dependencies are injected for the reason every leg here has them: a probe must
     drive the contradiction, the ordinary case and NOT RUN without a live repository, and a
     leg that can only run against the live box cannot be probed at all when the live box is
     what is wrong.
+
+    THE REGISTRATIONS (#595) ride the same report and are still a NAMING, never a problem
+    line: every registration of this repository is enumerated ONCE, and both findings are
+    read off that one walk — the rows that exist only at a registration's HEAD, and the
+    registrations whose HEAD is not an ancestor of the base. A registration ahead of the
+    base is the DESIGNED state for a lane's worktree, so it cannot be a problem; what it
+    can be is STRANDED (no ref carries the commit) or a LOSS RISK (ahead, with the
+    directory gone). A census that cannot be read is a STATED INABILITY in the coverage —
+    never an empty list, which would read as a repository with no registrations.
 
     A read that cannot be made is NOT RUN with its reason, never an empty set: the whole
     point of this leg is that a zero standing in for "could not look" is what made the
@@ -11760,6 +12018,7 @@ def row_set_leg(
     level_fn = level_fn or row_set_level
     tree_fn = tree_fn or row_set_tree
     remote_fn = remote_fn or row_set_remote
+    registrations_fn = registrations_fn or row_set_registrations
 
     ahead, behind, level_error = level_fn(repo, base)
     if level_error:
@@ -11819,6 +12078,11 @@ def row_set_leg(
     tree_only = sorted(tree_set - remote_set)
     remote_only = sorted(remote_set - tree_set)
 
+    # ONE enumeration of the registrations, and both findings read off it. The base's row
+    # set is passed IN rather than re-read, so "present only at a registration's HEAD" is
+    # measured against the same population the rest of this leg just reported.
+    registrations, registrations_error = registrations_fn(repo, base, remote_set, ledger=path)
+
     return {
         "name": "row-set",
         "status": "ASSERTED",
@@ -11840,6 +12104,21 @@ def row_set_leg(
             "remote_only": remote_only,
             "remote_only_count": len(remote_only),
             "rows_examined": len(tree_set | remote_set),
+            # ---- the registrations (#595) ------------------------------------------
+            # Every key is present on every run, `None` included, so a render can tell a
+            # zero from an unread value instead of printing both as "0".
+            "registrations": (registrations or {}).get("registrations"),
+            "registrations_probed": (registrations or {}).get("registrations_probed"),
+            "registrations_error": registrations_error,
+            "rows_off_base": (registrations or {}).get("rows_off_base"),
+            "rows_off_base_count": (registrations or {}).get("rows_off_base_count"),
+            "ahead_of_base": (registrations or {}).get("ahead_of_base"),
+            "ahead_of_base_count": (registrations or {}).get("ahead_of_base_count"),
+            "stranded": (registrations or {}).get("stranded"),
+            "stranded_count": (registrations or {}).get("stranded_count"),
+            "loss_risk": (registrations or {}).get("loss_risk"),
+            "loss_risk_count": (registrations or {}).get("loss_risk_count"),
+            "registration_errors": (registrations or {}).get("errors"),
             "recovery": ROW_SET_RECOVERY,
             # STATED, because the leg's own silence is what a reader must be able to judge.
             "verdict": "none -- the rows are named and the reader decides (#559 ruling n=4232)",
@@ -11908,6 +12187,190 @@ def render_row_set(read: dict) -> list[str]:
             f"  {len(remote_only)} row(s) on {coverage.get('base')} and NOT in the tree: "
             f"{named}" + (f" ... and {more} more" if more else "")
         )
+    # ---- #595: the REGISTRATIONS, not just this one tree ------------------
+    # ONE enumeration (git worktree list --porcelain) yields BOTH findings: the
+    # ledger half (rows at a registration's HEAD that the base does not carry)
+    # and the commit half (a registration's HEAD the base does not contain, and
+    # whether ANY ref carries it). A registration ahead of the base is the
+    # DESIGNED state for a lane worktree (SKILL.md §4), so nothing below is a
+    # problem line: #559 ruling n=4232 makes this leg a NAMING and the reader
+    # decides.
+    #
+    # None IS NOT 0 in every branch below. An unread value renders as an
+    # INABILITY, because "0 found" and "0 looked at" are the same number and
+    # different facts — the collapse this leg exists to end.
+    reg_error = coverage.get("registrations_error")
+    registrations = coverage.get("registrations")
+    probed = coverage.get("registrations_probed")
+    if reg_error:
+        lines.append(
+            "  registrations: COULD NOT BE ENUMERATED — "
+            f"{reg_error}. No finding below is a clean census: nothing was looked at."
+        )
+    elif registrations is None:
+        lines.append("  registrations: not read by this run (unstated — not zero)")
+    else:
+        probed_txt = f"{probed} probed" if probed is not None else "unprobed"
+        lines.append(
+            f"  registrations: {registrations} worktree registration(s), "
+            f"{probed_txt} against {coverage.get('base')}"
+        )
+        if registrations and not probed:
+            lines.append(
+                "  registrations: INCOMPLETE — the census saw the registrations "
+                "and probed none of them, so an empty finding below is an "
+                "INABILITY, not a clean result"
+            )
+
+    # A CLEAN CLAIM MAY ONLY BE MADE BY A CENSUS THAT LOOKED (#595). `probed` is
+    # None when the census was never attempted and 0 when the enumeration saw the
+    # registrations and probed none of them; any registration error makes the
+    # population PARTIAL, which is the same failure one step in — some were looked
+    # at, so an empty list is a LOWER BOUND, not a census. Every clean branch below
+    # therefore falls through to "unstated (not read)" unless this flag is true.
+    # Printing "no STRANDED commit" two lines under an admitted INCOMPLETE is the
+    # exact defect this leg exists to end, wearing the report's own words.
+    census_looked = bool(probed) and not coverage.get("registration_errors")
+
+    rows_off = coverage.get("rows_off_base")
+    if rows_off is None:
+        lines.append("  rows off the base, per registration: unstated (not read)")
+    elif not rows_off and not census_looked:
+        lines.append(
+            "  rows off the base, per registration: unstated (not read) — the census "
+            "did not look, so an empty list here is an INABILITY"
+        )
+    elif not rows_off:
+        lines.append("  no registration carries a row the base does not")
+    else:
+        lines.append(
+            f"  {coverage.get('rows_off_base_count')} registration(s) whose HEAD "
+            f"carries row(s) not on {coverage.get('base')}:"
+        )
+        for entry in rows_off[:ROW_SET_NAME_CAP]:
+            all_rows = list(entry.get("rows") or [])
+            shown_rows = all_rows[:ROW_SET_NAME_CAP]
+            named = ", ".join(f"n={n}" for n in shown_rows)
+            if len(all_rows) > len(shown_rows):
+                named += f" ... and {len(all_rows) - len(shown_rows)} more"
+            absent = "" if entry.get("directory_present") else " — DIRECTORY ABSENT"
+            lines.append(
+                f"    {entry.get('path')} at {str(entry.get('sha') or '')[:12]}: "
+                f"{entry.get('count')} row(s): {named}{absent}"
+            )
+        if len(rows_off) > ROW_SET_NAME_CAP:
+            lines.append(f"    ... and {len(rows_off) - ROW_SET_NAME_CAP} more")
+
+    ahead = coverage.get("ahead_of_base")
+    if ahead is None:
+        lines.append("  registrations ahead of the base: unstated (not read)")
+    elif not ahead and not census_looked:
+        lines.append(
+            "  registrations ahead of the base: unstated (not read) — the census did "
+            "not look, so an empty list here is an INABILITY"
+        )
+    elif not ahead:
+        lines.append(f"  no registration is ahead of {coverage.get('base')}")
+    else:
+        lines.append(
+            f"  {coverage.get('ahead_of_base_count')} registration(s) ahead of "
+            f"{coverage.get('base')} — the DESIGNED state for a lane worktree, "
+            "not a finding:"
+        )
+        for entry in ahead[:ROW_SET_NAME_CAP]:
+            sha = str(entry.get("sha") or "")
+            oldest = str(entry.get("oldest_sha") or "")
+            refs = entry.get("ref_count")
+            if refs is None:
+                carried = "carrying refs UNASKED"
+            elif not refs:
+                carried = "carried by NO ref"
+            else:
+                carried = f"carried by {refs} ref(s)"
+            lines.append(
+                f"    {entry.get('path')} at {sha[:12]}: "
+                f"{entry.get('ahead')} commit(s) ahead, oldest {oldest[:12]} "
+                f"({entry.get('oldest_committed_at')}) — {carried}"
+            )
+        if len(ahead) > ROW_SET_NAME_CAP:
+            lines.append(f"    ... and {len(ahead) - ROW_SET_NAME_CAP} more")
+
+    stranded = coverage.get("stranded")
+    if stranded is None:
+        lines.append("  STRANDED commits: unstated (not read)")
+    elif not stranded and not census_looked:
+        lines.append(
+            "  STRANDED commits: unstated (not read) — the census did not look, so "
+            "an empty list here is an INABILITY, never 'no STRANDED commit'"
+        )
+    elif not stranded:
+        lines.append(
+            "  no STRANDED commit: every registration ahead of the base is "
+            "carried by a ref"
+        )
+    else:
+        lines.append(
+            f"  {coverage.get('stranded_count')} STRANDED commit(s) — reachable "
+            "only from a worktree registration's HEAD and carried by NO ref, so "
+            "one 'git worktree prune' deletes them:"
+        )
+        for entry in stranded[:ROW_SET_NAME_CAP]:
+            sha = str(entry.get("sha") or "")
+            oldest = str(entry.get("oldest_sha") or "")
+            present = "present" if entry.get("directory_present") else "ABSENT"
+            tail = f"carried by {entry.get('ref_count')} ref(s); directory {present}"
+            if entry.get("pusher_checkout"):
+                tail += "; this checkout IS the pusher target"
+            lines.append(
+                f"    {entry.get('path')} at {sha[:12]}: "
+                f"{entry.get('ahead')} commit(s) ahead, oldest {oldest[:12]} "
+                f"({entry.get('oldest_committed_at')}) "
+                f"{entry.get('oldest_subject') or ''}"
+            )
+            lines.append(f"      {tail}")
+        if len(stranded) > ROW_SET_NAME_CAP:
+            lines.append(f"    ... and {len(stranded) - ROW_SET_NAME_CAP} more")
+
+    loss = coverage.get("loss_risk")
+    if loss is None:
+        lines.append("  LOSS RISK registrations: unstated (not read)")
+    elif not loss and not census_looked:
+        lines.append(
+            "  LOSS RISK registrations: unstated (not read) — the census did not "
+            "look, so an empty list here is an INABILITY, never 'no LOSS RISK'"
+        )
+    elif not loss:
+        lines.append(
+            "  no LOSS RISK registration: every registration ahead of the base "
+            "still has its directory"
+        )
+    else:
+        lines.append(
+            f"  {coverage.get('loss_risk_count')} LOSS RISK registration(s) — "
+            "the directory is GONE, so it is the only copy of its commit:"
+        )
+        for entry in loss[:ROW_SET_NAME_CAP]:
+            sha = str(entry.get("sha") or "")
+            lines.append(
+                f"    {entry.get('path')} at {sha[:12]}: "
+                f"{entry.get('ahead')} commit(s) ahead, directory ABSENT"
+            )
+        if len(loss) > ROW_SET_NAME_CAP:
+            lines.append(f"    ... and {len(loss) - ROW_SET_NAME_CAP} more")
+
+    reg_errors = coverage.get("registration_errors")
+    if reg_errors:
+        all_errs = list(reg_errors)
+        shown_errs = all_errs[:ROW_SET_NAME_CAP]
+        lines.append(
+            f"  {len(all_errs)} registration read(s) COULD NOT BE MADE — the "
+            "findings above are INCOMPLETE, not clean:"
+        )
+        for err in shown_errs:
+            lines.append(f"    {err}")
+        if len(all_errs) > len(shown_errs):
+            lines.append(f"    ... and {len(all_errs) - len(shown_errs)} more")
+
     lines.append(
         "  recovery route when these are orphans (fsck cannot see them for 30 days): "
         f"{coverage.get('recovery')}"

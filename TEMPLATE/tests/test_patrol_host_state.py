@@ -13034,6 +13034,284 @@ def test_arm13_a_read_that_CANNOT_be_made_is_NOT_RUN_with_its_reason() -> None:
         # A NOT RUN round must never print a row population: there is none.
         assert "row(s) in the tree and NOT on" not in out, out
 
+
+def _row_set_cov(**overrides):
+    """A row-set coverage dict with the registrations keys at their UNREAD values.
+
+    Every key is present, `None` included, exactly as `row_set_leg` emits them — the
+    render is being probed, so a fixture that omitted a key would test a shape the leg
+    never produces.
+    """
+    cov = {
+        "name": "row-set",
+        "status": "ASSERTED",
+        "path": "evidence/ledger.jsonl",
+        "base": "origin/main",
+        "recovery": "ROUTE",
+        "verdict": "none",
+        "read_at": "2026-11-01T00:00:00Z",
+        "tree_rows": 4593,
+        "remote_rows": 4593,
+        "rows_examined": 4593,
+        "tree_only": [],
+        "tree_only_count": 0,
+        "remote_only": [],
+        "remote_only_count": 0,
+        "level": True,
+        "registrations": None,
+        "registrations_probed": None,
+        "registrations_error": None,
+        "rows_off_base": None,
+        "rows_off_base_count": None,
+        "ahead_of_base": None,
+        "ahead_of_base_count": None,
+        "stranded": None,
+        "stranded_count": None,
+        "loss_risk": None,
+        "loss_risk_count": None,
+        "registration_errors": None,
+    }
+    cov.update(overrides)
+    return cov
+
+
+# The four clean claims this render can make, as LINE PREFIXES. A prefix test is
+# required, not fussiness: the INABILITY wording QUOTES the claim it refuses
+# ("never 'no STRANDED commit'"), so a substring search finds the refusal and calls
+# it the lie -- which is how the first version of this probe passed a broken render.
+_ROW_SET_CLEAN_CLAIMS = (
+    "no registration carries a row the base does not",
+    "no registration is ahead of",
+    "no STRANDED commit",
+    "no LOSS RISK registration",
+)
+
+
+def _row_set_claims(lines):
+    """The clean claims the render ACTUALLY emitted, matched by line prefix."""
+    found = []
+    for line in lines:
+        body = line.strip()
+        for claim in _ROW_SET_CLEAN_CLAIMS:
+            if body.startswith(claim):
+                found.append(claim)
+    return found
+
+
+def test_arm14_a_clean_claim_requires_a_census_that_LOOKED() -> None:
+    """ARM 14 (#595): a clean claim may never follow an admitted INABILITY.
+
+    The defect this arm exists for was live in the render: with 31 registrations seen
+    and ZERO probed, the block printed "registrations: INCOMPLETE -- ... an INABILITY,
+    not a clean result" and then, two lines below it, "no STRANDED commit: every
+    registration ahead of the base is carried by a ref". A clean claim emitted after an
+    admitted inability is the exact collapse the leg was built to end, wearing the
+    report's own words.
+
+    FIVE SHAPES, and the CLEAN one is the only shape allowed to claim anything. The
+    others are the same four empty lists under different reasons for not having looked,
+    which is why they are one arm: a zero and an unread value are the same number and
+    different facts.
+    """
+    cases = (
+        # (label, overrides, expect_clean_claims)
+        ("UNREAD -- never attempted", {}, False),
+        ("CLEAN -- 31 seen, 31 probed, nothing found", {
+            "registrations": 31, "registrations_probed": 31,
+            "rows_off_base": [], "rows_off_base_count": 0,
+            "ahead_of_base": [], "ahead_of_base_count": 0,
+            "stranded": [], "stranded_count": 0,
+            "loss_risk": [], "loss_risk_count": 0,
+            "registration_errors": [],
+        }, True),
+        ("ENUMERATION-FAILED -- git could not be read", {
+            "registrations_error": "git worktree list --porcelain failed: exit 128",
+        }, False),
+        ("READ-BUT-UNPROBED -- 31 seen, 0 probed", {
+            "registrations": 31, "registrations_probed": 0,
+            "rows_off_base": [], "rows_off_base_count": 0,
+            "ahead_of_base": [], "ahead_of_base_count": 0,
+            "stranded": [], "stranded_count": 0,
+            "loss_risk": [], "loss_risk_count": 0,
+            "registration_errors": [],
+        }, False),
+        ("PARTIAL -- 31 seen, 30 probed, 1 error", {
+            "registrations": 31, "registrations_probed": 30,
+            "rows_off_base": [], "rows_off_base_count": 0,
+            "ahead_of_base": [], "ahead_of_base_count": 0,
+            "stranded": [], "stranded_count": 0,
+            "loss_risk": [], "loss_risk_count": 0,
+            "registration_errors": ["/tmp/x/tree: the registration carries no HEAD"],
+        }, False),
+    )
+    for label, overrides, expect_clean in cases:
+        out = RUNNER.render_row_set(
+            {"name": "row-set", "status": "ASSERTED", "problems": [], "excused": [],
+             "coverage": _row_set_cov(**overrides)}
+        )
+        claims = _row_set_claims(out)
+        if expect_clean:
+            assert claims == list(_ROW_SET_CLEAN_CLAIMS), (label, claims, out)
+        else:
+            assert claims == [], (
+                f"{label}: a clean claim was printed by a census that did not look: "
+                f"{claims}\n" + "\n".join(out)
+            )
+            # And the refusal must be STATED, not merely withheld: four unread values
+            # render as four "unstated" lines, so the silence is legible.
+            assert "\n".join(out).count("unstated (not read)") >= 4, (label, out)
+    # The two shapes that ADMIT an inability say so in words the reader can act on.
+    for overrides, fragment in (
+        ({"registrations_error": "git worktree list --porcelain failed: exit 128"},
+         "COULD NOT BE ENUMERATED"),
+        ({"registrations": 31, "registrations_probed": 0,
+          "rows_off_base": [], "ahead_of_base": [], "stranded": [], "loss_risk": []},
+         "INCOMPLETE"),
+    ):
+        out = "\n".join(RUNNER.render_row_set(
+            {"name": "row-set", "status": "ASSERTED", "problems": [], "excused": [],
+             "coverage": _row_set_cov(**overrides)}
+        ))
+        assert fragment in out, (fragment, out)
+
+
+def test_arm15_a_STRANDED_commit_is_named_by_path_and_sha() -> None:
+    """ARM 15 (#595): a commit carried by NO ref is named, and is still not a problem.
+
+    The live casualty this arm was written against (2026-11-01): one lane worktree one
+    commit ahead of the base and carried by ZERO refs -- one `git worktree prune` from
+    gone, and `fsck` cannot see it for 30 days. The leg must name the path, the sha, the
+    subject and the ref count. The sha below is FABRICATED on purpose: this file is a
+    TEMPLATE pair and ships to factories whose history does not contain ours, so citing a
+    real commit would make the pair non-portable (a probe asserting on a sha the reader's
+    repo has never seen).
+
+    It carries NO problem: a registration ahead of base is the DESIGNED state for a lane
+    worktree (SKILL.md §4), so STRANDED is a naming and the reader decides (#559 ruling
+    n=4232). The finding is a fact about reachability, not a verdict about the lane.
+    """
+    stranded_entry = {
+        "path": "/tmp/gate-select-wtk06ses/tree",
+        "sha": "9f9e9d9c9b9a9989796959493929190897867564",
+        "oldest_sha": "9f9e9d9c9b9a9989796959493929190897867564",
+        "oldest_committed_at": "2026-11-01T19:29:03+00:00",
+        "oldest_subject": "sync_binding: a clean tree inside the pusher grace window is HELD, not refused (#594)",
+        "ahead": 1,
+        "ref_count": 0,
+        "directory_present": True,
+        "pusher_checkout": False,
+        "stranded": True,
+        "loss_risk": False,
+    }
+    leg = RUNNER.row_set_leg(
+        read_at="2026-11-01T20:00:00Z",
+        level_fn=lambda repo, base: (0, 0, None),
+        tree_fn=lambda repo, path: ([4593], None),
+        remote_fn=lambda repo, base, path: ([4593], None),
+        registrations_fn=lambda repo, base, base_rows, **kw: ({
+            "registrations": 31, "registrations_probed": 31,
+            "rows_off_base": [], "rows_off_base_count": 0,
+            "ahead_of_base": [stranded_entry], "ahead_of_base_count": 1,
+            "stranded": [stranded_entry], "stranded_count": 1,
+            "loss_risk": [], "loss_risk_count": 0,
+            "errors": [],
+        }, None),
+    )
+    cov = leg["coverage"]
+    assert leg["status"] == "ASSERTED", leg
+    assert cov["stranded_count"] == 1, cov
+    assert cov["ahead_of_base_count"] == 1, cov
+    assert cov["loss_risk_count"] == 0, cov
+    # THE ARM THAT MATTERS: a named casualty is still not a problem line.
+    assert leg["problems"] == [], leg
+    assert leg["excused"] == [], leg
+
+    out = "\n".join(RUNNER.render_row_set(leg))
+    assert "1 STRANDED commit(s)" in out, out
+    assert "/tmp/gate-select-wtk06ses/tree" in out, out          # the PATH
+    assert "9f9e9d9c9b9a" in out, out                            # the SHA
+    assert "carried by 0 ref(s)" in out, out                     # the reachability
+    assert "one 'git worktree prune' deletes them" in out, out    # the consequence
+    assert "HELD, not refused" in out, out                       # the subject
+    # The clean STRANDED claim must NOT be printed beside a real stranded commit.
+    assert "no STRANDED commit" not in [ln.strip() for ln in out.splitlines()], out
+
+
+def test_arm16_a_LOSS_RISK_registration_names_its_ABSENT_directory() -> None:
+    """ARM 16 (#595): ahead of base AND the directory gone -- the only copy of the commit.
+
+    This is the strictly worse sibling of STRANDED: the commit is carried by no ref AND
+    the working tree that held it is gone, so the object is the last copy anywhere. The
+    leg names the path and the sha with `directory ABSENT`, and still files no problem.
+    """
+    loss_entry = {
+        "path": "/tmp/af-reaped-1029",
+        "sha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        "oldest_sha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+        "oldest_committed_at": "2026-10-29T08:00:00+00:00",
+        "oldest_subject": "a commit whose tree is gone",
+        "ahead": 2,
+        "ref_count": 0,
+        "directory_present": False,
+        "pusher_checkout": False,
+        "stranded": True,
+        "loss_risk": True,
+    }
+    leg = RUNNER.row_set_leg(
+        read_at="2026-11-01T20:00:00Z",
+        level_fn=lambda repo, base: (0, 0, None),
+        tree_fn=lambda repo, path: ([4593], None),
+        remote_fn=lambda repo, base, path: ([4593], None),
+        registrations_fn=lambda repo, base, base_rows, **kw: ({
+            "registrations": 31, "registrations_probed": 31,
+            "rows_off_base": [], "rows_off_base_count": 0,
+            "ahead_of_base": [loss_entry], "ahead_of_base_count": 1,
+            "stranded": [loss_entry], "stranded_count": 1,
+            "loss_risk": [{"path": loss_entry["path"], "sha": loss_entry["sha"],
+                           "ahead": 2}],
+            "loss_risk_count": 1,
+            "errors": [],
+        }, None),
+    )
+    cov = leg["coverage"]
+    assert cov["loss_risk_count"] == 1, cov
+    assert leg["problems"] == [], leg
+
+    out = "\n".join(RUNNER.render_row_set(leg))
+    assert "1 LOSS RISK registration(s)" in out, out
+    assert "/tmp/af-reaped-1029" in out, out
+    assert "deadbeefdead" in out, out
+    assert "directory ABSENT" in out, out
+    assert "the directory is GONE" in out, out
+    assert "no LOSS RISK registration" not in [ln.strip() for ln in out.splitlines()], out
+
+
+def test_arm17_an_EMPTY_census_is_an_INSTRUMENT_FAILURE_not_a_repository() -> None:
+    """ARM 17 (#595): a repository always has at least its main worktree.
+
+    So `git worktree list --porcelain` returning no record is the INSTRUMENT failing, not
+    a repository with nothing registered -- and the leg must say so rather than hand back
+    an empty set that renders as a clean census. Same law as every other leg here: a zero
+    standing in for "could not look" is what made the incident silent.
+
+    The seam is `worktree_records`, not a kwarg: `row_set_registrations` calls it
+    directly, so patching it is the only way to drive the census without a live repo.
+    """
+    with mock.patch.object(RUNNER, "worktree_records", lambda repo=None: ([], None)):
+        findings, error = RUNNER.row_set_registrations(Path("."), "origin/main", set())
+    assert findings is None, findings
+    assert error, error
+    assert "instrument failure" in error, error
+    assert "at least its main worktree" in error, error
+
+    # The census read ITSELF failing is the same class, with its own reason.
+    with mock.patch.object(RUNNER, "worktree_records",
+                           lambda repo=None: (None, "fatal: not a git repository")):
+        findings, error = RUNNER.row_set_registrations(Path("."), "origin/main", set())
+    assert findings is None, findings
+    assert "could not be read" in error, error
+    assert "fatal: not a git repository" in error, error
+
 def test_arm4_the_grace_is_DERIVED_per_job_and_PRINTED_with_its_derivation() -> None:
     """ARM 4: a hardcoded constant must be unable to produce these numbers.
 
