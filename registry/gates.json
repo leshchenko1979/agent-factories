@@ -62,7 +62,19 @@
       "margin_x": 4.08,
       "measured_at": "8bf30499ae0565e123235d801cd824baab14f84c",
       "measured_sec": 9.41,
-      "load_at_measure": 1.46
+      "load_at_measure": 1.46,
+      "growth_breach": {
+        "sample_sec": 9.47,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 9.41,
+        "basis_revision": "8bf30499ae0565e123235d801cd824baab14f84c",
+        "declared_sec": 38.39,
+        "derived_sec": 38.63,
+        "growth_x": 1.0064,
+        "derived_over_declared": 1.0063,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_close_telemetry_provenance.py": {
       "budget_sec": 42.63,
@@ -115,21 +127,45 @@
       "margin_x": 4.006,
       "measured_at": "25344213fb851e1d345474ac7ca0adb983ccff12",
       "measured_sec": 134.71,
-      "load_at_measure": 2.92
+      "load_at_measure": 2.92,
+      "growth_breach": {
+        "sample_sec": 169.34,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 134.71,
+        "basis_revision": "25344213fb851e1d345474ac7ca0adb983ccff12",
+        "declared_sec": 539.59,
+        "derived_sec": 678.11,
+        "growth_x": 1.2571,
+        "derived_over_declared": 1.2567,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_gate_fixtures_closure.py": {
       "budget_sec": 68.03,
       "margin_x": 4.045,
       "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
       "measured_sec": 16.82,
-      "load_at_measure": 4.13
+      "load_at_measure": 4.13,
+      "growth_breach": {
+        "sample_sec": 23.84,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 16.82,
+        "basis_revision": "5059fa68311f968e07ced06f4415d725672e0af8",
+        "declared_sec": 68.03,
+        "derived_sec": 96.11,
+        "growth_x": 1.4174,
+        "derived_over_declared": 1.4128,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_gate_registration.py": {
-      "budget_sec": 53.47,
-      "margin_x": 4.057,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 13.18,
-      "load_at_measure": 5.69
+      "budget_sec": 91.23,
+      "margin_x": 4.033,
+      "measured_at": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+      "measured_sec": 22.62,
+      "load_at_measure": 3.71
     },
     "tests/test_hq_delegation.py": {
       "budget_sec": 17.87,
@@ -240,7 +276,19 @@
       "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
       "measured_sec": 2.66,
       "load_at_measure": 5.69,
-      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED of three samples, per this manifest's slow-tail rule (#579, ruling n=4460): 289.73 s at ~13:33Z load 5.83, 258.25 s at ~18:45Z load 4.09, 280.218 s. measured_at is RECOVERED, not composed: the ruling recorded no revision, so it is bracketed from the reflog -- c5327536 was the tree state from 13:20:27Z (ff-merge origin/main) to 14:37:48Z (af9858ae), the only window containing ~13:33Z, and tests/test_ledger_no_shrink.py's blob there is 4ef10d7438808dcaca23fa1176accd6a12e60066, byte-identical to HEAD's, so the measured subject is the file that ships. A fresh 176.024 s run at HEAD (load 0.77, rc=0, /tmp/noshrink-measure.log) CORROBORATES and does NOT re-base: it is a fast sample on a quiet box, and #128/n=823 refuses re-basing on every new maximum."
+      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED of three samples, per this manifest's slow-tail rule (#579, ruling n=4460): 289.73 s at ~13:33Z load 5.83, 258.25 s at ~18:45Z load 4.09, 280.218 s. measured_at is RECOVERED, not composed: the ruling recorded no revision, so it is bracketed from the reflog -- c5327536 was the tree state from 13:20:27Z (ff-merge origin/main) to 14:37:48Z (af9858ae), the only window containing ~13:33Z, and tests/test_ledger_no_shrink.py's blob there is 4ef10d7438808dcaca23fa1176accd6a12e60066, byte-identical to HEAD's, so the measured subject is the file that ships. A fresh 176.024 s run at HEAD (load 0.77, rc=0, /tmp/noshrink-measure.log) CORROBORATES and does NOT re-base: it is a fast sample on a quiet box, and #128/n=823 refuses re-basing on every new maximum.",
+      "growth_breach": {
+        "sample_sec": 3.02,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 2.66,
+        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+        "declared_sec": 11.39,
+        "derived_sec": 12.83,
+        "growth_x": 1.1353,
+        "derived_over_declared": 1.1264,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_ledger_schema.py": {
       "budget_sec": 19.19,
@@ -280,14 +328,38 @@
       "margin_x": 4.088,
       "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
       "measured_sec": 8.57,
-      "load_at_measure": 5.69
+      "load_at_measure": 5.69,
+      "growth_breach": {
+        "sample_sec": 9.99,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 8.57,
+        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+        "declared_sec": 35.03,
+        "derived_sec": 40.71,
+        "growth_x": 1.1657,
+        "derived_over_declared": 1.1621,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_registry.py": {
       "budget_sec": 6.35,
       "margin_x": 4.536,
       "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
       "measured_sec": 1.4,
-      "load_at_measure": 4.13
+      "load_at_measure": 4.13,
+      "growth_breach": {
+        "sample_sec": 1.96,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 1.4,
+        "basis_revision": "5059fa68311f968e07ced06f4415d725672e0af8",
+        "declared_sec": 6.35,
+        "derived_sec": 8.59,
+        "growth_x": 1.4,
+        "derived_over_declared": 1.3528,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_registry_render.py": {
       "budget_sec": 26.99,
@@ -301,20 +373,56 @@
       "margin_x": 4.168,
       "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
       "measured_sec": 4.47,
-      "load_at_measure": 4.13
+      "load_at_measure": 4.13,
+      "growth_breach": {
+        "sample_sec": 4.72,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 4.47,
+        "basis_revision": "5059fa68311f968e07ced06f4415d725672e0af8",
+        "declared_sec": 18.63,
+        "derived_sec": 19.63,
+        "growth_x": 1.0559,
+        "derived_over_declared": 1.0537,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_rework_declared_landed.py": {
       "budget_sec": 5.47,
       "margin_x": 4.636,
       "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
       "measured_sec": 1.18,
-      "load_at_measure": 5.69
+      "load_at_measure": 5.69,
+      "growth_breach": {
+        "sample_sec": 1.85,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 1.18,
+        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+        "declared_sec": 5.47,
+        "derived_sec": 8.15,
+        "growth_x": 1.5678,
+        "derived_over_declared": 1.4899,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_rework_relative_revision.py": {
       "budget_sec": 3.07,
       "margin_x": 5.293,
       "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 0.58
+      "measured_sec": 0.58,
+      "growth_breach": {
+        "sample_sec": 1.15,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 0.58,
+        "basis_revision": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
+        "declared_sec": 3.07,
+        "derived_sec": 5.35,
+        "growth_x": 1.9828,
+        "derived_over_declared": 1.7427,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_roadmap_transition.py": {
       "budget_sec": 11.99,
@@ -353,7 +461,19 @@
       "margin_x": 4.062,
       "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
       "measured_sec": 12.07,
-      "load_at_measure": 5.69
+      "load_at_measure": 5.69,
+      "growth_breach": {
+        "sample_sec": 12.57,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 12.07,
+        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+        "declared_sec": 49.03,
+        "derived_sec": 51.03,
+        "growth_x": 1.0414,
+        "derived_over_declared": 1.0408,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_subject_form.py": {
       "budget_sec": 28.91,
@@ -373,21 +493,45 @@
       "margin_x": 4.037,
       "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
       "measured_sec": 20.27,
-      "load_at_measure": 5.69
+      "load_at_measure": 5.69,
+      "growth_breach": {
+        "sample_sec": 30.42,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 20.27,
+        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+        "declared_sec": 81.83,
+        "derived_sec": 122.43,
+        "growth_x": 1.5007,
+        "derived_over_declared": 1.4962,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_template_integrity.py": {
       "budget_sec": 15.03,
       "margin_x": 4.21,
       "measured_at": "f6709eb62fca3d039722501cd39f760e8ba5028f",
       "measured_sec": 3.57,
-      "load_at_measure": 7.19
+      "load_at_measure": 7.19,
+      "growth_breach": {
+        "sample_sec": 4.01,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 3.57,
+        "basis_revision": "f6709eb62fca3d039722501cd39f760e8ba5028f",
+        "declared_sec": 15.03,
+        "derived_sec": 16.79,
+        "growth_x": 1.1232,
+        "derived_over_declared": 1.1171,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_template_sync.py": {
-      "budget_sec": 14.47,
-      "margin_x": 4.219,
-      "measured_at": "4f3192c462cef02a29ba59b05e6bb206c02cb25c",
-      "measured_sec": 3.43,
-      "load_at_measure": 10.93
+      "budget_sec": 9.59,
+      "margin_x": 4.339,
+      "measured_at": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+      "measured_sec": 2.21,
+      "load_at_measure": 3.71
     },
     "tools/hygiene.py": {
       "budget_sec": 29.67,
@@ -401,7 +545,19 @@
       "margin_x": 4.223,
       "measured_at": "25344213fb851e1d345474ac7ca0adb983ccff12",
       "measured_sec": 3.36,
-      "load_at_measure": 2.92
+      "load_at_measure": 2.92,
+      "growth_breach": {
+        "sample_sec": 6.06,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 3.36,
+        "basis_revision": "25344213fb851e1d345474ac7ca0adb983ccff12",
+        "declared_sec": 14.19,
+        "derived_sec": 24.99,
+        "growth_x": 1.8036,
+        "derived_over_declared": 1.7611,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tools/roadmap.py": {
       "budget_sec": 2.47,
@@ -421,7 +577,19 @@
       "measured_sec": 0.61,
       "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
       "margin_x": 5.23,
-      "load_at_measure": 5.69
+      "load_at_measure": 5.69,
+      "growth_breach": {
+        "sample_sec": 0.67,
+        "sample_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 0.61,
+        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+        "declared_sec": 3.19,
+        "derived_sec": 3.43,
+        "growth_x": 1.0984,
+        "derived_over_declared": 1.0752,
+        "round_id": "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "reported_at": "2026-11-02T09:38:03Z"
+      }
     },
     "tests/test_questions.py": {
       "budget_sec": 3373.43,
