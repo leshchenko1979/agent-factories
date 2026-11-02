@@ -1281,9 +1281,61 @@ def render_status_line(verdict: GateVerdict) -> str:
 PR_SET_PDEATHSIG = 1
 
 # The whole-run in-flight guard's lock, and its refusal exit code (issue #145, ruling
-# n=940 Q2). The lock sits at the repo root and is covered by `.gitignore`'s `.*.lock`
-# rule, the same idiom `.ledger.lock` and `.insights.lock` already use.
-AUDIT_LOCK = REPO_ROOT / ".audit.lock"
+# n=940 Q2). SCOPE (#597, ruling n=4608): the lock's identity is the REPOSITORY, never the
+# CHECKOUT. It resolves into the git COMMON dir, which every linked worktree of one
+# repository shares, because a lock anchored at the worktree root is a lock per checkout:
+# this repository had 31 worktrees when the defect was measured and each carried its own
+# `.audit.lock`, so three peer audit suites ran in one window (loadavg peaking 47.18) while
+# the guard that exists to prevent exactly that prevented nothing.
+def git_common_dir(repo_root: Path) -> Path | None:
+    """The repository's COMMON git dir — ONE path from every linked worktree, else None.
+
+    `--path-format=absolute` is load-bearing rather than tidy: without it the main checkout
+    answers the RELATIVE string `.git` while a linked worktree answers an absolute path, so
+    two callers resolving the same repository would still not agree on a file. The naive
+    form is driven and shown to differ in `tests/test_patrol_host_state.py`'s
+    `git_common_dir` probe; this one resolves, so both worktrees land on one path.
+
+    None means git could not answer: no repository, no git binary, a scratch fixture. The
+    caller decides the fallback — this function never guesses one, because a guessed anchor
+    is a lock two callers can disagree about.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    common = Path(proc.stdout.strip())
+    return common if common.is_dir() else None
+
+def run_lock_path(repo_root: Path = REPO_ROOT) -> Path:
+    """Where the whole-run lock lives: the git COMMON dir, else the worktree root.
+
+    THE UNIT IS THE RUN, AND ITS BOUNDARY IS THE REPOSITORY (#597). `REPO_ROOT` is the
+    WORKTREE this copy of the tool sits in, so a lock anchored there is a lock per checkout.
+    A per-checkout lock does not weaken the guard, it DELETES it: every worktree acquires a
+    different file and every run succeeds. So the anchor is the common dir, which is the
+    first surface all the worktrees of a repository already share.
+
+    THE FALLBACK IS THE WORKTREE ROOT, and it is not an error path. With no repository
+    there is no other checkout to serialize against, so a per-checkout lock is the whole
+    population rather than a hole in it — and unlike `tools/ledger.py`'s fail-open (whose
+    anchor is the ledger's own directory because `<repo>/.git` is absent in exactly the
+    case that reaches it) the tool's own root always exists here. Two anchors are therefore
+    possible and the reader is told which one it got: `acquire_run_lock` names the resolved
+    path in every message it prints.
+    """
+    common = git_common_dir(repo_root)
+    return (common if common is not None else repo_root) / ".audit.lock"
+
+AUDIT_LOCK = run_lock_path()
 LOCK_HELD_EXIT_CODE = 3
 
 def _orphan_guard() -> Callable[[], None]:

@@ -43,6 +43,17 @@ already satisfied, so they proceed without taking it themselves. The probe
 `probe_the_lock_acquisition_is_non_blocking` is the regression probe, driven in a CHILD
 process because a blocking call in this one would hang the gate rather than fail it.
 
+THE LOCK'S SCOPE IS THE REPOSITORY, NOT THE CHECKOUT (#597, ruling n=4608). The anchor is
+resolved through `git rev-parse --path-format=absolute --git-common-dir`, so every linked
+worktree of one repository contends for ONE file. This was a live defect, not a hypothesis:
+`AUDIT_LOCK` was `REPO_ROOT / ".audit.lock"` — the WORKTREE root — and with 31 worktrees in
+this repository each carried its own lock, so three peer audit suites ran inside one window
+(loadavg peaking 47.18) while the guard ruling n=940 established serialized nothing. The
+probes drive that property from TWO worktrees of one throwaway repository in both directions,
+with the same-worktree self-exclusion as the positive control: a cross-worktree probe alone
+would pass for the wrong reason if nothing flocked the shared file, and the control is the
+thing that can fail.
+
 WHAT THIS GATE DOES NOT CLAIM. A per-repo lock cannot bound the ops cgroup. The cgroup is
 shared ACROSS repositories and at least three other repositories run the same template
 audit inside it (ai-antispam, inferhub-watch, vds-servers), each with its own lock. The
@@ -58,6 +69,7 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -142,6 +154,59 @@ def _throwaway_repo(root: Path) -> Path:
         shutil.copytree(REPO / sub, root / sub)
     return root
 
+def _audit_module():
+    """`tools/audit.py` as a module, so a probe reads the tool's OWN resolution.
+
+    The lock path is a RESOLUTION, never a constant a gate may restate: a test that hardcoded
+    `.audit.lock` at the worktree root would keep passing after the anchor moved, which is the
+    presence-instead-of-behaviour shape this gate exists to refuse. Imported once and cached —
+    the module is constants and functions, and `spec_from_file_location` re-execs it per call.
+    """
+    global _AUDIT_MOD
+    if _AUDIT_MOD is None:
+        spec = importlib.util.spec_from_file_location("audit_under_gate_597", AUDIT)
+        mod = importlib.util.module_from_spec(spec)
+        # Registered BEFORE exec, not after: `@dataclass` resolves its own module through
+        # `sys.modules[cls.__module__]`, so an unregistered module raises AttributeError on
+        # the first dataclass in the file and the probe dies before it can judge anything.
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)
+        _AUDIT_MOD = mod
+    return _AUDIT_MOD
+
+_AUDIT_MOD = None
+
+def _lock_path(repo: Path) -> Path:
+    """The run lock `tools/audit.py` resolves for `repo` — read from the tool, not restated."""
+    return _audit_module().run_lock_path(repo)
+
+def _throwaway_git_repo(root: Path) -> tuple[Path, Path]:
+    """A throwaway REPOSITORY with two linked worktrees: `(main, linked)`.
+
+    A throwaway rather than a worktree of THIS repository, deliberately: the probe must not
+    mutate the shared `.git/worktrees` of the tree it runs in, and a second checkout needs no
+    history — one commit is enough for `git worktree add`.
+
+    `tools/` and `evidence/` are copied from this tree, so each checkout carries a runnable
+    `audit.py` whose `REPO_ROOT` is ITS OWN root. That is the whole point of the fixture: two
+    different roots, one repository.
+    """
+    repo = _throwaway_repo(root / "main")
+    git = ["git", "-c", "user.email=gate@example.invalid", "-c", "user.name=gate"]
+    subprocess.run([*git, "init", "-q"], cwd=repo, check=True, capture_output=True)
+    subprocess.run([*git, "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(
+        [*git, "commit", "-qm", "fixture"], cwd=repo, check=True, capture_output=True
+    )
+    linked = root / "linked"
+    subprocess.run(
+        [*git, "worktree", "add", "-q", str(linked), "HEAD"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+    return repo, linked
+
 def _ledger_identity(repo: Path) -> tuple[int, str]:
     """`(row count, md5)` of the repo's ledger — the pair a write would move."""
     ledger = repo / "evidence" / "ledger.jsonl"
@@ -156,7 +221,7 @@ def probe_the_guard_refuses_a_second_run() -> str:
     code, stderr names the lock, stdout carries no payload (no verdict was taken), and
     the whole thing returns in seconds where a real run takes minutes.
     """
-    lock = REPO / ".audit.lock"
+    lock = _lock_path(REPO)
     handle = _hold_lock(lock)
     try:
         rc, out, err, elapsed = _run_audit(REPO, "--json", timeout=60)
@@ -181,7 +246,7 @@ def probe_the_guard_is_exempt_under_no_gates() -> str:
     `audit.py --json --no-gates`, asserting rc==0 — so a guard applied to that path makes
     the outer run's own gate red.
     """
-    lock = REPO / ".audit.lock"
+    lock = _lock_path(REPO)
     handle = _hold_lock(lock)
     try:
         rc, out, err, elapsed = _run_audit(REPO, "--json", "--no-gates", timeout=90)
@@ -207,7 +272,7 @@ def probe_the_refusal_writes_no_run_row() -> str:
     with tempfile.TemporaryDirectory() as tmp:
         repo = _throwaway_repo(Path(tmp))
         before_rows, before_md5 = _ledger_identity(repo)
-        handle = _hold_lock(repo / ".audit.lock")
+        handle = _hold_lock(_lock_path(repo))
         try:
             rc, out, err, _ = _run_audit(repo, "--json", timeout=60)
         finally:
@@ -357,11 +422,11 @@ def probe_the_lock_acquisition_is_non_blocking() -> str:
 import sys
 sys.path.insert(0, {str(REPO / "tests")!r})
 import test_audit_inflight_guard as G
-h1 = G._hold_lock(G.REPO / ".audit.lock")
+h1 = G._hold_lock(G._lock_path(G.REPO))
 if h1 is None:
     print("OUTER")
     sys.exit(0)
-h2 = G._hold_lock(G.REPO / ".audit.lock")
+h2 = G._hold_lock(G._lock_path(G.REPO))
 print("NONE" if h2 is None else "UNEXPECTED")
 """
     try:
@@ -387,6 +452,122 @@ print("NONE" if h2 is None else "UNEXPECTED")
         return "the enclosing run holds the lock; the second acquisition returned rather than blocked"
     return "a second acquisition returned None immediately instead of blocking"
 
+def probe_the_lock_resolves_to_the_git_common_dir() -> str:
+    """(#597) ONE lock per REPOSITORY — and the anchor is a RESOLUTION, driven both ways.
+
+    Two facts, and the second is what makes the first a measurement rather than a reading:
+    two worktrees of one repository resolve to the SAME path, and that path sits in the git
+    COMMON dir; then the resolver is driven on a directory that is in NO repository, where it
+    must fall back to that directory. Without the fallback leg a constant and a resolver are
+    indistinguishable — the happy path alone cannot tell them apart.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        main, linked = _throwaway_git_repo(root)
+        module = _audit_module()
+        p_main, p_linked = _lock_path(main), _lock_path(linked)
+        common = module.git_common_dir(main)
+        assert common is not None, (
+            f"the fixture at {main} is a git repository, so its common dir must resolve"
+        )
+        assert main != linked, "the fixture's two worktrees must be DIFFERENT roots"
+        assert p_main == p_linked, (
+            f"two worktrees of ONE repository must resolve to one lock; got {p_main} and "
+            f"{p_linked} — a per-checkout lock is the defect this gate exists for"
+        )
+        assert p_main.parent == common, (
+            f"the lock must sit in the git COMMON dir {common}, got {p_main}"
+        )
+        assert p_main != main / ".audit.lock", (
+            "the resolved path must NOT be the worktree root's `.audit.lock` — that anchor is "
+            "the defect (#597): 31 worktrees, 31 locks, no serialization"
+        )
+        outside = root / "not-a-repository"
+        outside.mkdir()
+        assert module.git_common_dir(outside) is None, (
+            f"{outside} is in no repository, so git must not answer a common dir for it — the "
+            f"fallback leg below would otherwise prove nothing"
+        )
+        assert _lock_path(outside) == outside / ".audit.lock", (
+            "with no repository the anchor must fall back to the directory itself: there is no "
+            "second checkout to serialize against, so a per-checkout lock is the population"
+        )
+        return (
+            f"two worktrees resolve to one lock in the common dir ({common.name}), and a "
+            f"directory in no repository falls back to its own root"
+        )
+
+def probe_two_worktrees_of_one_repository_CONTEND_for_ONE_lock() -> str:
+    """(#597) THE PROBE THAT BITES: a run in one worktree refuses while a peer holds it.
+
+    Driven in BOTH directions — main holds / linked runs, then linked holds / main runs —
+    because one direction cannot distinguish "the lock is shared" from "the linked copy
+    happened to take the main copy's file".
+
+    It bites by construction: under the worktree-scoped anchor this defect shipped with, each
+    run takes its OWN `.audit.lock`, no contention exists, and the second run returns 0
+    instead of LOCK_HELD_EXIT_CODE. Measured live before the fix: 31 worktrees, one lock
+    file each, three peer suites in one window.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        main, linked = _throwaway_git_repo(Path(tmp))
+        results = []
+        for holder, runner in ((main, linked), (linked, main)):
+            handle = _hold_lock(_lock_path(holder))
+            assert handle is not None, (
+                f"the throwaway lock at {_lock_path(holder)} must be FREE — a None here means "
+                f"the acquisition is broken, not that a peer holds it"
+            )
+            try:
+                rc, out, err, elapsed = _run_audit(runner, "--json", timeout=60)
+            finally:
+                _release(handle)
+            assert rc == LOCK_HELD_EXIT_CODE, (
+                f"a run in {runner.name} must REFUSE while {holder.name} holds the run lock "
+                f"(exit {LOCK_HELD_EXIT_CODE}), got rc={rc} — the two worktrees took different "
+                f"locks. stdout {out[:120]!r}, stderr {err.strip()[:200]!r}"
+            )
+            assert "audit in-flight guard" in err, (
+                f"the cross-worktree refusal must be the guard's own, named on stderr; got "
+                f"{err.strip()[:200]!r}"
+            )
+            results.append(f"{holder.name} holds -> {runner.name} refused in {elapsed:.2f}s")
+        return "; ".join(results)
+
+def probe_the_same_worktree_still_excludes_itself() -> str:
+    """(#597) POSITIVE CONTROL: one worktree still excludes a second run of itself.
+
+    Without this the cross-worktree probe could pass for the wrong reason — two roots agreeing
+    on a path that nothing actually flocks. Here the SECOND acquisition in the SAME worktree
+    must return None, and releasing the first must free the lock again (otherwise the control
+    proves a dead holder, not an exclusion).
+
+    Driven on a throwaway repository so the enclosing audit's hold on THIS repository's lock
+    cannot turn the control into a tautology.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        main, _linked = _throwaway_git_repo(Path(tmp))
+        path = _lock_path(main)
+        first = _hold_lock(path)
+        assert first is not None, f"the throwaway lock at {path} must be free at the start"
+        try:
+            second = _hold_lock(path)
+            assert second is None, (
+                "a second acquisition in the SAME worktree must be refused — the lock no longer "
+                "excludes itself, so the cross-worktree probe would prove nothing"
+            )
+        finally:
+            _release(first)
+        third = _hold_lock(path)
+        try:
+            assert third is not None, (
+                "releasing the first holder must free the lock — otherwise the exclusion above "
+                "is a stale file rather than a live flock"
+            )
+        finally:
+            _release(third)
+        return f"same-worktree exclusion holds at {path.name}, and release frees it"
+
 PROBES = (
     ("(a) whole-run scope", probe_the_guard_is_whole_run),
     ("(a) recursion case — exempt under --no-gates", probe_the_guard_is_exempt_under_no_gates),
@@ -395,6 +576,9 @@ PROBES = (
     ("(b) the exit code is distinct", probe_the_exit_code_is_distinct),
     ("(d) the orphan property, control-paired", probe_the_orphan_property_control_paired),
     ("(e) the acquisition is non-blocking", probe_the_lock_acquisition_is_non_blocking),
+    ("(f) the lock's scope is the REPOSITORY (#597)", probe_the_lock_resolves_to_the_git_common_dir),
+    ("(f) two worktrees contend for ONE lock (#597)", probe_two_worktrees_of_one_repository_CONTEND_for_ONE_lock),
+    ("(f) positive control — one worktree excludes itself (#597)", probe_the_same_worktree_still_excludes_itself),
     ("registration and pairing", probe_the_gate_is_registered_and_paired),
 )
 
