@@ -321,6 +321,12 @@
         "derived_over_declared": 1.0538,
         "round_id": "2026-10-29:d32e41958f2f5a45358de75eb4a309a787a01c6a",
         "reported_at": "2026-10-29T06:49:57Z"
+      },
+      "wall_kills": {
+        "rounds": [
+          "2026-11-02:bc51b74f1387200ea5380a106dbe171fc16c27c4"
+        ],
+        "recorded_at": "2026-11-02T13:06:20Z"
       }
     },
     "tests/test_reconstructed_claim_declared.py": {
