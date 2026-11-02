@@ -202,11 +202,21 @@ DEFAULT_TTL_DAYS = 7
 
 # The issue tracker the mechanical-closure check (C6) asks whether the thing a
 # question was about has moved. The answer is never inferred from prose, so the
-# tracker has to be NAMED -- and which tracker is a FACTORY PARAMETER, not a law:
-# a factory that files its work units elsewhere gets no answer from this repo's
-# tracker. Overridable per factory; the default is THIS factory's own tracker
-# (two-stream routing, SKILL.md; owner order 2026-10-03, superseded 2026-10-09).
-FORK_REPO = os.environ.get("OC_QUESTIONS_TRACKER") or "leshchenko1979/opencrabs"
+# board has to be NAMED -- and WHICH board is a property of the QUESTION, never
+# of this tool (#59). The register is SHARED by every factory, so a single
+# default resolves one factory's `#N` against another factory's tracker and
+# closes a live owner decision on an unrelated, long-closed issue. Measured
+# 2026-11-02: ai-antispam/q19 names `#123`, which is CLOSED on the opencrabs
+# fork and OPEN on ai-antispam's own board. Resolution order, most specific
+# first:
+#   1. an explicit `owner/repo#N` in the question's own text;
+#   2. a `repo` field on the question, else on its set;
+#   3. OC_QUESTIONS_TRACKER -- an operator's explicit declaration;
+#   4. the set's factory key -> registry/fleet.json -> that repo's git origin.
+# Nothing resolves => SKIP. An unreadable predicate never closes a question,
+# and neither does an unresolvable board.
+QUALIFIED_ISSUE_RE = re.compile(
+    r"([A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*)#(\d{1,6})\b")
 ISSUE_RE = re.compile(r"#(\d{1,6})\b")
 # Every network or shell predicate is bounded. An unbounded probe inside a
 # register mutation would stall the caller's turn, which is the failure the
@@ -433,6 +443,29 @@ def load_fleet():
                               str(record.get("display_name") or slug)))
         if fleet:
             return fleet
+    return []
+
+def load_fleet_records():
+    """The raw records of the manifest `load_fleet` selected, else [].
+
+    Same file, same choice. A caller that needs a field `load_fleet` does not
+    project -- a factory's repo PATH, which is what turns a set's factory key
+    into the board its `#N` names (#59) -- must read the SAME declaration,
+    never a second guess at which manifest is authoritative."""
+    for path in _fleet_manifest_candidates():
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        records = data.get("factories") if isinstance(data, dict) else None
+        if not isinstance(records, list):
+            continue
+        usable = [r for r in records if isinstance(r, dict)
+                  and str(r.get("slug") or "").strip()
+                  and r.get("chat_id") is not None]
+        if usable:
+            return usable
     return []
 
 def session_chat_id(session):
@@ -873,12 +906,62 @@ def question_is_closed(question):
     return question.get("status") in CLOSED_STATUSES
 
 
-def fork_issue_state(number):
+def _git_origin_slug(path):
+    """('owner/repo', None) for a local checkout's origin, or (None, reason).
+
+    A fleet record names its factory's repo as a PATH on this box, not as a
+    GitHub slug, so the board is READ off the checkout that declares it rather
+    than restated in a second place that would drift (#59)."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", path, "remote", "get-url", "origin"],
+            capture_output=True, text=True, timeout=PREDICATE_TIMEOUT)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, "git unavailable (%s)" % exc.__class__.__name__
+    if proc.returncode != 0:
+        return None, "no readable origin at %s" % path
+    url = (proc.stdout or "").strip()
+    match = re.search(r"[:/]([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?/?$", url)
+    if not match:
+        return None, "origin url unparseable (%s)" % url
+    return "%s/%s" % (match.group(1), match.group(2)), None
+
+def resolve_board(entry, question):
+    """(repo, why) -- the tracker THIS question's `#N` names, or a reason.
+
+    Never guesses, and never falls back to a fleet-wide default: the register is
+    shared by every factory, so a wrong board does not merely fail -- it closes a
+    live owner decision against an unrelated issue (#59, measured 2026-11-02:
+    ai-antispam/q19's `#123` is CLOSED on the opencrabs fork and OPEN on
+    ai-antispam's own board). An unresolvable board is reported as a SKIP, the
+    same failure mode as an unreadable probe."""
+    for holder in (question, entry):
+        declared = str((holder or {}).get("repo") or "").strip()
+        if declared:
+            return declared, None
+    override = os.environ.get("OC_QUESTIONS_TRACKER")
+    if override:
+        return override, None
+    slug = str((entry or {}).get("factory") or (entry or {}).get("id") or "").strip()
+    if not slug:
+        return None, "the set declares no factory"
+    for record in load_fleet_records():
+        if str(record.get("slug") or "").strip() != slug:
+            continue
+        declared = str(record.get("repo") or "").strip()
+        if not declared:
+            return None, "fleet record %r declares no repo" % slug
+        if declared.startswith("/"):
+            return _git_origin_slug(declared)
+        return declared, None
+    return None, "factory %r is not in the fleet manifest" % slug
+
+def fork_issue_state(number, repo):
     """('OPEN'|'CLOSED', None) or (None, reason). NEVER guesses: an unreadable
     probe yields a reason, and the caller reports a SKIP rather than closing."""
     try:
         proc = subprocess.run(
-            ["gh", "issue", "view", str(number), "--repo", FORK_REPO,
+            ["gh", "issue", "view", str(number), "--repo", repo,
              "--json", "state"],
             capture_output=True, text=True, timeout=PREDICATE_TIMEOUT)
     except (OSError, subprocess.SubprocessError) as exc:
@@ -915,15 +998,22 @@ def mechanical_close(entry, question):
     blob = " ".join(str(x) for x in (
         question.get("title"), question.get("description"), entry.get("subject"))
         if x)
-    match = ISSUE_RE.search(blob)
-    if not match:
-        return None, None
-    number = match.group(1)
-    state, why = fork_issue_state(number)
+    qualified = QUALIFIED_ISSUE_RE.search(blob)
+    if qualified:
+        board, number = qualified.group(1), qualified.group(2)
+    else:
+        match = ISSUE_RE.search(blob)
+        if not match:
+            return None, None
+        number = match.group(1)
+        board, why = resolve_board(entry, question)
+        if not board:
+            return None, "issue-state SKIPPED (#%s: %s)" % (number, why)
+    state, why = fork_issue_state(number, board)
     if why:
-        return None, "issue-state SKIPPED (#%s: %s)" % (number, why)
+        return None, "issue-state SKIPPED (%s#%s: %s)" % (board, number, why)
     if state == "CLOSED":
-        return "%s#%s is CLOSED" % (FORK_REPO, number), None
+        return "%s#%s is CLOSED" % (board, number), None
     return None, None
 
 
@@ -5560,6 +5650,189 @@ def selftest():
             ck(not question_is_closed({"status": _open}),
                "\u2026while %r still reads NOT closed, so the guard was widened "
                "rather than made to refuse everything" % _open)
+
+        # -- 8f. #59: the board a `#N` names belongs to the QUESTION, not to the
+        # tool. The register is SHARED by every factory, so a hardcoded default
+        # resolves one factory's `#N` against another factory's tracker. Measured
+        # 2026-11-02: ai-antispam/q19's `#123` is CLOSED on the opencrabs fork and
+        # OPEN on ai-antispam's own board, so `gc` would have closed a live owner
+        # decision on an unrelated issue -- permanently, since it is in
+        # CLOSED_STATUSES and clear_answer runs on the same path.
+        #
+        # The fixture `gh` answers from a table and LOGS every query, so these
+        # legs observe WHICH BOARD was asked, not merely the status that followed.
+        # Without that, a predicate that never fires passes the regression leg.
+        _board_repo = os.path.join(root, "member-ai-antispam")
+        os.makedirs(_board_repo, exist_ok=True)
+        for _cmd in (["git", "-C", _board_repo, "init", "-q"],
+                     ["git", "-C", _board_repo, "remote", "add", "origin",
+                      "https://github.com/leshchenko1979/ai-antispam.git"]):
+            subprocess.run(_cmd, capture_output=True, text=True)
+        _not_repo = os.path.join(root, "not-a-git-repo")
+        os.makedirs(_not_repo, exist_ok=True)
+        _gh_dir = os.path.join(root, "bin")
+        os.makedirs(_gh_dir, exist_ok=True)
+        _gh_path = os.path.join(_gh_dir, "gh")
+        with open(_gh_path, "w", encoding="utf-8") as fh:
+            fh.write('''#!/bin/sh
+num=""; repo=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    view) shift; num="${1:-}"; shift ;;
+    --repo) shift; repo="${1:-}"; shift ;;
+    *) shift ;;
+  esac
+done
+[ -n "$num" ] && [ -n "$repo" ] || exit 9
+printf '%s\\n' "$repo#$num" >> "$FIXTURE_GH_LOG"
+state=$(python3 - "$FIXTURE_GH_MAP" "$repo#$num" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        table = json.load(fh)
+except Exception:
+    sys.exit(1)
+value = table.get(sys.argv[2])
+if not value:
+    sys.exit(1)
+print(value)
+PY
+) || exit 1
+printf '{"state": "%s"}\\n' "$state"
+''')
+        os.chmod(_gh_path, 0o755)
+        _gh_map = os.path.join(root, "gh-map.json")
+        with open(_gh_map, "w", encoding="utf-8") as fh:
+            json.dump({"leshchenko1979/opencrabs#123": "CLOSED",
+                       "leshchenko1979/ai-antispam#123": "OPEN",
+                       "leshchenko1979/ai-antispam#9": "CLOSED",
+                       "leshchenko1979/other#7": "CLOSED"}, fh)
+        _gh_log = os.path.join(root, "gh-log.txt")
+        _saved_path = env.get("PATH", "")
+        env["PATH"] = _gh_dir + os.pathsep + _saved_path
+        env["FIXTURE_GH_MAP"] = _gh_map
+        env["FIXTURE_GH_LOG"] = _gh_log
+        # Declare the boards on the SAME manifest the lane legs use: the fleet
+        # file is the declared side, and it is what resolve_board reads.
+        with open(_fleet, encoding="utf-8") as fh:
+            _fleet_data = json.load(fh)
+        _fleet_data["factories"] += [
+            {"slug": "f-board-lane", "display_name": "Board Lane",
+             "chat_id": -1001, "repo": _board_repo},
+            {"slug": "f-board-two", "display_name": "Board Two",
+             "chat_id": -1002, "repo": _board_repo},
+            {"slug": "f-board-four", "display_name": "Board Four",
+             "chat_id": -1003, "repo": _board_repo},
+            {"slug": "f-ghost-lane", "display_name": "Ghost", "chat_id": -1004},
+            {"slug": "f-broken-repo", "display_name": "Broken",
+             "chat_id": -1005, "repo": _not_repo}]
+        with open(_fleet, "w", encoding="utf-8") as fh:
+            json.dump(_fleet_data, fh)
+
+        def _gh_queries():
+            try:
+                with open(_gh_log, encoding="utf-8") as fh:
+                    return [ln.strip() for ln in fh if ln.strip()]
+            except OSError:
+                return []
+
+        # (a) THE REGRESSION. Bare `#123`, OPEN on the question's own board and
+        # CLOSED on the tracker the old hardcoded default pointed at.
+        # --allow-foreign is REQUIRED once a factory is DECLARED: these fixture
+        # lanes are declared so resolve_board can read their `repo`, and the
+        # cross-factory gate (#309) then compares this session's chat against
+        # theirs and refuses. The gate is right; the ask is deliberately
+        # foreign, so it says so rather than the fixture dodging the manifest.
+        rc, out, _ = run("ask", "--factory", "f-board-lane",
+                         "--title", "#123: guest-bot spam",
+                         "--description", "the summoner question",
+                         "--allow-foreign", "#59 board probe", "--json")
+        board_set = json.loads(out)["set"]
+        _before = len(_gh_queries())
+        run("gc", "--json")
+        _asked = _gh_queries()[_before:]
+        ck(get_set(board_set)["questions"][0]["status"] == "open",
+           "a `#N` OPEN on the question's OWN board is NOT closed by a CLOSED "
+           "`#N` on another factory's tracker (#59)")
+        ck("leshchenko1979/ai-antispam#123" in _asked,
+           "\u2026because the predicate asked the SET's board (%r)" % (_asked,))
+        ck("leshchenko1979/opencrabs#123" not in _asked,
+           "\u2026and never queried the tracker that carried a CLOSED #123")
+
+        # (b) THE POSITIVE CONTROL. Without it, a predicate that never fires at
+        # all passes (a) -- the exact shape of a decoration.
+        rc, out, _ = run("ask", "--factory", "f-board-two",
+                         "--title", "#9: same board, now closed",
+                         "--description", "positive control",
+                         "--allow-foreign", "#59 board probe", "--json")
+        pos_set = json.loads(out)["set"]
+        run("gc", "--json")
+        ck(get_set(pos_set)["questions"][0]["status"] == "resolved_mechanically",
+           "\u2026and a `#N` CLOSED on that same board DOES close it, so (a) is "
+           "a reading and not a dead predicate")
+        ck(get_set(pos_set)["questions"][0].get("closed_reason")
+           == "leshchenko1979/ai-antispam#9 is CLOSED",
+           "\u2026with the reason naming the question's own board (%r)"
+           % get_set(pos_set)["questions"][0].get("closed_reason"))
+
+        # (c) NO BOARD, NO CLOSE. Both unresolvable shapes, and neither may
+        # touch a tracker: a guess is not a fallback.
+        # Each lane names a DIFFERENT number, and the assertion is scoped to
+        # that number. A global "nothing was queried" check is a false test:
+        # earlier legs leave their own open questions behind, and every later
+        # `gc` re-probes those legitimately. MEASURED: the first form of this
+        # leg went red on exactly that, three times over.
+        for _fac, _why, _num in (("f-ghost-lane", "declares no repo", "771"),
+                                 ("f-broken-repo", "no readable origin", "772"),
+                                 ("f-absent-lane", "not in the fleet manifest",
+                                  "773")):
+            rc, out, _ = run("ask", "--factory", _fac,
+                             "--title", "#%s: boardless" % _num,
+                             "--description", "d",
+                             "--allow-foreign", "#59 board probe", "--json")
+            _set = json.loads(out)["set"]
+            rc, out, _ = run("gc", "--json")
+            _notes = json.loads(out)["predicate_notes"]
+            ck(get_set(_set)["questions"][0]["status"] == "open",
+               "an UNRESOLVABLE board SKIPS the predicate (%s): the question "
+               "stays open" % _fac)
+            ck(any(_why in n for n in _notes),
+               "\u2026and the skip is REPORTED, not silent (%r)" % (_notes,))
+            ck(not any(("#%s" % _num) in q for q in _gh_queries()),
+               "\u2026and THAT number was never queried on any board (%s#%s)"
+               % (_fac, _num))
+
+        # (d) An explicit `owner/repo#N` outranks the set's board: the text said
+        # which board, so nothing else may override it.
+        rc, out, _ = run("ask", "--factory", "f-board-four",
+                         "--title", "leshchenko1979/other#7 is closed",
+                         "--description", "d",
+                         "--allow-foreign", "#59 board probe", "--json")
+        qual_set = json.loads(out)["set"]
+        _before = len(_gh_queries())
+        run("gc", "--json")
+        _asked = _gh_queries()[_before:]
+        ck(get_set(qual_set)["questions"][0]["status"] == "resolved_mechanically",
+           "an explicit `owner/repo#N` in the question text is honoured (#59)")
+        ck("leshchenko1979/other#7" in _asked,
+           "\u2026and that is the board that was queried (%r)" % (_asked,))
+
+        # (e) The operator's explicit declaration still wins over the derived
+        # board -- the escape hatch the old default was mistaken for.
+        env["OC_QUESTIONS_TRACKER"] = "leshchenko1979/opencrabs"
+        try:
+            rc, out, _ = run("ask", "--factory", "f-board-lane",
+                             "--title", "#123: override", "--description", "d",
+                             "--allow-foreign", "#59 board probe", "--json")
+            ovr_set = json.loads(out)["set"]
+            run("gc", "--json")
+            _ovr = [q for q in get_set(ovr_set)["questions"]
+                    if q.get("title") == "#123: override"]
+            ck(_ovr and _ovr[0]["status"] == "resolved_mechanically",
+               "OC_QUESTIONS_TRACKER still overrides the derived board")
+        finally:
+            env.pop("OC_QUESTIONS_TRACKER", None)
+        env["PATH"] = _saved_path
 
         # -- 9. the LOGGING path, unsuppressed -----------------------------
         # This leg exists because every other leg suppresses the unified log, so
