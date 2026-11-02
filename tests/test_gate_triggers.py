@@ -471,6 +471,12 @@ FIXTURE_RANGE_AUDIT = (
     "\n"
     "def registered_gates(repo_root):\n"
     "    return [cmd for cmd in gates_to_run if gate_key_for_cmd(cmd, repo_root)]\n"
+    "\n"
+    "# #606: the code this runner classifies as a REFUSAL rather than a FAIL. gate_select\n"
+    "# reads it from its OWN sibling audit.py (the vocabulary is the runner's, not the\n"
+    "# judged tree's), so a fixture standing in for that pair must declare it -- without it\n"
+    "# the copied runner refuses to start at all, which reds every arm for the wrong reason.\n"
+    "LOCK_HELD_EXIT_CODE = 3\n"
 )
 
 # TEMPLATE-SYNC SHAPED on purpose: the gate resolves its tree from its own `__file__` and

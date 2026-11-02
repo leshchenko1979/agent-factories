@@ -30,6 +30,7 @@ which tree produced it.
 from __future__ import annotations
 
 import argparse
+import ast
 import fnmatch
 import importlib.util
 import json
@@ -189,6 +190,52 @@ def declared_kill_code() -> int:
     return module.TIMEOUT_EXIT_CODE
 
 TIMEOUT_EXIT_CODE = declared_kill_code()
+
+def declared_lock_held_code() -> int:
+    """The audit's REFUSAL code, READ from `tools/audit.py` (#606).
+
+    A refusal is a THIRD kind of absent verdict, beside a pass and a failure: the run never
+    started, so no gate was measured and nothing about the tree was learned. This runner
+    knew only the kill code, so a refused gate fell into the `rc=<n>` failure bucket and a
+    reader holding the receipt saw a red for a tree no run had opened -- the same
+    mislabelling #544 removed for kills, one code over.
+
+    The value is READ from the file that declares it, never retyped: `tools/audit.py` is a
+    SCRIPT (importing it runs it), so the assignment is taken from its AST. That is the
+    discipline `tests/test_audit_inflight_guard.py` already applies to this same constant,
+    and it is why a moved refusal code cannot leave this runner classifying the old number.
+
+    Read from THIS module's own directory, not from the tree under judgement: the refusal
+    code is a property of the runner's vocabulary, and a clean checkout is not the
+    authority on it. An unreadable declaration is a hard failure rather than a fallback to
+    3, because a classifier that guesses its own vocabulary is how the literal got here.
+    """
+    src = Path(__file__).resolve().parent / Path(AUDIT_RELATIVE).name
+    try:
+        tree = ast.parse(src.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError) as exc:
+        raise SystemExit(
+            f"gate-select: cannot read {Path(AUDIT_RELATIVE).name}, which declares the "
+            f"audit's refusal code; without it a refused run cannot be told from a failed "
+            f"one: {exc}"
+        )
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(
+            isinstance(t, ast.Name) and t.id == "LOCK_HELD_EXIT_CODE" for t in node.targets
+        ):
+            continue
+        if isinstance(node.value, ast.Constant) and isinstance(node.value.value, int):
+            return node.value.value
+        break
+    raise SystemExit(
+        f"gate-select: {Path(AUDIT_RELATIVE).name} declares no integer "
+        f"LOCK_HELD_EXIT_CODE; a refusal whose code cannot be read would be reported as a "
+        f"gate failure."
+    )
+
+LOCK_HELD_EXIT_CODE = declared_lock_held_code()
 
 def declared_budget_table(root: Path) -> tuple[object | None, str]:
     """The declared walls, read ONCE per run, or the reason they could not be.
@@ -559,7 +606,20 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
             break
         if proc is None:
             continue
-        if proc.returncode == TIMEOUT_EXIT_CODE:
+        if proc.returncode == LOCK_HELD_EXIT_CODE:
+            # A REFUSAL IS NOT A FAILURE (#606). The run never started: another audit held
+            # the repository-wide run lock, so this gate measured nothing. It lands in the
+            # SAME bucket a budget kill uses -- an absent verdict, and the run exits with
+            # the fleet's no-verdict code so every existing consumer keeps reading "no
+            # verdict" rather than "red" -- but the LINE names the true class, because
+            # "killed at its budget" would be a false account of a run that never began.
+            no_verdicts.append(
+                f"{gate} — REFUSED, the run never started (exit {proc.returncode}): "
+                f"another audit run held the repository's run lock, so no gate was measured "
+                f"and this one neither passed nor failed. This is not a budget kill: no "
+                f"wall was reached, the run was declined before it opened the tree"
+            )
+        elif proc.returncode == TIMEOUT_EXIT_CODE:
             no_verdicts.append(
                 f"{gate} — killed at its declared budget (exit {proc.returncode}); "
                 f"it neither passed nor failed"

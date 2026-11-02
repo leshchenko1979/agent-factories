@@ -75,6 +75,11 @@ from gate_budget import (  # noqa: E402
     gates_manifest_path,
     load_gate_budgets,
 )
+# The refusal's code has ONE home too (#606): `tools/gate_select.py` reads it from
+# `tools/audit.py`'s own AST, and this gate imports that reader rather than retyping a 3.
+# Two copies of a code a consumer classifies on is the drift class this factory files
+# against itself; the day the tool moves the code, both readers move together.
+from gate_select import LOCK_HELD_EXIT_CODE  # noqa: E402
 SHIPPED = REPO / "TEMPLATE"
 SHIPPED_AUDIT = SHIPPED / "tools" / "audit.py"
 # The declared non-green population: FACTORY DATA, repo-side, in its own file so an entry
@@ -147,7 +152,8 @@ def registered_gates(audit_source: str) -> list[str]:
 
 
 def classify(registered: list[str], absent: set[str], results: dict[str, dict],
-             declared: dict[str, dict], source_of) -> dict[str, list[str]]:
+             declared: dict[str, dict], source_of,
+             lock_held_code: int = LOCK_HELD_EXIT_CODE) -> dict[str, list[str]]:
     """The ONE predicate. Returns {class: [named entries]}.
 
     `results` maps a gate path to its record from the shipped audit's payload. A gate with
@@ -162,7 +168,7 @@ def classify(registered: list[str], absent: set[str], results: dict[str, dict],
     source is a SILENT skip, which is a defect exactly as a FAIL is.
     """
     out: dict[str, list[str]] = {"PASS": [], "STATED SKIP": [], "NAMED ABSENCE": [],
-                                 "NO VERDICT": [], "FAIL": []}
+                                 "NO VERDICT": [], "REFUSED": [], "FAIL": []}
     for path in registered:
         if path in absent:
             out["NAMED ABSENCE"].append(path)
@@ -185,6 +191,17 @@ def classify(registered: list[str], absent: set[str], results: dict[str, dict],
                          f"and a budget kill fails against ANY declaration — the declaration "
                          f"does not make the kill a skip")
             out["NO VERDICT"].append(line)
+            continue
+        # REFUSED — the run was DECLINED before it opened the tree (#606). A third kind of
+        # absent verdict, and its own class rather than a member of NO VERDICT: a kill
+        # reached a wall after measuring, a refusal measured nothing at all. Folding it
+        # into FAIL reported a failure of a tree the run never read, and folding it into
+        # NO VERDICT would lose the distinction the refusal code exists to carry.
+        if rec.get("exit_code") == lock_held_code:
+            out["REFUSED"].append(
+                f"{path} — REFUSED (exit {rec.get('exit_code')}): the run did not start, so "
+                f"nothing was measured and this gate neither passed nor failed"
+            )
             continue
         if rec.get("exit_code") == 0 and not entry:
             out["PASS"].append(path)
@@ -358,6 +375,65 @@ def probes() -> None:
     check("KILL: the class is accounted for even when EMPTY, so 0 is readable as 0",
           clean["NO VERDICT"] == [], "NO VERDICT == []")
 
+    # ---- #606: a REFUSED run is its OWN class, never a FAIL and never a kill -----------
+    #
+    # MEASURED, not inferred: the shipped audit's refusal writes ZERO bytes to stdout and
+    # names the lock holder on stderr. It therefore reached the JSON parse, failed there,
+    # and surfaced as `FAIL ... no readable JSON payload, exit=3` -- a failure of a tree the
+    # run never opened. The class is driven SYNTHETICALLY here for the same reason the kill
+    # probes are: whether a peer holds the lock is a property of the instant, so a probe
+    # reading today's verdict would pass on every quiet day.
+
+    # (1) THE RULING'S OWN CASE. A bare refusal code and nothing else.
+    refused = classify(["tests/r.py"], absent=set(),
+                       results={"tests/r.py": {"exit_code": LOCK_HELD_EXIT_CODE}},
+                       declared={}, source_of=lambda p: "")
+    check("REFUSED: a bare exit 3 is REFUSED, never a FAIL",
+          len(refused["REFUSED"]) == 1 and len(refused["FAIL"]) == 0
+          and len(refused["NO VERDICT"]) == 0,
+          f"REFUSED={len(refused['REFUSED'])} FAIL={len(refused['FAIL'])} "
+          f"NO VERDICT={len(refused['NO VERDICT'])}")
+    check("REFUSED: the verdict NAMES the gate it could not judge, and says nothing was measured",
+          any("tests/r.py" in v and "nothing was measured" in v for v in refused["REFUSED"]),
+          refused["REFUSED"][:1])
+
+    # (2) NEUTER CONTROL — the branch is keyed on the CODE, not on "non-zero". A gate that
+    # exited 1 on its own merits is STILL a FAIL, and one that exited 2 (the budget
+    # manifest's own code) is still a FAIL: neither is absorbed by the new class.
+    for code in (1, 2):
+        other = classify(["tests/f.py"], absent=set(),
+                         results={"tests/f.py": {"exit_code": code, "unknown": False}},
+                         declared={}, source_of=lambda p: "")
+        check(f"REFUSED: a gate that exited {code} on its own merits is STILL a FAIL",
+              len(other["FAIL"]) == 1 and len(other["REFUSED"]) == 0,
+              other["FAIL"][:1])
+
+    # (3) THE CODE IS READ FROM THE CONSTANT, never hard-coded: moving the parameter moves
+    # the class, which is what proves the classifier and the audit agree on ONE number.
+    moved = classify(["tests/r.py"], absent=set(),
+                     results={"tests/r.py": {"exit_code": 7}}, declared={},
+                     source_of=lambda p: "", lock_held_code=7)
+    check("REFUSED: the class follows the declared refusal code, not a literal",
+          len(moved["REFUSED"]) == 1 and len(moved["FAIL"]) == 0, moved["REFUSED"][:1])
+
+    # (4) THE KILL CLASS WINS A CONTRADICTION, and that is deliberate: a record carrying
+    # BOTH flags describes a run that STARTED and hit a wall, which is more information
+    # than a refusal carries. A refusal writes no payload at all, so it cannot set `unknown`.
+    both = classify(["tests/k.py"], absent=set(),
+                    results={"tests/k.py": {"exit_code": LOCK_HELD_EXIT_CODE,
+                                            "unknown": True}},
+                    declared={}, source_of=lambda p: "")
+    check("REFUSED: a record carrying BOTH a kill flag and the refusal code reads as a KILL",
+          len(both["NO VERDICT"]) == 1 and len(both["REFUSED"]) == 0,
+          f"NO VERDICT={len(both['NO VERDICT'])} REFUSED={len(both['REFUSED'])}")
+
+    # (5) THE POPULATION IS PRINTED EVEN AT ZERO, same reason as the kill class.
+    clean_refusal = classify(["tests/a.py"], absent=set(),
+                             results={"tests/a.py": {"exit_code": 0}}, declared={},
+                             source_of=lambda p: "")
+    check("REFUSED: the class is accounted for even when EMPTY, so 0 is readable as 0",
+          clean_refusal["REFUSED"] == [], "REFUSED == []")
+
 
 def budget_controls() -> None:
     """#414: the wall is READ from the manifest, and a kill at it is NO VERDICT, not a FAIL.
@@ -429,6 +505,13 @@ def budget_controls() -> None:
         (root / "tools").mkdir(parents=True)
         (root / "TEMPLATE" / "tools").mkdir(parents=True)
         shutil.copyfile(REPO / "tools" / "gate_budget.py", root / "tools" / "gate_budget.py")
+        # The gate IMPORTS the refusal code rather than retyping it (#606), and the reader
+        # that declares it lives in `tools/gate_select.py` beside `tools/audit.py`. So the
+        # fixture mirrors that layout instead of stubbing the import out: a fixture that
+        # cannot import the gate's own dependencies tests a file that would not run.
+        shutil.copyfile(REPO / "tools" / "gate_select.py", root / "tools" / "gate_select.py")
+        (root / "tools" / "audit.py").write_text(
+            "LOCK_HELD_EXIT_CODE = 3\n", encoding="utf-8")
         # A registration the AST can find, then a sleep longer than the fixture budget.
         (root / "TEMPLATE" / "tools" / "audit.py").write_text(
             "import time\n"
@@ -561,6 +644,22 @@ def main() -> int:
               f"(#{206})")
         del exc
         return TIMEOUT_EXIT_CODE
+    if proc.returncode == LOCK_HELD_EXIT_CODE:
+        # MEASURED, not inferred: a refused run writes ZERO bytes to stdout and names the
+        # holder on stderr, so this branch has to sit BEFORE the payload is parsed -- the
+        # refusal used to surface as `FAIL ... no readable JSON payload, exit=3`, a failure
+        # of a tree the run never opened (#606). The class is named in its own words, and
+        # the code is returned rather than 1, so a caller can tell "did not run" from
+        # "ran and failed".
+        lines = (proc.stderr or "").strip().splitlines()
+        reason = lines[-1][:160] if lines else "no reason was printed"
+        print(f"  REFUSED  the shipped audit did not run — another audit run holds the "
+              f"repository's run lock (exit {LOCK_HELD_EXIT_CODE})")
+        print(f"      no gate was measured and no verdict was taken on this tree: {reason}")
+        print(f"      not counted as a FAIL: exit {LOCK_HELD_EXIT_CODE}, the refusal's own "
+              f"code, distinct from gate-failure 1, budget-manifest 2 and kill "
+              f"{TIMEOUT_EXIT_CODE}")
+        return LOCK_HELD_EXIT_CODE
     try:
         payload = json.loads(proc.stdout)
     except json.JSONDecodeError:
@@ -584,7 +683,7 @@ def main() -> int:
             return ""
 
     got = classify(registered, absent, results, declared, _source_of)
-    for cls in ("PASS", "STATED SKIP", "NAMED ABSENCE", "NO VERDICT", "FAIL"):
+    for cls in ("PASS", "STATED SKIP", "NAMED ABSENCE", "NO VERDICT", "REFUSED", "FAIL"):
         print(f"  {cls}: {len(got[cls])}")
     if got["NAMED ABSENCE"]:
         print("  — NAMED ABSENCE, registered and not carried by this tree:")
@@ -597,6 +696,11 @@ def main() -> int:
     if got["NO VERDICT"]:
         print("  — NO VERDICT, killed at budget (neither a pass nor a failure):")
         for p in got["NO VERDICT"]:
+            print(f"      {p}")
+    if got["REFUSED"]:
+        print("  — REFUSED, the run was declined before it read the tree "
+              "(neither a pass nor a failure):")
+        for p in got["REFUSED"]:
             print(f"      {p}")
     if got["FAIL"]:
         print("  — FAIL:")
@@ -615,9 +719,16 @@ def main() -> int:
         print(f"shipped audit gate FAILED: {len(_failures)} probe failure(s), "
               f"{len(got['FAIL'])} unaccounted verdict(s)")
         return 1
+    if got["REFUSED"]:
+        # A gate the run never measured is not a pass. This arm is unreachable from a real
+        # refusal (the outer branch returns first) and exists so the CLASS cannot be
+        # silently counted as clean if a future payload carries a per-gate refusal record.
+        print(f"shipped audit gate REFUSED: {len(got['REFUSED'])} gate(s) were never "
+              f"measured — the run was declined, so this is neither a pass nor a failure")
+        return LOCK_HELD_EXIT_CODE
     print(f"shipped audit gate passed — {len(registered)} gate(s): {len(got['PASS'])} pass, "
           f"{len(got['STATED SKIP'])} stated skip, {len(got['NAMED ABSENCE'])} named absence, "
-          f"{len(got['NO VERDICT'])} no verdict")
+          f"{len(got['NO VERDICT'])} no verdict, {len(got['REFUSED'])} refused")
     return 0
 
 
