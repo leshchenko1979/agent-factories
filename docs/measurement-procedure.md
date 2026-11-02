@@ -641,6 +641,56 @@ VALUE** — what the suite does with a gate nobody has measured — is a policy 
 held, and an empty population is stated as EMPTY — never silence, so a leg that ran over nothing
 stays distinguishable from one that never ran.
 
+**THE THIRD ROUTE — A LABELLED PROBE SAMPLE, WHEN NO COMPLETED SAMPLE CAN EXIST (`#604`).** The
+two routes above are both closed for one gate class, and a deadlock is the outcome: a gate killed
+at its own declared wall produces `unknown` and **no completed sample**, so **staleness** has no
+fresh sample to re-derive from, while the **trend** clause's exhaustion escape needs an outstanding
+growth breach that a gate going from inside-its-wall to killed in ONE step never recorded. Measured
+on `tests/test_patrol_host_state.py`: 411.65 s organic, a 3.6× per-test cost jump, then `exit 124`
+twice at its 1647.35 s wall — no breach on record, no sample obtainable, `HELD` forever. `#579` is
+the same class on `tests/test_ledger_no_shrink.py`, and it was cleared by a RULING because no
+mechanism existed; a ruling per gate is not a mechanism.
+
+An entry is **PROBE-ELIGIBLE** when all three hold:
+
+- **it reported EXHAUSTED (`unknown`) in N ≥ 2 consecutive rounds** — one kill is contention; two
+  consecutive at a wall the gate previously met is a lockout;
+- **its breach is not OUTSTANDING** — a breach is **OUTSTANDING until the wall has been re-derived
+  past it**, and the marker records the wall it was reported against (`declared_sec`), so an entry
+  whose `budget_sec` DIFFERS from that record has already CONSUMED its breach whatever the marker's
+  presence. This conjunct is load-bearing and must be read exactly so, never as "carries no
+  marker": of the 15 entries carrying a marker on 2026-11-02, 14 are OUTSTANDING and exactly one —
+  `test_patrol_host_state.py`, `budget_sec` 1647.35 against `declared_sec` 1185.31 — is CONSUMED.
+  A marker-presence test would exclude BOTH deadlocked gates and reproduce the deadlock one layer
+  up, inside the mechanism built to break it;
+- **it carries no fresh completed sample** either route above could use.
+
+A probe sample is a **COMPLETED** sample taken OUTSIDE the round: ONE run of the gate's declared
+invocation form, exclusively — no concurrent `audit.py`, no peer gate run — with the wall lifted
+for the probe only, under a declared `probe_ceiling` and a hard cap so a runaway cannot become an
+outage. It is recorded as `probe_sample` beside `probe_ceiling`, the load at start and finish, and
+the concurrent-audit count, because the regime is part of the number: the same gate read **411.65 s**
+organic and **1496 s** on a quiet box, and a figure that does not carry its regime is not evidence
+about another one.
+
+**The probe feeds the EXISTING derivation and is never a bypass.** `margin_x = 4.0 + 0.75 / measured_sec`
+applies to a probe sample exactly as to a round sample, and the wall moves only if that arithmetic
+licenses it — `#602`'s own probe arithmetic, `4.001 × 1496 = 5984.75 s`, is **REFUSED** as an
+outage wearing a budget's clothes. A probe producing an unlicensed number leaves the entry exactly
+where it is, and `registry/gates.json` keeps its ONE writer: the probe is an INPUT, never a second
+write path.
+
+**A probe is never an alternative to a remedy that already works.** Where an OUTSTANDING breach
+exists, the trend clause's CARRIED sample already resolves it and no probe may run.
+
+**Residual, stated rather than hidden:** a wall that moved and later returned to the same number
+reads as OUTSTANDING. It errs toward NOT probing, which is the safe direction.
+
+**The eligible population is PRINTED, and EMPTY is a reading.** `wall_kills` is written from the
+audit report's `unknown` flag on the reporting path, so on the round the record is introduced no
+entry carries it and the population is empty **by construction** — stated as EMPTY, never as
+silence, so a fresh record is never read as a clean bill of health.
+
 **PRECEDENT — this leg DECLARES a practice that already ran.** Commit `ee5d885` (2026-10-02,
 Surveys) re-derived the two bases killed in that day's round on exactly the two triggers that
 fired then (leg A + budget exhaustion; growth did not exist until `#564`), using the manifest's
