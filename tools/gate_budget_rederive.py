@@ -6,7 +6,7 @@ the command it names changes, so staleness is a **standing property of the manif
 a one-off backlog: `#141`, the one-off batch that first cleared the class, is CLOSED while its
 class RECURS. Before this file nothing re-derived the bases on any cadence, so the class was
 reported every round and cleared by nothing. The procedure's declaration is
-`docs/measurement-procedure.md` §5.2; this file is the MECHANICAL half of that declaration,
+`docs/measurement-procedure.md` docs/measurement-procedure.md §5.2; this file is the MECHANICAL half of that declaration,
 and it exists so the leg is an invocation rather than a paragraph.
 
 WHAT IT READS, AND FROM WHERE. The containment population comes from the manifest's OWN
@@ -80,7 +80,12 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
+import os
+import shlex
+import signal
+import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -92,6 +97,12 @@ from gate_budget import (  # noqa: E402
     load_gate_budgets,
     margin_for,
 )
+# THE ONE REGISTRATION READER, IMPORTED RATHER THAN RE-DERIVED (#604). A second
+# `gates_to_run.append(...)` scan would be the drift class this factory files against itself:
+# the probe must run the gate the way the AUDIT runs it, and the audit's registration is the
+# only surface that says so. `gate_budget` already owns that reader; copying it here would
+# give the probe its own opinion of the command.
+from gate_budget import _registration_reader  # noqa: E402
 
 EXIT_VACUOUS = 2
 EXIT_REFUSED = 3
@@ -111,6 +122,56 @@ EXIT_REFUSED = 3
 # reads it back. A lane's memory is never the store: a fresh process, on a fresh box, in a
 # fresh clone, reaches the same verdict from these two files alone.
 GROWTH_MARKER = "growth_breach"
+
+# THE WALL-KILL RECORD, AND THE DEADLOCK IT BREAKS (#604). A gate killed at its own declared
+# wall produces `unknown: true` and NO sample, so the ordinary re-derivation can never fire:
+# the stale basis refuses (no fresh sample) and the wall refuses to produce one. Two
+# consecutive rounds of that and the entry is locked out of its own budget -- `HELD` forever,
+# with no lane told why. The record below is the DURABLE half of the escape, and it lives in
+# the ENTRY for the same reason `growth_breach` does: a report is one round, so "consecutive"
+# is only computable from a surface that outlives it. Written from the audit's own `unknown`
+# flag on the REPORTING path, with or without `--apply`, and cleared the moment the gate
+# COMPLETES (passing or failing) because a completed run breaks the streak by definition.
+WALL_KILLS = "wall_kills"
+# How many round identities the record keeps. A streak longer than this is still eligible;
+# the count is what the reader needs, not the archaeology.
+WALL_KILLS_KEEP = 5
+
+# THE PROBE, AND ITS TWO BOUNDS (#604). A probe exists to obtain ONE completed sample for a
+# gate the declared wall will not let finish. It is NOT a licence to raise a wall: the sample
+# is fed to the ORDINARY derivation, which then has to license the number it produces.
+#
+# `PROBE_CEILING_FACTOR` is the envelope the probe may run in -- twice the declared wall. The
+# measured case it is sized against (#602) needed 1496 s against a 1647.35 s declared wall,
+# i.e. 0.91x, so 2x is ample for the class this serves.
+#
+# `PROBE_HARD_CAP_SEC` is absolute, so a wedged gate cannot turn a probe into an outage: no
+# single probe runs past an hour, whatever its declared wall.
+PROBE_CEILING_FACTOR = 2.0
+PROBE_HARD_CAP_SEC = 3600.0
+# The DECLARED fields a probe sample carries, so a machine reader -- never prose -- can tell
+# it from an organic round sample. The regime travels with the number: a performance figure
+# measured on a quiet box says nothing about the same gate on a loaded one.
+PROBE_SAMPLE_FIELD = "probe_sample"
+PROBE_REGIME_FIELD = "probe_regime"
+# A REFUSED probe is recorded too, with the gate's blob at refusal time. A refusal is not a
+# failure to report and re-run: probing a 25-minute gate every round to re-learn the same
+# arithmetic is the cost this record removes, and the blob is what re-arms it when the gate
+# itself changes (the #602 remedy is a SPLIT, which moves the blob).
+PROBE_REFUSED_FIELD = "probe_refused"
+# Whether the kill record was READ at all. An empty record and an unreadable manifest are
+# the same value and different facts, so the renderer is given the distinction rather than
+# left to infer it from an empty tuple.
+WALL_KILLS_READ = "wall_kills_read"
+# WHERE the kill record came from. THREE states, and collapsing them is the #595
+# ordering lie in this leg: a record nobody read, a record that was read but not
+# ADVANCED this round (no audit report), and a record advanced by a real round. The
+# first two produce an empty tuple and so does a genuinely clean third, so the state
+# is carried rather than re-derived at the render.
+WALL_KILLS_SOURCE = "wall_kills_source"
+KILL_SOURCE_UNREAD = "unread"
+KILL_SOURCE_NO_AUDIT = "no-audit"
+KILL_SOURCE_ROUND = "round"
 
 @dataclass(frozen=True)
 class Growth:
@@ -135,6 +196,66 @@ class Growth:
     sample_revision: str | None = None
     carried: bool = False
     also_unknown: bool = False
+
+@dataclass(frozen=True)
+class WallKill:
+    """One gate's record of being killed at its own declared wall, round after round.
+
+    `rounds` are the audit reports' own identities (`date:head_sha`), newest LAST, deduplicated
+    and capped. `consecutive` is their count: every entry in the list came from a round in
+    which the gate was reported UNKNOWN, and a completed run CLEARS the list, so the count is
+    an unbroken streak by construction rather than by assertion.
+
+    `eligible` is `consecutive >= 2`. ONE kill is contention -- a loaded box, a peer's suite --
+    and a mechanism that fired on it would probe every gate that ever got unlucky. Two
+    consecutive kills at a wall the gate previously met is a LOCKOUT: the wall itself is what
+    prevents the sample that would move it (#604).
+    """
+
+    key: str
+    rounds: tuple
+    consecutive: int
+    declared_sec: float
+    eligible: bool
+    why: str = ""
+    # Whether a growth breach is still outstanding on this entry. Carried so the render can
+    # say WHICH conjunct refused, rather than leaving a reader to re-derive it from the wall.
+    outstanding_breach: bool = False
+
+@dataclass(frozen=True)
+class ProbeSample:
+    """One quiet-box probe: the sample it produced, and the regime it was taken in.
+
+    `taken` is False when the probe did not run at all, and `why` says which of the three
+    lawful refusals applied -- no registered invocation, a box that is not quiet, or a
+    refusal already recorded against the SAME gate blob. An instrument that cannot observe
+    its own failure class proves nothing, so a probe that did not run is REPORTED rather than
+    omitted: "no sample" and "never tried" are different facts with the same shape.
+
+    `licensed` is the derivation's verdict on the number, never the probe's: a sample is an
+    INPUT to docs/measurement-procedure.md §5.2, and the wall moves only if `margin_for(sample) x sample` fits under the
+    HARD CAP. That bound is deliberately not the probe ceiling: docs/measurement-procedure.md §5.2 multiplies by ~4, so a
+    gate that finished just past its wall derives a wall several times its sample, and a
+    ceiling-shaped licence would refuse the ordinary re-derivation it exists to produce. The
+    cap refuses the shape that is an OUTAGE rather than a budget (#602: 1496 s licensing
+    5984.75 s), and the entry is then left exactly where it was -- which is the whole
+    difference between this mechanism and raising a wall by feel.
+    """
+
+    key: str
+    invocation: str = ""
+    sample_sec: float | None = None
+    rc: int | None = None
+    ceiling_sec: float = 0.0
+    hard_cap_sec: float = 0.0
+    load_at_start: float | None = None
+    load_at_finish: float | None = None
+    concurrent_audits: int | None = None
+    taken: bool = False
+    why: str = ""
+    derived_sec: float | None = None
+    licensed: bool = False
+    licence_note: str = ""
 
 @dataclass
 class Population:
@@ -171,6 +292,13 @@ class Population:
     # reset by a round INSIDE the wall is a different event from one re-derived because its
     # basis moved.
     cleared: tuple = ()
+    # THE WALL-KILL POPULATION (#604). Deliberately OUTSIDE `keys` and outside
+    # `partition_problems`: a kill is not a fourth containment source, it is a fact ABOUT an
+    # entry already owned by one of the three (usually STALE, since a killed gate's basis is
+    # also refused). Folding it in would double-count every entry it names and break the
+    # breakdown arithmetic #578 made a refusal. `probes` is the same shape one step later.
+    kills: tuple = ()
+    probes: tuple = ()
     note: str = ""
     extras: dict = field(default_factory=dict)
 
@@ -422,7 +550,17 @@ def containment_population(
         note=note,
         extras={"samples": samples, "sample_note": sample_note, "manifest": str(path),
                 "failed_only": failed_only, "sample_revision": sample_revision,
-                "round_id": round_id, "present": present},
+                "round_id": round_id, "present": present,
+                # THE RAW UNKNOWN SET, before any narrowing (#604). The containment
+                # partitions are narrowed against each other by precedence, so an entry that
+                # is BOTH stale and killed appears only under STALE -- and a kill record read
+                # from the narrowed set would therefore miss exactly the gates this mechanism
+                # exists for. These two are the audit's own account, unfiltered.
+                "audit_unknown": tuple(audit.exhausted) if audit is not None else (),
+                "completed": (
+                    tuple(sorted(set(audit.present) - set(audit.exhausted)))
+                    if audit is not None else ()
+                )},
     )
 
 
@@ -676,6 +814,519 @@ def record_growth_state(pop: Population, manifest_path: Path) -> Population:
     pop.extras["marker_recorded"] = tuple(recorded)
     return pop
 
+# ---------------------------------------------------------------------------------------
+# #604 — THE WALL-KILL RECORD, THE PROBE, AND THE LICENCE
+#
+# THE DEADLOCK THIS BREAKS, stated once here rather than in three comments. docs/measurement-procedure.md §5.2 needs a
+# COMPLETED sample to move a budget. A gate killed at its declared wall produces `unknown:
+# true` and no sample. Two consecutive rounds of that leave the entry with a STALE basis (the
+# old sample is refused) and NO fresh sample (the wall prevents one) — both conditions
+# checked, both refusing, `HELD` forever, and no lane told why. #579 was broken by a ruling
+# because no mechanism existed; #602 was broken BY HAND, outside any tool. The three pieces
+# below are that mechanism, and each answers one clause of the order:
+#
+#   record_wall_kills  — the streak, counted from the audit's own `unknown` flag across rounds,
+#                        because a report is one round and "consecutive" needs a surface that
+#                        outlives it (the same argument `growth_breach` rests on).
+#   run_probes         — ONE quiet-box sample per eligible gate, under a ceiling and a hard
+#                        cap, labelled with its regime so the number travels with the box it
+#                        was taken on.
+#   the licence        — in `apply_rederivation`: the sample is an INPUT to docs/measurement-procedure.md §5.2, never a
+#                        bypass, so a wall moves only if the arithmetic produces one that fits
+#                        inside the envelope the probe was allowed to run in.
+# ---------------------------------------------------------------------------------------
+
+def _manifest_readable(manifest_path: Path) -> bool:
+    """Whether the manifest parsed — the difference between an empty record and a blind read."""
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(data.get("gates"), dict)
+
+def _wall_kill_rounds(entry: object) -> tuple:
+    """The round identities recorded against one entry, newest LAST."""
+    if not isinstance(entry, dict):
+        return ()
+    record = entry.get(WALL_KILLS)
+    if not isinstance(record, dict):
+        return ()
+    rounds = record.get("rounds")
+    if not isinstance(rounds, list):
+        return ()
+    return tuple(r for r in rounds if isinstance(r, str) and r)
+
+def _outstanding_breach(entry: object) -> bool:
+    """Whether a growth breach on this entry has NOT yet moved the wall it was reported at.
+
+    KEYED ON THE ARITHMETIC, never on marker PRESENCE — measured, live manifest, and the
+    difference is the whole mechanism. 15 entries carry `growth_breach`; ONE
+    (`tests/test_patrol_host_state.py`) has a CONSUMED marker because its wall moved
+    1185.31 -> 1647.35 after the breach; the other 14 are outstanding. And BOTH deadlocked
+    gates carry a marker — #602's is consumed, #579's is outstanding. So a predicate written
+    `entry.get(GROWTH_MARKER) is None` excludes the very gate #604 exists to unblock, and
+    reproduces the deadlock one layer up: an escape mechanism ineligible on every gate.
+
+    `declared_sec` is written into the marker at report time, so this needs no git ancestry
+    and no lane memory — which is what "consecutive is read from the manifest, never from a
+    lane's memory" requires anyway.
+
+    STATED RESIDUAL: a wall that moved and later returned to the SAME number reads as
+    outstanding. Rare, and it errs toward NOT probing, which is the safe direction — the cost
+    is an entry that stays deadlocked a round longer, never a wall moved on a remedy that was
+    already working.
+    """
+    if not isinstance(entry, dict):
+        return False
+    marker = entry.get(GROWTH_MARKER)
+    if not isinstance(marker, dict):
+        return False
+    declared = marker.get("declared_sec")
+    wall = entry.get("budget_sec")
+    if not isinstance(declared, (int, float)) or not isinstance(wall, (int, float)):
+        # A marker whose own numbers cannot be read is not evidence either way, and the
+        # refusal direction is to leave the entry to docs/measurement-procedure.md §5.2 rather than probe it.
+        return False
+    return abs(float(wall) - float(declared)) < 1e-9
+
+def read_wall_kills(manifest_path: Path) -> tuple:
+    """Every entry carrying a kill record, with its streak and its ELIGIBILITY.
+
+    Read from the MANIFEST, never from a lane's memory: a fresh process holding the manifest
+    reaches the same verdict with no history of its own, which is what makes the eligibility
+    checkable by a peer rather than taken on trust.
+    """
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ()
+    entries = data.get("gates")
+    if not isinstance(entries, dict):
+        return ()
+    kills: list = []
+    for key in sorted(entries):
+        entry = entries[key]
+        rounds = _wall_kill_rounds(entry)
+        if not rounds:
+            continue
+        declared = entry.get("budget_sec") if isinstance(entry, dict) else None
+        declared_sec = float(declared) if isinstance(declared, (int, float)) else 0.0
+        streak = len(rounds) >= 2
+        outstanding = _outstanding_breach(entry)
+        # ELIGIBILITY IS THREE CONJUNCTS, and the second one is why this is not a one-liner:
+        #
+        #   (a) killed at its own wall in >=2 consecutive rounds — the streak above;
+        #   (b) NO OUTSTANDING growth breach — because docs/measurement-procedure.md §5.2's trend clause ALREADY resolves
+        #       such an entry from the CARRIED sample (breach + exhaustion = second breach).
+        #       A probe there would be an alternative to a remedy that already works, and the
+        #       mechanism exists for entries nothing else can move;
+        #   (c) no fresh completed sample — STRUCTURAL, not a conjunct: a completed run CLEARS
+        #       the record, so a surviving streak of >=2 already means none completed. Stated
+        #       rather than coded, because a second check of the same fact would be a second
+        #       definition that can drift from the first.
+        eligible = streak and not outstanding
+        if eligible:
+            why = (
+                f"killed at its declared wall in {len(rounds)} consecutive round(s), and no "
+                f"outstanding breach: the wall is what prevents the sample that would move it"
+            )
+        elif not streak:
+            why = (
+                "killed at its declared wall in ONE round — contention is the likelier "
+                "reading, and the mechanism fires only on a streak"
+            )
+        else:
+            why = (
+                f"killed in {len(rounds)} consecutive round(s) BUT a growth breach is "
+                f"OUTSTANDING (the wall has not moved since it was reported), so docs/measurement-procedure.md §5.2's "
+                f"trend clause already owns this entry from its carried sample — a probe "
+                f"would be an alternative to a remedy that works"
+            )
+        kills.append(
+            WallKill(
+                key=key,
+                rounds=rounds,
+                consecutive=len(rounds),
+                declared_sec=declared_sec,
+                eligible=eligible,
+                why=why,
+                outstanding_breach=outstanding,
+            )
+        )
+    return tuple(kills)
+
+def record_wall_kills(
+    pop: Population,
+    manifest_path: Path,
+    root: Path | None = None,
+) -> Population:
+    """Record this round's kills, and CLEAR the streak of every gate that completed.
+
+    THE CLEAR IS THE HALF THAT MAKES THE COUNT TRUE. A completed run — passing OR failing —
+    breaks the streak by definition, so leaving the record behind would let a gate that
+    finished yesterday be probed today on a streak that no longer exists. It is cleared here,
+    at the record, rather than inferred at the read.
+
+    IDEMPOTENT ON THE ROUND, never on the clock: a re-run of the SAME audit report finds its
+    own `round_id` already in the record and appends nothing, so replaying a report cannot
+    manufacture a second kill out of one round. That is the same property `growth_breach`
+    gets from recording the reporting round's identity, and it is why the identity is the
+    report's own (`date:head_sha`), not the write time.
+    """
+    audit_unknown = tuple(pop.extras.get("audit_unknown") or ())
+    completed = tuple(pop.extras.get("completed") or ())
+    round_id = pop.extras.get("round_id")
+    if not audit_unknown and not completed:
+        pop.kills = read_wall_kills(manifest_path)
+        # `read_wall_kills` returns () for BOTH "nothing is recorded" and "the manifest could
+        # not be read", and those are different facts with the same shape (#595's own class).
+        # So the read state is carried explicitly and the renderer may not claim a clean
+        # record it never saw.
+        pop.extras[WALL_KILLS_READ] = bool(pop.kills) or _manifest_readable(manifest_path)
+        # NO AUDIT REPORT means the record was NOT ADVANCED: whatever it holds is what an
+        # EARLIER round left, and an empty one says nothing about this round's gates. The
+        # renderer must say that, not "every declared wall was met".
+        pop.extras[WALL_KILLS_SOURCE] = (
+            KILL_SOURCE_NO_AUDIT if pop.extras[WALL_KILLS_READ] else KILL_SOURCE_UNREAD
+        )
+        return pop
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pop.kills = ()
+        pop.extras[WALL_KILLS_READ] = False
+        pop.extras[WALL_KILLS_SOURCE] = KILL_SOURCE_UNREAD
+        return pop
+    entries = data.get("gates")
+    if not isinstance(entries, dict):
+        pop.kills = ()
+        pop.extras[WALL_KILLS_READ] = False
+        pop.extras[WALL_KILLS_SOURCE] = KILL_SOURCE_UNREAD
+        return pop
+
+    now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    changed = False
+    for key in audit_unknown:
+        entry = entries.get(key)
+        if not isinstance(entry, dict) or not round_id:
+            continue
+        rounds = list(_wall_kill_rounds(entry))
+        if round_id in rounds:
+            continue  # this round already counted — a re-run is not a new kill
+        rounds.append(round_id)
+        entry[WALL_KILLS] = {"rounds": rounds[-WALL_KILLS_KEEP:], "recorded_at": now}
+        changed = True
+    for key in completed:
+        entry = entries.get(key)
+        if isinstance(entry, dict) and entry.pop(WALL_KILLS, None) is not None:
+            changed = True
+    if changed:
+        # `root` follows this leg's own convention (`containment_population`,
+        # `apply_rederivation`): production passes nothing and the live tree is used, while a
+        # probe validates its throwaway manifest against the tree it was built in.
+        _write_manifest(data, manifest_path, root or REPO_ROOT, entries)
+    pop.kills = read_wall_kills(manifest_path)
+    pop.extras[WALL_KILLS_READ] = True
+    pop.extras[WALL_KILLS_SOURCE] = KILL_SOURCE_ROUND
+    return pop
+
+def _load_avg() -> float | None:
+    """The box's own load, as the regime field records it. None when it cannot be read."""
+    try:
+        return round(os.getloadavg()[0], 2)
+    except (OSError, AttributeError):
+        return None
+
+def _concurrent_gate_processes(exclude: set) -> int:
+    """How many OTHER audit or pytest processes are live on this box right now.
+
+    THE PROBE MUST BE EXCLUSIVE, and this is the mechanical test of it: a sample taken beside
+    a peer's suite measures the BOX, not the gate, and #602's own filing is what that costs —
+    a runtime read at loadavg 47.18 was reported as the gate's.
+
+    READ FROM /proc, never `pgrep -f`: a name-wide pattern matches every lane's copy of the
+    same tools out of its own worktree, and it also matches the shell that typed it. Here the
+    exclusion set is OUR pid and OUR parent, and nothing else is claimed about ownership.
+    """
+    count = 0
+    try:
+        procs = list(Path("/proc").iterdir())
+    except OSError:
+        return 0
+    for path in procs:
+        if not path.name.isdigit() or int(path.name) in exclude:
+            continue
+        try:
+            raw = (path / "cmdline").read_bytes()
+        except OSError:
+            continue
+        if not raw:
+            continue
+        cmd = raw.replace(b"\x00", b" ").decode("utf-8", "replace")
+        if "tools/audit.py" in cmd or "pytest" in cmd:
+            count += 1
+    return count
+
+def _gate_invocation(root: Path, key: str) -> str:
+    """The gate's DECLARED invocation form, read from the audit's own registration.
+
+    NEVER COMPOSED HERE. A probe that invented an argv would measure a command no round runs,
+    and the number it produced would describe something else — the unit/predicate mismatch
+    this manifest's own header spends a paragraph on. The registration is the surface
+    `tools/audit.py` is built from, so the probe runs the gate the way the audit runs it; the
+    projection carries `<sys.executable>` for the interpreter, substituted here.
+
+    Empty string means the registration does not name this gate, and the caller REPORTS that
+    rather than probing something adjacent.
+    """
+    try:
+        text = (root / "tools" / "audit.py").read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    reader = _registration_reader()
+    if reader is None:
+        return ""
+    for entry in reader(text):
+        if entry.get("target") == key:
+            return str(entry.get("argv") or "").replace("<sys.executable>", sys.executable)
+    return ""
+
+def _gate_blob(root: Path, key: str) -> str:
+    """The gate file's blob at HEAD — what a refusal record is armed against.
+
+    A refusal describes the gate THAT WAS PROBED. When the gate itself changes — the #602
+    remedy is a SPLIT, which moves it — the refusal no longer describes what runs, and the
+    blob is what re-arms the probe without anyone having to remember to clear a field.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", f"HEAD:{key}"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+def run_probes(
+    pop: Population,
+    manifest_path: Path,
+    root: Path,
+    quiet_check=None,
+) -> Population:
+    """Take ONE quiet-box sample per ELIGIBLE gate and hand it to the ordinary derivation.
+
+    FOUR REFUSALS, each REPORTED rather than silently skipped, because "no sample" and "never
+    tried" are different facts with the same shape:
+
+      - no registered invocation — there is no declared command to probe;
+      - a refusal already recorded against this gate's BLOB — re-probing an unchanged gate
+        would re-learn the same arithmetic at the cost of a 25-minute run;
+      - the box is not quiet — a sample beside a peer's suite measures the box;
+      - the gate does not complete inside the probe ceiling — the envelope failed too, so
+        there is still no sample to license a wall.
+
+    A sample is taken ONLY from a run that exits 0. A FAILED run measures how fast the gate
+    refused, never how long the work takes (#558), and a kill at the ceiling is the same
+    lower-bound trap the audit's own `unknown` flag exists to prevent.
+
+    `quiet_check` is the count of OTHER live audit/pytest processes, injectable because the
+    precondition is ENVIRONMENTAL and the logic is what a probe can test: under a test runner
+    the runner itself is always live, so the real check would refuse every probe and the
+    mechanism would read as untestable rather than as tested. Production passes nothing and
+    gets the /proc scan.
+
+    The sample is injected into `extras["samples"]` so the ORDINARY derivation consumes it —
+    this function decides nothing about a wall. Its own verdict is `licensed`, computed from
+    the same margin law the derivation uses, so the number a reader sees here is the number
+    the wall would move to.
+    """
+    eligible = [k for k in pop.kills if k.eligible]
+    if not eligible:
+        return pop
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return pop
+    entries = data.get("gates")
+    if not isinstance(entries, dict):
+        return pop
+
+    samples = dict(pop.extras.get("samples") or {})
+    probe_samples: dict = dict(pop.extras.get("probe_samples") or {})
+    probes: list = []
+    for kill in eligible:
+        entry = entries.get(kill.key)
+        declared = entry.get("budget_sec") if isinstance(entry, dict) else None
+        declared_sec = (
+            float(declared) if isinstance(declared, (int, float)) else kill.declared_sec
+        )
+        ceiling = round(declared_sec * PROBE_CEILING_FACTOR, 2)
+        effective = min(ceiling, PROBE_HARD_CAP_SEC)
+        invocation = _gate_invocation(root, kill.key)
+        if not invocation:
+            probes.append(
+                ProbeSample(
+                    key=kill.key,
+                    ceiling_sec=ceiling,
+                    hard_cap_sec=PROBE_HARD_CAP_SEC,
+                    taken=False,
+                    why="no registered invocation — the audit's own registration does not name "
+                        "this gate, so there is no declared command to probe",
+                )
+            )
+            continue
+        blob = _gate_blob(root, kill.key)
+        refused = entry.get(PROBE_REFUSED_FIELD) if isinstance(entry, dict) else None
+        if isinstance(refused, dict) and blob and refused.get("gate_blob") == blob:
+            probes.append(
+                ProbeSample(
+                    key=kill.key,
+                    invocation=invocation,
+                    ceiling_sec=ceiling,
+                    hard_cap_sec=PROBE_HARD_CAP_SEC,
+                    sample_sec=refused.get("sample_sec"),
+                    taken=False,
+                    why="a REFUSED probe is already recorded against this gate's blob "
+                        f"{blob[:12]}: {refused.get('why')} — re-probing an unchanged gate "
+                        "would re-learn the same arithmetic",
+                )
+            )
+            continue
+        concurrent = (
+            quiet_check()
+            if quiet_check is not None
+            else _concurrent_gate_processes({os.getpid(), os.getppid()})
+        )
+        load_start = _load_avg()
+        if concurrent > 0:
+            probes.append(
+                ProbeSample(
+                    key=kill.key,
+                    invocation=invocation,
+                    ceiling_sec=ceiling,
+                    hard_cap_sec=PROBE_HARD_CAP_SEC,
+                    load_at_start=load_start,
+                    concurrent_audits=concurrent,
+                    taken=False,
+                    why=f"the box is NOT quiet — {concurrent} other audit/pytest process(es) "
+                        "are live, and a sample taken beside them measures the box",
+                )
+            )
+            continue
+
+        started = time.monotonic()
+        try:
+            proc = subprocess.Popen(
+                shlex.split(invocation),
+                cwd=str(root),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except (OSError, ValueError) as exc:
+            probes.append(
+                ProbeSample(
+                    key=kill.key,
+                    invocation=invocation,
+                    ceiling_sec=ceiling,
+                    hard_cap_sec=PROBE_HARD_CAP_SEC,
+                    load_at_start=load_start,
+                    taken=False,
+                    why=f"the declared command could not be started ({exc})",
+                )
+            )
+            continue
+        try:
+            rc = proc.wait(timeout=effective)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                proc.kill()
+            proc.wait()
+            rc = None
+        elapsed = round(time.monotonic() - started, 2)
+        finish_load = _load_avg()
+
+        if rc is None:
+            probes.append(
+                ProbeSample(
+                    key=kill.key,
+                    invocation=invocation,
+                    sample_sec=elapsed,
+                    ceiling_sec=ceiling,
+                    hard_cap_sec=PROBE_HARD_CAP_SEC,
+                    load_at_start=load_start,
+                    load_at_finish=finish_load,
+                    concurrent_audits=0,
+                    taken=False,
+                    why=f"killed at the probe ceiling {effective} s — the gate does not "
+                        "complete inside the envelope either, so there is still no sample",
+                )
+            )
+            continue
+        if rc != 0:
+            probes.append(
+                ProbeSample(
+                    key=kill.key,
+                    invocation=invocation,
+                    sample_sec=elapsed,
+                    rc=rc,
+                    ceiling_sec=ceiling,
+                    hard_cap_sec=PROBE_HARD_CAP_SEC,
+                    load_at_start=load_start,
+                    load_at_finish=finish_load,
+                    concurrent_audits=0,
+                    taken=False,
+                    why=f"completed with rc={rc} — a FAILED run measures how fast the gate "
+                        "refused, never how long the work takes (#558)",
+                )
+            )
+            continue
+
+        # THE TWO BOUNDS, and why they are DIFFERENT NUMBERS. The CEILING bounds how long the
+        # probe may RUN; the HARD CAP bounds the WALL a sample may license. They cannot be the
+        # same bound, because docs/measurement-procedure.md §5.2 multiplies by ~4: a gate that finished in 1.5 s against a
+        # 1.0 s wall derives a 6.75 s wall, and a ceiling-shaped licence (2.0 s) would refuse
+        # the ordinary re-derivation it exists to produce. Measured, not argued — a
+        # ceiling-shaped predicate refuses every legitimate probe AND #602's, which makes it
+        # a predicate that cannot discriminate and therefore proves nothing.
+        #
+        # #602 is refused by the CAP: margin_for(1496) = 4.000501, so 1496 s licenses 5984.75 s
+        # against a 3600 s cap. That is not a budget, it is an outage, and the arithmetic says
+        # so without anyone judging the case by eye.
+        derived = round(margin_for(elapsed) * elapsed, 2)
+        licensed = derived <= PROBE_HARD_CAP_SEC
+        probe = ProbeSample(
+            key=kill.key,
+            invocation=invocation,
+            sample_sec=elapsed,
+            rc=0,
+            ceiling_sec=ceiling,
+            hard_cap_sec=PROBE_HARD_CAP_SEC,
+            load_at_start=load_start,
+            load_at_finish=finish_load,
+            concurrent_audits=0,
+            taken=True,
+            derived_sec=derived,
+            licensed=licensed,
+            licence_note=(
+                f"margin_for({elapsed}) = {margin_for(elapsed):.6f}, so the derivation gives "
+                f"{derived} s against the hard cap of {PROBE_HARD_CAP_SEC} s — "
+                + ("LICENSED" if licensed else "REFUSED, so no wall moves")
+            ),
+        )
+        probes.append(probe)
+        samples[kill.key] = max(samples.get(kill.key, 0.0), elapsed)
+        probe_samples[kill.key] = probe
+
+    pop.probes = tuple(probes)
+    pop.extras["samples"] = samples
+    pop.extras["probe_samples"] = probe_samples
+    return pop
+
 def apply_rederivation(
     pop: Population,
     manifest_path: Path,
@@ -718,6 +1369,8 @@ def apply_rederivation(
     reported: list = []
     held: list = []
     cleared: list = []
+    refused: list = []
+    probe_applied: list = []
     growth_keys = {g.key for g in pop.growth}
     stale_keys = {s.key for s in pop.stale}
     for growth in pop.growth:
@@ -773,6 +1426,58 @@ def apply_rederivation(
         if not isinstance(entry, dict):
             held.append((key, "declared entry is not an object"))
             continue
+        # THE LICENCE (#604). A probe sample is an INPUT to docs/measurement-procedure.md §5.2, never a bypass: the sample
+        # decides nothing on its own, the arithmetic does. The probe was allowed to run for at
+        # most `ceiling` seconds, so a sample taken there can only license a wall the same
+        # arithmetic places INSIDE that envelope — anything larger is a number no run has ever
+        # demonstrated, and writing it would make the manifest assert a wall nothing supports.
+        # #602 is the instance: 4.001 x 1496 = 5984.75 s against a gate whose own wall is
+        # 1496 s is not a budget, it is an outage, and the ceiling is what says so without
+        # anyone having to judge the case by eye.
+        probe = (pop.extras.get("probe_samples") or {}).get(key)
+        if probe is not None:
+            derived = round(margin_for(float(sample)) * float(sample), 2)
+            if derived > PROBE_HARD_CAP_SEC:
+                why = (
+                    f"PROBE SAMPLE REFUSED — {round(float(sample), 2)} s licenses {derived} s "
+                    f"at margin {margin_for(float(sample)):.6f}, above the hard cap "
+                    f"{PROBE_HARD_CAP_SEC} s; the wall is left EXACTLY as it is"
+                )
+                refused.append((key, why))
+                # The refusal is recorded AGAINST THE GATE'S BLOB, so the probe is not re-run
+                # until the gate itself changes. A remedy that splits the gate moves the blob
+                # and re-arms it; remembering to clear a field does not scale, and a record
+                # that outlives its subject reads as a live verdict.
+                entry[PROBE_REFUSED_FIELD] = {
+                    "gate_blob": _gate_blob(root, key),
+                    "sample_sec": round(float(sample), 2),
+                    "derived_sec": derived,
+                    "ceiling_sec": probe.ceiling_sec,
+                    "why": why,
+                    "recorded_at": measured_at,
+                }
+                entry.pop(WALL_KILLS, None)
+                continue
+            entry[PROBE_SAMPLE_FIELD] = True
+            entry[PROBE_REGIME_FIELD] = {
+                "sample_sec": probe.sample_sec,
+                "ceiling_sec": probe.ceiling_sec,
+                "load_at_start": probe.load_at_start,
+                "load_at_finish": probe.load_at_finish,
+                "concurrent_audits": probe.concurrent_audits,
+                "invocation": probe.invocation,
+                "taken_at": measured_at,
+            }
+            entry.pop(PROBE_REFUSED_FIELD, None)
+            entry.pop(WALL_KILLS, None)
+            probe_applied.append(key)
+        else:
+            # An ORGANIC sample clears the probe provenance: the wall now rests on a run the
+            # ordinary audit took, so a leftover `probe_sample` flag would keep describing a
+            # number that is no longer the basis — the same stale-record class as the marker.
+            entry.pop(PROBE_SAMPLE_FIELD, None)
+            entry.pop(PROBE_REGIME_FIELD, None)
+            entry.pop(PROBE_REFUSED_FIELD, None)
         entry["measured_sec"] = round(float(sample), 2)
         entry["margin_x"] = round(margin_x, 3)
         entry["budget_sec"] = round(margin_x * float(sample), 2)
@@ -792,9 +1497,13 @@ def apply_rederivation(
             cleared.append(key)
         applied.append(key)
 
-    if applied:
+    pop.extras["probe_refused"] = tuple(refused)
+    pop.extras["probe_applied"] = tuple(probe_applied)
+    if applied or refused:
         # The manifest's own loader is the gate on the write: it refuses a derivation its
         # numbers contradict, so the swap only happens when the result reads back sound.
+        # A REFUSAL ALSO WRITES (#604): the record it leaves is what stops the probe being
+        # re-run against an unchanged gate, so it is state, not a message.
         if not _write_manifest(data, manifest_path, root, entries):
             return Population(
                 declared=pop.declared,
@@ -814,6 +1523,8 @@ def apply_rederivation(
                     f"{manifest_path} is unchanged"
                 ),
                 extras=pop.extras,
+                kills=pop.kills,
+                probes=pop.probes,
             )
 
     return Population(
@@ -830,6 +1541,8 @@ def apply_rederivation(
         cleared=tuple(cleared),
         note=pop.note,
         extras=pop.extras,
+        kills=pop.kills,
+        probes=pop.probes,
     )
 
 
@@ -951,6 +1664,82 @@ def render(pop: Population) -> str:
             f"    [RESET] {key} — this round came back INSIDE the declared wall, so the "
             f"breach streak is cleared"
         )
+    # ---- #604: the wall-kill streak, the probe, and what the licence decided ----
+    # THE CLEAN CLAIM IS GATED ON A READ THAT HAPPENED (#595's ordering lesson, applied here
+    # before it could bite twice): an empty kill record and an unreadable manifest are the
+    # same value and different facts, so "no gate was killed" prints only when the record was
+    # actually READ.
+    kills_read = bool(pop.extras.get(WALL_KILLS_READ))
+    if pop.kills:
+        for kill in pop.kills:
+            # THE REASON IS CARRIED, NEVER RE-DERIVED HERE. Ineligibility has TWO causes
+            # (#604's ruling, n=4631): a single kill, or an outstanding growth breach that
+            # docs/measurement-procedure.md §5.2 already owns. A render that printed "ONE round is contention" for both
+            # would name the wrong cause on the second, and the reader would go looking for
+            # a streak that was never the problem.
+            lines.append(
+                f"    [WALL KILL] {kill.key} — killed at its declared {kill.declared_sec} s wall "
+                f"in {kill.consecutive} consecutive round(s) ({', '.join(kill.rounds)})"
+                + ("" if kill.eligible else f" — NOT ELIGIBLE: {kill.why}")
+            )
+    elif kills_read:
+        # EMPTY IS A READING, NEVER A CLEAN BILL (HQ's #604 clause, and the same ordering
+        # rule #595 fixed one leg over). The record is written FROM the audit's unknown flag,
+        # so it is empty BY CONSTRUCTION on the round that introduces it, and an empty record
+        # asserts only that no kill has been OBSERVED — never that no wall was ever exceeded.
+        # The old wording here said "every declared wall was met", which claims a history the
+        # record does not have: exactly the shape that reads as current and is not.
+        source = pop.extras.get(WALL_KILLS_SOURCE)
+        if source == KILL_SOURCE_ROUND:
+            lines.append(
+                "  wall kills: no gate carries a kill record — the record was READ and "
+                "advanced this round and holds nothing, which is a READING, not a clean bill: "
+                "it advances only from an audit report's unknown flag, so it says no gate was "
+                "OBSERVED killed, never that no wall was ever exceeded"
+            )
+        else:
+            lines.append(
+                "  wall kills: unstated (the record was NOT advanced this round) — no audit "
+                "report was read, so an empty record here is an INABILITY, not a clean result"
+            )
+    else:
+        lines.append(
+            "  wall kills: unstated (not read) — the kill record could not be read, so an "
+            "empty record here is an INABILITY, not a clean result"
+        )
+    eligible = [k for k in pop.kills if k.eligible]
+    probe_applied = set(pop.extras.get("probe_applied") or ())
+    for probe in pop.probes:
+        regime = (
+            f"load {probe.load_at_start}->{probe.load_at_finish}, "
+            f"{probe.concurrent_audits} concurrent audit/pytest process(es)"
+        )
+        if not probe.taken:
+            lines.append(
+                f"    [NOT PROBED] {probe.key} — {probe.why}"
+                + (f" (ceiling {probe.ceiling_sec} s, hard cap {probe.hard_cap_sec} s)" if probe.ceiling_sec else "")
+            )
+            continue
+        lines.append(
+            f"    [PROBED] {probe.key} — the declared invocation completed in "
+            f"{probe.sample_sec} s on a quiet box ({regime}); {probe.licence_note}"
+            + (
+                ""
+                if probe.licensed and probe.key in probe_applied
+                else (
+                    f" — a run with --apply re-derives the wall"
+                    if probe.licensed
+                    else " — NOTHING MOVES"
+                )
+            )
+        )
+    if eligible and not pop.probes:
+        lines.append(
+            "  probes: unstated (not taken) — eligible gates exist but no probe ran, so this "
+            "round states no sample for them"
+        )
+    for key, why in pop.extras.get("probe_refused") or ():
+        lines.append(f"    [LICENCE REFUSED] {key} — {why}")
     if pop.applied:
         lines.append(f"  APPLIED {len(pop.applied)}: {', '.join(pop.applied)}")
     if pop.reported:
@@ -973,13 +1762,41 @@ def render(pop: Population) -> str:
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """The leg's own argument surface, so a probe can assert its DEFAULTS.
+
+    A parser buried inside `main()` is only reachable by running the whole leg, so the one
+    property #604 rests on — that the probe fires when NO flag is given — could not be
+    asserted without invoking it against the live manifest.
+    """
     parser = argparse.ArgumentParser(description="Gate-budget re-derivation leg (#269).")
     parser.add_argument("--manifest", type=str, default="", help="Manifest path (default: the live one)")
     parser.add_argument("--repo-root", type=str, default="", help="Repo root (default: this tree)")
     parser.add_argument("--audit-report", type=str, default="", help="An audit --json report to read samples from")
     parser.add_argument("--apply", action="store_true", help="Re-derive and write the manifest")
+    # DEFAULT ON, and that is the load-bearing half of #604's last clause. The issue says the
+    # escape must NOT remain a hand-run one: `#602` was broken by hand, outside any tool, and
+    # the next gate in this class deadlocks identically while no lane knows the escape exists.
+    # A flag a caller has to remember is the same hand-run escape wearing an argument, and the
+    # daily measurement round invokes this leg with NO flags — so opt-in would have shipped a
+    # mechanism that never fires. It costs nothing in the ordinary case: no gate has a kill
+    # record, so no probe runs. `--no-probe` turns it off explicitly.
+    parser.add_argument(
+        "--probe",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Take ONE quiet-box sample per gate killed at its own wall for >=2 consecutive "
+            "rounds (#604). ON by default, because an escape nobody invokes is not one; "
+            "use --no-probe to disable. The sample is an INPUT to the derivation, never a "
+            "bypass: a wall moves only if the arithmetic fits under the hard cap."
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Emit the population as JSON")
+    return parser
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
 
     manifest = Path(args.manifest) if args.manifest else gates_manifest_path()
@@ -1005,6 +1822,18 @@ def main(argv: list[str] | None = None) -> int:
     # behind it: a first breach is REPORTED, and the record of that report is what lets the
     # next round tell a trend from a one-off. It never touches a wall.
     pop = record_growth_state(pop, manifest)
+    # THE KILL STREAK (#604), recorded on EVERY run and not behind `--apply`: the streak is
+    # the eligibility evidence, and a record that only advanced on the run that acts would
+    # never accumulate the two rounds it needs. It never touches a wall.
+    pop = record_wall_kills(pop, manifest)
+
+    # THE PROBE (#604) runs BEFORE `--apply`, so one invocation can take the sample and
+    # re-derive from it. ON by default (see the flag's own comment): the eligibility gate is
+    # what makes that safe — nothing runs until a gate has been killed at its own wall in two
+    # consecutive rounds — and the quiet check refuses the sample whenever a peer's run is
+    # live, which is the concurrent-run pile #597 exists to stop.
+    if args.probe:
+        pop = run_probes(pop, manifest, root)
 
     if args.apply:
         if report is None:
@@ -1058,6 +1887,42 @@ def main(argv: list[str] | None = None) -> int:
                     "applied": list(pop.applied),
                     "cleared": list(pop.cleared),
                     "held": [{"key": k, "why": w} for k, w in pop.held],
+                    "wall_kills_read": bool(pop.extras.get(WALL_KILLS_READ)),
+                    "wall_kills": [
+                        {
+                            "key": k.key,
+                            "rounds": list(k.rounds),
+                            "consecutive": k.consecutive,
+                            "declared_sec": k.declared_sec,
+                            "eligible": k.eligible,
+                            "why": k.why,
+                        }
+                        for k in pop.kills
+                    ],
+                    "probes": [
+                        {
+                            "key": pr.key,
+                            "invocation": pr.invocation,
+                            "sample_sec": pr.sample_sec,
+                            "rc": pr.rc,
+                            "ceiling_sec": pr.ceiling_sec,
+                            "hard_cap_sec": pr.hard_cap_sec,
+                            "load_at_start": pr.load_at_start,
+                            "load_at_finish": pr.load_at_finish,
+                            "concurrent_audits": pr.concurrent_audits,
+                            "taken": pr.taken,
+                            "why": pr.why,
+                            "derived_sec": pr.derived_sec,
+                            "licensed": pr.licensed,
+                            "licence_note": pr.licence_note,
+                        }
+                        for pr in pop.probes
+                    ],
+                    "probe_refused": [
+                        {"key": k, "why": w}
+                        for k, w in (pop.extras.get("probe_refused") or ())
+                    ],
+                    "probe_applied": list(pop.extras.get("probe_applied") or ()),
                     "note": pop.note,
                 },
                 indent=2,

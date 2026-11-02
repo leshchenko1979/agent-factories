@@ -150,6 +150,20 @@ def _throwaway_repo(root: Path) -> Path:
     ledger nobody else is appending to. `tools/` is the tool and its two sibling
     readers; `evidence/` is the ledger and the rework log it reads.
     """
+    # THE SHIPPED TREE CARRIES NO `evidence/` (issue #76/#78, P35): the ledger and the rework
+    # log it reads are created by `BOOTSTRAP.md`, not by the template. This helper is reached
+    # from probes that build a throwaway repository, and an unguarded `copytree` here makes
+    # the gate CRASH in the tree it ships from -- a shipped gate red in its own source, which
+    # is the exact class `tests/test_shipped_audit_runs.py` exists to catch (#597 measured it).
+    # The sibling probe already states this skip; stating it HERE covers every caller at once,
+    # rather than each call site re-deriving whether its fixture can be built.
+    missing = [sub for sub in ("tools", "evidence") if not (REPO / sub).is_dir()]
+    if missing:
+        raise _Skip(
+            f"no {'/'.join(missing)}/ in this tree — the ledger and the rework log are "
+            f"bootstrap-created (TEMPLATE/BOOTSTRAP.md), so this probe has no throwaway "
+            f"repository to build and nothing to compare"
+        )
     for sub in ("tools", "evidence"):
         shutil.copytree(REPO / sub, root / sub)
     return root

@@ -2422,7 +2422,7 @@ def probe_the_live_manifest_states_its_load_population() -> None:
 
 # THE RE-DERIVATION LEG (issue #269, ledger n=1924 / dispatch n=1928). The staleness sweep
 # above REPORTS which declared bases no longer describe what runs; the leg is the standing
-# duty that CLEARS them, declared in `docs/measurement-procedure.md` §5.2 and invoked inside
+# duty that CLEARS them, declared in `docs/measurement-procedure.md` docs/measurement-procedure.md §5.2 and invoked inside
 # the daily measurement round. These probes cover the LEG — the command the round runs —
 # because the sweep's own predicate is already probed above and a command's properties
 # (does it exit non-zero on a vacuous read, does it print the population it examined, does
@@ -2677,7 +2677,7 @@ def probe_the_rederivation_leg_prints_and_bites() -> None:
     leg = REPO / "tools" / "gate_budget_rederive.py"
     if not leg.is_file():
         # STATED SKIP, never a RED. The leg is this factory's standing duty under
-        # `docs/measurement-procedure.md` §5.2, and that document does NOT ship: a factory
+        # `docs/measurement-procedure.md` docs/measurement-procedure.md §5.2, and that document does NOT ship: a factory
         # bootstrapped from the template carries the staleness SWEEP (`tools/gate_budget.py`
         # ships, `tools/audit.py` imports it) without the leg that CLEARS the class. Whether
         # the kit should ship the leg — and with it a clause in the shipped law — is an
@@ -3669,6 +3669,515 @@ def probe_the_live_tree_declares_every_invoked_gate() -> None:
           str(report["classes"]))
     check("direction 6 — the live tree is CLEAN", problems == [], str(problems)[:150])
 
+# --- #604: the wall-kill streak, the probe, and the licence -----------------------
+#
+# THE DEADLOCK THESE PROBES COVER. docs/measurement-procedure.md §5.2 needs a COMPLETED sample to move a budget; a gate
+# killed at its own wall produces `unknown: true` and no sample. Two consecutive rounds leave
+# the entry with a STALE basis and no fresh sample — both conditions refusing, `HELD` forever,
+# and no lane told why. The mechanism is three pieces and every one of them gets a probe, with
+# a POSITIVE CONTROL beside each refusal: a predicate that can only ever refuse is decoration.
+
+def _rederive_module():
+    """`tools/gate_budget_rederive.py` ITSELF, loaded by path.
+
+    Registered in `sys.modules` BEFORE `exec_module` on purpose: the module's dataclasses
+    resolve their annotations through `sys.modules[cls.__module__]`, so a module executed
+    without that entry raises from `dataclasses` instead of running at all. A loader fact,
+    stated once here rather than rediscovered as a mystery.
+    """
+    name = "gate_budget_rederive_under_probe"
+    if name in sys.modules:
+        return sys.modules[name]
+    import importlib.util  # noqa: PLC0415
+
+    path = REPO / "tools" / "gate_budget_rederive.py"
+    if not path.is_file():
+        # THIS FILE IS SHIPPED, and `gate_budget_rederive.py` is NOT part of the kit: it is a
+        # factory-local leg. A probe that assumed its presence would red in every factory that
+        # vendored this test without the tool — the portability class #595 had to be fixed
+        # for. The absence is SKIPPED and NAMED, never silently green.
+        print(
+            "  SKIP  no tools/gate_budget_rederive.py in this tree — the re-derivation leg "
+            "is factory-local, so its #604 probes cannot run here"
+        )
+        return None
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+def _probe_entry(**extra) -> dict:
+    """A WELL-FORMED declared entry, because the manifest loader refuses one without a basis.
+
+    `budget_sec` IS `margin_x x measured_sec` (4.375 x 2.0 = 8.75), which is the law the
+    loader enforces — a fixture that omitted it would make `record_wall_kills`'s write fail
+    for a reason having nothing to do with the streak under probe.
+    """
+    entry = {"measured_sec": 2.0, "margin_x": 4.375, "budget_sec": 8.75,
+             "measured_at": "unstated"}
+    entry.update(extra)
+    return entry
+
+def _probe_tree(root: Path, gates: dict, gate_bodies: dict) -> Path:
+    """A throwaway repo root: `tools/audit.py`, the gate files it registers, and a manifest.
+
+    The registration is written in the audit's OWN form, so `_gate_invocation` resolves the
+    probe's argv through the real reader rather than through a fixture that agrees with the
+    code under test.
+    """
+    (root / "tools").mkdir(parents=True, exist_ok=True)
+    audit = "".join(
+        f'gates_to_run.append([sys.executable, "{rel}"])\n' for rel in gate_bodies
+    )
+    (root / "tools" / "audit.py").write_text(audit, encoding="utf-8")
+    for rel, body in gate_bodies.items():
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text(body, encoding="utf-8")
+    manifest = root / "registry" / "gates.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text(
+        json.dumps({"default": {"budget_sec": 120.0}, "gates": gates}, indent=2),
+        encoding="utf-8",
+    )
+    return manifest
+
+def probe_a_single_kill_is_NOT_eligible_and_a_streak_is() -> None:
+    """Eligibility is the STREAK, and one kill is contention rather than a lockout."""
+    module = _rederive_module()
+    if module is None:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        manifest = _probe_tree(
+            Path(tmp),
+            {
+                "tests/test_killed_once.py": _probe_entry(wall_kills={"rounds": ["r1"]}),
+                "tests/test_killed_twice.py": _probe_entry(
+                    wall_kills={"rounds": ["r1", "r2"]}
+                ),
+                "tests/test_never_killed.py": _probe_entry(),
+            },
+            {},
+        )
+        kills = {k.key: k for k in module.read_wall_kills(manifest)}
+        # POSITIVE CONTROL: the reader SAW records, so the absent third entry is a fact about
+        # that entry rather than a blind read.
+        check("#604 — the kill record is READ, not empty", len(kills) == 2,
+              f"{sorted(kills)}")
+        check("#604 — ONE kill is not eligible",
+              kills.get("tests/test_killed_once.py") is not None
+              and not kills["tests/test_killed_once.py"].eligible,
+              str(kills.get("tests/test_killed_once.py")))
+        check("#604 — TWO consecutive kills are eligible",
+              kills.get("tests/test_killed_twice.py") is not None
+              and kills["tests/test_killed_twice.py"].eligible,
+              str(kills.get("tests/test_killed_twice.py")))
+        check("#604 — an entry with no kill record is not in the population",
+              "tests/test_never_killed.py" not in kills)
+
+def probe_an_OUTSTANDING_breach_is_NOT_eligible_and_a_CONSUMED_one_IS() -> None:
+    """#604 ruling (n=4631): eligibility is THREE conjuncts, and the second is not presence.
+
+    THE TRAP THIS PROBE EXISTS FOR, measured on the live manifest: 15 entries carry a
+    `growth_breach` marker, and BOTH deadlocked gates carry one — `tests/test_patrol_host_state.py`
+    CONSUMED (wall moved 1185.31 -> 1647.35 after the breach) and
+    `tests/test_ledger_no_shrink.py` OUTSTANDING (wall still 11.39, the number it was reported
+    at). So an eligibility test written `entry.get(GROWTH_MARKER) is None` excludes the very
+    gate #604 exists to unblock, and reproduces the deadlock one layer up: an escape mechanism
+    that is ineligible on every gate it was built for.
+
+    The discriminating predicate is ARITHMETIC — `budget_sec == marker["declared_sec"]` means
+    the wall never moved. Here that is probed BOTH ways, with the flip as the positive control.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        manifest = _probe_tree(
+            Path(tmp),
+            {
+                # killed twice, breach still outstanding: the wall has not moved
+                "tests/test_outstanding.py": _probe_entry(
+                    budget_sec=11.39,
+                    growth_breach={"declared_sec": 11.39},
+                    wall_kills={"rounds": ["r1", "r2"]},
+                ),
+                # killed twice, breach CONSUMED: the wall moved off the declared number
+                "tests/test_consumed.py": _probe_entry(
+                    budget_sec=1647.35,
+                    growth_breach={"declared_sec": 1185.31},
+                    wall_kills={"rounds": ["r1", "r2"]},
+                ),
+                # killed twice, no breach ever reported: nothing else can move it
+                "tests/test_unbreached.py": _probe_entry(
+                    wall_kills={"rounds": ["r1", "r2"]},
+                ),
+            },
+            {},
+        )
+        kills = {k.key: k for k in module.read_wall_kills(manifest)}
+        check("#604 — all three entries are in the population",
+              len(kills) == 3, f"{sorted(kills)}")
+        check("#604 — an OUTSTANDING breach makes a streak INELIGIBLE "
+              "(docs/measurement-procedure.md §5.2's trend clause already owns it from the carried sample)",
+              kills.get("tests/test_outstanding.py") is not None
+              and not kills["tests/test_outstanding.py"].eligible,
+              str(kills.get("tests/test_outstanding.py")))
+        check("#604 — a CONSUMED breach leaves the streak ELIGIBLE "
+              "(the marker is PRESENT and must not exclude it)",
+              kills.get("tests/test_consumed.py") is not None
+              and kills["tests/test_consumed.py"].eligible,
+              str(kills.get("tests/test_consumed.py")))
+        check("#604 — a streak with NO breach marker is ELIGIBLE",
+              kills.get("tests/test_unbreached.py") is not None
+              and kills["tests/test_unbreached.py"].eligible,
+              str(kills.get("tests/test_unbreached.py")))
+
+        # THE TRAP, ASSERTED DIRECTLY: BOTH gates in the live instance carry a marker, so a
+        # presence-keyed predicate would refuse both. If this ever stops holding, the clause
+        # above it needs re-deriving rather than quietly passing.
+        markers = [k for k in kills.values() if k.key != "tests/test_unbreached.py"]
+        check("#604 — the presence trap is REAL: both marked entries carry a marker, so "
+              "presence cannot discriminate them",
+              all(getattr(k, "outstanding_breach", None) in (True, False) for k in markers)
+              and len({k.outstanding_breach for k in markers}) == 2,
+              str({k.key: k.outstanding_breach for k in markers}))
+
+        # POSITIVE CONTROL — THE FLIP. Move the outstanding entry's wall to a different number
+        # and the predicate must change its answer. A check that cannot observe the failure
+        # class it is aimed at proves nothing, and a predicate that reads presence cannot move.
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["gates"]["tests/test_outstanding.py"]["budget_sec"] = 47.0
+        manifest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        flipped = {k.key: k for k in module.read_wall_kills(manifest)}
+        check("#604 — moving the wall FLIPS the predicate (arithmetic, not presence)",
+              flipped["tests/test_outstanding.py"].eligible,
+              str(flipped["tests/test_outstanding.py"]))
+
+        # And the other direction: consume the consumed one by re-declaring at its own wall.
+        data["gates"]["tests/test_consumed.py"]["growth_breach"]["declared_sec"] = 1647.35
+        manifest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        back = {k.key: k for k in module.read_wall_kills(manifest)}
+        check("#604 — re-declaring a breach at the CURRENT wall makes it outstanding again",
+              not back["tests/test_consumed.py"].eligible,
+              str(back["tests/test_consumed.py"]))
+
+def probe_the_streak_advances_once_per_round_and_a_COMPLETED_run_clears_it() -> None:
+    """The count is a streak by construction: one round adds one, a completion clears all."""
+    module = _rederive_module()
+    if module is None:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        manifest = _probe_tree(
+            Path(tmp),
+            {
+                "tests/test_killed.py": _probe_entry(wall_kills={"rounds": ["r1"]}),
+                "tests/test_completed.py": _probe_entry(
+                    wall_kills={"rounds": ["r1", "r2"]}
+                ),
+            },
+            {},
+        )
+        pop = module.Population(
+            declared=2,
+            examined=2,
+            extras={
+                "audit_unknown": ("tests/test_killed.py",),
+                "completed": ("tests/test_completed.py",),
+                "round_id": "2026-11-02:abc123",
+            },
+        )
+        module.record_wall_kills(pop, manifest, Path(tmp))
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        killed = data["gates"]["tests/test_killed.py"]
+        check("#604 — the round is appended to the streak",
+              killed.get("wall_kills", {}).get("rounds") == ["r1", "2026-11-02:abc123"],
+              str(killed.get("wall_kills")))
+        check("#604 — a COMPLETED run CLEARS the record",
+              "wall_kills" not in data["gates"]["tests/test_completed.py"],
+              str(data["gates"]["tests/test_completed.py"]))
+
+        # IDEMPOTENT ON THE ROUND: replaying the same report is not a second kill. Without
+        # this, a re-run of one report would manufacture the streak the mechanism acts on.
+        module.record_wall_kills(
+            module.Population(
+                declared=2,
+                examined=2,
+                extras={
+                    "audit_unknown": ("tests/test_killed.py",),
+                    "completed": (),
+                    "round_id": "2026-11-02:abc123",
+                },
+            ),
+            manifest,
+            Path(tmp),
+        )
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        check("#604 — replaying the SAME round adds nothing",
+              data["gates"]["tests/test_killed.py"]["wall_kills"]["rounds"]
+              == ["r1", "2026-11-02:abc123"],
+              str(data["gates"]["tests/test_killed.py"]["wall_kills"]["rounds"]))
+
+def probe_a_gate_that_OUTRUNS_its_wall_is_probed_and_one_that_MEETS_it_is_not() -> None:
+    """THE POSITIVE CONTROL for the probe itself: a real subprocess, really measured.
+
+    A synthetic gate that takes ~1.5 s against a declared 1.0 s wall is the shape the
+    mechanism exists for, and the probe must produce a SAMPLE from it. A gate that finishes
+    inside its wall carries no kill record, so it is never eligible — the other half of the
+    control, because a probe that ran on every gate would be an expensive decoration.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        manifest = _probe_tree(
+            root,
+            {
+                "tests/test_slow_gate.py": {
+                    "budget_sec": 1.0,
+                    "measured_sec": 0.2,
+                    "margin_x": 5.0,
+                    "measured_at": "unstated",
+                    "wall_kills": {"rounds": ["r1", "r2"]},
+                },
+                "tests/test_quick_gate.py": {"budget_sec": 5.0},
+            },
+            {
+                "tests/test_slow_gate.py": "import time\ntime.sleep(1.5)\n",
+                "tests/test_quick_gate.py": "import time\ntime.sleep(0.01)\n",
+            },
+        )
+        pop = module.Population(
+            declared=2,
+            examined=2,
+            exhausted=("tests/test_slow_gate.py",),
+            kills=module.read_wall_kills(manifest),
+        )
+        # `quiet_check` is stubbed because the PRECONDITION is environmental: this runner is
+        # itself a live pytest, so the production /proc scan would refuse every probe here and
+        # the mechanism would read as untestable instead of as tested.
+        probed = module.run_probes(pop, manifest, root, quiet_check=lambda: 0)
+        by_key = {p.key: p for p in probed.probes}
+        slow = by_key.get("tests/test_slow_gate.py")
+        check("#604 — a gate that OUTRUNS its wall is probed", slow is not None, str(by_key))
+        if slow is not None:
+            check("#604 — the probe TOOK a sample", slow.taken and slow.sample_sec is not None,
+                  f"taken={slow.taken} sample={slow.sample_sec} why={slow.why}")
+            check("#604 — the sample is the REAL runtime, not a projection",
+                  slow.sample_sec is not None and 1.4 <= slow.sample_sec <= 3.0,
+                  str(slow.sample_sec))
+            check("#604 — the sample carries its REGIME",
+                  slow.concurrent_audits == 0 and slow.load_at_start is not None,
+                  f"concurrent={slow.concurrent_audits} load={slow.load_at_start}")
+            check("#604 — the derivation is the margin law applied to the sample",
+                  slow.derived_sec == round(module.margin_for(slow.sample_sec) * slow.sample_sec, 2),
+                  f"{slow.sample_sec} -> {slow.derived_sec}")
+            check("#604 — a legitimate re-derivation is LICENSED (the cap is not the ceiling)",
+                  slow.licensed is True,
+                  f"derived={slow.derived_sec} cap={module.PROBE_HARD_CAP_SEC}")
+        check("#604 — a gate that MEETS its wall is never probed",
+              "tests/test_quick_gate.py" not in by_key, str(sorted(by_key)))
+
+def probe_a_box_that_is_NOT_QUIET_REFUSES_the_probe_and_SAYS_SO() -> None:
+    """A sample taken beside a peer's suite measures the BOX, not the gate (#602's own cost)."""
+    module = _rederive_module()
+    if module is None:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        manifest = _probe_tree(
+            root,
+            {"tests/test_slow_gate.py": {"budget_sec": 1.0,
+                                         "wall_kills": {"rounds": ["r1", "r2"]}}},
+            {"tests/test_slow_gate.py": "import time\ntime.sleep(1.5)\n"},
+        )
+        pop = module.Population(
+            declared=1, examined=1, exhausted=("tests/test_slow_gate.py",),
+            kills=module.read_wall_kills(manifest),
+        )
+        probed = module.run_probes(pop, manifest, root, quiet_check=lambda: 3)
+        check("#604 — a loaded box REFUSES the probe", len(probed.probes) == 1
+              and probed.probes[0].taken is False, str(probed.probes))
+        check("#604 — the refusal NAMES the box",
+              "NOT quiet" in probed.probes[0].why and "3 other" in probed.probes[0].why,
+              probed.probes[0].why[:90])
+
+def probe_a_sample_that_would_CARRY_an_OUTAGE_is_REFUSED_and_the_wall_stays() -> None:
+    """#602's own arithmetic, refused — with the ordinary derivation as the control.
+
+    THE DISCRIMINATING CASE. `margin_for(1496) x 1496 = 5984.75 s` is not a budget, it is an
+    outage: the gate never completed inside its wall, so 1496 s is a LOWER BOUND and the
+    derivation turns it into a wall nothing supports. The control is the SAME code path with a
+    sample whose arithmetic fits — it moves the wall, which is what makes the refusal a
+    decision rather than a wall of `continue`.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    basis = {"measured_sec": 20.0, "margin_x": 4.0375, "budget_sec": 80.75,
+             "measured_at": "unstated"}
+
+    def _run(sample_sec: float) -> tuple:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _probe_tree(
+                root,
+                {"tests/test_gate_budget.py": dict(basis,
+                                                   wall_kills={"rounds": ["r1", "r2"]})},
+                {},
+            )
+            probe = module.ProbeSample(
+                key="tests/test_gate_budget.py",
+                invocation="<stub>",
+                sample_sec=sample_sec,
+                rc=0,
+                ceiling_sec=2992.0,
+                hard_cap_sec=module.PROBE_HARD_CAP_SEC,
+                load_at_start=0.4,
+                load_at_finish=0.4,
+                concurrent_audits=0,
+                taken=True,
+                derived_sec=round(module.margin_for(sample_sec) * sample_sec, 2),
+                licensed=round(module.margin_for(sample_sec) * sample_sec, 2)
+                <= module.PROBE_HARD_CAP_SEC,
+            )
+            pop = module.Population(
+                declared=1,
+                examined=1,
+                exhausted=("tests/test_gate_budget.py",),
+                extras={"samples": {"tests/test_gate_budget.py": sample_sec},
+                        "probe_samples": {"tests/test_gate_budget.py": probe}},
+            )
+            out = module.apply_rederivation(pop, manifest, root, "0" * 40)
+            entry = json.loads(manifest.read_text(encoding="utf-8"))["gates"][
+                "tests/test_gate_budget.py"
+            ]
+            return out, entry
+
+    refused_pop, refused_entry = _run(1496.0)
+    check("#602 — 1496 s licenses 5984.75 s", refused_entry["budget_sec"] == 80.75,
+          f"the wall moved to {refused_entry['budget_sec']}")
+    check("#602 — the refusal is RECORDED, not silent",
+          "probe_refused" in refused_entry
+          and refused_entry["probe_refused"].get("derived_sec") == 5984.75,
+          str(refused_entry.get("probe_refused")))
+    check("#602 — nothing was APPLIED",
+          refused_pop.applied == (), str(refused_pop.applied))
+    check("#602 — the render NAMES the refusal",
+          any("[LICENCE REFUSED]" in line
+              for line in module.render(refused_pop).splitlines()),
+          " | ".join(l for l in module.render(refused_pop).splitlines()
+                     if "LICENCE REFUSED" in l))
+
+    licensed_pop, licensed_entry = _run(30.0)
+    check("#604 — the CONTROL: a sample whose arithmetic fits MOVES the wall",
+          licensed_entry["budget_sec"] == round(module.margin_for(30.0) * 30.0, 2),
+          f"budget_sec={licensed_entry['budget_sec']}")
+    check("#604 — the CONTROL applied it",
+          licensed_pop.applied == ("tests/test_gate_budget.py",), str(licensed_pop.applied))
+    check("#604 — the applied entry carries its PROBE PROVENANCE",
+          licensed_entry.get("probe_sample") is True
+          and licensed_entry.get("probe_regime", {}).get("concurrent_audits") == 0,
+          str(licensed_entry.get("probe_regime")))
+
+def probe_the_PROBE_IS_ON_BY_DEFAULT_and_an_escape_nobody_invokes_is_not_one() -> None:
+    """#604's last clause: the escape must not be a hand-run one.
+
+    `#602` was broken BY HAND, outside any tool, and the daily measurement round invokes this
+    leg with NO flags. A `--probe` flag a caller has to remember would ship a mechanism that
+    never fires — the hand-run escape wearing an argument. So the default is asserted here,
+    not left to a reader of the help text.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    parser = module.build_parser()
+    check("#604 — the probe is ON when the leg is invoked with NO flags",
+          parser.parse_args([]).probe is True, str(parser.parse_args([]).probe))
+    check("#604 — --no-probe turns it OFF explicitly",
+          parser.parse_args(["--no-probe"]).probe is False,
+          str(parser.parse_args(["--no-probe"]).probe))
+    # And it costs nothing in the ordinary case: with no kill record there is nothing to probe.
+    with tempfile.TemporaryDirectory() as tmp:
+        manifest = _probe_tree(Path(tmp), {"tests/test_clean.py": _probe_entry()}, {})
+        pop = module.Population(declared=1, examined=1)
+        module.record_wall_kills(pop, manifest, Path(tmp))
+        check("#604 — with no kill record the default costs nothing",
+              pop.kills == (), str(pop.kills))
+
+def probe_an_UNREAD_kill_record_is_NEVER_reported_as_a_clean_one() -> None:
+    """An empty record and an unreadable manifest are the same value and different facts.
+
+    #595's ordering lesson, applied to this leg BEFORE it could bite twice: a clean claim
+    printed under an admitted inability is the defect the row-set renderer had to be fixed for.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        missing = Path(tmp) / "registry" / "does-not-exist.json"
+        pop = module.Population(declared=1, examined=1)
+        module.record_wall_kills(pop, missing)
+        check("#604 — an unreadable record is marked UNREAD",
+              pop.extras.get(module.WALL_KILLS_READ) is False,
+              str(pop.extras.get(module.WALL_KILLS_READ)))
+        lines = module.render(pop).splitlines()
+        check("#604 — the render says UNSTATED, never 'no gate carries a kill record'",
+              any("unstated (not read)" in line for line in lines)
+              and not any("no gate carries a kill record" in line for line in lines),
+              " | ".join(l for l in lines if "wall kills" in l))
+
+        # THE THREE STATES, AND WHY TWO OF THEM ARE NOT THE THIRD (HQ's #604 clause: "the
+        # eligible population is PRINTED with EMPTY as a reading ... a fresh record must not
+        # read as a clean bill"). The record is written FROM the audit's unknown flag, so it
+        # is empty BY CONSTRUCTION on the round that introduces it. A render that read that
+        # emptiness as health would assert a history the record does not have — the exact
+        # ordering lie #595 fixed one leg over, and it was LIVE in this leg until this probe:
+        # a bare invocation (no --audit-report) printed "every declared wall was met" with NO
+        # audit read at all.
+
+        # (1) READ, BUT NOT ADVANCED — no audit report this round.
+        manifest = _probe_tree(Path(tmp), {"tests/test_clean.py": {"budget_sec": 5.0}}, {})
+        idle = module.Population(declared=1, examined=1)
+        module.record_wall_kills(idle, manifest, Path(tmp))
+        idle_lines = module.render(idle).splitlines()
+        check("#604 — no audit report is NOT a clean record",
+              idle.extras.get(module.WALL_KILLS_SOURCE) == module.KILL_SOURCE_NO_AUDIT
+              and any("NOT advanced this round" in line for line in idle_lines),
+              str(idle.extras.get(module.WALL_KILLS_SOURCE))
+              + " | " + " | ".join(l for l in idle_lines if "wall kills" in l))
+
+        # (2) ADVANCED BY A REAL ROUND, EMPTY — a READING, and the render must SAY so rather
+        # than claim every wall was met. `completed` reaches this state without recording a
+        # kill: the round ran, nothing was exhausted, and nothing had a record to clear.
+        advanced = module.Population(
+            declared=1,
+            examined=1,
+            extras={"audit_unknown": (), "completed": ("tests/test_clean.py",),
+                    "round_id": "2026-11-02:probe"},
+        )
+        module.record_wall_kills(advanced, manifest, Path(tmp))
+        adv_lines = module.render(advanced).splitlines()
+        check("#604 — an empty record on an ADVANCED round is a READING, and the render "
+              "does NOT claim every declared wall was met",
+              advanced.extras.get(module.WALL_KILLS_SOURCE) == module.KILL_SOURCE_ROUND
+              and any("READING, not a clean bill" in line for line in adv_lines)
+              and not any("every declared wall was met" in line for line in adv_lines),
+              str(advanced.extras.get(module.WALL_KILLS_SOURCE))
+              + " | " + " | ".join(l for l in adv_lines if "wall kills" in l))
+
+        # (3) AND THE THREE RENDER DIFFERENTLY — the whole point. One string for all three
+        # would be the collapse this probe exists to prevent.
+        def _wall_line(rendered_lines):
+            hits = [l for l in rendered_lines if "wall kills" in l]
+            return hits[0] if hits else ""
+
+        seen = {_wall_line(lines), _wall_line(idle_lines), _wall_line(adv_lines)}
+        check("#604 — the three states render as three DISTINCT lines",
+              len(seen) == 3 and "" not in seen,
+              " | ".join(sorted(seen)))
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -3805,6 +4314,15 @@ def main() -> int:
     probe_an_exit_owed_entry_must_name_the_board_item()
     probe_the_exit_population_is_the_call_sites_not_a_glob()
 
+    print("  #604 — the wall-kill streak, the probe, and the licence")
+    probe_a_single_kill_is_NOT_eligible_and_a_streak_is()
+    probe_an_OUTSTANDING_breach_is_NOT_eligible_and_a_CONSUMED_one_IS()
+    probe_the_streak_advances_once_per_round_and_a_COMPLETED_run_clears_it()
+    probe_a_gate_that_OUTRUNS_its_wall_is_probed_and_one_that_MEETS_it_is_not()
+    probe_a_box_that_is_NOT_QUIET_REFUSES_the_probe_and_SAYS_SO()
+    probe_a_sample_that_would_CARRY_an_OUTAGE_is_REFUSED_and_the_wall_stays()
+    probe_the_PROBE_IS_ON_BY_DEFAULT_and_an_escape_nobody_invokes_is_not_one()
+    probe_an_UNREAD_kill_record_is_NEVER_reported_as_a_clean_one()
     print("  live manifest — #295: the exit declaration, its classes and its coverage")
     probe_the_live_tree_declares_every_invoked_gate()
 
