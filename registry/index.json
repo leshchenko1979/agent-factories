@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-11-02T07:15:12Z",
+  "resolved_at": "2026-11-02T07:51:02Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -919,7 +919,7 @@
       "factory": "inferhub-watch",
       "display_name": "Inferhub watch",
       "status": "attested",
-      "attested_at": "2026-10-27T06:27:29Z",
+      "attested_at": "2026-11-02T06:03:18Z",
       "profile": "ops",
       "repo": "/root/inferhub-watch",
       "skill": "/root/inferhub-watch/skills/inferhub/SKILL.md",
@@ -2631,8 +2631,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-02T07:15:00+00:00",
-      "last_run_at": "2026-11-02T06:45:18Z",
+      "next_run_at": "2026-11-02T08:15:00+00:00",
+      "last_run_at": "2026-11-02T07:45:57Z",
       "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "profile": "ops",

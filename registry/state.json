@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-11-02T07:15:12Z",
+  "resolved_at": "2026-11-02T07:51:02Z",
   "fragments": [
     {
       "path": "/tmp/wt-reg-1102/registry/factories/ai-antispam.json",
@@ -375,7 +375,7 @@
           }
         ],
         "status": "attested",
-        "attested_at": "2026-10-27T06:27:29Z",
+        "attested_at": "2026-11-02T06:03:18Z",
         "instruments": {
           "pacemaker": {
             "state": "adopted",
@@ -2406,7 +2406,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1793603115,
+      "session_updated_at": 1793605712,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2523,7 +2523,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Surveys [chat:-1004497192134:topic:19]",
-      "session_updated_at": 1793603095,
+      "session_updated_at": 1793604406,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2653,7 +2653,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: ai-antispam / Triage [chat:-1003993000918:topic:10781]",
-      "session_updated_at": 1793602181,
+      "session_updated_at": 1793604095,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2952,7 +2952,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1793111433,
+      "session_updated_at": 1793604957,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3056,7 +3056,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1793603691,
+      "session_updated_at": 1793605496,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3121,7 +3121,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Meta-Factory HQ: ASIF Architecture & Crons",
-      "session_updated_at": 1793603260,
+      "session_updated_at": 1793604510,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3251,7 +3251,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
-      "session_updated_at": 1793603696,
+      "session_updated_at": 1793605853,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
@@ -3365,8 +3365,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-11-02T07:15:00+00:00",
-      "last_run_at": "2026-11-02T06:45:18Z",
+      "next_run_at": "2026-11-02T08:15:00+00:00",
+      "last_run_at": "2026-11-02T07:45:57Z",
       "trigger_cmd": "/usr/bin/python3 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json",
       "_profile": "ops"
     },
