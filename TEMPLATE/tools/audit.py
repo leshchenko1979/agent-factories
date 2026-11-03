@@ -1753,8 +1753,23 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     #     read rendering as a clean patrol is the one failure mode a patrol cannot survive.
     #     This gate is OFFLINE: every probe injects a synthetic board, so the audit itself
     #     never calls `gh` (issue #95, ruling n=580 PART 2).
-    if (repo_root / "tests/test_patrol_host_state.py").is_file():
-        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_host_state.py"])
+    #      #602 split it into ONE GATE PER LEG so a single slow leg can no longer
+    #      withhold a verdict from the whole fleet: the monolith measured 411.65 s
+    #      organic, then 1489-2400 s under load, and its wall could never be
+    #      re-derived. Each leg below carries its own measured budget.
+    if (repo_root / "tests/patrol_fixtures.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_criterion.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_ruling.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_tree_instants.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_worktree.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_publish.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_workspace.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_round_receipts.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_cron_duty.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_render.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_census.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_board.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_preamble.py"])
 
     # 36. Rework relative-revision gate: an attribution names an ABSOLUTE sha, never a
     #     moving-HEAD-relative form. The receipt rule above (gate 29) governs RECEIPTS,

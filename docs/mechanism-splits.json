@@ -1,0 +1,24 @@
+{
+  "_note": "THIS factory's declared SPLITS: a mechanism a recorded law names whose FILE was divided into leg-scoped successors while the mechanism itself kept running (#602). The law sources direction 4 reads — the rework log's `Prevented by` column and the skill's sentences — are historical records: an entry states what prevented a defect AT THE TIME, and which successor now carries which probe is not derivable from a cell that names no function. Rewriting those rows would be fabrication, and matching the retired name by a glob would be exempt-by-silence (a pattern resolving to nothing still passes, n=571). So the division is DECLARED here and VALIDATED: every successor must EXIST under `tests/` AND be REGISTERED in `tools/audit.py`, because the law's claim is that the probes it cites still run — a split resolving to a file the audit never runs is a dead reference with paperwork. The retired file must be GONE: an entry whose retired file is still present declares a division that has not happened and is reported as stale. A one-successor entry is a RENAME, not a split, and is refused — a rename is followed in the law, never laundered through a store. `issue` and `date` are REQUIRED, because an entry nobody can check is forgiveness. Absent or empty means no splits declared, never a failure: a bootstrapped factory carries none until it splits something. WHY THE ONE ENTRY EXISTS: the 433-test patrol monolith `tests/test_patrol_host_state.py` was killed at its own 1647.35 s wall and could never re-derive it (#579 class), so the ruling on #602 ordered it divided into leg-scoped gates with a budget each; 54 rework rows still name the undivided file, and every probe they cite still runs in one of the twelve legs.",
+  "splits": [
+    {
+      "retired": "test_patrol_host_state.py",
+      "successors": [
+        "test_patrol_board.py",
+        "test_patrol_census.py",
+        "test_patrol_criterion.py",
+        "test_patrol_cron_duty.py",
+        "test_patrol_preamble.py",
+        "test_patrol_publish.py",
+        "test_patrol_render.py",
+        "test_patrol_round_receipts.py",
+        "test_patrol_ruling.py",
+        "test_patrol_tree_instants.py",
+        "test_patrol_workspace.py",
+        "test_patrol_worktree.py"
+      ],
+      "issue": 602,
+      "date": "2026-11-03"
+    }
+  ]
+}

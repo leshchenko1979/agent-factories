@@ -501,6 +501,14 @@ DECLARATION_SURFACES: tuple[
      "entries name LEDGER ROWS, and the ledger is append-only -- a row cannot be stranded"),
     ("ledger-schema-exemptions", "docs/ledger-schema-exemptions.json", (),
      "entries are keyed by ledger row `n`; the same append-only reason as above"),
+    ("mechanism-splits", "docs/mechanism-splits.json", (),
+     "entries name a RETIRED test file that is absent BY CONSTRUCTION -- declaring a split "
+     "asserts the undivided file is gone -- so a `path` probe would report every correct "
+     "entry as stale debt, the false positive inverted. The gate-registry leg reconciles "
+     "every entry against a LIVE read of the tree and the audit instead "
+     "(`tests/gate_registry.py::law_coverage_problems`): each successor must exist under "
+     "`tests/` AND be registered, an entry whose retired file is still present is an "
+     "ERROR, and a one-successor entry is refused as a rename"),
     ("ontology-exemptions", "docs/ontology-exemptions.json",
      (("exemptions", "path", DECL_PATH),), ""),
     ("products", "docs/products.json", (),

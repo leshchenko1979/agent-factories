@@ -94,7 +94,7 @@ listed because the pair is what a member adopts, and the manifest hashes the `TE
 |---|---|---|---|
 | 1 | `tools/patrol_host_state.py` ↔ `TEMPLATE/tools/patrol_host_state.py` | `standalone` | **the executable** — the live multi-leg runner |
 | 2 | `tests/test_cron_thinness.py` ↔ `TEMPLATE/tests/test_cron_thinness.py` | `standalone` | **the gate** — the pure predicate over rows |
-| 3 | `tests/test_patrol_host_state.py` ↔ `TEMPLATE/tests/test_patrol_host_state.py` | `standalone` | **the gate** — the runner's wiring |
+| 3 | `tests/patrol_fixtures.py` ↔ `TEMPLATE/tests/patrol_fixtures.py`, and the 12 `tests/test_patrol_*.py` legs ↔ their TEMPLATE copies | `standalone` | **the gates** — the runner's wiring. Split into one gate per leg by #602 so each carries its own measured budget; the former single file was killed at its own 1647.35 s wall and could not re-derive it |
 | 4 | `tools/field_predicate.py` ↔ `TEMPLATE/tools/field_predicate.py` | `closure` | the canonical-trailer read the close-board leg binds to |
 | 5 | `tools/kit_pin.py` ↔ `TEMPLATE/tools/kit_pin.py` | `closure` | the pin reader — travels with its pin (frame §3) |
 | 6 | `tools/publish.py` ↔ `TEMPLATE/tools/publish.py` | `standalone` | the publish-freshness leg. **SCOPE — the pusher holds its OWN pushes only.** Its 900 s grace window and 6 h cadence are **the pusher's declared bounds**: they bind `tools/publish.py` and nothing else, and they are not a property of the fleet. The leg this row feeds measures **LAG** — commits committed but not yet on the remote — and never cadence compliance. |
@@ -218,7 +218,7 @@ path to this protection, and that is a measurement rather than a preference.
 | gate | registered at | grain | why that grain |
 |---|---|---|---|
 | `test_cron_thinness.py` | `gate_registry.py`, REQUIRED | required | the predicate is PURE over a list of rows and reads no live table, so it passes in a bootstrapped factory exactly as it does here — there is no `TEMPLATE` comparison or box-local fixture that would make it red |
-| `test_patrol_host_state.py` | `gate_registry.py`, REQUIRED | required | it drives the instrument's own selftest against a throwaway register in a temp directory: no live register, no fleet manifest, no box-local fixture |
+| the 12 `test_patrol_*.py` legs | `gate_registry.py`, REQUIRED | required | each drives the instrument's own selftest against a throwaway register in a temp directory: no live register, no fleet manifest, no box-local fixture |
 
 **The pacemaker-presence leg (#315) rides these SAME two gates — it is not a third.** The
 thinness predicate asks *"is this row a thin wake?"*; it is silent about a row that does not
@@ -252,7 +252,8 @@ identifier is read over: **the three paths in §2.**
 
 Measured at the instant of writing, the part-4 forcing fact is present here as it was on the ledger:
 **no hand-typed version exists in this instrument.** `tools/patrol_host_state.py` and
-`tests/test_patrol_host_state.py` return **0** hits for `VERSION|__version__`; `test_cron_thinness.py`
+the 13 split gate files (`tests/patrol_fixtures.py` plus the 12 `tests/test_patrol_*.py`) return **0** hits
+for `VERSION|__version__`; `test_cron_thinness.py`
 returns **1**, and that one is the English word inside a docstring (*"that command's logic is a
 VERSIONED REPO FILE"*), not a constant. State the hit rather than rounding it to zero: a count taken by
 a pattern is not a count of items, and the honest report of this measurement is *one match, zero
@@ -356,10 +357,10 @@ instrument's probes are named, not implied:
 
 | probe | where | what it shows |
 |---|---|---|
-| `test_the_cron_leg_BITES_on_a_defect_in_a_row_this_factory_declares` | `tests/test_patrol_host_state.py` | the leg produces a PROBLEM on a synthetic defect, not merely a clean run |
-| `test_the_cron_leg_RUNS_and_states_the_population_it_examined` | `tests/test_patrol_host_state.py` | coverage is printed beside the verdict: "0 problems" over "0 examined" and over "29 examined" are different facts |
-| `test_the_cron_leg_fails_LOUDLY_when_nothing_is_attributed` | `tests/test_patrol_host_state.py` | a clean verdict over an examined-nothing read is not a verdict |
-| `test_the_law_content_class_BITES_on_a_row_this_factory_declares` | `tests/test_patrol_host_state.py` | the embedded-law-content class bites on a row of the factory's own |
+| `test_the_cron_leg_BITES_on_a_defect_in_a_row_this_factory_declares` | `tests/test_patrol_cron_duty.py` | the leg produces a PROBLEM on a synthetic defect, not merely a clean run |
+| `test_the_cron_leg_RUNS_and_states_the_population_it_examined` | `tests/test_patrol_cron_duty.py` | coverage is printed beside the verdict: "0 problems" over "0 examined" and over "29 examined" are different facts |
+| `test_the_cron_leg_fails_LOUDLY_when_nothing_is_attributed` | `tests/test_patrol_cron_duty.py` | a clean verdict over an examined-nothing read is not a verdict |
+| `test_the_law_content_class_BITES_on_a_row_this_factory_declares` | `tests/test_patrol_cron_duty.py` | the embedded-law-content class bites on a row of the factory's own |
 | `test_probe_is_offline` | `tests/test_cron_thinness.py` | the predicate is pure over a list, asserted structurally |
 | `test_the_live_negative_specimen_stays_a_problem_for_the_right_reason` | `tests/test_cron_thinness.py` | a real row stays a finding, for the right reason and not by luck |
 | `test_a_declared_owner_with_no_wake_is_named_by_role` | `tests/test_cron_thinness.py` | the presence predicate BITES: an owner with no wake is NAMED by role and session, over a populated row set |
@@ -367,10 +368,10 @@ instrument's probes are named, not implied:
 | `test_shape_two_prompt_notify_satisfies_presence` | `tests/test_cron_thinness.py` | a NULL target whose prompt invokes a notify IS a wake — the half a `deliver_to`-only test gets wrong |
 | `test_a_wake_naming_ANOTHER_session_does_not_satisfy_this_owner` | `tests/test_cron_thinness.py` | the negative control for the prompt leg: presence keys on the uuid, not on a notify's mere presence |
 | `test_the_register_parse_locates_the_owner_column_BY_HEADER` | `tests/test_cron_thinness.py` | the column is found by NAME, so an inserted column cannot hijack the owner set while still returning something |
-| `test_the_pacemaker_presence_leg_NAMES_an_owner_with_no_wake` | `tests/test_patrol_host_state.py` | the RUNNER's presence leg bites over a synthetic register+fragment+rows |
-| `test_the_pacemaker_presence_leg_is_QUIET_when_a_woken_sibling_is_present` | `tests/test_patrol_host_state.py` | the runner control, under both wake shapes |
-| `test_the_pacemaker_presence_leg_PRINTS_its_examined_population` | `tests/test_patrol_host_state.py` | coverage is printed: the register, the owner count and every owner with its wake travel with the verdict |
-| `test_the_pacemaker_presence_leg_fails_OPEN_when_the_register_is_absent` | `tests/test_patrol_host_state.py` | an unreadable DECLARATION is NOT RUN with its reason, never a clean read |
+| `test_the_pacemaker_presence_leg_NAMES_an_owner_with_no_wake` | `tests/test_patrol_publish.py` | the RUNNER's presence leg bites over a synthetic register+fragment+rows |
+| `test_the_pacemaker_presence_leg_is_QUIET_when_a_woken_sibling_is_present` | `tests/test_patrol_publish.py` | the runner control, under both wake shapes |
+| `test_the_pacemaker_presence_leg_PRINTS_its_examined_population` | `tests/test_patrol_publish.py` | coverage is printed: the register, the owner count and every owner with its wake travel with the verdict |
+| `test_the_pacemaker_presence_leg_fails_OPEN_when_the_register_is_absent` | `tests/test_patrol_publish.py` | an unreadable DECLARATION is NOT RUN with its reason, never a clean read |
 
 **The live probe is the runner itself:** `python3 tools/patrol_host_state.py` prints each leg's own
 coverage count beside its verdict. A probe that reported only its verdict would be the vacuity this

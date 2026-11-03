@@ -105,7 +105,7 @@ PRACTICE_GATES: dict[str, list[str]] = {
     # arm is the patrol runner plus the offline gate over its logic, and the render arm is
     # the generator paired with the gate that compares its output. All five ship in
     # TEMPLATE/, so the mapping holds in a bootstrapped factory.
-    "P37": ["tests/test_commit_pair_hook.py", "tools/hooks/pre-commit", "tools/patrol_host_state.py", "tests/test_patrol_host_state.py", "tools/registry_render.py"],  # A commit check reads the index; a live-state check says so
+    "P37": ["tests/test_commit_pair_hook.py", "tools/hooks/pre-commit", "tools/patrol_host_state.py", "tests/test_patrol_criterion.py", "tests/test_patrol_ruling.py", "tests/test_patrol_tree_instants.py", "tests/test_patrol_worktree.py", "tests/test_patrol_publish.py", "tests/test_patrol_workspace.py", "tests/test_patrol_round_receipts.py", "tests/test_patrol_cron_duty.py", "tests/test_patrol_render.py", "tests/test_patrol_census.py", "tests/test_patrol_board.py", "tests/test_patrol_preamble.py", "tools/registry_render.py"],  # A commit check reads the index; a live-state check says so
     # P38's three targets are the DETECTORS and the shared read, not a single shared
     # gate: `tests/test_gate_registration.py` compares the argv a selector rebuilds
     # against the argv the audit actually runs (#436), `tests/test_rework_declared_landed.py`

@@ -247,6 +247,14 @@ CLOSURE_MODULES = frozenset({
                                              # as tools/rework_entries.py -- Phase D
                                              # candidate, and the reason a second
                                              # parser is the drift class)
+    "TEMPLATE/tests/patrol_fixtures.py",     # board #602: the shared fixture module of the
+                                             # twelve leg gates. No CLI and no `__main__`
+                                             # of its own -- it holds the helpers, the
+                                             # module-level state and the source order the
+                                             # legs were split out of, so a factory that
+                                             # ports a leg without it collects zero tests
+                                             # and reports a green run over an empty
+                                             # population
 })
 
 # The seeds. Declared per path rather than matched on suffix, so that a file named
@@ -309,6 +317,14 @@ SEEDS = frozenset({
     "TEMPLATE/docs/products.example.json",
     "TEMPLATE/docs/skill-version-exemptions.example.json",
     "TEMPLATE/docs/rework-relative-revision-exemptions.example.json",
+    # The mechanism-SPLIT store (#602): a retired gate file's declared successors. A seed
+    # for the same reason the exemption tables above are -- the LEG's logic is universal
+    # (a law-named file that no longer exists must resolve or be named) and its PARAMETERS
+    # are the factory's own history, so the shipped skeleton declares an EMPTY `splits`
+    # list and a member fills in its own retirements. Classed `standalone` it would
+    # compare a factory's own split history byte-for-byte against this empty skeleton and
+    # red every adopter for writing the file it is told to write.
+    "TEMPLATE/docs/mechanism-splits.example.json",
     "TEMPLATE/registry/fleet.example.json",
     "TEMPLATE/registry/gates.example.json",
     "TEMPLATE/registry/kit.example.json",      # the pin vehicle -- a factory data file

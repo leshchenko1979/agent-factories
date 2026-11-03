@@ -970,8 +970,10 @@ def test_a_factory_without_the_procedure_declares_nothing() -> None:
 # makes the predicate semantic rather than a naming convention; the name half catches a leg
 # whose annotation was written differently. BOTH halves matter: a predicate keyed on the
 # name alone is the one the #475 ruling measured FALSE-POSITIVING over the 22 dual-shaped
-# modules, where `tests/test_patrol_host_state.py`'s helpers are named `_duty_leg` and
-# `_presence_leg` while its `main()` already iterates `globals()` — the correct pattern.
+# modules, where the patrol gate's helpers are named `_duty_leg` and `_presence_leg` while
+# its `main()` already iterates `globals()` — the correct pattern. (Measured on
+# `tests/test_patrol_host_state.py`; #602 has since split it into the `tests/test_patrol_*.py`
+# legs, where the same naming and the same `globals()` iteration carry over.)
 #
 # BOUND, stated so it is not assumed: a leg introduced with NEITHER the leg return shape NOR
 # the `_leg` name is outside this guard's population. The guard's job is to keep the wiring

@@ -105,6 +105,7 @@ Only the declaration discriminates.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -178,11 +179,16 @@ LAW_COVERAGE_PREDICATE = (
     "a tests/test_*.py that a RECORDED LAW names as an upholding mechanism must be "
     "REGISTERED. The law sources are the rework log's `Prevented by` column — section 11 "
     "makes that log a law surface — and the skill's own sentences. A mechanism named and "
-    "not registered FAILS, NAMING it. SCOPE BOUND: this covers mechanisms a recorded law "
-    "names; the GENERAL case (a test file that should be a gate and is named nowhere) is "
-    "#48, already open, and this direction must NOT swallow it. The report PRINTS the "
-    "entries parsed, the mechanisms named and the files it read on every run — an "
-    "unprinted population is the exempt-by-silence surface ruled at n=571."
+    "not registered FAILS, NAMING it. A name the tree no longer carries FAILS as a dead "
+    "reference UNLESS the store `docs/mechanism-splits.json` declares it SPLIT — and then "
+    "EVERY successor must EXIST and be REGISTERED, because the law's claim is that the "
+    "probes it cites still run; the retired file must be GONE, and a one-successor entry "
+    "is a RENAME rather than a split and is refused. SCOPE BOUND: this covers mechanisms "
+    "a recorded law names; the GENERAL case (a test file that should be a gate and is "
+    "named nowhere) is #48, already open, and this direction must NOT swallow it. The "
+    "report PRINTS the entries parsed, the mechanisms named, the split store and the "
+    "files it read on every run — an unprinted population is the exempt-by-silence "
+    "surface ruled at n=571."
 )
 
 # A `tests/test_*.py` NAMED as a token. The token form is what makes the scan safe on
@@ -196,6 +202,16 @@ _FILE_TOKEN = re.compile(r"\btest_[A-Za-z0-9_]+\.py\b")
 # header text: matching is case-insensitive, but the column reader builds its failure
 # reason from this string, so the casing is what a reader of that reason sees.
 _PREVENTED_BY_HEADER = "Prevented by"
+
+# Where a factory DECLARES that one mechanism a law names was SPLIT into several. Absent
+# is the empty state — a factory that has split nothing carries no store — so absence is
+# a skip, never a failure.
+MECHANISM_SPLITS_PATH = "docs/mechanism-splits.json"
+
+# A BARE `test_*.py` file name, matched whole. `_FILE_TOKEN` above finds that shape
+# inside prose; a store entry IS the name, so a partial match there would accept a
+# sentence and quietly resolve nothing.
+_SPLIT_FILE = re.compile(r"^test_[A-Za-z0-9_]+\.py$")
 
 # The two runner forms an append can use, and the two shapes a target can have. The RUNNER
 # is read from the append's argv; the SHAPE is read from the target's own text.
@@ -745,7 +761,18 @@ REQUIRED_GATES: tuple[str, ...] = (
     # path checks EXISTENCE only, so a receipt asserting `intake row n=X` for a row that is
     # a CLOSE passes the write and misleads every reader who follows it.
     "test_ledger_ref_roles.py",
-    "test_patrol_host_state.py",
+    "test_patrol_criterion.py",
+    "test_patrol_ruling.py",
+    "test_patrol_tree_instants.py",
+    "test_patrol_worktree.py",
+    "test_patrol_publish.py",
+    "test_patrol_workspace.py",
+    "test_patrol_round_receipts.py",
+    "test_patrol_cron_duty.py",
+    "test_patrol_render.py",
+    "test_patrol_census.py",
+    "test_patrol_board.py",
+    "test_patrol_preamble.py",
     "test_citation_clause_titles.py",
     # Added with its registration (board #441, ruled n=2907, dispatched n=2909). REQUIRED is
     # the correct grain: the gate drives SYNTHETIC repositories under a temp directory — a
@@ -1279,6 +1306,84 @@ def optional_gate_lines() -> list[str]:
         for name, reason in sorted(OPTIONAL_GATES.items())
     ]
 
+def declared_splits(path: Path) -> tuple[dict[str, list[str]], list[str], bool]:
+    """(splits, problems, read) — retired mechanism name -> the files now carrying it.
+
+    A SPLIT is the one event that retires a FILE NAME without retiring the MECHANISM: a
+    gate too large to measure was divided into leg-scoped gates, and every row of law
+    that named the undivided file is still TRUE — the probes those rows cite still run,
+    in the successors. Rewriting the rows would be a fabrication twice over: they record
+    what prevented the defect at the time, and which leg now carries which probe is not
+    derivable from a row whose cell names no function. Matching the retired name by a
+    GLOB is worse — a pattern that resolves to nothing still passes, which is the
+    exempt-by-silence class ruled at n=571.
+
+    So the division is DECLARED here and VALIDATED: every successor must EXIST under
+    `tests/` and be REGISTERED (asserted by the caller, which owns the run list), and the
+    retired file must be GONE. Three shapes are refused as problems rather than resolved:
+
+      * a retired file still present — the entry claims a division that has not happened,
+        so the store is stale debt sitting there looking live;
+      * fewer than two successors — that is a RENAME wearing the word split, and a rename
+        is followed in the law, never laundered through a store;
+      * an entry missing `issue` or `date` — an entry nobody can check is forgiveness.
+
+    An ABSENT file is the empty state, not a failure: a bootstrapped factory carries no
+    such store until it splits something, and `read=False` says so rather than letting a
+    skipped read look like a clean one.
+    """
+    if not path.is_file():
+        return {}, [], False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return {}, [f"mechanism-splits store is unreadable: {exc}"], True
+    if not isinstance(data, dict) or not isinstance(data.get("splits"), list):
+        return {}, ["mechanism-splits store carries no `splits` list"], True
+
+    splits: dict[str, list[str]] = {}
+    problems: list[str] = []
+    for index, entry in enumerate(data["splits"], 1):
+        where = f"mechanism-splits entry {index}"
+        if not isinstance(entry, dict):
+            problems.append(f"{where} is not an object")
+            continue
+        retired = entry.get("retired")
+        if not isinstance(retired, str) or not _SPLIT_FILE.match(retired):
+            problems.append(f"{where} carries no `retired` file name")
+            continue
+        where = f"mechanism-splits entry {index} ({retired})"
+        if retired in splits:
+            problems.append(f"{where} is declared twice")
+            continue
+        successors = entry.get("successors")
+        if (
+            not isinstance(successors, list)
+            or len(successors) < 2
+            or not all(
+                isinstance(s, str) and _SPLIT_FILE.match(s) for s in successors
+            )
+        ):
+            problems.append(
+                f"{where} needs `successors` — at least TWO file names, because a "
+                "one-successor entry is a rename and a rename is followed, not declared"
+            )
+            continue
+        missing = [
+            key
+            for key in ("issue", "date")
+            if entry.get(key) in (None, "", [])
+        ]
+        if missing:
+            problems.append(
+                f"{where} is missing "
+                + ", ".join(f"`{key}`" for key in missing)
+                + " — an entry nobody can check is forgiveness"
+            )
+            continue
+        splits[retired] = list(successors)
+    return splits, problems, True
+
 def law_named_mechanisms(
     rework_path: Path, skill_path: Path | None
 ) -> tuple[dict[str, list[str]], dict]:
@@ -1330,6 +1435,7 @@ def law_coverage_problems(
     audit_path: Path,
     rework_path: Path,
     skill_path: Path | None = None,
+    splits_path: Path | None = None,
 ) -> tuple[list[str], dict]:
     """Direction 4: a mechanism a RECORDED LAW names must be REGISTERED.
 
@@ -1337,12 +1443,21 @@ def law_coverage_problems(
     what the template ships. This one reads the LAW, because a law naming a mechanism
     that is not wired up is the dead text P29 forbids, one step further out.
 
-    Two failure legs, reported DISTINCTLY so a reader can tell them apart:
+    Three failure legs, reported DISTINCTLY so a reader can tell them apart:
 
       (a) named, the file exists, and it is not registered in `tools/audit.py` — the
           mechanism the law relies on does not run.
       (b) named and no such file exists under `tests/` — a DEAD REFERENCE: the law cites
           a mechanism this tree does not carry at all.
+      (c) named, gone, and the store `docs/mechanism-splits.json` declares it SPLIT into
+          successors that do not all run — a split is only a resolution when EVERY
+          successor exists AND is registered, because the law's claim is that the probes
+          it cites still run.
+
+    A declared split whose successors all run RESOLVES leg (b) and is printed with the
+    successors it resolved to, so the resolution is visible rather than assumed. The store
+    is validated in its own right too: an entry whose retired file is still present is
+    stale, and a one-successor entry is a rename rather than a split.
 
     SCOPE BOUND, carried in `LAW_COVERAGE_PREDICATE`: this covers mechanisms a recorded
     law NAMES. The GENERAL case — a test file that should be a gate and is named nowhere
@@ -1355,6 +1470,15 @@ def law_coverage_problems(
     mechanisms, report = law_named_mechanisms(rework_path, skill_path)
 
     problems: list[str] = []
+
+    # The split store sits BESIDE `tests/`, so a caller that hands over a synthetic tests
+    # directory gets that tree's own store — and a tree with none simply declares none.
+    splits, split_problems, splits_read = declared_splits(
+        splits_path
+        if splits_path is not None
+        else tests_dir.parent / MECHANISM_SPLITS_PATH
+    )
+    problems += split_problems
 
     # A law source that EXISTS and cannot be read is not an absent one. Passing here would
     # be the vacuous-green class this repo names: an empty result from an unparsed region
@@ -1369,18 +1493,59 @@ def law_coverage_problems(
 
     unregistered: list[str] = []
     dead_reference: list[str] = []
+    split_resolved: list[str] = []
+    split_broken: list[str] = []
     for name in sorted(mechanisms):
         if name in registered:
             continue
         where = "; ".join(mechanisms[name])
         if (tests_dir / name).is_file():
             unregistered.append(f"{name} — named by {where}")
+        elif name in splits:
+            # A declared split is a RESOLUTION only when the mechanism the law names is
+            # actually running: every successor present AND registered. A split that
+            # resolves to a file the audit never runs is a dead reference with extra
+            # paperwork, so it fails naming the successor that broke.
+            absent = [s for s in splits[name] if not (tests_dir / s).is_file()]
+            unrunnable = [
+                s
+                for s in splits[name]
+                if (tests_dir / s).is_file() and s not in registered
+            ]
+            if absent or unrunnable:
+                broken: list[str] = []
+                if absent:
+                    broken.append(f"absent under tests/: {', '.join(absent)}")
+                if unrunnable:
+                    broken.append(
+                        f"not registered in tools/audit.py: {', '.join(unrunnable)}"
+                    )
+                split_broken.append(
+                    f"{name} — declared split into {', '.join(splits[name])}, but "
+                    f"{'; '.join(broken)} — named by {where}"
+                )
+            else:
+                split_resolved.append(f"{name} -> {', '.join(splits[name])}")
         else:
             dead_reference.append(f"{name} — named by {where}, no such file under tests/")
+
+    # The store's own claim is about the TREE, so staleness is judged over EVERY entry,
+    # not only over the names a law happens to cite: an entry whose retired file is still
+    # present declares a division that has not happened.
+    stale_splits = [
+        f"{retired} — declared split, but the retired file is STILL present under tests/"
+        for retired in sorted(splits)
+        if (tests_dir / retired).is_file()
+    ]
 
     problems += [
         f"law-named mechanism not registered in tools/audit.py: {item}"
         for item in unregistered
+    ] + [
+        f"law-named mechanism's declared split does not resolve: {item}"
+        for item in split_broken
+    ] + [
+        f"mechanism-splits store is stale: {item}" for item in stale_splits
     ] + [
         f"law-named mechanism is a dead reference: {item}" for item in dead_reference
     ]
@@ -1392,12 +1557,20 @@ def law_coverage_problems(
             "named": len(mechanisms),
             "unregistered": unregistered,
             "dead_reference": dead_reference,
+            "split_resolved": split_resolved,
+            "split_broken": split_broken,
+            "stale_splits": stale_splits,
             "law_sources": [
                 f"rework log: {report['rework_rows']} row(s) read, reason={report['rework_reason']}",
                 (
                     f"skill: {report['skill_lines']} line(s) read"
                     if report["skill_read"]
                     else "skill: NOT READ"
+                ),
+                (
+                    f"mechanism-splits store: {len(splits)} split(s) declared"
+                    if splits_read
+                    else "mechanism-splits store: NOT READ"
                 ),
             ],
         }

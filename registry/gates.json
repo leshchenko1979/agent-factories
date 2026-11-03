@@ -4,8 +4,8 @@
     "budget_sec": 69.27,
     "load_at_measure": 19.2,
     "margin_x": 4.044,
-    "measured_sec": 17.13,
     "measured_at": "d5aa15f121580bcc395d71739315697eb777ea7e",
+    "measured_sec": 17.13,
     "population": {
       "tests/test_audit_inflight_guard.py": 10.26,
       "tests/test_audit_tree_condition.py": 2.75,
@@ -14,8 +14,8 @@
       "tests/test_citation_clause_titles.py": 0.88,
       "tests/test_commit_session_trailer.py": 0.88,
       "tests/test_gate_invocation_mode.py": 0.98,
-      "tests/test_insights_author.py": 4.23,
       "tests/test_insights_audience.py": 3.76,
+      "tests/test_insights_author.py": 4.23,
       "tests/test_insights_status.py": 5.38,
       "tests/test_instrument_census.py": 3.51,
       "tests/test_kit_census.py": 0.55,
@@ -34,582 +34,6 @@
       "tests/test_subject_anchor.py": 0.35,
       "tests/test_synthesize_insights.py": 17.13
     }
-  },
-  "gates": {
-    "tests/test_audit_rates.py": {
-      "budget_sec": 223.47,
-      "margin_x": 4.013,
-      "measured_at": "7b725ad892bb9b1753b33959bd8c18bf4e16aa39",
-      "measured_sec": 55.68,
-      "load_at_measure": 6.52
-    },
-    "tests/test_board_intake_recorded.py": {
-      "budget_sec": 26.47,
-      "margin_x": 4.117,
-      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
-      "measured_sec": 6.43,
-      "load_at_measure": 3.78
-    },
-    "tests/test_close_board_recorded.py": {
-      "budget_sec": 31.35,
-      "margin_x": 4.098,
-      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
-      "measured_sec": 7.65,
-      "load_at_measure": 3.78
-    },
-    "tests/test_close_row_revision.py": {
-      "budget_sec": 38.39,
-      "margin_x": 4.08,
-      "measured_at": "8bf30499ae0565e123235d801cd824baab14f84c",
-      "measured_sec": 9.41,
-      "load_at_measure": 1.46
-    },
-    "tests/test_close_telemetry_provenance.py": {
-      "budget_sec": 42.63,
-      "margin_x": 4.072,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 10.47,
-      "load_at_measure": 7.07
-    },
-    "tests/test_commit_pair_hook.py": {
-      "budget_sec": 16.07,
-      "margin_x": 4.196,
-      "measured_at": "700b55dc01558d4a85e880599c9061c3de07b1b0",
-      "measured_sec": 3.83,
-      "load_at_measure": 11.02
-    },
-    "tests/test_commit_pathspec_law.py": {
-      "budget_sec": 1.71,
-      "margin_x": 7.125,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 0.24
-    },
-    "tests/test_criteria_count.py": {
-      "budget_sec": 3.79,
-      "margin_x": 4.987,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "measured_sec": 0.76
-    },
-    "tests/test_cron_thinness.py": {
-      "budget_sec": 42.71,
-      "margin_x": 4.071,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 10.49,
-      "load_at_measure": 7.07
-    },
-    "tests/test_docs_sync.py": {
-      "budget_sec": 1.67,
-      "margin_x": 7.261,
-      "measured_at": "b218b35eff839443f77d87cff9f3e0f41fb10547",
-      "measured_sec": 0.23,
-      "load_at_measure": 6.43
-    },
-    "tests/test_duplicate_prose.py": {
-      "budget_sec": 1.91,
-      "margin_x": 6.586,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "measured_sec": 0.29
-    },
-    "tests/test_gate_entry_point_equivalence.py": {
-      "budget_sec": 865.67,
-      "margin_x": 4.003,
-      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-      "measured_sec": 216.23,
-      "load_at_measure": 6.85
-    },
-    "tests/test_gate_fixtures_closure.py": {
-      "budget_sec": 85.87,
-      "margin_x": 4.035,
-      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-      "measured_sec": 21.28,
-      "load_at_measure": 6.85
-    },
-    "tests/test_gate_registration.py": {
-      "budget_sec": 69.11,
-      "margin_x": 4.044,
-      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-      "measured_sec": 17.09,
-      "load_at_measure": 6.85
-    },
-    "tests/test_hq_delegation.py": {
-      "budget_sec": 17.87,
-      "margin_x": 4.175,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 4.28
-    },
-    "tests/test_hygiene_build_residue.py": {
-      "budget_sec": 24.59,
-      "load_at_measure": 5.69,
-      "margin_x": 4.126,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 5.96,
-      "growth_breach": {
-        "sample_sec": 6.15,
-        "sample_revision": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-        "basis_sec": 5.96,
-        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-        "declared_sec": 24.59,
-        "derived_sec": 25.35,
-        "growth_x": 1.0319,
-        "derived_over_declared": 1.0309,
-        "round_id": "2026-11-03:d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-        "reported_at": "2026-11-03T07:29:46Z"
-      }
-    },
-    "tests/test_hygiene_declaration_sweep.py": {
-      "budget_sec": 20.19,
-      "load_at_measure": 7.07,
-      "margin_x": 4.154,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 4.86
-    },
-    "tests/test_hygiene_placement.py": {
-      "budget_sec": 20.15,
-      "load_at_measure": 7.07,
-      "margin_x": 4.155,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 4.85,
-      "growth_breach": {
-        "sample_sec": 6.3,
-        "sample_revision": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-        "basis_sec": 4.85,
-        "basis_revision": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-        "declared_sec": 20.15,
-        "derived_sec": 25.95,
-        "growth_x": 1.299,
-        "derived_over_declared": 1.2878,
-        "round_id": "2026-11-03:d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-        "reported_at": "2026-11-03T07:29:46Z"
-      }
-    },
-    "tests/test_hygiene_stale_dirs.py": {
-      "budget_sec": 19.07,
-      "load_at_measure": 5.69,
-      "margin_x": 4.164,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 4.58
-    },
-    "tests/test_hygiene_evidence_supersession.py": {
-      "budget_sec": 18.79,
-      "load_at_measure": 7.07,
-      "margin_x": 4.166,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 4.51
-    },
-    "tests/test_hygiene_inflight.py": {
-      "budget_sec": 57.11,
-      "margin_x": 4.053,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 14.09,
-      "load_at_measure": 7.07
-    },
-    "tests/test_hygiene_namespace.py": {
-      "budget_sec": 41.31,
-      "margin_x": 4.074,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 10.14,
-      "load_at_measure": 7.07
-    },
-    "tests/test_insights_gate_recorded.py": {
-      "budget_sec": 40.27,
-      "margin_x": 4.076,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 9.88,
-      "load_at_measure": 7.07
-    },
-    "tests/test_law_coverage.py": {
-      "budget_sec": 26.91,
-      "margin_x": 4.115,
-      "measured_at": "8ac5bbba9fc3a945f9128b68d7c10d8b53e9d61d",
-      "measured_sec": 6.54,
-      "load_at_measure": 2.03
-    },
-    "tests/test_law_structure.py": {
-      "budget_sec": 28.59,
-      "margin_x": 4.108,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 6.96
-    },
-    "tests/test_ledger.py": {
-      "budget_sec": 485.87,
-      "load_at_measure": 10.93,
-      "margin_x": 4.006,
-      "measured_at": "4f3192c462cef02a29ba59b05e6bb206c02cb25c",
-      "measured_sec": 121.28
-    },
-    "tests/test_ledger_close_preflight.py": {
-      "budget_sec": 63.95,
-      "margin_x": 4.047,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 15.8,
-      "load_at_measure": 7.07
-    },
-    "tests/test_declared_event_population.py": {
-      "budget_sec": 4.75,
-      "margin_x": 4.75,
-      "measured_at": "350a7af134ac514f4452750867ef21e829397a5d",
-      "measured_sec": 1.0,
-      "load_at_measure": 7.04
-    },
-    "tests/test_ledger_commit_cites_no_rows.py": {
-      "budget_sec": 4.91,
-      "margin_x": 4.721,
-      "measured_at": "0b92e1036c3a0d8ed6394addd311b96b2b0a0fd4",
-      "measured_sec": 1.04,
-      "load_at_measure": 2.0
-    },
-    "tests/test_ledger_no_shrink.py": {
-      "budget_sec": 11.39,
-      "margin_x": 4.282,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 2.66,
-      "load_at_measure": 5.69,
-      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED of three samples, per this manifest's slow-tail rule (#579, ruling n=4460): 289.73 s at ~13:33Z load 5.83, 258.25 s at ~18:45Z load 4.09, 280.218 s. measured_at is RECOVERED, not composed: the ruling recorded no revision, so it is bracketed from the reflog -- c5327536 was the tree state from 13:20:27Z (ff-merge origin/main) to 14:37:48Z (af9858ae), the only window containing ~13:33Z, and tests/test_ledger_no_shrink.py's blob there is 4ef10d7438808dcaca23fa1176accd6a12e60066, byte-identical to HEAD's, so the measured subject is the file that ships. A fresh 176.024 s run at HEAD (load 0.77, rc=0, /tmp/noshrink-measure.log) CORROBORATES and does NOT re-base: it is a fast sample on a quiet box, and #128/n=823 refuses re-basing on every new maximum."
-    },
-    "tests/test_ledger_schema.py": {
-      "budget_sec": 19.19,
-      "margin_x": 4.163,
-      "measured_at": "350a7af134ac514f4452750867ef21e829397a5d",
-      "measured_sec": 4.61,
-      "load_at_measure": 7.04,
-      "growth_breach": {
-        "sample_sec": 4.92,
-        "sample_revision": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-        "basis_sec": 4.61,
-        "basis_revision": "350a7af134ac514f4452750867ef21e829397a5d",
-        "declared_sec": 19.19,
-        "derived_sec": 20.43,
-        "growth_x": 1.0672,
-        "derived_over_declared": 1.0646,
-        "round_id": "2026-11-03:d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-        "reported_at": "2026-11-03T07:29:46Z"
-      }
-    },
-    "tests/test_ontology.py": {
-      "budget_sec": 14.23,
-      "margin_x": 4.223,
-      "measured_at": "0b92e1036c3a0d8ed6394addd311b96b2b0a0fd4",
-      "measured_sec": 3.37,
-      "load_at_measure": 2.0
-    },
-    "tests/test_patrol_host_state.py": {
-      "budget_sec": 1647.35,
-      "load_at_measure": 2.92,
-      "margin_x": 4.002,
-      "measured_at": "25344213fb851e1d345474ac7ca0adb983ccff12",
-      "measured_sec": 411.65,
-      "growth_breach": {
-        "sample_sec": 312.07,
-        "sample_revision": "d32e41958f2f5a45358de75eb4a309a787a01c6a",
-        "basis_sec": 296.14,
-        "basis_revision": "5059fa68311f968e07ced06f4415d725672e0af8",
-        "declared_sec": 1185.31,
-        "derived_sec": 1249.03,
-        "growth_x": 1.0538,
-        "derived_over_declared": 1.0538,
-        "round_id": "2026-10-29:d32e41958f2f5a45358de75eb4a309a787a01c6a",
-        "reported_at": "2026-10-29T06:49:57Z"
-      },
-      "probe_refused": {
-        "gate_blob": "72333bafdc2189e72ca06bacc8f323a45eda3d3f",
-        "sample_sec": 2400.07,
-        "derived_sec": 9601.03,
-        "ceiling_sec": 3294.7,
-        "why": "PROBE SAMPLE REFUSED — 2400.07 s licenses 9601.03 s at margin 4.000312, above the hard cap 3600.0 s; the wall is left EXACTLY as it is",
-        "recorded_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745"
-      }
-    },
-    "tests/test_reconstructed_claim_declared.py": {
-      "budget_sec": 35.03,
-      "margin_x": 4.088,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 8.57,
-      "load_at_measure": 5.69
-    },
-    "tests/test_registry.py": {
-      "budget_sec": 6.35,
-      "margin_x": 4.536,
-      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
-      "measured_sec": 1.4,
-      "load_at_measure": 4.13
-    },
-    "tests/test_registry_render.py": {
-      "budget_sec": 26.99,
-      "margin_x": 4.114,
-      "measured_at": "4f3192c462cef02a29ba59b05e6bb206c02cb25c",
-      "measured_sec": 6.56,
-      "load_at_measure": 10.93
-    },
-    "tests/test_rework.py": {
-      "budget_sec": 26.91,
-      "margin_x": 4.115,
-      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-      "measured_sec": 6.54,
-      "load_at_measure": 6.85
-    },
-    "tests/test_rework_declared_landed.py": {
-      "budget_sec": 5.47,
-      "margin_x": 4.636,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 1.18,
-      "load_at_measure": 5.69
-    },
-    "tests/test_rework_relative_revision.py": {
-      "budget_sec": 5.67,
-      "margin_x": 4.61,
-      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-      "measured_sec": 1.23,
-      "load_at_measure": 6.85
-    },
-    "tests/test_roadmap_transition.py": {
-      "budget_sec": 11.99,
-      "margin_x": 4.267,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "measured_sec": 2.81
-    },
-    "tests/test_score_artifact_sections.py": {
-      "budget_sec": 36.27,
-      "margin_x": 4.084,
-      "measured_at": "b45e76b9f503f296050c1984338289aeb30431c6",
-      "measured_sec": 8.88,
-      "load_at_measure": 5.79
-    },
-    "tests/test_score_gate_recorded.py": {
-      "budget_sec": 38.67,
-      "margin_x": 4.079,
-      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
-      "measured_sec": 9.48,
-      "load_at_measure": 7.07
-    },
-    "tests/test_session_bindings.py": {
-      "budget_sec": 34.03,
-      "margin_x": 4.09,
-      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
-      "measured_sec": 8.32
-    },
-    "tests/test_single_writer.py": {
-      "budget_sec": 1.55,
-      "margin_x": 7.75,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 0.2
-    },
-    "tests/test_skill_version_contract.py": {
-      "budget_sec": 49.03,
-      "margin_x": 4.062,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 12.07,
-      "load_at_measure": 5.69
-    },
-    "tests/test_subject_form.py": {
-      "budget_sec": 28.91,
-      "margin_x": 4.107,
-      "measured_at": "fdea0dff990cf5e312a431f33e2fc5f254f93cbb",
-      "measured_sec": 7.04,
-      "load_at_measure": 10.93
-    },
-    "tests/test_synthesize_interface.py": {
-      "budget_sec": 6.03,
-      "margin_x": 4.568,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 1.32
-    },
-    "tests/test_telemetry_reader_registry.py": {
-      "budget_sec": 81.83,
-      "margin_x": 4.037,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 20.27,
-      "load_at_measure": 5.69
-    },
-    "tests/test_template_integrity.py": {
-      "budget_sec": 15.03,
-      "margin_x": 4.21,
-      "measured_at": "f6709eb62fca3d039722501cd39f760e8ba5028f",
-      "measured_sec": 3.57,
-      "load_at_measure": 7.19
-    },
-    "tests/test_template_sync.py": {
-      "budget_sec": 9.59,
-      "margin_x": 4.339,
-      "measured_at": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
-      "measured_sec": 2.21,
-      "load_at_measure": 3.71,
-      "growth_breach": {
-        "sample_sec": 2.31,
-        "sample_revision": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-        "basis_sec": 2.21,
-        "basis_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
-        "declared_sec": 9.59,
-        "derived_sec": 9.99,
-        "growth_x": 1.0452,
-        "derived_over_declared": 1.0417,
-        "round_id": "2026-11-03:d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-        "reported_at": "2026-11-03T07:29:46Z"
-      }
-    },
-    "tools/hygiene.py": {
-      "budget_sec": 29.67,
-      "load_at_measure": 7.19,
-      "margin_x": 4.104,
-      "measured_at": "f6709eb62fca3d039722501cd39f760e8ba5028f",
-      "measured_sec": 7.23
-    },
-    "tools/ledger.py": {
-      "budget_sec": 18.99,
-      "margin_x": 4.164,
-      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-      "measured_sec": 4.56,
-      "load_at_measure": 6.85
-    },
-    "tools/roadmap.py": {
-      "budget_sec": 2.47,
-      "margin_x": 5.744,
-      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
-      "measured_sec": 0.43
-    },
-    "tests/test_shipped_audit_runs.py": {
-      "budget_sec": 3289.07,
-      "measured_sec": 822.08,
-      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
-      "margin_x": 4.001,
-      "load_at_measure": 4.13
-    },
-    "tests/test_shipped_mechanism_law.py": {
-      "budget_sec": 3.19,
-      "measured_sec": 0.61,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "margin_x": 5.23,
-      "load_at_measure": 5.69
-    },
-    "tests/test_questions.py": {
-      "budget_sec": 3373.43,
-      "load_at_measure": 5.69,
-      "margin_x": 4.001,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 843.17,
-      "growth_breach": {
-        "sample_sec": 1042.52,
-        "sample_revision": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-        "basis_sec": 843.17,
-        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-        "declared_sec": 3373.43,
-        "derived_sec": 4170.83,
-        "growth_x": 1.2364,
-        "derived_over_declared": 1.2364,
-        "round_id": "2026-11-03:d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
-        "reported_at": "2026-11-03T07:29:46Z"
-      }
-    }
-  },
-  "modes": {
-    "tests/test_audit_inflight_guard.py": "script",
-    "tests/test_audit_rates.py": "pytest",
-    "tests/test_audit_tree_condition.py": "script",
-    "tests/test_audit_undefined_names.py": "script",
-    "tests/test_binding_mechanism_exists.py": "pytest",
-    "tests/test_binding_sync.py": "pytest",
-    "tests/test_board_intake_recorded.py": "pytest",
-    "tests/test_brain_metrics.py": "script",
-    "tests/test_citation_clause_titles.py": "script",
-    "tests/test_citation_published.py": "script",
-    "tests/test_close_board_recorded.py": "pytest",
-    "tests/test_close_row_revision.py": "pytest",
-    "tests/test_close_telemetry_provenance.py": "pytest",
-    "tests/test_commit_pair_hook.py": "script",
-    "tests/test_commit_pathspec_law.py": "script",
-    "tests/test_commit_session_trailer.py": "script",
-    "tests/test_criteria_count.py": "script",
-    "tests/test_criterion_path_exemptions.py": "script",
-    "tests/test_cron_landing_route.py": "pytest",
-    "tests/test_cron_thinness.py": "pytest",
-    "tests/test_declaration_drift.py": "script",
-    "tests/test_declared_boundary_census.py": "script",
-    "tests/test_docs_sync.py": "script",
-    "tests/test_duplicate_prose.py": "script",
-    "tests/test_gate_entry_point_equivalence.py": "script",
-    "tests/test_gate_fixtures_closure.py": "pytest",
-    "tests/test_gate_invocation_mode.py": "script",
-    "tests/test_gate_registration.py": "script",
-    "tests/test_gate_triggers.py": "pytest",
-    "tests/test_harness_bindings.py": "pytest",
-    "tests/test_hq_delegation.py": "pytest",
-    "tests/test_hygiene_branch_occupancy.py": "pytest",
-    "tests/test_hygiene_build_residue.py": "pytest",
-    "tests/test_hygiene_declaration_sweep.py": "pytest",
-    "tests/test_hygiene_evidence_supersession.py": "pytest",
-    "tests/test_hygiene_inflight.py": "pytest",
-    "tests/test_hygiene_namespace.py": "pytest",
-    "tests/test_hygiene_placement.py": "pytest",
-    "tests/test_hygiene_stale_dirs.py": "pytest",
-    "tests/test_insights_audience.py": "pytest",
-    "tests/test_insights_author.py": "pytest",
-    "tests/test_insights_gate_recorded.py": "pytest",
-    "tests/test_insights_status.py": "pytest",
-    "tests/test_instrument_census.py": "script",
-    "tests/test_issue_routing_surfaces.py": "script",
-    "tests/test_kit_census.py": "script",
-    "tests/test_kit_deliver.py": "script",
-    "tests/test_kit_manifest.py": "script",
-    "tests/test_kit_names.py": "script",
-    "tests/test_kit_pin.py": "script",
-    "tests/test_kit_questions_homes.py": "script",
-    "tests/test_kit_surfaces.py": "script",
-    "tests/test_law_conversion_join.py": "pytest",
-    "tests/test_law_coverage.py": "pytest",
-    "tests/test_law_mechanism_same_commit.py": "script",
-    "tests/test_law_mechanism_triggers.py": "script",
-    "tests/test_law_no_raw_session_uuid.py": "script",
-    "tests/test_law_structure.py": "pytest",
-    "tests/test_ledger.py": "script",
-    "tests/test_ledger_citation_declared.py": "pytest",
-    "tests/test_ledger_claim_preflight.py": "pytest",
-    "tests/test_ledger_close_preflight.py": "pytest",
-    "tests/test_declared_event_population.py": "script",
-    "tests/test_ledger_commit_cites_no_rows.py": "script",
-    "tests/test_ledger_factory_scope.py": "script",
-    "tests/test_ledger_header_closure.py": "script",
-    "tests/test_ledger_identity.py": "script",
-    "tests/test_ledger_index.py": "script",
-    "tests/test_ledger_no_shrink.py": "script",
-    "tests/test_ledger_refs_preflight.py": "pytest",
-    "tests/test_ledger_schema.py": "script",
-    "tests/test_ontology.py": "script",
-    "tests/test_patrol_host_state.py": "pytest",
-    "tests/test_publish.py": "script",
-    "tests/test_question_intake.py": "pytest",
-    "tests/test_questions.py": "script",
-    "tests/test_reconstructed_claim_declared.py": "pytest",
-    "tests/test_registry.py": "script",
-    "tests/test_registry_attest.py": "pytest",
-    "tests/test_registry_render.py": "pytest",
-    "tests/test_rework.py": "script",
-    "tests/test_rework_declared_landed.py": "script",
-    "tests/test_rework_relative_revision.py": "script",
-    "tests/test_roadmap_transition.py": "script",
-    "tests/test_ruling_row_recorded.py": "pytest",
-    "tests/test_score_artifact_measurable.py": "pytest",
-    "tests/test_score_artifact_citations.py": "pytest",
-    "tests/test_score_artifact_sections.py": "pytest",
-    "tests/test_score_gate_recorded.py": "pytest",
-    "tests/test_self_audit_instant.py": "script",
-    "tests/test_session_bindings.py": "pytest",
-    "tests/test_shipped_audit_runs.py": "script",
-    "tests/test_shipped_mechanism_law.py": "script",
-    "tests/test_single_writer.py": "script",
-    "tests/test_skill_version_contract.py": "pytest",
-    "tests/test_subject_anchor.py": "script",
-    "tests/test_subject_form.py": "pytest",
-    "tests/test_synthesize_insights.py": "pytest",
-    "tests/test_synthesize_interface.py": "script",
-    "tests/test_telemetry_reader_registry.py": "pytest",
-    "tests/test_template_gate_pairing.py": "script",
-    "tests/test_template_integrity.py": "pytest",
-    "tests/test_template_sync.py": "script",
-    "tools/hygiene.py": "script",
-    "tools/ledger.py": "script",
-    "tools/roadmap.py": "script",
-    "tests/test_duty_receipt_exemptions.py": "script",
-    "tests/test_ledger_ref_roles.py": "script",
-    "tests/test_gate_direct_invocation.py": "script"
   },
   "exits": {
     "tests/test_audit_inflight_guard.py": {
@@ -647,8 +71,8 @@
     },
     "tests/test_close_board_recorded.py": {
       "class": "exemption-table",
-      "table": "docs/close-board-exemptions.json",
-      "refuser": "tools/ledger.py"
+      "refuser": "tools/ledger.py",
+      "table": "docs/close-board-exemptions.json"
     },
     "tests/test_close_row_revision.py": {
       "class": "repair-verb",
@@ -813,8 +237,8 @@
     },
     "tests/test_ledger_citation_declared.py": {
       "class": "exemption-table",
-      "table": "docs/ledger-citation-exemptions.json",
-      "note": "#317 landed the exit this entry declared as owed: the gate now reads its past instances from the factory's own data file, and every matched entry prints as an `excused:` line on every run, so 'clean' and 'excused' are never the same output."
+      "note": "#317 landed the exit this entry declared as owed: the gate now reads its past instances from the factory's own data file, and every matched entry prints as an `excused:` line on every run, so 'clean' and 'excused' are never the same output.",
+      "table": "docs/ledger-citation-exemptions.json"
     },
     "tests/test_ledger_claim_preflight.py": {
       "class": "write-path-refusal",
@@ -860,9 +284,42 @@
       "class": "exemption-table",
       "table": "docs/ontology-exemptions.json"
     },
-    "tests/test_patrol_host_state.py": {
+    "tests/test_patrol_board.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_patrol_census.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_patrol_criterion.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_patrol_cron_duty.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_patrol_preamble.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_patrol_publish.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_patrol_render.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_patrol_round_receipts.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_patrol_ruling.py": {
       "class": "exemption-table",
       "table": "docs/ruling-board-exemptions.json"
+    },
+    "tests/test_patrol_tree_instants.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_patrol_workspace.py": {
+      "class": "always-satisfiable"
+    },
+    "tests/test_patrol_worktree.py": {
+      "class": "always-satisfiable"
     },
     "tests/test_publish.py": {
       "class": "always-satisfiable"
@@ -939,8 +396,8 @@
     },
     "tests/test_subject_form.py": {
       "class": "exemption-table",
-      "table": "docs/ledger-subject-form-exemptions.json",
-      "note": "#320 landed the exit this entry declared as owed: the store is factory data, each entry names one row and a reason, every excuse prints, and a stale entry is an ERROR"
+      "note": "#320 landed the exit this entry declared as owed: the store is factory data, each entry names one row and a reason, every excuse prints, and a stale entry is an ERROR",
+      "table": "docs/ledger-subject-form-exemptions.json"
     },
     "tests/test_synthesize_insights.py": {
       "class": "always-satisfiable"
@@ -970,5 +427,649 @@
     "tools/roadmap.py": {
       "class": "always-satisfiable"
     }
+  },
+  "gates": {
+    "tests/test_audit_rates.py": {
+      "budget_sec": 223.47,
+      "load_at_measure": 6.52,
+      "margin_x": 4.013,
+      "measured_at": "7b725ad892bb9b1753b33959bd8c18bf4e16aa39",
+      "measured_sec": 55.68
+    },
+    "tests/test_board_intake_recorded.py": {
+      "budget_sec": 26.47,
+      "load_at_measure": 3.78,
+      "margin_x": 4.117,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 6.43
+    },
+    "tests/test_close_board_recorded.py": {
+      "budget_sec": 31.35,
+      "load_at_measure": 3.78,
+      "margin_x": 4.098,
+      "measured_at": "20f1186573f0e89571080dc94c6d2e5814d67812",
+      "measured_sec": 7.65
+    },
+    "tests/test_close_row_revision.py": {
+      "budget_sec": 38.39,
+      "load_at_measure": 1.46,
+      "margin_x": 4.08,
+      "measured_at": "8bf30499ae0565e123235d801cd824baab14f84c",
+      "measured_sec": 9.41
+    },
+    "tests/test_close_telemetry_provenance.py": {
+      "budget_sec": 42.63,
+      "load_at_measure": 7.07,
+      "margin_x": 4.072,
+      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+      "measured_sec": 10.47
+    },
+    "tests/test_commit_pair_hook.py": {
+      "budget_sec": 16.07,
+      "load_at_measure": 11.02,
+      "margin_x": 4.196,
+      "measured_at": "700b55dc01558d4a85e880599c9061c3de07b1b0",
+      "measured_sec": 3.83
+    },
+    "tests/test_commit_pathspec_law.py": {
+      "budget_sec": 1.71,
+      "margin_x": 7.125,
+      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
+      "measured_sec": 0.24
+    },
+    "tests/test_criteria_count.py": {
+      "budget_sec": 3.79,
+      "margin_x": 4.987,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "measured_sec": 0.76
+    },
+    "tests/test_cron_thinness.py": {
+      "budget_sec": 42.71,
+      "load_at_measure": 7.07,
+      "margin_x": 4.071,
+      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+      "measured_sec": 10.49
+    },
+    "tests/test_declared_event_population.py": {
+      "budget_sec": 4.75,
+      "load_at_measure": 7.04,
+      "margin_x": 4.75,
+      "measured_at": "350a7af134ac514f4452750867ef21e829397a5d",
+      "measured_sec": 1.0
+    },
+    "tests/test_docs_sync.py": {
+      "budget_sec": 1.67,
+      "load_at_measure": 6.43,
+      "margin_x": 7.261,
+      "measured_at": "b218b35eff839443f77d87cff9f3e0f41fb10547",
+      "measured_sec": 0.23
+    },
+    "tests/test_duplicate_prose.py": {
+      "budget_sec": 1.91,
+      "margin_x": 6.586,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "measured_sec": 0.29
+    },
+    "tests/test_gate_entry_point_equivalence.py": {
+      "budget_sec": 865.67,
+      "load_at_measure": 6.85,
+      "margin_x": 4.003,
+      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+      "measured_sec": 216.23
+    },
+    "tests/test_gate_fixtures_closure.py": {
+      "budget_sec": 85.87,
+      "load_at_measure": 6.85,
+      "margin_x": 4.035,
+      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+      "measured_sec": 21.28
+    },
+    "tests/test_gate_registration.py": {
+      "budget_sec": 69.11,
+      "load_at_measure": 6.85,
+      "margin_x": 4.044,
+      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+      "measured_sec": 17.09
+    },
+    "tests/test_hq_delegation.py": {
+      "budget_sec": 17.87,
+      "margin_x": 4.175,
+      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
+      "measured_sec": 4.28
+    },
+    "tests/test_hygiene_build_residue.py": {
+      "budget_sec": 24.59,
+      "growth_breach": {
+        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+        "basis_sec": 5.96,
+        "declared_sec": 24.59,
+        "derived_over_declared": 1.0309,
+        "derived_sec": 25.35,
+        "growth_x": 1.0319,
+        "reported_at": "2026-11-03T07:29:46Z",
+        "round_id": "2026-11-03:d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+        "sample_revision": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+        "sample_sec": 6.15
+      },
+      "load_at_measure": 5.69,
+      "margin_x": 4.126,
+      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+      "measured_sec": 5.96
+    },
+    "tests/test_hygiene_declaration_sweep.py": {
+      "budget_sec": 20.19,
+      "load_at_measure": 7.07,
+      "margin_x": 4.154,
+      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+      "measured_sec": 4.86
+    },
+    "tests/test_hygiene_evidence_supersession.py": {
+      "budget_sec": 18.79,
+      "load_at_measure": 7.07,
+      "margin_x": 4.166,
+      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+      "measured_sec": 4.51
+    },
+    "tests/test_hygiene_inflight.py": {
+      "budget_sec": 57.11,
+      "load_at_measure": 7.07,
+      "margin_x": 4.053,
+      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+      "measured_sec": 14.09
+    },
+    "tests/test_hygiene_namespace.py": {
+      "budget_sec": 41.31,
+      "load_at_measure": 7.07,
+      "margin_x": 4.074,
+      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+      "measured_sec": 10.14
+    },
+    "tests/test_hygiene_placement.py": {
+      "budget_sec": 20.15,
+      "growth_breach": {
+        "basis_revision": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+        "basis_sec": 4.85,
+        "declared_sec": 20.15,
+        "derived_over_declared": 1.2878,
+        "derived_sec": 25.95,
+        "growth_x": 1.299,
+        "reported_at": "2026-11-03T07:29:46Z",
+        "round_id": "2026-11-03:d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+        "sample_revision": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+        "sample_sec": 6.3
+      },
+      "load_at_measure": 7.07,
+      "margin_x": 4.155,
+      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+      "measured_sec": 4.85
+    },
+    "tests/test_hygiene_stale_dirs.py": {
+      "budget_sec": 19.07,
+      "load_at_measure": 5.69,
+      "margin_x": 4.164,
+      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+      "measured_sec": 4.58
+    },
+    "tests/test_insights_gate_recorded.py": {
+      "budget_sec": 40.27,
+      "load_at_measure": 7.07,
+      "margin_x": 4.076,
+      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+      "measured_sec": 9.88
+    },
+    "tests/test_law_coverage.py": {
+      "budget_sec": 26.91,
+      "load_at_measure": 2.03,
+      "margin_x": 4.115,
+      "measured_at": "8ac5bbba9fc3a945f9128b68d7c10d8b53e9d61d",
+      "measured_sec": 6.54
+    },
+    "tests/test_law_structure.py": {
+      "budget_sec": 28.59,
+      "margin_x": 4.108,
+      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
+      "measured_sec": 6.96
+    },
+    "tests/test_ledger.py": {
+      "budget_sec": 485.87,
+      "load_at_measure": 10.93,
+      "margin_x": 4.006,
+      "measured_at": "4f3192c462cef02a29ba59b05e6bb206c02cb25c",
+      "measured_sec": 121.28
+    },
+    "tests/test_ledger_close_preflight.py": {
+      "budget_sec": 63.95,
+      "load_at_measure": 7.07,
+      "margin_x": 4.047,
+      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+      "measured_sec": 15.8
+    },
+    "tests/test_ledger_commit_cites_no_rows.py": {
+      "budget_sec": 4.91,
+      "load_at_measure": 2.0,
+      "margin_x": 4.721,
+      "measured_at": "0b92e1036c3a0d8ed6394addd311b96b2b0a0fd4",
+      "measured_sec": 1.04
+    },
+    "tests/test_ledger_no_shrink.py": {
+      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED of three samples, per this manifest's slow-tail rule (#579, ruling n=4460): 289.73 s at ~13:33Z load 5.83, 258.25 s at ~18:45Z load 4.09, 280.218 s. measured_at is RECOVERED, not composed: the ruling recorded no revision, so it is bracketed from the reflog -- c5327536 was the tree state from 13:20:27Z (ff-merge origin/main) to 14:37:48Z (af9858ae), the only window containing ~13:33Z, and tests/test_ledger_no_shrink.py's blob there is 4ef10d7438808dcaca23fa1176accd6a12e60066, byte-identical to HEAD's, so the measured subject is the file that ships. A fresh 176.024 s run at HEAD (load 0.77, rc=0, /tmp/noshrink-measure.log) CORROBORATES and does NOT re-base: it is a fast sample on a quiet box, and #128/n=823 refuses re-basing on every new maximum.",
+      "budget_sec": 11.39,
+      "load_at_measure": 5.69,
+      "margin_x": 4.282,
+      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+      "measured_sec": 2.66
+    },
+    "tests/test_ledger_schema.py": {
+      "budget_sec": 19.19,
+      "growth_breach": {
+        "basis_revision": "350a7af134ac514f4452750867ef21e829397a5d",
+        "basis_sec": 4.61,
+        "declared_sec": 19.19,
+        "derived_over_declared": 1.0646,
+        "derived_sec": 20.43,
+        "growth_x": 1.0672,
+        "reported_at": "2026-11-03T07:29:46Z",
+        "round_id": "2026-11-03:d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+        "sample_revision": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+        "sample_sec": 4.92
+      },
+      "load_at_measure": 7.04,
+      "margin_x": 4.163,
+      "measured_at": "350a7af134ac514f4452750867ef21e829397a5d",
+      "measured_sec": 4.61
+    },
+    "tests/test_ontology.py": {
+      "budget_sec": 14.23,
+      "load_at_measure": 2.0,
+      "margin_x": 4.223,
+      "measured_at": "0b92e1036c3a0d8ed6394addd311b96b2b0a0fd4",
+      "measured_sec": 3.37
+    },
+    "tests/test_patrol_board.py": {
+      "budget_sec": 1079.47,
+      "load_at_measure": 5.75,
+      "margin_x": 4.003,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 269.68
+    },
+    "tests/test_patrol_census.py": {
+      "budget_sec": 31.11,
+      "load_at_measure": 6.23,
+      "margin_x": 4.099,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 7.59
+    },
+    "tests/test_patrol_criterion.py": {
+      "budget_sec": 924.99,
+      "load_at_measure": 5.13,
+      "margin_x": 4.003,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 231.06
+    },
+    "tests/test_patrol_cron_duty.py": {
+      "budget_sec": 1857.83,
+      "load_at_measure": 6.14,
+      "margin_x": 4.002,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 464.27
+    },
+    "tests/test_patrol_preamble.py": {
+      "budget_sec": 228.83,
+      "load_at_measure": 5.26,
+      "margin_x": 4.013,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 57.02
+    },
+    "tests/test_patrol_publish.py": {
+      "budget_sec": 568.75,
+      "load_at_measure": 6.19,
+      "margin_x": 4.005,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 142.0
+    },
+    "tests/test_patrol_render.py": {
+      "budget_sec": 923.75,
+      "load_at_measure": 6.25,
+      "margin_x": 4.003,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 230.75
+    },
+    "tests/test_patrol_round_receipts.py": {
+      "budget_sec": 1410.79,
+      "load_at_measure": 6.26,
+      "margin_x": 4.002,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 352.51
+    },
+    "tests/test_patrol_ruling.py": {
+      "budget_sec": 2351.63,
+      "load_at_measure": 5.42,
+      "margin_x": 4.001,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 587.72
+    },
+    "tests/test_patrol_tree_instants.py": {
+      "budget_sec": 1156.67,
+      "load_at_measure": 5.93,
+      "margin_x": 4.003,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 288.98
+    },
+    "tests/test_patrol_workspace.py": {
+      "budget_sec": 2017.27,
+      "load_at_measure": 6.41,
+      "margin_x": 4.001,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 504.13
+    },
+    "tests/test_patrol_worktree.py": {
+      "budget_sec": 1454.55,
+      "load_at_measure": 6.04,
+      "margin_x": 4.002,
+      "measured_at": "c8949433aa638426a5de8442f1faf5b219313622",
+      "measured_sec": 363.45
+    },
+    "tests/test_questions.py": {
+      "budget_sec": 3373.43,
+      "growth_breach": {
+        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+        "basis_sec": 843.17,
+        "declared_sec": 3373.43,
+        "derived_over_declared": 1.2364,
+        "derived_sec": 4170.83,
+        "growth_x": 1.2364,
+        "reported_at": "2026-11-03T07:29:46Z",
+        "round_id": "2026-11-03:d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+        "sample_revision": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+        "sample_sec": 1042.52
+      },
+      "load_at_measure": 5.69,
+      "margin_x": 4.001,
+      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+      "measured_sec": 843.17
+    },
+    "tests/test_reconstructed_claim_declared.py": {
+      "budget_sec": 35.03,
+      "load_at_measure": 5.69,
+      "margin_x": 4.088,
+      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+      "measured_sec": 8.57
+    },
+    "tests/test_registry.py": {
+      "budget_sec": 6.35,
+      "load_at_measure": 4.13,
+      "margin_x": 4.536,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 1.4
+    },
+    "tests/test_registry_render.py": {
+      "budget_sec": 26.99,
+      "load_at_measure": 10.93,
+      "margin_x": 4.114,
+      "measured_at": "4f3192c462cef02a29ba59b05e6bb206c02cb25c",
+      "measured_sec": 6.56
+    },
+    "tests/test_rework.py": {
+      "budget_sec": 26.91,
+      "load_at_measure": 6.85,
+      "margin_x": 4.115,
+      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+      "measured_sec": 6.54
+    },
+    "tests/test_rework_declared_landed.py": {
+      "budget_sec": 5.47,
+      "load_at_measure": 5.69,
+      "margin_x": 4.636,
+      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+      "measured_sec": 1.18
+    },
+    "tests/test_rework_relative_revision.py": {
+      "budget_sec": 5.67,
+      "load_at_measure": 6.85,
+      "margin_x": 4.61,
+      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+      "measured_sec": 1.23
+    },
+    "tests/test_roadmap_transition.py": {
+      "budget_sec": 11.99,
+      "margin_x": 4.267,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "measured_sec": 2.81
+    },
+    "tests/test_score_artifact_sections.py": {
+      "budget_sec": 36.27,
+      "load_at_measure": 5.79,
+      "margin_x": 4.084,
+      "measured_at": "b45e76b9f503f296050c1984338289aeb30431c6",
+      "measured_sec": 8.88
+    },
+    "tests/test_score_gate_recorded.py": {
+      "budget_sec": 38.67,
+      "load_at_measure": 7.07,
+      "margin_x": 4.079,
+      "measured_at": "87ff9a384ee14e7a7fb594eb41fc273a878672d3",
+      "measured_sec": 9.48
+    },
+    "tests/test_session_bindings.py": {
+      "budget_sec": 34.03,
+      "margin_x": 4.09,
+      "measured_at": "d36ce91cae0ef3f1d07c43c389bf58e8384c00a7",
+      "measured_sec": 8.32
+    },
+    "tests/test_shipped_audit_runs.py": {
+      "budget_sec": 3289.07,
+      "load_at_measure": 4.13,
+      "margin_x": 4.001,
+      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
+      "measured_sec": 822.08
+    },
+    "tests/test_shipped_mechanism_law.py": {
+      "budget_sec": 3.19,
+      "load_at_measure": 5.69,
+      "margin_x": 5.23,
+      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+      "measured_sec": 0.61
+    },
+    "tests/test_single_writer.py": {
+      "budget_sec": 1.55,
+      "margin_x": 7.75,
+      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
+      "measured_sec": 0.2
+    },
+    "tests/test_skill_version_contract.py": {
+      "budget_sec": 49.03,
+      "load_at_measure": 5.69,
+      "margin_x": 4.062,
+      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+      "measured_sec": 12.07
+    },
+    "tests/test_subject_form.py": {
+      "budget_sec": 28.91,
+      "load_at_measure": 10.93,
+      "margin_x": 4.107,
+      "measured_at": "fdea0dff990cf5e312a431f33e2fc5f254f93cbb",
+      "measured_sec": 7.04
+    },
+    "tests/test_synthesize_interface.py": {
+      "budget_sec": 6.03,
+      "margin_x": 4.568,
+      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
+      "measured_sec": 1.32
+    },
+    "tests/test_telemetry_reader_registry.py": {
+      "budget_sec": 81.83,
+      "load_at_measure": 5.69,
+      "margin_x": 4.037,
+      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+      "measured_sec": 20.27
+    },
+    "tests/test_template_integrity.py": {
+      "budget_sec": 15.03,
+      "load_at_measure": 7.19,
+      "margin_x": 4.21,
+      "measured_at": "f6709eb62fca3d039722501cd39f760e8ba5028f",
+      "measured_sec": 3.57
+    },
+    "tests/test_template_sync.py": {
+      "budget_sec": 9.59,
+      "growth_breach": {
+        "basis_revision": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+        "basis_sec": 2.21,
+        "declared_sec": 9.59,
+        "derived_over_declared": 1.0417,
+        "derived_sec": 9.99,
+        "growth_x": 1.0452,
+        "reported_at": "2026-11-03T07:29:46Z",
+        "round_id": "2026-11-03:d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+        "sample_revision": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+        "sample_sec": 2.31
+      },
+      "load_at_measure": 3.71,
+      "margin_x": 4.339,
+      "measured_at": "bc51b74f1387200ea5380a106dbe171fc16c27c4",
+      "measured_sec": 2.21
+    },
+    "tools/hygiene.py": {
+      "budget_sec": 29.67,
+      "load_at_measure": 7.19,
+      "margin_x": 4.104,
+      "measured_at": "f6709eb62fca3d039722501cd39f760e8ba5028f",
+      "measured_sec": 7.23
+    },
+    "tools/ledger.py": {
+      "budget_sec": 18.99,
+      "load_at_measure": 6.85,
+      "margin_x": 4.164,
+      "measured_at": "d1d8d3a3888bd506baa560960cb7c5c6c0f26745",
+      "measured_sec": 4.56
+    },
+    "tools/roadmap.py": {
+      "budget_sec": 2.47,
+      "margin_x": 5.744,
+      "measured_at": "ed419678fb911774d2fac0a4ac48c6e7344f9984",
+      "measured_sec": 0.43
+    }
+  },
+  "modes": {
+    "tests/test_audit_inflight_guard.py": "script",
+    "tests/test_audit_rates.py": "pytest",
+    "tests/test_audit_tree_condition.py": "script",
+    "tests/test_audit_undefined_names.py": "script",
+    "tests/test_binding_mechanism_exists.py": "pytest",
+    "tests/test_binding_sync.py": "pytest",
+    "tests/test_board_intake_recorded.py": "pytest",
+    "tests/test_brain_metrics.py": "script",
+    "tests/test_citation_clause_titles.py": "script",
+    "tests/test_citation_published.py": "script",
+    "tests/test_close_board_recorded.py": "pytest",
+    "tests/test_close_row_revision.py": "pytest",
+    "tests/test_close_telemetry_provenance.py": "pytest",
+    "tests/test_commit_pair_hook.py": "script",
+    "tests/test_commit_pathspec_law.py": "script",
+    "tests/test_commit_session_trailer.py": "script",
+    "tests/test_criteria_count.py": "script",
+    "tests/test_criterion_path_exemptions.py": "script",
+    "tests/test_cron_landing_route.py": "pytest",
+    "tests/test_cron_thinness.py": "pytest",
+    "tests/test_declaration_drift.py": "script",
+    "tests/test_declared_boundary_census.py": "script",
+    "tests/test_declared_event_population.py": "script",
+    "tests/test_docs_sync.py": "script",
+    "tests/test_duplicate_prose.py": "script",
+    "tests/test_duty_receipt_exemptions.py": "script",
+    "tests/test_gate_direct_invocation.py": "script",
+    "tests/test_gate_entry_point_equivalence.py": "script",
+    "tests/test_gate_fixtures_closure.py": "pytest",
+    "tests/test_gate_invocation_mode.py": "script",
+    "tests/test_gate_registration.py": "script",
+    "tests/test_gate_triggers.py": "pytest",
+    "tests/test_harness_bindings.py": "pytest",
+    "tests/test_hq_delegation.py": "pytest",
+    "tests/test_hygiene_branch_occupancy.py": "pytest",
+    "tests/test_hygiene_build_residue.py": "pytest",
+    "tests/test_hygiene_declaration_sweep.py": "pytest",
+    "tests/test_hygiene_evidence_supersession.py": "pytest",
+    "tests/test_hygiene_inflight.py": "pytest",
+    "tests/test_hygiene_namespace.py": "pytest",
+    "tests/test_hygiene_placement.py": "pytest",
+    "tests/test_hygiene_stale_dirs.py": "pytest",
+    "tests/test_insights_audience.py": "pytest",
+    "tests/test_insights_author.py": "pytest",
+    "tests/test_insights_gate_recorded.py": "pytest",
+    "tests/test_insights_status.py": "pytest",
+    "tests/test_instrument_census.py": "script",
+    "tests/test_issue_routing_surfaces.py": "script",
+    "tests/test_kit_census.py": "script",
+    "tests/test_kit_deliver.py": "script",
+    "tests/test_kit_manifest.py": "script",
+    "tests/test_kit_names.py": "script",
+    "tests/test_kit_pin.py": "script",
+    "tests/test_kit_questions_homes.py": "script",
+    "tests/test_kit_surfaces.py": "script",
+    "tests/test_law_conversion_join.py": "pytest",
+    "tests/test_law_coverage.py": "pytest",
+    "tests/test_law_mechanism_same_commit.py": "script",
+    "tests/test_law_mechanism_triggers.py": "script",
+    "tests/test_law_no_raw_session_uuid.py": "script",
+    "tests/test_law_structure.py": "pytest",
+    "tests/test_ledger.py": "script",
+    "tests/test_ledger_citation_declared.py": "pytest",
+    "tests/test_ledger_claim_preflight.py": "pytest",
+    "tests/test_ledger_close_preflight.py": "pytest",
+    "tests/test_ledger_commit_cites_no_rows.py": "script",
+    "tests/test_ledger_factory_scope.py": "script",
+    "tests/test_ledger_header_closure.py": "script",
+    "tests/test_ledger_identity.py": "script",
+    "tests/test_ledger_index.py": "script",
+    "tests/test_ledger_no_shrink.py": "script",
+    "tests/test_ledger_ref_roles.py": "script",
+    "tests/test_ledger_refs_preflight.py": "pytest",
+    "tests/test_ledger_schema.py": "script",
+    "tests/test_ontology.py": "script",
+    "tests/test_patrol_board.py": "pytest",
+    "tests/test_patrol_census.py": "pytest",
+    "tests/test_patrol_criterion.py": "pytest",
+    "tests/test_patrol_cron_duty.py": "pytest",
+    "tests/test_patrol_preamble.py": "pytest",
+    "tests/test_patrol_publish.py": "pytest",
+    "tests/test_patrol_render.py": "pytest",
+    "tests/test_patrol_round_receipts.py": "pytest",
+    "tests/test_patrol_ruling.py": "pytest",
+    "tests/test_patrol_tree_instants.py": "pytest",
+    "tests/test_patrol_workspace.py": "pytest",
+    "tests/test_patrol_worktree.py": "pytest",
+    "tests/test_publish.py": "script",
+    "tests/test_question_intake.py": "pytest",
+    "tests/test_questions.py": "script",
+    "tests/test_reconstructed_claim_declared.py": "pytest",
+    "tests/test_registry.py": "script",
+    "tests/test_registry_attest.py": "pytest",
+    "tests/test_registry_render.py": "pytest",
+    "tests/test_rework.py": "script",
+    "tests/test_rework_declared_landed.py": "script",
+    "tests/test_rework_relative_revision.py": "script",
+    "tests/test_roadmap_transition.py": "script",
+    "tests/test_ruling_row_recorded.py": "pytest",
+    "tests/test_score_artifact_citations.py": "pytest",
+    "tests/test_score_artifact_measurable.py": "pytest",
+    "tests/test_score_artifact_sections.py": "pytest",
+    "tests/test_score_gate_recorded.py": "pytest",
+    "tests/test_self_audit_instant.py": "script",
+    "tests/test_session_bindings.py": "pytest",
+    "tests/test_shipped_audit_runs.py": "script",
+    "tests/test_shipped_mechanism_law.py": "script",
+    "tests/test_single_writer.py": "script",
+    "tests/test_skill_version_contract.py": "pytest",
+    "tests/test_subject_anchor.py": "script",
+    "tests/test_subject_form.py": "pytest",
+    "tests/test_synthesize_insights.py": "pytest",
+    "tests/test_synthesize_interface.py": "script",
+    "tests/test_telemetry_reader_registry.py": "pytest",
+    "tests/test_template_gate_pairing.py": "script",
+    "tests/test_template_integrity.py": "pytest",
+    "tests/test_template_sync.py": "script",
+    "tools/hygiene.py": "script",
+    "tools/ledger.py": "script",
+    "tools/roadmap.py": "script"
   }
 }

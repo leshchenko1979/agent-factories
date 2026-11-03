@@ -105,6 +105,7 @@ from gate_registry import (  # noqa: E402
     first_docstring_line,
     gate_registration_problems,
     law_coverage_problems,
+    declared_splits,
     manifest_drift_problems,
     optional_gate_lines,
     reads_a_docstring,
@@ -512,6 +513,35 @@ def _law_tree(
     skill_path.write_text(skill, encoding="utf-8")
     return tests, audit_path, rework_path, skill_path
 
+def _splits_tree(root: Path, retired: str, successors: list[str]) -> Path:
+    """A throwaway `docs/mechanism-splits.json` declaring ONE split; returns its path.
+
+    Written at the store's REAL relative path under `root`, so a probe can hand it over
+    explicitly OR leave it to be discovered beside the synthetic `tests/` directory —
+    both routes are exercised, and neither can pass by the other's accident.
+    """
+    path = root / "docs" / "mechanism-splits.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "_note": "synthetic split store",
+                "splits": [
+                    {
+                        "retired": retired,
+                        "successors": successors,
+                        "issue": 602,
+                        "date": "2026-11-03",
+                    }
+                ],
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
 def probe_a_law_named_unregistered_mechanism_is_named() -> None:
     """Direction 4 (a): a law names a mechanism that exists but never runs."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -619,6 +649,157 @@ def probe_a_dead_reference_is_reported() -> None:
         check("direction 4 — a dead reference is not counted as merely unregistered",
               report["unregistered"] == [] and len(report["dead_reference"]) == 1,
               str(report["dead_reference"]))
+
+def probe_a_declared_split_resolves_a_retired_name() -> None:
+    """Direction 4 (c): a law names a file the tree SPLIT into legs that all run.
+
+    The shape is #602's: a gate too large to measure was divided into leg-scoped gates,
+    and the law rows that named the undivided file are still TRUE because the probes they
+    cite still run. The store declares the division, so the name RESOLVES instead of
+    reading as a dead reference — and the resolution is PRINTED, never assumed.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        tests, audit, rework, skill = _law_tree(
+            root,
+            {"test_leg_a.py": CANONICAL_GATE, "test_leg_b.py": CANONICAL_GATE},
+            _register("test_leg_a.py", "test_leg_b.py"),
+            _rework("tests/test_retired.py"),
+            "no mechanism named here\n",
+        )
+        splits = _splits_tree(root, "test_retired.py",
+                              ["test_leg_a.py", "test_leg_b.py"])
+        problems, report = law_coverage_problems(
+            tests, audit, rework, skill, splits_path=splits
+        )
+        check("direction 4 — a declared split RESOLVES the retired name",
+              problems == [] and report["dead_reference"] == [],
+              f"problems={problems} dead={report['dead_reference']}")
+        check("direction 4 — and the resolution NAMES its successors",
+              report["split_resolved"]
+              == ["test_retired.py -> test_leg_a.py, test_leg_b.py"],
+              str(report["split_resolved"]))
+        check("direction 4 — the store is printed as READ, not silently skipped",
+              report["law_sources"][2] == "mechanism-splits store: 1 split(s) declared",
+              str(report["law_sources"]))
+
+def probe_a_split_with_an_absent_successor_does_not_resolve() -> None:
+    """A split is a resolution only when EVERY successor EXISTS.
+
+    A declared division that points at a file the tree does not carry is a dead reference
+    with paperwork: the law's claim is that the probes still run, and one of them cannot.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        tests, audit, rework, skill = _law_tree(
+            root,
+            {"test_leg_a.py": CANONICAL_GATE},
+            _register("test_leg_a.py"),
+            _rework("tests/test_retired.py"),
+            "no mechanism named here\n",
+        )
+        splits = _splits_tree(root, "test_retired.py",
+                              ["test_leg_a.py", "test_leg_missing.py"])
+        problems, report = law_coverage_problems(
+            tests, audit, rework, skill, splits_path=splits
+        )
+        check("direction 4 — a split naming an ABSENT successor FAILS, naming it",
+              any("test_leg_missing.py" in p and "absent under tests/" in p
+                  for p in problems),
+              problems[0][:110] if problems else "no problem reported")
+        check("direction 4 — and it is NOT counted as resolved",
+              report["split_resolved"] == [] and len(report["split_broken"]) == 1,
+              str(report["split_broken"]))
+
+def probe_a_split_with_an_unregistered_successor_does_not_resolve() -> None:
+    """A successor that exists but the audit never RUNS is not a resolution either."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        tests, audit, rework, skill = _law_tree(
+            root,
+            {"test_leg_a.py": CANONICAL_GATE, "test_leg_b.py": CANONICAL_GATE},
+            _register("test_leg_a.py"),
+            _rework("tests/test_retired.py"),
+            "no mechanism named here\n",
+        )
+        splits = _splits_tree(root, "test_retired.py",
+                              ["test_leg_a.py", "test_leg_b.py"])
+        problems, report = law_coverage_problems(
+            tests, audit, rework, skill, splits_path=splits
+        )
+        check("direction 4 — a split naming an UNREGISTERED successor FAILS, naming it",
+              any("test_leg_b.py" in p and "not registered" in p for p in problems),
+              problems[0][:110] if problems else "no problem reported")
+
+def probe_a_stale_split_is_reported() -> None:
+    """An entry whose retired file is STILL PRESENT declares a division that never happened.
+
+    This is the exemptions stores' own rule applied to splits: retired debt must not sit
+    in a store looking live. It is judged over EVERY entry, not only over names a law
+    happens to cite, because the entry's claim is about the TREE.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        tests, audit, rework, skill = _law_tree(
+            root,
+            {
+                "test_still.py": CANONICAL_GATE,
+                "test_leg_a.py": CANONICAL_GATE,
+                "test_leg_b.py": CANONICAL_GATE,
+            },
+            _register("test_still.py", "test_leg_a.py", "test_leg_b.py"),
+            _rework("nothing yet"),
+            "no mechanism named here\n",
+        )
+        splits = _splits_tree(root, "test_still.py",
+                              ["test_leg_a.py", "test_leg_b.py"])
+        problems, report = law_coverage_problems(
+            tests, audit, rework, skill, splits_path=splits
+        )
+        check("direction 4 — a split whose retired file is STILL present is STALE",
+              any("store is stale" in p and "test_still.py" in p for p in problems),
+              problems[0][:110] if problems else "no problem reported")
+        check("direction 4 — staleness is reported even when NO law names the file",
+              report["named"] == 0 and len(report["stale_splits"]) == 1,
+              f"named={report['named']} stale={report['stale_splits']}")
+
+def probe_a_one_successor_entry_is_a_rename_not_a_split() -> None:
+    """A single successor launders a RENAME: the law should follow it, not store it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        splits = _splits_tree(root, "test_old.py", ["test_new.py"])
+        declared, problems, read = declared_splits(splits)
+        check("direction 4 — a one-successor entry is REFUSED as a rename",
+              declared == {} and read is True
+              and any("at least TWO" in p for p in problems),
+              str(problems))
+        check("direction 4 — and the refusal says WHY",
+              any("rename" in p for p in problems), str(problems))
+
+def probe_an_absent_split_store_is_a_skip() -> None:
+    """A factory that has split nothing carries no store — absence is a skip, not a fault."""
+    with tempfile.TemporaryDirectory() as tmp:
+        declared, problems, read = declared_splits(Path(tmp) / "no-such.json")
+        check("direction 4 — an ABSENT split store declares nothing and is not read",
+              declared == {} and problems == [] and read is False,
+              f"declared={declared} problems={problems} read={read}")
+
+def probe_a_malformed_split_store_fails_rather_than_passing() -> None:
+    """A present-but-unreadable store is not an absent one (the n=571 class, one store over)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        bad = root / "bad.json"
+        bad.write_text("{ not json", encoding="utf-8")
+        declared, problems, read = declared_splits(bad)
+        check("direction 4 — an unreadable split store FAILS and states why",
+              declared == {} and read is True
+              and any("unreadable" in p for p in problems), str(problems))
+        empty = root / "empty.json"
+        empty.write_text('{"_note": "no list"}', encoding="utf-8")
+        declared, problems, read = declared_splits(empty)
+        check("direction 4 — a store with no `splits` list FAILS, naming the missing key",
+              declared == {} and any("no `splits` list" in p for p in problems),
+              str(problems))
 
 def probe_an_unreadable_law_source_fails_rather_than_passing() -> None:
     """A present-but-unparseable law source is not an absent one (the n=571 class)."""
@@ -4200,6 +4381,14 @@ def main() -> int:
     probe_a_prose_mention_is_not_a_mechanism()
     probe_only_the_prevented_by_column_is_read()
     probe_a_dead_reference_is_reported()
+    print("  synthetic probes — #602: a declared SPLIT resolves a retired name")
+    probe_a_declared_split_resolves_a_retired_name()
+    probe_a_split_with_an_absent_successor_does_not_resolve()
+    probe_a_split_with_an_unregistered_successor_does_not_resolve()
+    probe_a_stale_split_is_reported()
+    probe_a_one_successor_entry_is_a_rename_not_a_split()
+    probe_an_absent_split_store_is_a_skip()
+    probe_a_malformed_split_store_fails_rather_than_passing()
     probe_an_unreadable_law_source_fails_rather_than_passing()
     probe_the_law_coverage_predicate_states_its_scope()
     print("  synthetic probes — direction 5, registered -> CAN RUN")

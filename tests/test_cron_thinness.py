@@ -26,7 +26,7 @@ DECLARATION, never the home a row sits in — all twelve ai-antispam rows sit in
 so a home-scoped read would answer a narrower question than the one it names (#102). A row
 nobody declares is COUNTED and REPORTED, never judged, and zero attributed rows over a
 declared prefix set FAILS LOUDLY. `test_probe_is_offline` asserts the purity structurally,
-and `tests/test_patrol_host_state.py` asserts the wiring.
+and the 12 `tests/test_patrol_*.py` legs (split from one file by #602) assert the wiring.
 
 THINNESS IS TWO LEGS, AND BOTH MUST HOLD (#120, ruling n=729). A pacemaker row is thin
 only when it carries (a) a WAKE — `deliver_to` begins with `session:`, or the prompt

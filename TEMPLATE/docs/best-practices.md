@@ -825,7 +825,8 @@ rather than asserting it.
   pair guard fired only after the bytes had landed. The live-state arm is
   `tools/patrol_host_state.py`: a runner that exits 2 with no verdict on an
   unreadable board and is invoked on a cadence, while the correctness pass carries
-  only `tests/test_patrol_host_state.py`, the offline gate over its logic.
+  only the offline gates over its logic — the 12 `tests/test_patrol_*.py` legs, split
+  from one file by #602 so a single slow leg cannot withhold the fleet's verdict.
 - *Prevents:* a gate that passes a one-sided commit because the working tree
   happened to agree; a live-state check enrolled in the offline suite, red-ing
   every bootstrapped factory; a render whose output depends on uncommitted bytes.
