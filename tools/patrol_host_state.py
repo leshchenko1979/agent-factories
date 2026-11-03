@@ -8239,6 +8239,14 @@ def stall_census_leg(
     threshold_days: float = STALL_CENSUS_THRESHOLD_DAYS,
     lane_names_fn=None,
     unit_citations_fn=None,
+    # #607 shape 2a: the STANDING DECLARATION and the predicate that resolves it arrive
+    # HERE, at the single assembly point both this leg and `driverless_leg` share, so the
+    # exclusion is inherited structurally rather than re-taught to each leg that reads the
+    # population. Injected for the same reason every other declaration is: a probe must
+    # never have its verdict decided by whichever standing items the live factory holds.
+    predicate=None,
+    standing=None,
+    standing_refusal="",
 ) -> dict:
     """Every unit dispatched and NEVER claimed, past the declared threshold.
 
@@ -8405,6 +8413,12 @@ def stall_census_leg(
     numbers travel with it, so the reading is re-derivable rather than asserted.
     """
     is_unit = ledger_predicate().is_work_unit
+    # The standing resolver asks the BOARD predicate's own vocabulary which issue a ruling
+    # row names, so it needs the same predicate the ruling legs are given -- NOT
+    # `ledger_predicate()`, which is the ledger's work-unit vocabulary and carries no
+    # `issue_reference` at all. Defaulting here keeps every existing caller (and every probe
+    # that drives this leg without one) working unchanged.
+    predicate = predicate or load_predicate()
 
     def precedes_filing(ts: object, created: "dt.datetime | None") -> bool:
         """A dispatch instant that PREDATES the board item it would be read as
@@ -8679,7 +8693,41 @@ def stall_census_leg(
     # they must NOT also be listed among the declarations that "matched NO OWED line" -- one
     # park printed with two contradictory dispositions is the defect #471 reports.
     superseded_units: set[str] = set()
+    # THE STANDING DECLARATION (#607 shape 2a/2b), resolved HERE — the single assembly point
+    # both this leg and `driverless_leg` share. `#586` taught ONE leg to excuse a
+    # permanent-state item and closed on that leg, so the item it excused stayed OWED here
+    # and in driverless-lane: the fix travelled exactly as far as the report did. Moving the
+    # resolution into this leg makes the inheritance structural — a leg added later gets the
+    # exclusion because it cannot get the population any other way.
+    #
+    # THE PAIR IS INDIVISIBLE (#607 shape 2b). A VALID entry excludes; a REFUSED one NEVER
+    # does, and its refusal prints beside the unit it failed to excuse. Half of the pair is
+    # worse than neither: an exclusion without the refusal turns a visible red into an
+    # invisible false excuse, where a stale or mistyped entry silently retires a live unit.
+    standing_ok_i, standing_refused = resolve_standing_items(standing, rows, predicate)
+    standing_units: set[str] = set()
+    standing_notes: list[str] = []
+    # The census keys a unit by its LEDGER SUBJECT token; the declaration keys by issue
+    # NUMBER. One map each, so the exclusion and the refusal are both looked up by unit.
+    standing_by_unit: dict[str, dict] = {}
+    standing_refusals_by_unit: dict[str, list[dict]] = {}
+    for _token in carriers:
+        try:
+            _issue = int(str(_token).lstrip("#"))
+        except (TypeError, ValueError):
+            continue
+        if _issue in standing_ok_i:
+            standing_by_unit[_token] = standing_ok_i[_issue]
+        for _refusal in standing_refused:
+            if int(_refusal["issue"]) == _issue:
+                standing_refusals_by_unit.setdefault(_token, []).append(_refusal)
+
+
     off_board = 0
+    # #607 shape 2c: units that passed the age test and reached the declaration chain. The
+    # identity `population_judged + excluded == population_before` is asserted by a test and
+    # printed on every round, so the population's meaning stays readable across the change.
+    population_before = 0
     for unit, row in carriers.items():
         if unit not in open_on_board:
             off_board += 1
@@ -8699,6 +8747,13 @@ def stall_census_leg(
         age_days = (now - fired).total_seconds() / 86400.0
         if age_days < threshold_days:
             continue
+        # #607 shape 2c: the population this leg JUDGES, counted at the instant a unit passes
+        # the age test and reaches the declaration chain below. `population_judged + excluded`
+        # must equal it, and both are printed -- so "0 problems" stays distinguishable from
+        # "empty population", and a receipt taken before this change is still comparable to one
+        # taken after it by arithmetic rather than by eye.
+        population_before += 1
+
         # THE DECLARED DISPOSITION (#473), checked BEFORE the park and after the age test,
         # for the same reason the park is: a declaration can only ever REMOVE a line the
         # census would otherwise report. Before the park because the two are not peers -- a
@@ -8761,6 +8816,21 @@ def stall_census_leg(
                     f"total (#331)."
                 )
                 continue
+        # THE STANDING STATE (#607 shape 2a). A VALID standing declaration is an exclusion of
+        # the same class the park and the disposition are: the item is PERMANENT STATE, not
+        # work, so no dispatch is owed and none will ever be. Applied HERE, in the population
+        # builder, so `driverless_leg` inherits it through `_census()` instead of having to be
+        # taught the declaration separately.
+        standing_entry = standing_by_unit.get(unit)
+        if standing_entry is not None:
+            standing_units.add(unit)
+            standing_notes.append(
+                f"STANDING {unit}: dispatched {age_days:.2f} d ago and NEVER CLAIMED, but this "
+                f"factory DECLARED it a PERMANENT-STATE item excused by ruling row "
+                f"n={standing_entry['ruling_row']} -- not work, so not a finding, and EXCLUDED "
+                f"from the owed total (#607)."
+            )
+            continue
         declared = declared_refs.get(unit)
         owed.append({
             "unit": unit,
@@ -8769,7 +8839,12 @@ def stall_census_leg(
             "session_ref": declared[0] if declared else "",
             "ref_row_n": declared[1].get("n") if declared else None,
             "dispatch_rows": dispatch_counts.get(unit, 1),
+            # #607 shape 2b: a REFUSED standing entry rides BESIDE the unit it failed to
+            # excuse, so the item stays OWED and the reader sees why the declaration did not
+            # hold. Hiding it would make a broken declaration indistinguishable from none.
+            "standing_refusals": standing_refusals_by_unit.get(unit) or [],
         })
+
 
     # A PARK WHOSE UNIT IS NOT IN THE POPULATION AT ALL (#470). The declaration STANDS and the
     # unit is EXCLUDED from the owed total, but no dispatch ROUTED it, so it never entered the
@@ -9203,10 +9278,19 @@ def stall_census_leg(
                 f"close -- and no commit discharges a claim."
             )
             continue
+        # #607 shape 2b: a REFUSED standing declaration is printed ON the OWED line, because
+        # the item it failed to excuse stays OWED and the reason must travel with it. Without
+        # this half, a stale or mistyped entry is indistinguishable from no declaration.
+        standing_refusal_note = ""
+        for refusal in entry.get("standing_refusals") or []:
+            standing_refusal_note += (
+                f" A STANDING DECLARATION names it (ruling_row n={refusal['ruling_row']}) and "
+                f"is REFUSED: {refusal['refusal']} — a refused entry excuses nothing (#607)."
+            )
         problems.append(
             f"OWED {unit}: dispatched {entry['age_days']:.2f} d ago and NEVER CLAIMED, "
             f"and the board still carries it OPEN -- {addressee_note}.{assignee_note}"
-            f"{age_note} {remedy_note}"
+            f"{age_note} {remedy_note}{standing_refusal_note}"
         )
 
     # THE RULING-PROSE PARK GAP (#535 leg 3), read LAST so it is judged against the parks the
@@ -9277,6 +9361,35 @@ def stall_census_leg(
             "units_voided": len(voided_units),
             "units_disposition_superseded": len(disposition_superseded_notes),
             "dispositions": voided + disposition_notes,
+            # THE STANDING EXCLUSION TRAVELS WITH THE VERDICT (#607 shape 2a/2c), on the park's
+            # and the disposition's terms: a reader who sees an owed total smaller than the
+            # dispatched population must be able to read WHY, and `units_standing` beside
+            # `standing_declared` is that answer. A REFUSED entry is counted in NEITHER -- the
+            # unit it failed to excuse stays OWED and the refusal prints on that unit's line,
+            # which is why `standing_refused` is its own count here.
+            "standing_declared": len(standing_ok_i),
+            "units_standing": len(standing_units),
+            "standing_refused": len(standing_refused),
+            "standing_refusals": standing_refused,
+            "standing": standing_notes,
+            # THE DECLARATION'S OWN STATE (#607), printed for the reason every other
+            # declaration reader prints it: ABSENT and UNREADABLE are legitimate-but-different
+            # states, and a bare `standing_declared: 0` would make "no permanent-state item
+            # exists" indistinguishable from "the declaration could not be read". A zero must
+            # never stand in for "could not look".
+            "standing_declaration": standing_refusal or "READ",
+            # THE POPULATION IDENTITY (#607 shape 2c). `population_before` is every unit that
+            # passed the age test and reached the declaration chain; `population_judged` is
+            # what survived it into the OWED set, and `excluded` is what a VALID declaration
+            # held out. The three are printed so `population_judged + excluded` can be checked
+            # against `population_before` by arithmetic -- the cost shape 2 pays for making
+            # "population" mean a different number than it did before, and the reason a receipt
+            # from before this change stays comparable to one taken after it.
+            "population_before": population_before,
+            "population_judged": len(owed),
+            "excluded": (
+                len(parked_units) + len(voided_units) + len(standing_units)
+            ),
             # THE ADDRESSEE COVERAGE (#331 clause 2): how many OWED lines could name the lane
             # the work was handed to. A line that names none says so in words; this pair is
             # the count, so a read where NOTHING resolved is not mistaken for one where the
@@ -9713,6 +9826,15 @@ def driverless_leg(
             "unarmed_active": counts["UNARMED-ACTIVE"],
             "unreadable": counts["UNREADABLE"],
             "readings": DRIVERLESS_READINGS,
+            # THE POPULATION IDENTITY TRAVELS TO EVERY INHERITING LEG (#607 shape 2c). This
+            # leg's population IS the census's `owed_by_lane`, so it must print the census's
+            # own arithmetic beside its own counts -- otherwise a reader comparing this block
+            # to the census block sees two "populations" with no way to reconcile them.
+            "population_before": coverage.get("population_before"),
+            "population_judged": coverage.get("population_judged"),
+            "excluded": coverage.get("excluded"),
+            "units_standing": coverage.get("units_standing"),
+            "standing_refused": coverage.get("standing_refused"),
             "lanes": lanes,
             "lanes_with_a_turn_in_flight": sum(
                 1 for lane in lanes if lane["turn_open"]
@@ -10170,6 +10292,88 @@ def declared_standing_items_fn(repo: Path | None = None) -> dict:
         return {"standing": {}, "standing_refusal": f"UNREADABLE: {exc}"}
     return {"standing": standing, "standing_refusal": ""}
 
+def resolve_standing_items(
+    standing: dict | None,
+    rows: list[dict],
+    predicate,
+) -> tuple[dict[int, dict], list[dict]]:
+    """`(ok, refused)` — the standing declaration VALIDATED against the ledger (#607).
+
+    The ONE home of the declaration's meaning (#607 shape 2a, ruling n=4674). The shape is
+    checked by the reader in `tools/ledger_declaration.py`; what is left is a question only
+    the rows can answer, and it is answered HERE so that every leg reading the standing
+    declaration reads the same answer.
+
+    WHY IT IS NOT A LOCAL OF ONE LEG ANY MORE. `#586` taught one leg to excuse a
+    permanent-state item and closed on that leg, so the item it excused stayed OWED in the
+    two legs that build their population elsewhere — the fix travelled exactly as far as the
+    report did. While this resolution lived inside `undispatched_ruling_leg`, the
+    declaration's MEANING was a local of that leg, and a second reader would have had to
+    duplicate the predicate to share it — the one-field-one-predicate class, and worse: it
+    would make the declaration's meaning a function of how many legs happen to exist.
+
+    THE PAIR IS INDIVISIBLE (#607 shape 2b). `ok` is what an exclusion may be built on and
+    `refused` is what must never become one: moving the exclusion without the refusal
+    converts a visible red into an invisible false excuse, where a stale or mistyped entry
+    silently retires a live unit. So a caller that excludes on `ok` is obliged to print
+    `refused` beside the units it leaves in the population.
+
+    Three refusal strings, kept apart because they are three different repairs: the row does
+    not exist (the entry is stale or mistyped), the row is not a `ruling` (a standing item is
+    made by a ruling and nothing else), or the row resolves to a DIFFERENT unit (an entry
+    naming another unit's ruling excuses nothing).
+    """
+    ok: dict[int, dict] = {}
+    refused: list[dict] = []
+    by_row_n: dict[int, dict] = {}
+    for number in (standing or {}):
+        ruling_row = (standing or {})[number].get("ruling_row")
+        if ruling_row not in by_row_n:
+            for row in rows:
+                if row.get("n") == ruling_row:
+                    by_row_n[ruling_row] = row
+                    break
+    for number in sorted(standing or {}):
+        entry = standing[number]
+        ruling_row = entry.get("ruling_row")
+        reason = entry.get("reason") or ""
+        row = by_row_n.get(ruling_row)
+        if row is None:
+            refused.append({
+                "issue": number, "ruling_row": ruling_row, "reason": reason,
+                "refusal": f"ledger row n={ruling_row} does not exist",
+            })
+            continue
+        event = str(row.get("event") or "")
+        if event != "ruling":
+            refused.append({
+                "issue": number, "ruling_row": ruling_row, "reason": reason,
+                "refusal": (
+                    f"ledger n={ruling_row} is a `{event or 'eventless'}` row, not a `ruling` "
+                    f"row — a standing item is made by a ruling, and nothing else"
+                ),
+            })
+            continue
+        resolved, _arm, _bridge = resolve_ruling_issue(row, rows, predicate)
+        if resolved != number:
+            refused.append({
+                "issue": number, "ruling_row": ruling_row, "reason": reason,
+                "refusal": (
+                    f"ledger n={ruling_row} resolves to "
+                    f"{'no issue' if resolved is None else f'#{resolved}'}, not #{number} — "
+                    f"an entry that names another unit's ruling excuses nothing"
+                ),
+            })
+            continue
+        ok[number] = {
+            "issue": number,
+            "ruling_row": ruling_row,
+            "ruling_at": str(row.get("ts") or ""),
+            "reason": reason,
+        }
+    return ok, refused
+
+
 MENTION_CONTEXT_CHARS = 40
 
 # A NUMBER THAT IS NOT AN ISSUE (#534). The token accepts the bare digits as well as the
@@ -10390,61 +10594,13 @@ def undispatched_ruling_leg(issues: list[dict], rows: list[dict], *, read_at: st
                 "declared_at": str(entry.get("recorded_at") or ""),
             })
 
-    # THE STANDING DECLARATION IS VALIDATED AGAINST THE LEDGER, and an entry that does not
-    # check out REFUSES rather than excuses (#586, ruling n=4478). The reader has already
-    # checked the SHAPE (positive issue, positive ruling_row, non-empty reason); what is left
-    # is a question only the rows can answer: does `ruling_row` name a `ruling` row, and does
-    # that row's own resolution land on the issue the entry claims? A stale or mistyped entry
-    # that silently excused would clear a real debt, so the two failure modes are kept apart
-    # from an absent declaration exactly as `undispatched_batches_fn` keeps them apart.
-    standing_ok: dict[int, dict] = {}
-    standing_refused: list[dict] = []
-    by_row_n: dict[int, dict] = {}
-    for number in (standing or {}):
-        ruling_row = (standing or {})[number].get("ruling_row")
-        if ruling_row not in by_row_n:
-            for row in rows:
-                if row.get("n") == ruling_row:
-                    by_row_n[ruling_row] = row
-                    break
-    for number in sorted(standing or {}):
-        entry = standing[number]
-        ruling_row = entry.get("ruling_row")
-        reason = entry.get("reason") or ""
-        row = by_row_n.get(ruling_row)
-        if row is None:
-            standing_refused.append({
-                "issue": number, "ruling_row": ruling_row, "reason": reason,
-                "refusal": f"ledger row n={ruling_row} does not exist",
-            })
-            continue
-        event = str(row.get("event") or "")
-        if event != "ruling":
-            standing_refused.append({
-                "issue": number, "ruling_row": ruling_row, "reason": reason,
-                "refusal": (
-                    f"ledger n={ruling_row} is a `{event or 'eventless'}` row, not a `ruling` "
-                    f"row — a standing item is made by a ruling, and nothing else"
-                ),
-            })
-            continue
-        resolved, _arm, _bridge = resolve_ruling_issue(row, rows, predicate)
-        if resolved != number:
-            standing_refused.append({
-                "issue": number, "ruling_row": ruling_row, "reason": reason,
-                "refusal": (
-                    f"ledger n={ruling_row} resolves to "
-                    f"{'no issue' if resolved is None else f'#{resolved}'}, not #{number} — "
-                    f"an entry that names another unit's ruling excuses nothing"
-                ),
-            })
-            continue
-        standing_ok[number] = {
-            "issue": number,
-            "ruling_row": ruling_row,
-            "ruling_at": str(row.get("ts") or ""),
-            "reason": reason,
-        }
+    # THE STANDING DECLARATION IS VALIDATED BY THE ONE SHARED RESOLVER (#607 shape 2a).
+    # This leg used to carry the resolution inline, which made the declaration's meaning a
+    # local of this leg and left the two legs that build their population elsewhere unable to
+    # share it (#586's fix travelled exactly as far as the report did). `resolve_standing_items`
+    # is now the single home: same three refusal strings, same `ok` map, one predicate.
+    standing_ok, standing_refused = resolve_standing_items(standing, rows, predicate)
+
 
     population: list[int] = sorted(
         n for n in open_numbers
@@ -14874,6 +15030,17 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['units_owed']} never claimed past the declared threshold of "
                 f"{cov['threshold_days']} d"
             )
+            # THE POPULATION IDENTITY (#607 shape 2c), printed on EVERY round so a receipt is
+            # comparable across this change by ARITHMETIC rather than by eye. Shape 2 moved the
+            # standing exclusion into the population builder, which changes what "population"
+            # means in this line; the identity is how the cost is paid. It also keeps "0
+            # problems" distinguishable from "empty population": a judged population of 0 with
+            # excluded 0 is a different read from one where everything was excluded.
+            lines.append(
+                f"  population identity: judged {cov.get('population_judged', 0)} + excluded "
+                f"{cov.get('excluded', 0)} = {cov.get('population_before', 0)} "
+                f"(reached the declaration chain; #607)"
+            )
             # THE MENTION POPULATION IS PRINTED BESIDE THE ROUTED ONE (#470): the population
             # admits ROUTED units alone, so a reader must be able to see how many units the
             # harvest saw and refused the population slot -- a narrowed read that hides what
@@ -14950,6 +15117,22 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             )
             for note in cov.get("dispositions", []):
                 lines.append(f"    {note}")
+            # THE STANDING EXCLUSION IS PRINTED BESIDE THE VERDICT (#607 shape 2a/2c), for the
+            # same reason the park and the disposition are: a permanent-state item is not work,
+            # and a reader who cannot see WHY it left the owed count cannot tell a declared
+            # item from a dropped one. `standing_refused` prints separately because a REFUSED
+            # entry excuses NOTHING (#607 shape 2b) -- the unit it names is still OWED, and its
+            # line carries the refusal.
+            lines.append(
+                f"  standing items (declared in docs/ledger-invariants.json, validated against "
+                f"the ledger): {cov.get('standing_declared', 0)} declared, "
+                f"{cov.get('units_standing', 0)} OWED unit(s) excused and EXCLUDED from the "
+                f"owed total, {cov.get('standing_refused', 0)} REFUSED (each still OWED) "
+                f"-- declaration {cov.get('standing_declaration', 'READ')}"
+            )
+            for note in cov.get("standing", []):
+                lines.append(f"    {note}")
+
             # ... and the ADDRESSEE coverage (#331 clause 2), so a run where NOTHING
             # resolved is not read as a run that never asked.
             lines.append(
@@ -16137,12 +16320,32 @@ def main(
     # verdict, and the driverless leg's guard reports the raise it inherited.
     census_cache: dict[str, dict] = {}
 
+    # #607: the standing declaration is read ONCE and shared by the census (which excludes on
+    # it) and by `undispatched-ruling` (which excuses on it). Two reads would be two chances to
+    # see different declarations in one round, and the two legs' verdicts about the SAME item
+    # would then disagree -- the drift class this factory files repeatedly.
+    standing_cache: dict[str, dict] = {}
+
+    def _standing() -> dict:
+        if "v" not in standing_cache:
+            standing_cache["v"] = (standing_items_fn or declared_standing_items_fn)()
+        return standing_cache["v"]
+
     def _census() -> dict:
         if "v" not in census_cache:
+            # #607 shape 2a: the STANDING DECLARATION is resolved INSIDE `stall_census_leg`,
+            # at the one assembly point both this leg and `driverless_leg` share -- so the
+            # exclusion is inherited through this cache instead of being re-taught to each leg
+            # that reads the population. The predicate travels with it because the resolution
+            # is a question about the ledger's own vocabulary, not about this leg's.
+            _standing_payload = _standing()
             census_cache["v"] = stall_census_leg(
                 issues, rows, read_at=read_at,
                 lane_names_fn=lane_names_fn or stall_lane_names,
                 unit_citations_fn=unit_citations_fn or stall_unit_citations,
+                predicate=predicate,
+                standing=_standing_payload.get("standing") or {},
+                standing_refusal=_standing_payload.get("standing_refusal") or "",
             )
         return census_cache["v"]
 
@@ -16222,7 +16425,7 @@ def main(
         leg_guard("undispatched-ruling", lambda: undispatched_ruling_leg(
             issues, rows, read_at=read_at, predicate=predicate,
             **(dispatch_batches_fn or undispatched_batches_fn)(),
-            **(standing_items_fn or declared_standing_items_fn)(),
+            **_standing(),
         ), read_at),
         leg_guard("criterion-paths", lambda: criterion_path_leg(
             issues, read_at=read_at,
