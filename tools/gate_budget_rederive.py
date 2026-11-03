@@ -151,7 +151,7 @@ PROBE_CEILING_FACTOR = 2.0
 PROBE_HARD_CAP_SEC = 3600.0
 # The DECLARED fields a probe sample carries, so a machine reader -- never prose -- can tell
 # it from an organic round sample. The regime travels with the number: a performance figure
-# measured on a quiet box says nothing about the same gate on a loaded one.
+# measured on an idle box says nothing about the same gate on a loaded one.
 PROBE_SAMPLE_FIELD = "probe_sample"
 PROBE_REGIME_FIELD = "probe_regime"
 # A REFUSED probe is recorded too, with the gate's blob at refusal time. A refusal is not a
@@ -224,11 +224,16 @@ class WallKill:
 
 @dataclass(frozen=True)
 class ProbeSample:
-    """One quiet-box probe: the sample it produced, and the regime it was taken in.
+    """One EXCLUSIVE-box probe: the sample it produced, and the regime it was taken in.
 
-    `taken` is False when the probe did not run at all, and `why` says which of the three
-    lawful refusals applied -- no registered invocation, a box that is not quiet, or a
-    refusal already recorded against the SAME gate blob. An instrument that cannot observe
+    EXCLUSIVE is the precondition this tool actually enforces -- no peer audit/pytest process
+    is live -- and it is read from a process COUNT, never from the load average (#609). A
+    sample taken at load 5.73->6.85 with zero peers is exclusive and NOT quiet, so nothing
+    here may assert quietness it did not measure.
+
+    `taken` is False when the probe did not run at all, and `why` names the refusal that
+    applied. The refusals are enumerated in ONE place, `run_probes`'s own docstring, and not
+    counted here: a count in a second location is a number that drifts (#609). An instrument that cannot observe
     its own failure class proves nothing, so a probe that did not run is REPORTED rather than
     omitted: "no sample" and "never tried" are different facts with the same shape.
 
@@ -828,7 +833,7 @@ def record_growth_state(pop: Population, manifest_path: Path) -> Population:
 #   record_wall_kills  — the streak, counted from the audit's own `unknown` flag across rounds,
 #                        because a report is one round and "consecutive" needs a surface that
 #                        outlives it (the same argument `growth_breach` rests on).
-#   run_probes         — ONE quiet-box sample per eligible gate, under a ceiling and a hard
+#   run_probes         — ONE EXCLUSIVE-box sample per eligible gate, under a ceiling and a hard
 #                        cap, labelled with its regime so the number travels with the box it
 #                        was taken on.
 #   the licence        — in `apply_rederivation`: the sample is an INPUT to docs/measurement-procedure.md §5.2, never a
@@ -1113,9 +1118,9 @@ def run_probes(
     pop: Population,
     manifest_path: Path,
     root: Path,
-    quiet_check=None,
+    peer_count_check=None,
 ) -> Population:
-    """Take ONE quiet-box sample per ELIGIBLE gate and hand it to the ordinary derivation.
+    """Take ONE exclusive-box sample per ELIGIBLE gate and hand it to the ordinary derivation.
 
     FOUR REFUSALS, each REPORTED rather than silently skipped, because "no sample" and "never
     tried" are different facts with the same shape:
@@ -1123,7 +1128,9 @@ def run_probes(
       - no registered invocation — there is no declared command to probe;
       - a refusal already recorded against this gate's BLOB — re-probing an unchanged gate
         would re-learn the same arithmetic at the cost of a 25-minute run;
-      - the box is not quiet — a sample beside a peer's suite measures the box;
+      - a peer's audit/pytest suite is live — the sample would measure the box, not the
+        gate. The check is EXCLUSIVITY (a peer-process count), NOT quietness: load is
+        RECORDED and never judged, so a high-load box with no peers still qualifies (#609);
       - the gate does not complete inside the probe ceiling — the envelope failed too, so
         there is still no sample to license a wall.
 
@@ -1131,7 +1138,8 @@ def run_probes(
     refused, never how long the work takes (#558), and a kill at the ceiling is the same
     lower-bound trap the audit's own `unknown` flag exists to prevent.
 
-    `quiet_check` is the count of OTHER live audit/pytest processes, injectable because the
+    `peer_count_check` returns the count of OTHER live audit/pytest processes -- an
+    EXCLUSIVITY measure, never a quietness measure (#609) -- injectable because the
     precondition is ENVIRONMENTAL and the logic is what a probe can test: under a test runner
     the runner itself is always live, so the real check would refuse every probe and the
     mechanism would read as untestable rather than as tested. Production passes nothing and
@@ -1195,8 +1203,8 @@ def run_probes(
             )
             continue
         concurrent = (
-            quiet_check()
-            if quiet_check is not None
+            peer_count_check()
+            if peer_count_check is not None
             else _concurrent_gate_processes({os.getpid(), os.getppid()})
         )
         load_start = _load_avg()
@@ -1210,8 +1218,9 @@ def run_probes(
                     load_at_start=load_start,
                     concurrent_audits=concurrent,
                     taken=False,
-                    why=f"the box is NOT quiet — {concurrent} other audit/pytest process(es) "
-                        "are live, and a sample taken beside them measures the box",
+                    why=f"the box is not EXCLUSIVE — {concurrent} other audit/pytest "
+                        "process(es) are live, and a sample taken beside them measures the "
+                        "box, not the gate",
                 )
             )
             continue
@@ -1710,10 +1719,21 @@ def render(pop: Population) -> str:
     eligible = [k for k in pop.kills if k.eligible]
     probe_applied = set(pop.extras.get("probe_applied") or ())
     for probe in pop.probes:
-        regime = (
-            f"load {probe.load_at_start}->{probe.load_at_finish}, "
-            f"{probe.concurrent_audits} concurrent audit/pytest process(es)"
+        # #609: the precondition this tool ENFORCES is EXCLUSIVITY -- no peer audit/pytest
+        # process live -- read from a process count, never from the load average. So the
+        # render states the regime it MEASURED and claims no quietness: a 5.73->6.85 sample
+        # with zero peers is exclusive and NOT quiet. An unread load is an INABILITY and
+        # renders as one, never as the value `None->None`.
+        if probe.load_at_start is None or probe.load_at_finish is None:
+            load_text = "load unread (an INABILITY, not a quiet box)"
+        else:
+            load_text = f"load {probe.load_at_start}->{probe.load_at_finish}"
+        peer_text = (
+            "peer audit/pytest count unread"
+            if probe.concurrent_audits is None
+            else f"{probe.concurrent_audits} concurrent audit/pytest process(es)"
         )
+        regime = f"{load_text}, {peer_text}"
         if not probe.taken:
             lines.append(
                 f"    [NOT PROBED] {probe.key} — {probe.why}"
@@ -1722,7 +1742,8 @@ def render(pop: Population) -> str:
             continue
         lines.append(
             f"    [PROBED] {probe.key} — the declared invocation completed in "
-            f"{probe.sample_sec} s on a quiet box ({regime}); {probe.licence_note}"
+            f"{probe.sample_sec} s with no peer audit/pytest process live ({regime}); "
+            f"{probe.licence_note}"
             + (
                 ""
                 if probe.licensed and probe.key in probe_applied
@@ -1786,7 +1807,7 @@ def build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=True,
         help=(
-            "Take ONE quiet-box sample per gate killed at its own wall for >=2 consecutive "
+            "Take ONE exclusive-box sample per gate killed at its own wall for >=2 consecutive "
             "rounds (#604). ON by default, because an escape nobody invokes is not one; "
             "use --no-probe to disable. The sample is an INPUT to the derivation, never a "
             "bypass: a wall moves only if the arithmetic fits under the hard cap."
@@ -1830,7 +1851,7 @@ def main(argv: list[str] | None = None) -> int:
     # THE PROBE (#604) runs BEFORE `--apply`, so one invocation can take the sample and
     # re-derive from it. ON by default (see the flag's own comment): the eligibility gate is
     # what makes that safe — nothing runs until a gate has been killed at its own wall in two
-    # consecutive rounds — and the quiet check refuses the sample whenever a peer's run is
+    # consecutive rounds — and the exclusivity check refuses the sample whenever a peer's run is
     # live, which is the concurrent-run pile #597 exists to stop.
     if args.probe:
         pop = run_probes(pop, manifest, root)

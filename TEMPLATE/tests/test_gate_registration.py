@@ -3954,10 +3954,10 @@ def probe_a_gate_that_OUTRUNS_its_wall_is_probed_and_one_that_MEETS_it_is_not() 
             exhausted=("tests/test_slow_gate.py",),
             kills=module.read_wall_kills(manifest),
         )
-        # `quiet_check` is stubbed because the PRECONDITION is environmental: this runner is
+        # `peer_count_check` is stubbed because the PRECONDITION is environmental: this runner is
         # itself a live pytest, so the production /proc scan would refuse every probe here and
         # the mechanism would read as untestable instead of as tested.
-        probed = module.run_probes(pop, manifest, root, quiet_check=lambda: 0)
+        probed = module.run_probes(pop, manifest, root, peer_count_check=lambda: 0)
         by_key = {p.key: p for p in probed.probes}
         slow = by_key.get("tests/test_slow_gate.py")
         check("#604 — a gate that OUTRUNS its wall is probed", slow is not None, str(by_key))
@@ -3979,7 +3979,7 @@ def probe_a_gate_that_OUTRUNS_its_wall_is_probed_and_one_that_MEETS_it_is_not() 
         check("#604 — a gate that MEETS its wall is never probed",
               "tests/test_quick_gate.py" not in by_key, str(sorted(by_key)))
 
-def probe_a_box_that_is_NOT_QUIET_REFUSES_the_probe_and_SAYS_SO() -> None:
+def probe_a_box_with_a_LIVE_PEER_REFUSES_the_probe_and_SAYS_SO() -> None:
     """A sample taken beside a peer's suite measures the BOX, not the gate (#602's own cost)."""
     module = _rederive_module()
     if module is None:
@@ -3996,11 +3996,11 @@ def probe_a_box_that_is_NOT_QUIET_REFUSES_the_probe_and_SAYS_SO() -> None:
             declared=1, examined=1, exhausted=("tests/test_slow_gate.py",),
             kills=module.read_wall_kills(manifest),
         )
-        probed = module.run_probes(pop, manifest, root, quiet_check=lambda: 3)
-        check("#604 — a loaded box REFUSES the probe", len(probed.probes) == 1
+        probed = module.run_probes(pop, manifest, root, peer_count_check=lambda: 3)
+        check("#604 — a box with a LIVE PEER REFUSES the probe", len(probed.probes) == 1
               and probed.probes[0].taken is False, str(probed.probes))
         check("#604 — the refusal NAMES the box",
-              "NOT quiet" in probed.probes[0].why and "3 other" in probed.probes[0].why,
+              "not EXCLUSIVE" in probed.probes[0].why and "3 other" in probed.probes[0].why,
               probed.probes[0].why[:90])
 
 def probe_a_sample_that_would_CARRY_an_OUTAGE_is_REFUSED_and_the_wall_stays() -> None:
@@ -4319,7 +4319,7 @@ def main() -> int:
     probe_an_OUTSTANDING_breach_is_NOT_eligible_and_a_CONSUMED_one_IS()
     probe_the_streak_advances_once_per_round_and_a_COMPLETED_run_clears_it()
     probe_a_gate_that_OUTRUNS_its_wall_is_probed_and_one_that_MEETS_it_is_not()
-    probe_a_box_that_is_NOT_QUIET_REFUSES_the_probe_and_SAYS_SO()
+    probe_a_box_with_a_LIVE_PEER_REFUSES_the_probe_and_SAYS_SO()
     probe_a_sample_that_would_CARRY_an_OUTAGE_is_REFUSED_and_the_wall_stays()
     probe_the_PROBE_IS_ON_BY_DEFAULT_and_an_escape_nobody_invokes_is_not_one()
     probe_an_UNREAD_kill_record_is_NEVER_reported_as_a_clean_one()
