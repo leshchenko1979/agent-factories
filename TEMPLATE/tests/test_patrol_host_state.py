@@ -14731,5 +14731,149 @@ def test_probe_a_FOREIGN_ruling_does_not_rule_this_board() -> None:
     assert leg["coverage"]["foreign_rows"][0]["repo"] == "leshchenko1979/inferhub-watch"
 
 
+def test_the_census_EXCLUDES_a_declared_standing_item_and_NEVER_a_REFUSED_one() -> None:
+    """#607 shape 2, ruling n=4674: the standing exclusion lives in the POPULATION BUILDER.
+
+    THE DEFECT THIS CLOSES. `#586` taught ONE leg (`undispatched-ruling`) to excuse a
+    permanent-state item and closed on that leg, so the item it excused stayed OWED in the two
+    legs that build their population elsewhere -- `stall-census` and, through the census's own
+    grouping, `driverless-lane`. The fix travelled exactly as far as the report did. A lane
+    reading "1 owed" every morning for an item that will never be worked is being told to
+    re-dispatch finished work, which is the failure the excuse existed to stop.
+
+    THE SHAPE (2a/2b/2c) IS ASSERTED AS THREE SEPARATE PROPERTIES, because each one can fail
+    alone and each one fails silently:
+
+    * 2a -- a VALID declaration is an EXCLUSION applied in the population builder, so every
+      leg that reads the census inherits it. Asserted directly, and then asserted AGAIN
+      through `driverless_leg`, which is the leg that would otherwise still red.
+    * 2b -- a REFUSED declaration is NEVER an exclusion. The unit stays OWED and the refusal
+      prints ON its line. Half of the pair is worse than neither: an exclusion without the
+      refusal turns a visible red into an invisible false excuse.
+    * 2c -- every round prints `judged + excluded = before`, so "0 problems" stays
+      distinguishable from "empty population" and a receipt taken before this change is
+      comparable to one taken after it by ARITHMETIC rather than by eye.
+
+    THE FIXTURE IS #581's REAL SHAPE: a `ruling` row that resolves to it, a dispatch row that
+    was never claimed, and nothing else. #931 is the neighbour that must stay OWED in every
+    arm -- without it, a leg that excluded the whole population would satisfy every
+    exclusion assertion here.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    issues = [_issue(581, "OPEN"), _issue(931, "OPEN")]
+    rows = [
+        _stall_row(4472, "ruling", "#581", 1, now=now),      # the ruling that declares it
+        _stall_row(1, "dispatch", "#581", 5, now=now),       # dispatched, never claimed
+        _stall_row(2, "dispatch", "#931", 5, now=now),       # the neighbour, never declared
+    ]
+    declared = {581: {"issue": 581, "ruling_row": 4472, "reason": "permanent state, probe"}}
+
+    # ARM 1 -- 2a, the POSITIVE half: a valid declaration EXCLUDES #581 and leaves #931 OWED.
+    leg = RUNNER.stall_census_leg(
+        issues, rows, read_at=read_at,
+        predicate=RUNNER.load_predicate(), standing=declared)
+    cov = leg["coverage"]
+    named = "\n".join(leg["problems"])
+    assert "OWED #581" not in named, (
+        f"a VALID standing declaration must exclude the unit -- it is permanent state, not "
+        f"work, so no dispatch is owed and none will ever be\n{named}"
+    )
+    assert "OWED #931" in named, (
+        f"the undeclared neighbour must STILL be owed, or a leg that excluded the whole "
+        f"population would satisfy the assertion above\n{named}"
+    )
+    assert cov["standing_declared"] == 1, cov
+    assert cov["units_standing"] == 1, cov
+    assert cov["standing_refused"] == 0, cov
+    standing_notes = "\n".join(cov["standing"])
+    assert "STANDING #581" in standing_notes, cov["standing"]
+    assert "EXCLUDED" in standing_notes and "#607" in standing_notes, cov["standing"]
+
+    # ARM 1b -- 2c, the IDENTITY: judged + excluded == before, on THIS arm.
+    assert (cov["population_before"], cov["population_judged"], cov["excluded"]) == (2, 1, 1), cov
+    assert cov["population_judged"] + cov["excluded"] == cov["population_before"], cov
+
+    # ARM 2 -- THE NEGATIVE CONTROL: the SAME rows with NO declaration read #581 OWED. Without
+    # this arm, a leg that excused everything unconditionally would pass ARM 1.
+    bare = RUNNER.stall_census_leg(
+        issues, rows, read_at=read_at,
+        predicate=RUNNER.load_predicate(), standing={})
+    bare_cov = bare["coverage"]
+    assert "OWED #581" in "\n".join(bare["problems"]), bare["problems"]
+    assert bare_cov["units_standing"] == 0, bare_cov
+    assert bare_cov["standing_declared"] == 0, bare_cov
+    assert (bare_cov["population_before"], bare_cov["population_judged"],
+            bare_cov["excluded"]) == (2, 2, 0), bare_cov
+    assert bare_cov["population_judged"] + bare_cov["excluded"] == bare_cov["population_before"]
+
+    # ARM 3 -- 2b, REFUSED because the row does not exist: the entry is stale or mistyped. The
+    # unit stays OWED and the refusal prints ON its line, so a broken declaration is never
+    # indistinguishable from no declaration.
+    stale = {581: {"issue": 581, "ruling_row": 9999, "reason": "permanent state, probe"}}
+    leg = RUNNER.stall_census_leg(
+        issues, rows, read_at=read_at,
+        predicate=RUNNER.load_predicate(), standing=stale)
+    cov = leg["coverage"]
+    named = "\n".join(leg["problems"])
+    assert "OWED #581" in named, (
+        f"a REFUSED entry excuses NOTHING -- the unit it names stays in the population\n{named}"
+    )
+    assert "REFUSED" in named and "does not exist" in named, named
+    assert "a refused entry excuses nothing (#607)" in named, named
+    assert cov["units_standing"] == 0, cov
+    assert cov["standing_refused"] == 1, cov
+    assert cov["population_judged"] + cov["excluded"] == cov["population_before"], cov
+
+    # ARM 4 -- 2b, REFUSED because the row names ANOTHER unit's ruling. An entry that names
+    # another unit's ruling excuses nothing, and the refusal says which unit it resolves to.
+    other = {581: {"issue": 581, "ruling_row": 4473, "reason": "permanent state, probe"}}
+    rows_other = rows + [_stall_row(4473, "ruling", "#999", 1, now=now)]
+    leg = RUNNER.stall_census_leg(
+        issues, rows_other, read_at=read_at,
+        predicate=RUNNER.load_predicate(), standing=other)
+    named = "\n".join(leg["problems"])
+    assert "OWED #581" in named, named
+    assert "resolves to #999" in named, named
+    assert leg["coverage"]["standing_refused"] == 1, leg["coverage"]
+
+    # ARM 5 -- 2a THROUGH THE LEG THAT WOULD OTHERWISE STILL RED: `driverless_leg` reads the
+    # census's OWN grouping, so the exclusion is inherited rather than re-taught. This is the
+    # assertion the whole shape exists for -- before #607 this leg red on the same item.
+    driven_census = RUNNER.stall_census_leg(
+        issues, rows, read_at=read_at,
+        predicate=RUNNER.load_predicate(), standing=declared)
+    dl = RUNNER.driverless_leg(
+        driven_census, goals=_goal_store(), read_at=read_at,
+        lane_names_fn=lambda: {}, lane_activity_fn=lambda: _activity_store())
+    dl_cov = dl["coverage"]
+    assert dl_cov["units_standing"] == driven_census["coverage"]["units_standing"], dl_cov
+    assert dl_cov["population_before"] == driven_census["coverage"]["population_before"], dl_cov
+    assert dl_cov["population_judged"] == driven_census["coverage"]["population_judged"], dl_cov
+    assert dl_cov["excluded"] == driven_census["coverage"]["excluded"], dl_cov
+    slots = driven_census["coverage"]["owed_by_lane"]
+    assert all("#581" not in slot["units"] for slot in slots), (
+        f"the excluded unit must not reach the grouping `driverless_leg` reads, or the "
+        f"exclusion was applied after the population was already handed on\n{slots}"
+    )
+
+    # ARM 6 -- THE RENDER, through the REAL `main()`: a leg whose numbers are right and whose
+    # report still reads `1 owed` with no identity line would have fixed nothing a lane can
+    # see. The declaration is INJECTED, so no probe reads the live one.
+    rc, out, _err = _run(issues, rows, standing_items=declared)
+    assert "population identity: judged 1 + excluded 1 = 2" in out, out
+    assert "1 declared, 1 OWED unit(s) excused and EXCLUDED from the owed total" in out, out
+    assert "STANDING #581" in out, out
+    assert "declaration READ" in out, out
+    assert rc == 1, f"the undeclared neighbour is still OWED, got rc={rc}\n{out}"
+
+    # ... and a REFUSED entry renders as loudly as an excused one, with its reason ON the owed
+    # line -- the pair is what stops a broken declaration from reading as a clean one.
+    _rc, out, _err = _run(issues, rows, standing_items=stale)
+    assert "0 OWED unit(s) excused and EXCLUDED" in out, out
+    assert "1 REFUSED (each still OWED)" in out, out
+    assert "OWED #581" in out, out
+    assert "does not exist" in out, out
+
 if __name__ == "__main__":
     raise SystemExit(main())
