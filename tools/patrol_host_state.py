@@ -15172,6 +15172,19 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{cov['lanes_routing_unresolved']} skipped because the census could "
                     f"not resolve a routing to a lane"
                 )
+                # THE POPULATION IDENTITY PRINTS ON EVERY INHERITING LEG (#607 shape 2c).
+                # This leg's population IS the census's `owed_by_lane`, so it prints the
+                # census's own arithmetic beside its own counts -- otherwise a reader
+                # comparing this block to the census block sees two "populations" with no
+                # way to reconcile them, which is the reading (c) exists to prevent. The
+                # numbers are CARRIED, never recomputed here: a second computation is a
+                # second predicate, and this leg would then be free to disagree with the
+                # builder it inherits from.
+                lines.append(
+                    f"  population identity: judged {cov.get('population_judged', 0)} + "
+                    f"excluded {cov.get('excluded', 0)} = "
+                    f"{cov.get('population_before', 0)} (inherited from the census; #607)"
+                )
                 # THE FOUR READINGS PRINT WITH THEIR ZEROS, so a round that found no
                 # driverless lane is distinguishable from one that never looked.
                 # EACH LABEL NAMES ITS OWN PREDICATE, and DRIVERLESS deliberately does not

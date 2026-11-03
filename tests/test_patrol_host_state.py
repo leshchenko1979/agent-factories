@@ -14867,6 +14867,16 @@ def test_the_census_EXCLUDES_a_declared_standing_item_and_NEVER_a_REFUSED_one() 
     assert "declaration READ" in out, out
     assert rc == 1, f"the undeclared neighbour is still OWED, got rc={rc}\n{out}"
 
+    # ARM 6b -- 2c THROUGH THE INHERITING LEG'S OWN RENDER. (c) says EVERY inheriting leg
+    # PRINTS the identity, and carrying the numbers in a coverage dict is not printing them:
+    # `driverless-lane` is the leg that red on this item before the fix, so a reader comparing
+    # its block to the census's must find the same arithmetic there or see two populations with
+    # no way to reconcile them. The `(inherited from the census; #607)` suffix is what makes
+    # this assertion about THIS leg and not the census line ARM 6 already matched.
+    assert "population identity: judged 1 + excluded 1 = 2 (inherited from the census; #607)" in out, (
+        f"every INHERITING leg must print the identity, not only carry it\n{out}"
+    )
+
     # ... and a REFUSED entry renders as loudly as an excused one, with its reason ON the owed
     # line -- the pair is what stops a broken declaration from reading as a clean one.
     _rc, out, _err = _run(issues, rows, standing_items=stale)
