@@ -452,6 +452,8 @@ DECLARATION_SURFACES: tuple[
     ("close-board-exemptions", "docs/close-board-exemptions.json", (),
      "entries name a BOARD ISSUE (`subject`) and a ledger row `n`, neither of which this "
      "leg can read offline"),
+    ("commit-subject-issue-refs", "docs/commit-subject-issue-refs.json",
+     (("exemptions", "sha", DECL_COMMIT),), ""),
     ("criterion-path-exemptions", "docs/criterion-path-exemptions.json", (),
      "entries name a PATH and the path is absent BY CONSTRUCTION -- that is what the "
      "exemption asserts -- so a `path` probe would report every correct entry as stale "

@@ -877,6 +877,17 @@
       "docs/products.example.json",
       "docs/products.json",
       "tools/roadmap.py"
+    ],
+    "tests/test_commit_subject_issue_refs.py": [
+      "TEMPLATE/tests/test_commit_subject_issue_refs.py",
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/commit-subject-issue-refs.json",
+      "docs/instruments/ledger.md",
+      "evidence/ledger.jsonl",
+      "tests/test_commit_subject_issue_refs.py",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
     ]
   }
 }

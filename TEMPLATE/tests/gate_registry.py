@@ -714,6 +714,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # intake anywhere was invisible to a close-keyed reading until the close failed.
     "test_ledger_claim_preflight.py",
     "test_ledger_commit_cites_no_rows.py",
+    "test_commit_subject_issue_refs.py",
     # Added with its registration (board #137). REQUIRED is the correct grain: the gate
     # parses the ledger header's own declaration and compares it to the file's ACTUAL
     # intra-repo imports, driving four constructed sources so it bites for each reason it

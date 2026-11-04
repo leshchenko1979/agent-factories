@@ -506,6 +506,7 @@ PAIRS = [
     # the gate without the leg would probe a function that does not exist.
     ("tests/test_hygiene_evidence_supersession.py", "TEMPLATE/tests/test_hygiene_evidence_supersession.py"),
     ("tests/test_close_board_recorded.py", "TEMPLATE/tests/test_close_board_recorded.py"),
+    ("tests/test_commit_subject_issue_refs.py", "TEMPLATE/tests/test_commit_subject_issue_refs.py"),
     ("tests/test_ledger_commit_cites_no_rows.py", "TEMPLATE/tests/test_ledger_commit_cites_no_rows.py"),
     ("tests/test_commit_pathspec_law.py", "TEMPLATE/tests/test_commit_pathspec_law.py"),
     ("tests/test_criteria_count.py", "TEMPLATE/tests/test_criteria_count.py"),

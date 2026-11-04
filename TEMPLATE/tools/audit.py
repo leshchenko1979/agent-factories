@@ -1581,6 +1581,14 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_ledger_commit_cites_no_rows.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_ledger_commit_cites_no_rows.py"])
 
+    # 20b. Issue-receipt gate: a commit authored after an issue closed, whose subject cites
+    #      that issue, must add a ledger row naming it — the citation is the claim, the row
+    #      is the receipt. Forward-only from a declared marker, because a history-wide form
+    #      would be permanently red and a permanently red gate is one lanes learn to ignore
+    #      (#529).
+    if (repo_root / "tests/test_commit_subject_issue_refs.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_commit_subject_issue_refs.py"])
+
     # 21. Commit pathspec law gate: the shared-tree rule is stated on the repo law and on
     #     every card that commits, and it names the invocation rather than only the flags
     #     it forbids — the shape the defect slipped past (issue #47, clause 1, P29).
