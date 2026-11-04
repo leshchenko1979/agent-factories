@@ -560,6 +560,58 @@ def resolvable(ref: str, cwd: Path) -> bool:
     rc, out, _ = _git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}", cwd=cwd)
     return rc == 0 and bool(out.strip())
 
+def resolve_ref(explicit: str | None, cwd: Path) -> tuple[str | None, str, list[str]]:
+    """`(ref, note, problems)` — WHICH LINEAGE this run reads (#601, ruling n=4646).
+
+    The default is the PUBLISHED lineage and it stays the default: nothing that reads this
+    gate today starts reading a different one. What was missing was a way to ask the SAME
+    question about a lineage that is not published yet, and that absence was not cosmetic.
+
+    `git log`'s ordering makes the defect permanent rather than occasional. The row that
+    SANCTIONS a removal must be committed AFTER the commit it sanctions, because it quotes
+    the removal — so on any tree holding a lawful reconciliation the sanctioning row is the
+    newest thing and is ALWAYS unpublished at the moment of judgement. A walk that reads
+    `origin/main` cannot see it, and the lane is told its correct reconciliation is a
+    violation by the very check the push is supposed to satisfy. The remedy is not a weaker
+    predicate (that trades away clause 2); it is to let the caller NAME the lineage.
+
+    `explicit is None` reproduces the previous behaviour EXACTLY, including its documented
+    degradation to `HEAD` where `origin/main` is unreadable. An explicit ref is honoured
+    VERBATIM, and one that does not resolve is a FAILURE and never a fallback: `--ref HEAD`
+    silently reading `origin/main` (or the reverse) is a declared parameter that cannot be
+    honoured, which is a defect rather than an absence — and it would be undetectable,
+    because both refs produce a verdict.
+
+    The note always says which lineage the verdict speaks for. A green that is ambiguous
+    between two lineages is what criterion (c) forbids, and a `--ref` run in particular must
+    never be readable as a statement about what has been published.
+    """
+    if explicit is None:
+        if resolvable(PRIMARY_REF, cwd):
+            return PRIMARY_REF, (
+                f"ref: {PRIMARY_REF} (the default) — the PUBLISHED lineage; commits that "
+                f"have not been pushed are invisible to this run"
+            ), []
+        return FALLBACK_REF, (
+            f"ref: {FALLBACK_REF} (degraded) — {PRIMARY_REF} is unreadable here, so this run "
+            f"reads {FALLBACK_REF}; that is a LOCAL lineage and the published-lineage claim "
+            f"does not hold for it"
+        ), []
+    if not resolvable(explicit, cwd):
+        return None, "", [
+            f"--ref {explicit!r} does not resolve to a commit in this repository — a declared "
+            f"parameter that cannot be honoured is a failure, never a silent fallback"
+        ]
+    if explicit == PRIMARY_REF:
+        note = f"ref: {explicit} (--ref) — the PUBLISHED lineage"
+    else:
+        note = (
+            f"ref: {explicit} (--ref) — NOT the published lineage ({PRIMARY_REF}); this "
+            f"verdict speaks only for {explicit}, so it is a PRE-PUSH proof and never a "
+            f"statement about what has been published"
+        )
+    return explicit, note, []
+
 
 # METADATA ONLY, and deliberately so (#510). This cache holds `history_entries` -- one small
 # dict per commit touching the ledger (sha, subject, added, deleted). It must NEVER hold
@@ -1870,6 +1922,203 @@ def probe_record_scan_checkpoint_advances_to_the_SHA_THE_WALK_READ() -> list[str
             fails.append(f"an empty range REWROTE the checkpoint: {before} -> {after}")
     return fails
 
+def _synthetic_repo_with_an_unpushed_removal(root: Path) -> tuple[Path, list[str]]:
+    """A repo whose removal is on `HEAD` and INVISIBLE from `origin/main` (#601, n=4646).
+
+    `(cwd, [published_sha, removal_sha, sanction_sha])`. The defect is REPRODUCED here, not
+    described: three commits, built in the order the law forces.
+
+      1. two ledger rows, and `refs/remotes/origin/main` is pinned HERE, so the published
+         lineage is exactly this commit and never advances;
+      2. row 2 is removed. `origin/main` cannot see this commit — that is the defect, and it
+         is why a lane holding a lawful reconciliation could not obtain the green its push
+         required;
+      3. a row DECLARING that removal reconciled is appended. It must be a LATER commit than
+         the removal it quotes, which is exactly why `git log`'s ordering guarantees the
+         sanction is the newest thing and always unpublished at judgement time.
+    """
+    import subprocess
+
+    ledger = root / LEDGER_PATH
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+
+    def git(*args: str) -> str:
+        proc = subprocess.run(
+            ["git", "-c", "user.email=probe@example.invalid", "-c", "user.name=probe",
+             "-c", "commit.gpgsign=false", *args],
+            cwd=root, capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
+        return proc.stdout.strip()
+
+    def row(n: int, detail: str | None = None) -> dict:
+        payload: dict = {
+            "n": n,
+            "ts": f"2026-01-01T00:0{n}:00Z",
+            "event": "claim",
+            "actor": "probe",
+            "subject": f"#{n}",
+        }
+        if detail is not None:
+            payload["detail"] = detail
+        return payload
+
+    def write(rows: list[dict]) -> None:
+        ledger.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+
+    git("init", "-q")
+    write([row(1), row(2)])
+    git("add", "-A")
+    git("commit", "-q", "-m", "two ledger rows")
+    published = git("rev-parse", "HEAD")
+    # Pin the PUBLISHED lineage here. Everything after this commit is unpushed by
+    # construction, which is the state of a lane that has reconciled and not yet published.
+    git("update-ref", "refs/remotes/origin/main", published)
+
+    write([row(1)])
+    git("add", "-A")
+    git("commit", "-q", "-m", "remove ledger row 2")
+    removal = git("rev-parse", "HEAD")
+
+    sanction = {"removed": [row(2)], "surviving": [row(1)]}
+    write([row(1), row(3, detail=f"{RECONCILES_PREFIX} {json.dumps(sanction)}")])
+    git("add", "-A")
+    git("commit", "-q", "-m", "declare the removal reconciled")
+    return root, [published, removal, git("rev-parse", "HEAD")]
+
+def probe_the_ref_argument_reads_the_lineage_it_names() -> list[str]:
+    """#601's four done-criteria, one arm each (#601, ruling n=4646).
+
+    Every arm is a MEASUREMENT of one fixture at different refs rather than an assertion
+    about the code's intent, because a rule that has only ever seen good input has not been
+    shown to reject bad input:
+
+      (a) the default is `origin/main` and is UNCHANGED — the published lineage, said aloud;
+      (b) an unpushed reconciliation reaches GREEN on a `--ref HEAD` run, which is the point:
+          the pre-push proof the ruling exists to make possible;
+      (c) the run PRINTS which ref it read, and a non-default ref disclaims the published
+          lineage — a green readable as either is the ambiguity the ruling refuses;
+      (d) the published-lineage detector is NOT traded away: a checkpoint recorded by a HEAD
+          run must never be served to a default run.
+    """
+    fails: list[str] = []
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            cwd, shas = _synthetic_repo_with_an_unpushed_removal(Path(tmp))
+        except RuntimeError as exc:
+            return [f"the synthetic repo could not be built: {exc}"]
+        published, removal, sanction = shas
+
+        # (a) THE DEFAULT IS UNCHANGED.
+        ref, note, problems = resolve_ref(None, cwd)
+        if ref != PRIMARY_REF or problems:
+            fails.append(f"the default ref is not {PRIMARY_REF}: {ref!r} {problems!r}")
+        if PRIMARY_REF not in note or "PUBLISHED" not in note:
+            fails.append(f"the default note does not name the published lineage: {note!r}")
+
+        # THE DEFECT, MEASURED. If this arm fails the fixture stopped modelling the defect and
+        # every arm below is measuring nothing.
+        transitions, entries, err = build_transitions(PRIMARY_REF, LEDGER_PATH, cwd)
+        if transitions is None:
+            return fails + [f"the published-lineage walk failed: {err}"]
+        if any(removed_identities(t["before"], t["after"]) for t in transitions):
+            fails.append(
+                "the published lineage REPORTS the unpushed removal — the fixture no longer "
+                "models the defect this item exists to fix"
+            )
+
+        # (b) AN EXPLICIT REF IS HONOURED, and it SEES what the default cannot.
+        ref, note, problems = resolve_ref("HEAD", cwd)
+        if ref != "HEAD" or problems:
+            fails.append(f"--ref HEAD was not honoured: {ref!r} {problems!r}")
+        # (c) ... and it SAYS SO, disclaiming the published lineage.
+        if "NOT the published lineage" not in note:
+            fails.append(f"the --ref note does not disclaim the published lineage: {note!r}")
+        transitions, entries, err = build_transitions("HEAD", LEDGER_PATH, cwd)
+        if transitions is None:
+            return fails + [f"the HEAD walk failed: {err}"]
+        if not any(removed_identities(t["before"], t["after"]) for t in transitions):
+            fails.append(
+                "the HEAD walk MISSED the unpushed removal — the ref argument reads nothing "
+                "the default did not already read, so it fixes nothing"
+            )
+
+        # (b) THE PRE-PUSH GREEN ITSELF, composed as `main` composes it: the declarations are
+        # read from the ledger's rows AT THE REF UNDER EXAMINATION, then the walk's removals
+        # are judged against them. On the published lineage the declaration is invisible; on
+        # HEAD it resolves the removal, which is the rc=0 the push requires.
+        tip = rows_at("HEAD", LEDGER_PATH, cwd)
+        if tip is None:
+            return fails + [f"no {LEDGER_PATH} at HEAD"]
+        declared, surviving, decl_problems = load_reconciliations(tip)
+        if decl_problems:
+            fails.append(f"the seeded declaration did not parse: {decl_problems!r}")
+        survives_problems = surviving_problems(surviving, tip)
+        if survives_problems:
+            fails.append(f"the seeded `surviving` claim does not hold: {survives_problems!r}")
+        stream, entries, err = iter_transitions("HEAD", LEDGER_PATH, cwd)
+        if stream is None:
+            return fails + [f"the HEAD transition stream failed: {err}"]
+        gate_problems, _excused, _stale, reconciled, _stale_decl = no_shrink_problems(
+            stream, {}, declared
+        )
+        if gate_problems:
+            fails.append(
+                "an unpushed removal carrying its own reconciliation still REDs — the "
+                "pre-push green the ruling ordered is unreachable: " + "; ".join(gate_problems)
+            )
+        if not reconciled:
+            fails.append(
+                "the reconciliation was accepted without being REPORTED — an accounting that "
+                "prints nothing is indistinguishable from an exemption"
+            )
+
+        # (d) A HEAD RUN MUST NOT SERVE THE PUBLISHED LINEAGE ITS CHECKPOINT. The checkpoint is
+        # ref-keyed and `incremental_base` refuses one recorded for another ref, which is what
+        # keeps a pre-push convenience from quietly moving the default's meaning.
+        entries, err = history_entries("HEAD", LEDGER_PATH, cwd)
+        if entries is None:
+            return fails + [f"the HEAD walk's entries were unreadable: {err}"]
+        recorded = record_scan_checkpoint("HEAD", cwd, None, entries)
+        if "WRITTEN" not in recorded:
+            fails.append(f"a completed HEAD scan did not record a checkpoint: {recorded!r}")
+        base, cp_note = incremental_base(PRIMARY_REF, LEDGER_PATH, cwd)
+        if base is not None or "STALE" not in cp_note:
+            fails.append(
+                f"a checkpoint recorded by a HEAD run was served to a {PRIMARY_REF} run "
+                f"({base!r} {cp_note!r}) — the published-lineage detector was traded away"
+            )
+
+        # A DECLARED REF THAT CANNOT BE HONOURED IS A FAILURE, never a silent fallback.
+        ref, note, problems = resolve_ref("origin/no-such-branch", cwd)
+        if ref is not None:
+            fails.append(f"an unresolvable --ref degraded to {ref!r} instead of failing")
+        if not problems:
+            fails.append("an unresolvable --ref reported no problem")
+
+        # THE PARSER IS STRICT: a typo'd flag must not be read as "use the default".
+        for argv, label in (
+            (["--reff", "HEAD"], "a typo'd flag"),
+            (["--ref"], "a bare --ref"),
+            (["--ref="], "an empty --ref"),
+        ):
+            force_full, explicit_ref, arg_problems = parse_args(argv)
+            if explicit_ref is not None or not arg_problems:
+                fails.append(
+                    f"{label} was accepted as the default lineage "
+                    f"({explicit_ref!r} {arg_problems!r})"
+                )
+        force_full, explicit_ref, arg_problems = parse_args(["--ref=HEAD", "--full"])
+        if explicit_ref != "HEAD" or not force_full or arg_problems:
+            fails.append(
+                f"--ref=HEAD --full did not parse ({force_full!r} {explicit_ref!r} "
+                f"{arg_problems!r})"
+            )
+    return fails
+
 def probe_a_SAME_n_re_stamp_is_a_re_mint_but_a_published_one_still_bites() -> list[str]:
     """#569: the ts-only re-stamp, and the arm that keeps it from being a blanket excuse.
 
@@ -1969,7 +2218,7 @@ def probe_a_SAME_n_re_stamp_is_a_re_mint_but_a_published_one_still_bites() -> li
     return fails
 
 
-def report_the_live_history_walk(base: str | None = None) -> str:
+def report_the_live_history_walk(base: str | None = None, ref: str | None = None) -> str:
     """The live-history walk, REPORTED and never asserted (#169, ruling n=1128).
 
     It is kept because it is the only arm that reads THIS repo, and a walker that works
@@ -1989,7 +2238,13 @@ def report_the_live_history_walk(base: str | None = None) -> str:
     has stopped being proved; only the retention is gone.
     """
     cwd = repo_toplevel() or REPO
-    ref = PRIMARY_REF if resolvable(PRIMARY_REF, cwd) else FALLBACK_REF
+    if ref is None:
+        # STANDALONE DEFAULT, unchanged: this arm is also called by probes and by anything
+        # that wants the published-lineage report on its own. `main` passes its RESOLVED ref
+        # in (#601), because the report and the walk must describe ONE population — two
+        # resolutions could disagree whenever a peer moves a ref between them, and the report
+        # would then be a statement about a lineage the verdict never examined.
+        ref = PRIMARY_REF if resolvable(PRIMARY_REF, cwd) else FALLBACK_REF
     entries, err = history_entries(ref, LEDGER_PATH, cwd, base=base)
     if entries is None:
         return f"FAIL the live walk errored: {err}"
@@ -2011,15 +2266,63 @@ def report_the_live_history_walk(base: str | None = None) -> str:
             f"{with_deletions} carry a deletion")
 
 
+def parse_args(argv: list[str]) -> tuple[bool, str | None, list[str]]:
+    """`(force_full, explicit_ref, problems)` — this gate accepts exactly two flags (#601).
+
+    PARSED, not substring-matched. `--full` used to be found with `in args`, and that shape
+    cannot tell a flag from a typo: `--reff HEAD` would have been silently ignored, so the run
+    would have read the DEFAULT lineage while the caller believed it had named another — a
+    verdict about a population nobody asked about, and undetectable because it is exactly the
+    green the caller feared. An unrecognised argument is a problem here, never a shrug.
+    """
+    force_full = False
+    explicit_ref: str | None = None
+    problems: list[str] = []
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--full":
+            force_full = True
+            i += 1
+        elif arg == "--ref":
+            if i + 1 >= len(argv):
+                problems.append(
+                    "--ref needs a value (`--ref origin/main`, `--ref HEAD`) — a bare --ref "
+                    "names no lineage, and falling back to the default would answer a "
+                    "question the caller did not ask"
+                )
+                i += 1
+            else:
+                explicit_ref = argv[i + 1]
+                i += 2
+        elif arg.startswith("--ref="):
+            explicit_ref = arg.split("=", 1)[1]
+            i += 1
+        else:
+            problems.append(
+                f"unrecognised argument {arg!r} — this gate accepts --full and --ref <ref>; "
+                f"an ignored flag is a run that reads a lineage nobody named"
+            )
+            i += 1
+    if explicit_ref == "":
+        problems.append("--ref was given an empty value — that names no lineage")
+        explicit_ref = None
+    return force_full, explicit_ref, problems
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     # `--full` ignores the checkpoint for THIS run and rewrites it on success. It exists
     # because the staleness legs below are properties of the WHOLE history and an incremental
     # run cannot evaluate them: without this, the one run shape that can audit the declaration
     # files would be unreachable except by deleting the cache by hand.
-    force_full = "--full" in args
+    #
+    # `--ref <ref>` (#601, ruling n=4646) names the LINEAGE this run reads. The default stays
+    # the published lineage, so nothing that reads this gate today changes meaning; naming
+    # another one is what makes a pre-push proof possible on a tree whose reconciliation row
+    # is, by `git log`'s ordering, always newer than the removal it sanctions.
+    force_full, explicit_ref, arg_problems = parse_args(args)
     print("ledger no-shrink — a pushed row is never removed (P11, issue #58)")
-    fails: list[str] = []
+    fails: list[str] = list(arg_problems)
     print("  synthetic probes")
     probes = (
         probe_removal_without_exemption_is_a_problem,
@@ -2041,6 +2344,7 @@ def main(argv: list[str] | None = None) -> int:
         probe_a_SAME_n_re_stamp_is_a_re_mint_but_a_published_one_still_bites,
         probe_incremental_base_HONOURS_a_verified_checkpoint_and_REFUSES_every_bad_one,
         probe_record_scan_checkpoint_advances_to_the_SHA_THE_WALK_READ,
+        probe_the_ref_argument_reads_the_lineage_it_names,
     )
     # The probe set is PRINTED, by count and by name, so a probe deleted from this tuple is
     # VISIBLE: a run that silently stops exercising a leg reads exactly like one that
@@ -2053,9 +2357,22 @@ def main(argv: list[str] | None = None) -> int:
     cwd = repo_toplevel() or REPO
     exemptions, problems = load_exemptions(cwd / EXEMPTIONS_PATH)
 
-    ref = PRIMARY_REF if resolvable(PRIMARY_REF, cwd) else FALLBACK_REF
-    if ref != PRIMARY_REF:
-        print(f"  note: {PRIMARY_REF} is unreadable here — degrading to {FALLBACK_REF}")
+    ref, ref_note, ref_problems = resolve_ref(explicit_ref, cwd)
+    problems.extend(ref_problems)
+    if ref is None:
+        # NO LINEAGE RESOLVED — stop before the walk. A run with no ref would examine nothing
+        # and then report a verdict on it, which is the vacuous pass this gate's zero-commits
+        # rule exists to forbid. A declared parameter that cannot be honoured is a FAILURE
+        # and never a degradation, so the caller learns the ref was wrong rather than
+        # receiving a verdict about a lineage it never asked for.
+        for line in problems:
+            print(f"  FAIL {line}")
+        print(f"ledger no-shrink FAILED: {len(problems)} problem(s)")
+        return 1
+    # WHICH LINEAGE THIS RUN READ, on every run (criterion (c), #601). A green that could be
+    # read as either lineage is the ambiguity the ruling refuses, and the note also states
+    # what the verdict does NOT cover when the ref is not the published one.
+    print(f"  {ref_note}")
 
     # WHERE THIS RUN STARTS (#582). Every rejection prints the leg that failed: a checkpoint
     # that silently costs a full walk on every run is a cache nobody can see is broken, and
@@ -2072,7 +2389,7 @@ def main(argv: list[str] | None = None) -> int:
     # only when they ask for the SAME range, so both take `base`: passing it to one and not
     # the other buys a full walk and an incremental walk, i.e. the whole cost this item exists
     # to remove, plus a report describing a different population than the one judged.
-    live = report_the_live_history_walk(base)
+    live = report_the_live_history_walk(base, ref)
     if live.startswith("FAIL"):
         fails.append(f"report_the_live_history_walk: {live[5:].strip()}")
     else:
