@@ -1202,6 +1202,256 @@ def _malformation_sentence(key: str) -> str:
         f"`{key}=<one-token>` if you meant to declare."
     )
 
+# --- the ruling write path's PREVENTIVE guard (#611, HQ ruling n=4706) -----------------
+#
+# THE THIRD EXEMPTION IS THE REASON THIS EXISTS. `docs/ruling-board-exemptions.json` carries
+# three entries and all three have ONE cause: a ruling was hand-posted with
+# `gh issue comment`, and no `ruling` row was ever stamped for it, so the board and the
+# ledger diverged. `tools/rule.py` makes the two acts ONE invocation and refuses a body that
+# does not open canonically (#270) -- but it is OPTIONAL, so a lane that types the gh command
+# directly produces the divergence silently and a patrol finds it hours later. The leg in
+# `tools/patrol_host_state.py` is the DETECTOR; this is the WRITER on the path, which is the
+# remedy the doctrine orders: a reader without a writer on the path is a detector, not a gate.
+#
+# IT LANDS AT THE CLOSE BOUNDARY, beside #435's `board=closed` refusal, because the close is
+# the act that ENDS an item and a ruling posted while closing it is the exact instant the
+# omission happens. Measured: #609's ruling comment was posted at 2026-11-03T16:01:35Z and
+# the close row `n=4692` was stamped 8 s later carrying the ruling's SUBSTANCE in its
+# `detail` -- the lane held the whole act in hand and still bypassed the writer.
+#
+# THE PREDICATE IS NOT RESTATED HERE (#611 clause 2). `ruling_comments`,
+# `ruling_paired_comment_ids`, `comment_numeric_id`, `issue_from_row`, `ruling_board_scope`,
+# `load_ruling_exemptions` and `remote_slug` are IMPORTED from the module that owns them, by
+# PATH through `importlib`, exactly as `tools/rule.py` imports the heading predicate -- and
+# for a second reason that module-level import would violate: `ledger.py` is vendored
+# byte-identically into every member factory and its header DECLARES its intra-repo closure,
+# so importing the patrol would silently widen that unit and `tests/test_ledger_header_
+# closure.py` would red on the widened set. A private reimplementation of the pairing test
+# is the drift class this repo files repeatedly: the writer would put a token on the row that
+# the reader does not look for, and the pairing would exist and be invisible.
+#
+# AN UNREADABLE BOARD IS AN INABILITY -- never a block, never a clean pass (#611 clause 3).
+# The read is a NETWORK CALL inside the act that records a close, and a gh outage must not be
+# able to stop work being recorded. So the row is WRITTEN and DECLARES the inability with
+# `board_ruling=unread`, the `telemetry=` shape one field over (#129): the writer states what
+# it could not see, so no reader can mistake an unread board for a judged one. `None` never
+# renders as a pass, and it never renders as a refusal either. The two states are stated on
+# EVERY close this path writes -- `clear` is an ASSERTION, not the absence of one -- so a
+# post-mechanism row is self-declaring and an old row is told apart from a judged one.
+#
+# THE READ RUNS BEFORE THE LOCK, deliberately. `append` holds an exclusive flock from the
+# first row read to the write, and a 15 s network call inside it would stall every peer
+# append on this box. The pre-lock row snapshot can only make the guard see FEWER `ruling`
+# rows than exist, and that direction of staleness produces a REFUSAL (loud, re-runnable),
+# never a false clear.
+BOARD_RULING_KEY = "board_ruling"
+PATROL_TOOL = Path(__file__).resolve().parent / "patrol_host_state.py"
+# Bounded, because this read sits on the write path of every close.
+BOARD_READ_TIMEOUT_SEC = 15
+
+def load_patrol():
+    """The ruling-pairing predicate's OWN home, loaded by PATH (#611).
+
+    Function-local so every other verb on this tool pays nothing for it, and by path so the
+    header's declared closure stays TRUE: this file is copied into every member factory,
+    where the patrol may not be present at all -- and a guard that cannot be reached then
+    declares an INABILITY rather than refusing every close in that tree.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_ledger_patrol", PATROL_TOOL)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise ImportError(f"cannot load {PATROL_TOOL} -- the ruling predicate's home")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+def ruling_instance_problems(issue_number: int, comments: list[dict], rows: list[dict],
+                             exemptions: dict, bound, bound_text: str, *,
+                             read_at: str = "") -> list[str]:
+    """What the board-ruling leg would say about ONE item's LATEST ruling comment (#611).
+
+    PURE over its arguments -- no board read, no clock, no file -- so the guard's predicate
+    is probeable and the drift gate can hold it to the leg's own verdict on the same fixture.
+
+    THE INSTANCE IS THE LATEST ACCEPTED RULING COMMENT, which is the leg's own rule and not
+    a simplification: an amendment is a new ruling ACT, and the leg reads the latest so a
+    pre-mechanism head cannot excuse a post-mechanism amendment. Judging EVERY comment here
+    instead would refuse closes the leg reports clean, and a writer that disagrees with its
+    own reader is the divergence this guard exists to remove.
+
+    THE ARMS ARE IN THE LEG'S ORDER (paired -> exempted -> undatable id -> unbounded ->
+    undatable instant -> pre-boundary -> problem), because the order is what decides which
+    exit a reader is shown.
+    """
+    patrol = load_patrol()
+    accepted = patrol.ruling_comments({"comments": comments})
+    if not accepted:
+        return []
+    paired = patrol.ruling_paired_comment_ids(rows)
+    latest: dict | None = None
+    latest_instant = None
+    for candidate in accepted:
+        try:
+            instant = patrol.reader_parse_ts(str(candidate.get("createdAt") or ""))
+        except (ValueError, TypeError):
+            latest, latest_instant = candidate, None
+            break
+        if latest_instant is None or instant > latest_instant:
+            latest, latest_instant = candidate, instant
+    assert latest is not None
+    # TWO ID SPACES, kept apart exactly as the leg keeps them: the GraphQL node id keys the
+    # EXEMPTION surface, the numeric id from the comment's own URL is what `tools/rule.py`
+    # stamps into `comment=` and therefore what the pairing reader returns.
+    comment_node = str(latest.get("id") or "")
+    comment_id = patrol.comment_numeric_id(latest)
+    created = str(latest.get("createdAt") or "")
+    if comment_id and paired.get(comment_id):
+        return []
+    if comment_node and comment_node in exemptions:
+        return []
+    if not comment_id:
+        return [
+            f"#{issue_number} carries a ruling comment ({created or 'instant unstated'}, "
+            f"node id {comment_node or '(none)'}) whose own URL carries no "
+            f"`#issuecomment-<id>` fragment, so the pairing cannot be read at all"
+        ]
+    if bound is None:
+        return [
+            f"#{issue_number} carries a ruling comment (comment {comment_id}) and the "
+            f"ledger holds no `ruling` row naming it"
+        ]
+    if latest_instant is None:
+        return [
+            f"#{issue_number} carries a ruling comment whose `createdAt` cannot be dated "
+            f"({created!r}), so it cannot be placed against the bound either"
+        ]
+    if latest_instant < bound:
+        # PRE-BOUNDARY: no row could have been paired with it, so it is not this guard's
+        # business. The leg counts and prints it as excused for the same reason.
+        return []
+    return [
+        f"#{issue_number} carries a ruling comment ({created}, comment {comment_id}) that "
+        f"the ledger pairs with NO `ruling` row, and it is at or after the declared bound "
+        f"{bound_text} for the pairing mechanism"
+    ]
+
+def fetch_issue_comments(issue_number: int) -> list[dict]:
+    """ONE item's comments, from the board (#611).
+
+    `gh issue view`, NOT the leg's whole-board `fetch_board`: the guard judges a single item
+    at the instant a close is written, and pulling 600 issues with every comment to answer
+    about one of them would put a several-second read on the write path for no information.
+    A failed or unparseable read RAISES, so the caller can only ever declare an inability --
+    there is no branch here that returns an empty list a reader could mistake for "no ruling
+    comment on this item".
+    """
+    patrol = load_patrol()
+    try:
+        slug = patrol.remote_slug(REPO)
+    except Exception as exc:  # noqa: BLE001 -- any failure is the same inability
+        raise patrol.BoardReadError(f"cannot resolve the board slug: {exc}") from exc
+    try:
+        proc = subprocess.run(
+            ["gh", "issue", "view", str(issue_number), "-R", slug, "--json", "comments"],
+            capture_output=True, text=True, timeout=BOARD_READ_TIMEOUT_SEC,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise patrol.BoardReadError(f"gh issue view {issue_number} could not run: {exc}") from exc
+    if proc.returncode != 0:
+        raise patrol.BoardReadError(
+            f"gh issue view {issue_number} failed (rc={proc.returncode}): "
+            f"{proc.stderr.strip()[:300]}"
+        )
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise patrol.BoardReadError(
+            f"gh issue view {issue_number} returned unparseable JSON: {exc}"
+        ) from exc
+    comments = data.get("comments") if isinstance(data, dict) else None
+    if not isinstance(comments, list):
+        raise patrol.BoardReadError(
+            f"gh issue view {issue_number} returned no `comments` list"
+        )
+    return comments
+
+def board_ruling_write_path_check(subject: str, *, rows: list[dict] | None = None,
+                                  read_comments=None, scope=None,
+                                  exemptions=None) -> tuple[str, str]:
+    """`("clear"|"refuse"|"unread", message)` for the item a close row NAMES (#611).
+
+    The three verdicts are the whole contract. `clear` means the item's latest ruling comment
+    is paired, exempted, pre-boundary, or there is none -- an ASSERTION the row records as
+    `board_ruling=clear`. `refuse` exits non-zero and names the fix. `unread` never blocks:
+    the caller writes the row and declares the inability.
+
+    EVERY INJECTABLE ARGUMENT EXISTS FOR THE PROBE, so the gate can drive all three verdicts
+    with no network and no clock -- a guard whose arms can only be exercised by a live board
+    is a guard nobody can neuter-test.
+    """
+    patrol = load_patrol()
+    try:
+        # THE BOARD PREDICATE, not the field predicate: `issue_reference` is the board
+        # predicate's own vocabulary (`tests/test_board_intake_recorded.py`, loaded through
+        # `load_predicate`), while `declared_comment_id` lives on the field predicate. Two
+        # modules, two namespaces, and `issue_from_row` asks for the FIRST -- measured, a
+        # `field_predicate_readers()` here raises `AttributeError: no attribute
+        # 'issue_reference'` on every call and turns the whole guard into a permanent
+        # `unread`.
+        issue_number = patrol.issue_from_row(
+            {"subject": subject}, patrol.load_predicate())
+    except Exception as exc:  # noqa: BLE001 -- the reader is the patrol's, not this file's
+        return "unread", f"the subject could not be resolved to a board item: {exc}"
+    if issue_number is None:
+        # A close row whose subject names no board item (a slug, a survey id) has nothing
+        # for this guard to judge. It is NOT a clean verdict about a ruling; it is the
+        # stated absence of one, and the token says so.
+        return "clear", "no board item is named by this subject"
+    if scope is None:
+        try:
+            scope = patrol.ruling_board_scope()
+        except Exception as exc:  # noqa: BLE001
+            return "unread", f"the pairing bound could not be read: {exc}"
+    bound, bound_text, bound_refusal = scope
+    if bound_refusal:
+        return "unread", bound_refusal
+    if exemptions is None:
+        exemptions, exempt_problems = patrol.load_ruling_exemptions()
+        if exempt_problems:
+            # A malformed exemption file is a DEFECT, and it must not be laundered into
+            # either a refusal (which would block closes on a defect about another surface)
+            # or a pass (which would be a false clean). It is an inability, stated.
+            return "unread", (
+                "the ruling-board exemption surface could not be read: "
+                + "; ".join(exempt_problems)
+            )
+    # ONE TRY AROUND THE READ, injected or not: the probe simulates a gh failure by handing
+    # in a reader that raises, so the arm that proves "unreadable is an INABILITY" exercises
+    # the SAME branch the network failure takes. Two branches here would let the probe pass
+    # on a path the live writer never walks.
+    try:
+        comments = (read_comments or fetch_issue_comments)(issue_number)
+    except Exception as exc:  # noqa: BLE001 -- unreadable is unreadable, whoever raised
+        return "unread", f"the board could not be read for #{issue_number}: {exc}"
+    if rows is None:
+        rows = read_rows(LEDGER)
+    problems = ruling_instance_problems(
+        issue_number, comments, rows, exemptions, bound, bound_text)
+    if not problems:
+        return "clear", f"#{issue_number} carries no unpaired post-boundary ruling comment"
+    return "refuse", (
+        "ledger append refused: " + "; ".join(problems) + ". A ruling posted as a board "
+        "comment must be PAIRED with its ledger `ruling` row, and the only writer that does "
+        "both in one invocation is `tools/rule.py` -- post the ruling THROUGH it "
+        f"(`python3 tools/rule.py --issue {issue_number} --body-file <file>`) instead of "
+        "with `gh issue comment`, then append the close. Nothing was written (#611, ruling "
+        "n=4706). If the comment predates the pairing mechanism, or its repair is barred by "
+        "NO BACKFILL, the lawful exit is a declared entry in "
+        "`docs/ruling-board-exemptions.json` -- granted by HQ, keyed by the comment's node "
+        "id, and printed as debt on every run -- never a second unpairing."
+    )
+
 def cmd_append(args: argparse.Namespace) -> int:
     if args.event not in known_events():
         sys.exit(
@@ -1372,6 +1622,27 @@ def cmd_append(args: argparse.Namespace) -> int:
         target_lock = SUBPROCESSES_DIR / f".{sub_name}.lock"
 
     target_ledger.parent.mkdir(parents=True, exist_ok=True)
+    # THE RULING GUARD RUNS HERE, BEFORE THE LOCK (#611). `append` holds an exclusive flock
+    # from its first row read to the write, so a board read taken inside it would stall every
+    # peer append on this box for as long as gh takes. The snapshot this call takes can only
+    # see FEWER `ruling` rows than exist, and that staleness direction yields a REFUSAL --
+    # loud, named, and re-runnable -- never a false clear.
+    #
+    # A REFUSAL EXITS; AN INABILITY DOES NOT. `refuse` means the board says a ruling exists
+    # and the ledger has no row pairing it, which is the divergence this guard was ordered to
+    # stop, so nothing is written. `unread` means the board could not be read at all: a gh
+    # outage must never be able to stop work being RECORDED, so the row is written and says
+    # what the writer could not see.
+    board_ruling_note = ""
+    if args.event == "close" and target_ledger == LEDGER:
+        _verdict, _message = board_ruling_write_path_check(args.subject)
+        if _verdict == "refuse":
+            sys.exit(_message)
+        if _verdict == "unread":
+            print(f"ledger: {BOARD_RULING_KEY}=unread — {_message}", file=sys.stderr)
+            board_ruling_note = f"{BOARD_RULING_KEY}=unread"
+        else:
+            board_ruling_note = f"{BOARD_RULING_KEY}=clear"
     # The lock is what makes this the single writer. Read-last + write-next
     # happens entirely inside it, so concurrent appends cannot collide on `n`.
     with open(target_lock, "w") as lock:
@@ -2396,6 +2667,14 @@ def cmd_append(args: argparse.Namespace) -> int:
                 # for the reason the branch above states (#483's refusal is the guard).
                 detail = f"{detail} telemetry=unavailable".strip()
 
+        # THE GUARD'S VERDICT TRAVELS ON THE ROW (#611), appended AFTER `telemetry=` and so
+        # still inside the row's canonical trailer run -- which is what makes it readable by
+        # the shared positional reader rather than as prose. `clear` is an ASSERTION (the
+        # board WAS read and the item carries no unpaired post-boundary ruling comment), so a
+        # reader can tell a judged row from one written before this guard existed, which
+        # carries no token at all.
+        if board_ruling_note:
+            detail = f"{detail} {board_ruling_note}".strip()
         row = {
             "n": (rows[-1]["n"] + 1) if rows else 1,
             "ts": now_iso(),

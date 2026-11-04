@@ -715,6 +715,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_ledger_claim_preflight.py",
     "test_ledger_commit_cites_no_rows.py",
     "test_commit_subject_issue_refs.py",
+    # Added with its registration (#611). REQUIRED is the correct grain: the gate drives the
+    # writer's three verdicts through INJECTION (no board, no network, no clock) and neuters
+    # each mechanism on a COPY of the writer in a temp dir, so it passes in a bootstrapped
+    # factory exactly as it does here — the copy's `PATROL_TOOL` is re-anchored to the tree
+    # it is run from. What it guards is the close boundary: a ruling posted with `gh issue
+    # comment` and never paired with a `ruling` row is the omission behind every entry in
+    # `docs/ruling-board-exemptions.json`, and the writer now refuses the close that would
+    # end the item with that divergence in place.
+    "test_close_ruling_paired.py",
     # Added with its registration (board #137). REQUIRED is the correct grain: the gate
     # parses the ledger header's own declaration and compares it to the file's ACTUAL
     # intra-repo imports, driving four constructed sources so it bites for each reason it

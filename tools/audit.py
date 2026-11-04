@@ -1589,6 +1589,15 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_commit_subject_issue_refs.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_commit_subject_issue_refs.py"])
 
+    # 20c. Close-ruling gate: the ruling WRITE path refuses a close on an item whose latest
+    #      board ruling comment no `ruling` row pairs — the omission that produced every
+    #      entry in docs/ruling-board-exemptions.json. `tools/rule.py` is optional, so a lane
+    #      that types `gh issue comment` diverges the board from the ledger silently and a
+    #      patrol finds it hours later. The leg in patrol_host_state.py is the DETECTOR; this
+    #      covers the WRITER, which is where the doctrine puts the remedy (#611).
+    if (repo_root / "tests/test_close_ruling_paired.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_close_ruling_paired.py"])
+
     # 21. Commit pathspec law gate: the shared-tree rule is stated on the repo law and on
     #     every card that commits, and it names the invocation rather than only the flags
     #     it forbids — the shape the defect slipped past (issue #47, clause 1, P29).

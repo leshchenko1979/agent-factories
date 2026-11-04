@@ -888,6 +888,20 @@
       "tests/test_commit_subject_issue_refs.py",
       "tools/ledger.py",
       "tools/ledger_declaration.py"
+    ],
+    "tests/test_close_ruling_paired.py": [
+      "TEMPLATE/tests/test_board_intake_recorded.py",
+      "TEMPLATE/tests/test_close_ruling_paired.py",
+      "TEMPLATE/tools/field_predicate.py",
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/patrol_host_state.py",
+      "docs/ruling-board-exemptions.json",
+      "tests/ledger_boundary.py",
+      "tests/test_board_intake_recorded.py",
+      "tests/test_close_ruling_paired.py",
+      "tools/field_predicate.py",
+      "tools/ledger.py",
+      "tools/patrol_host_state.py"
     ]
   }
 }

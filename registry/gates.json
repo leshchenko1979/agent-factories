@@ -430,6 +430,9 @@
     "tests/test_commit_subject_issue_refs.py": {
       "class": "exemption-table",
       "table": "docs/commit-subject-issue-refs.json"
+    },
+    "tests/test_close_ruling_paired.py": {
+      "class": "always-satisfiable"
     }
   },
   "gates": {
@@ -979,6 +982,13 @@
       "margin_x": 4.795,
       "measured_at": "8cb28149240cfbe37fb285bd4e6714876d5efc24",
       "measured_sec": 0.94
+    },
+    "tests/test_close_ruling_paired.py": {
+      "budget_sec": 3.95,
+      "load_at_measure": 0.24,
+      "margin_x": 4.9375,
+      "measured_at": "88c8aea0c9c94c2f61884445bcb2b19935be814a",
+      "measured_sec": 0.8
     }
   },
   "modes": {
@@ -1102,6 +1112,7 @@
     "tools/hygiene.py": "script",
     "tools/ledger.py": "script",
     "tools/roadmap.py": "script",
-    "tests/test_commit_subject_issue_refs.py": "script"
+    "tests/test_commit_subject_issue_refs.py": "script",
+    "tests/test_close_ruling_paired.py": "script"
   }
 }
