@@ -1633,8 +1633,19 @@ def cmd_append(args: argparse.Namespace) -> int:
     # stop, so nothing is written. `unread` means the board could not be read at all: a gh
     # outage must never be able to stop work being RECORDED, so the row is written and says
     # what the writer could not see.
+    #
+    # A FIXTURE IS NOT A BOARD QUESTION, and the seam that says so is the SAME one the actor
+    # resolver above reads (`fixture`, `:1569`). The first cut of this guard keyed on
+    # `target_ledger == LEDGER` and that is a TAUTOLOGY: `LEDGER` IS the resolved target, so
+    # the comparison is true for every non-subprocess append and excludes nothing. Measured
+    # the hard way — `tests/test_ledger.py` went RED on ten arms in the commit that shipped
+    # this guard, because each fixture close drove a LIVE `gh issue view` against whatever
+    # issue number the fixture happened to name, and the fixtures that stage a tool closure
+    # died outright reaching for a `patrol_host_state.py` a fixture tree never carries. A
+    # guard on the write path must not put a network call on a throwaway ledger, so the
+    # fixture seam decides, exactly as it does for identity and authorization.
     board_ruling_note = ""
-    if args.event == "close" and target_ledger == LEDGER:
+    if args.event == "close" and not fixture:
         _verdict, _message = board_ruling_write_path_check(args.subject)
         if _verdict == "refuse":
             sys.exit(_message)

@@ -276,6 +276,35 @@ def wiring_problems(body: str) -> list:
     if body.find("sys.exit") < 0:
         problems.append("`cmd_append` never exits on the guard's refusal, so a refusal would "
                         "be written as an ordinary row")
+    # THE SCOPE ARM, and it exists because its absence shipped a live defect. The first
+    # wiring used `target_ledger == LEDGER`, which is a TAUTOLOGY: `LEDGER` IS the resolved
+    # target, so the comparison excludes nothing and the guard ran on every throwaway ledger.
+    # Ten arms of `tests/test_ledger.py` went RED in the commit that shipped it — each fixture
+    # close drove a live `gh issue view`, and fixtures that stage a tool closure died reaching
+    # for a `patrol_host_state.py` a fixture tree never carries. Every arm above still passed,
+    # because "the call exists and precedes the flock" says nothing about WHEN it runs. A guard
+    # that cannot be scoped cannot be a gate, so the scope is asserted rather than assumed.
+    #
+    # COMMENTS ARE STRIPPED FIRST, and that is not tidiness: the prose above QUOTES the
+    # tautology it describes, so a raw substring read reds on the very comment explaining the
+    # fix — the prose-as-data class this file has now paid for twice. The arm judges CODE.
+    guard_at = body.find("board_ruling_write_path_check(")
+    head = body[:guard_at] if guard_at > 0 else body
+    code = "\n".join(
+        line.split("#", 1)[0] for line in head.splitlines()
+    )
+    if "target_ledger == LEDGER" in code or "LEDGER == target_ledger" in code:
+        problems.append(
+            "the guard's condition compares the target against `LEDGER`, which is a "
+            "TAUTOLOGY — `LEDGER` IS the resolved target, so it excludes nothing and every "
+            "fixture close pays a live board read"
+        )
+    if "fixture" not in code:
+        problems.append(
+            "the guard is not scoped by the `fixture` seam, so a throwaway ledger reaches "
+            "the board — the seam that excludes fixtures for identity and authorization "
+            "must exclude them here too"
+        )
     return problems
 
 
