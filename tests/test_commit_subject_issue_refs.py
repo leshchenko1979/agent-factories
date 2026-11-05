@@ -27,6 +27,15 @@ age-preserving catch-up in the publish runbook depends on exactly that — so a
 committer-date predicate would judge a rewritten commit by when it was replayed instead
 of when it was written. The author date survives the rewrite.
 
+**The report line (#616, ruled n=4765) — and what it does NOT claim.** When a citation
+fails, this gate ALSO prints whether the commit's BODY carries the same citation. The
+convention that makes auditable is law: *a commit subject citing a CLOSED issue must be a
+commit that adds a ledger row naming that issue, and the causation belongs in the BODY.*
+The line is a REPORT: it changes no pass, no fail, and no predicate, because nothing
+detects a body sentence that is decorative rather than causal. So it does not CLOSE the
+class — it makes the class OBSERVABLE, which is the most a subject-only population can
+honestly offer. The unit's own close row and settlement row remain the record either way.
+
 **The marker is DECLARED FACTORY DATA.** This file is byte-paired into `TEMPLATE/`
 (`tests/test_template_sync.py`), so an instant baked here would ship into every factory
 that copies this tree, where it names nothing. The `marker` key of
@@ -334,6 +343,55 @@ def judged_pairs(
     return pairs
 
 
+def commit_bodies(shas: list[str]) -> tuple[dict[str, str], list[str]]:
+    """`({sha: body}, problems)` for the named commits, in ONE git call.
+
+    Read only for commits that ALREADY failed the subject predicate (#616). The body is
+    not part of the judgement — the population is `git log --format=%s` — so paying for
+    ~700 bodies to report on the few that violate would be cost with no reader.
+    """
+    if not shas:
+        return {}, []
+    rc, out, err = _git("log", "--no-walk", "--format=%H\x1f%b\x1e", *shas)
+    if rc != 0:
+        return {}, [f"git log failed — commit bodies cannot be read: {err.strip()}"]
+    bodies: dict[str, str] = {}
+    for chunk in out.split("\x1e"):
+        if not chunk.strip():
+            continue
+        sha, _, body = chunk.partition("\x1f")
+        if sha.strip():
+            bodies[sha.strip()] = body
+    return bodies, []
+
+def body_citation_line(short: str, issue: int, body: str | None) -> str:
+    """The REPORT LINE (#616, ruled n=4765): does the BODY carry the citation too?
+
+    REPORT ONLY — it changes no verdict and is not a predicate. What it makes visible is
+    the convention the ruling adopted as law: a commit subject citing a CLOSED issue must
+    be a commit that ADDS a ledger row naming it, and the causation belongs in the BODY.
+    The gate judges the SUBJECT alone, so before this line a body stating its causation
+    and a body saying nothing printed identically — a convention nobody can audit is
+    indistinguishable from no convention at all.
+
+    `None` means the body could not be read, and that is STATED rather than reported as an
+    absence: an unread body is not a body without the citation (#271, one surface over).
+    """
+    if body is None:
+        return (
+            f"body: {short} — UNREADABLE, so whether it carries #{issue} is unknown; "
+            "an unread body is not a body without the citation"
+        )
+    if issue in subject_issues(body):
+        return (
+            f"body: {short} carries #{issue} in its commit body — causation is stated "
+            f"where the gate does not read it, and no ledger row names #{issue}"
+        )
+    return (
+        f"body: {short} does NOT carry #{issue} in its commit body — the citation "
+        f"appears in the SUBJECT only, and no ledger row names #{issue}"
+    )
+
 def probe() -> list[str]:
     """Every arm of the predicate, driven by synthetic input.
 
@@ -430,6 +488,38 @@ def probe() -> list[str]:
             f"probe: three malformed exemptions must be problems, got {len(problems)}"
         )
 
+    # #616: the report line must DISCRIMINATE, or it is decoration. Both directions are
+    # driven, plus the laundering shape — a body citing a DIFFERENT issue must never read
+    # as a carrier, which is the same discipline the citation legs apply to a bare clause.
+    for label, body, issue, want in (
+        ("the body states the citation", "cites #529 as its cause", 529, True),
+        ("the body carries it mid-sentence", "this closes\nthe #529 gap", 529, True),
+        ("the body cites ANOTHER issue only", "see #607", 529, False),
+        ("the body is empty", "", 529, False),
+        ("the body names no issue at all", "see the ruling", 529, False),
+    ):
+        line = body_citation_line("abc1234", issue, body)
+        got = f" carries #{issue} " in line
+        if got != want:
+            failures.append(
+                f"probe: {label} must report carries={want}, got {got} — {line}"
+            )
+    unreadable = body_citation_line("abc1234", 529, None)
+    if "UNREADABLE" not in unreadable:
+        failures.append(
+            "probe: an unreadable body must be STATED, never read as an absence"
+        )
+    if "#529" not in unreadable:
+        failures.append(
+            "probe: the unreadable line must still name the issue it could not check"
+        )
+    # The line is REPORT ONLY: it must never carry a verdict word, because a reader who
+    # saw "FAIL" or "clean" inside a report line would take it for the gate's judgement.
+    for body in (None, "cites #529", "no issue here"):
+        line = body_citation_line("abc1234", 529, body)
+        if "FAIL" in line or "clean" in line:
+            failures.append(f"probe: a report line must carry no verdict word — {line}")
+
     return failures
 
 
@@ -510,6 +600,10 @@ def main() -> int:
 
     in_range = [c for c in commits if c[2] > marker]
     judged = judged_pairs(commits, closes, added, marker)
+    # #616: bodies are read ONLY for the commits that already failed the subject
+    # predicate, so the report costs one git call over a handful of shas.
+    bodies, body_problems = commit_bodies(sorted({sha for sha, _, _, _, _ in judged}))
+    problems.extend(body_problems)
     print(
         f"issue receipts: examined {len(in_range)} commit(s) after {raw_marker} "
         f"(declared) against {len(closes)} closed issue(s); "
@@ -518,6 +612,9 @@ def main() -> int:
 
     excused: list[tuple[str, dict]] = []
     for sha, short, issue, author, close_ts in judged:
+        # #616 REPORT LINE — printed for every violation, excused or not, and never a
+        # verdict: it says whether the BODY carries the citation the subject does.
+        print(f"  {body_citation_line(short, issue, bodies.get(sha))}")
         entry = exemptions.get(sha)
         if entry is None:
             problems.append(
