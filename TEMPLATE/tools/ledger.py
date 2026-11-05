@@ -1240,14 +1240,18 @@ def _malformation_sentence(key: str) -> str:
 # post-mechanism row is self-declaring and an old row is told apart from a judged one.
 #
 # THE READ RUNS BEFORE THE LOCK, deliberately. `append` holds an exclusive flock from the
-# first row read to the write, and a 15 s network call inside it would stall every peer
+# first row read to the write, and a 10 s network call inside it would stall every peer
 # append on this box. The pre-lock row snapshot can only make the guard see FEWER `ruling`
 # rows than exist, and that direction of staleness produces a REFUSAL (loud, re-runnable),
 # never a false clear.
 BOARD_RULING_KEY = "board_ruling"
 PATROL_TOOL = Path(__file__).resolve().parent / "patrol_host_state.py"
-# Bounded, because this read sits on the write path of every close.
-BOARD_READ_TIMEOUT_SEC = 15
+# Bounded, because this read sits on the write path of every close -- and bounded BELOW the
+# audit's declared budget for this tool (registry/gates.json), because #240's ordering is
+# load-bearing: the audit kills a gate at its budget, so a cap at or above the budget would
+# kill `verify` mid-read and the round would read UNKNOWN instead of a verdict. Lowering this
+# is the safe direction; raising it is the direction that buys silence.
+BOARD_READ_TIMEOUT_SEC = 10
 
 def load_patrol():
     """The ruling-pairing predicate's OWN home, loaded by PATH (#611).
