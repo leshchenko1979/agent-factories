@@ -183,11 +183,26 @@ def test_a_job_with_no_fire_record_is_not_judged() -> None:
     assert leg["problems"] == []
 
 # --- population discipline --------------------------------------------------
-def test_a_thin_wake_no_factory_owns_is_a_problem_naming_the_gap() -> None:
-    """An unowned thin wake can never be audited — the manifest gap is the finding."""
+def test_a_thin_wake_no_factory_owns_is_EXCUSED_and_COUNTED_never_a_red() -> None:
+    """An unowned thin wake can never be audited — and it is not THIS factory's red.
+
+    The finding is real: a row whose prefix no factory declares has no locatable target
+    store, so its duty is unauditable forever. But the row is FOREIGN — it arrived in a
+    home whose prefix the manifest does not name — and a per-factory round has no authority
+    over it (ruling n=610 part 3b). Reding here would turn a factory report into a box-wide
+    one, and in a bootstrapped factory declaring a single prefix it would red STANDING on a
+    row it can never fix. So the arm asserts BOTH halves: the gap is NAMED and COUNTED
+    (`unresolved_factory`), and it moves no verdict.
+    """
     leg = _leg([_wake("orphan-daily")], stores=_stores(prefix="probe-"))
-    assert leg["coverage"]["unresolved_factory"] == 1
-    assert "no factory in registry/fleet.json owns by prefix" in leg["problems"][0]
+    assert leg["coverage"]["unresolved_factory"] == 1, leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+    assert any(
+        "no factory in registry/fleet.json owns by prefix" in note
+        and "OUT OF THIS FACTORY'S POPULATION" in note
+        for note in leg["excused"]
+    ), leg["excused"]
+    assert leg["coverage"]["judged"] == 0
 
 def test_a_self_executing_row_is_outside_the_population() -> None:
     """A job that runs its own command leaves the work in its own run record; demanding a
@@ -203,7 +218,7 @@ def test_a_row_this_factory_owns_belongs_to_the_duty_receipt_leg() -> None:
     """`factory-` rows are `duty-receipt`'s population. Judging them here too would put two
     verdicts on one fact."""
     leg = _leg([_wake("factory-daily")])
-    assert leg["coverage"]["rows_attributed"] == 1
+    assert leg["coverage"]["rows_attributed_here"] == 1
     assert leg["coverage"]["thin_wakes"] == 0
 
 def test_the_population_counts_print_even_when_nothing_is_judged() -> None:
@@ -307,3 +322,12 @@ def test_MUTANT_reading_none_as_a_stem_reports_a_false_MISSING() -> None:
     finally:
         for key, value in saved.items():
             namespace[key] = value
+
+if __name__ == "__main__":
+    # PYTEST form: these are module-level arms, so a bare run would exit 0 having asserted
+    # NOTHING — a gate whose only exits are barred (entry-point equivalence, #612 review).
+    import sys
+
+    import pytest
+
+    sys.exit(pytest.main([__file__, "-q"]))

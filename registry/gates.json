@@ -1104,6 +1104,7 @@
     "tools/ledger.py": "script",
     "tools/roadmap.py": "script",
     "tests/test_commit_subject_issue_refs.py": "script",
-    "tests/test_close_ruling_paired.py": "script"
+    "tests/test_close_ruling_paired.py": "script",
+    "tests/test_patrol_wake_duty.py": "pytest"
   }
 }

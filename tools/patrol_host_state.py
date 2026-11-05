@@ -7196,11 +7196,19 @@ def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
                     owner = (len(prefix), record)
         if owner is None:
             unresolved += 1
-            problems.append(
+            # EXCUSED, never a problem. The row is FOREIGN to this factory -- it arrived in
+            # some home whose prefix no factory declares -- and a per-factory round has no
+            # authority over it (ruling n=610 part 3b): a block that judged rows this factory
+            # does not own would turn a factory report into a box-wide one, and in a
+            # bootstrapped factory whose manifest declares one prefix it would red STANDING on
+            # rows it can never fix. The finding is real and it is PRINTED with its count
+            # (`unresolved_factory`), so a reader sees it; it just is not this factory's red.
+            excused.append(
                 f"{name} (cron id {job_id}): a THIN WAKE that no factory in "
                 f"registry/fleet.json owns by prefix, so its target store cannot be located "
                 f"and its duty can never be audited -- the delivery receipt is the only "
-                f"record this row can leave (#612)"
+                f"record this row can leave. OUT OF THIS FACTORY'S POPULATION, never a pass "
+                f"and never a red (#612)"
             )
             continue
         record = owner[1]
@@ -7313,7 +7321,11 @@ def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
             "homes_read": len(homes_read),
             "homes_read_names": list(homes_read),
             "homes_unreached": list(unreached),
-            "rows_attributed": len(attributed),
+            # NOT `rows_attributed`: that key is a SUMMED contract (the verdict sentence adds
+            # it over every leg), so a second leg reporting it would inflate the count this
+            # leg does not own — measured 2026-11-05: the sentence read "4 cron row(s)
+            # attributed to this factory and judged" where the cron legs judged 2.
+            "rows_attributed_here": len(attributed),
             "thin_wakes": len(thin),
             "self_executing": self_executing,
             "unresolved_factory": unresolved,
@@ -16048,7 +16060,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             # which rows this leg never judged at all.
             lines.append(
                 f"  population: {cov['thin_wakes']} THIN WAKE row(s) of "
-                f"{cov['rows_read']} read ({cov['rows_attributed']} attributed to THIS "
+                f"{cov['rows_read']} read ({cov['rows_attributed_here']} attributed to THIS "
                 f"factory and judged by duty-receipt instead; {cov['self_executing']} "
                 f"self-executing row(s) outside this population)"
             )
