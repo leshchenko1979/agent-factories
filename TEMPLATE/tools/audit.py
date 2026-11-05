@@ -3230,6 +3230,19 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "-q", "tests/test_patrol_wake_duty.py"]
         )
 
+    # 98. the DECLARED-MODE gate (#615, ruled n=4745). An entry that declares ITSELF bimodal
+    #     in its own note must never be re-derived from a single sample of a mode that note
+    #     does not name — the live `tests/test_ledger_no_shrink.py` entry said so in prose and
+    #     the re-derivation leg could not read it (grep for `basis_note` in
+    #     tools/gate_budget_rederive.py returned ZERO hits), so a warm sample collapsed
+    #     550.91 -> 9.19 and killed every cold run with NO VERDICT. The gate drives a
+    #     fixture manifest under a temp dir and a mutant arm reproduces that exact collapse,
+    #     because a hold nobody can un-hold proves nothing. SCRIPT form: the file's arms run
+    #     from `main()` and print their PASS lines. Its subject tool is live-only, so the
+    #     test does not ship and this block is skipped in a bootstrapped factory.
+    if (repo_root / "tests/test_gate_budget_declared_mode.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_gate_budget_declared_mode.py"])
+
     # 96. the CRITERION-PATH EXEMPTION gate (#507). The `criterion-paths` leg resolves every
     #     path a board item's criteria NAME — in the issue BODY and in the RULING COMMENT —
     #     against the COMMITTED tree, and reds each name that resolves to nothing. It could

@@ -154,6 +154,12 @@ PROBE_HARD_CAP_SEC = 3600.0
 # measured on an idle box says nothing about the same gate on a loaded one.
 PROBE_SAMPLE_FIELD = "probe_sample"
 PROBE_REGIME_FIELD = "probe_regime"
+# THE MODE DECLARATION (#615). `basis_note` states, for a human, which measurement mode an
+# entry's basis was taken in -- and until #615 that was the ONLY place the answer existed,
+# so the one instrument that would act on it could not read it. This is the same fact as
+# data: a list of mode names, and an entry naming more than one is never re-derived from a
+# single sample (see `declared_basis_hold`).
+BASIS_MODES_FIELD = "basis_modes"
 # A REFUSED probe is recorded too, with the gate's blob at refusal time. A refusal is not a
 # failure to report and re-run: probing a 25-minute gate every round to re-learn the same
 # arithmetic is the cost this record removes, and the blob is what re-arms it when the gate
@@ -540,6 +546,29 @@ def containment_population(
             f"consecutive breach, {len(reset)} reset by a round inside the wall)"
         )
 
+    # THE DECLARED-MODE HOLD (#615). An entry whose own declaration names more than one
+    # measurement mode is removed from EVERY containment source before the population is
+    # built, so no branch of `apply_rederivation` can reach it -- not the growth arm, not the
+    # stale arm, not the exhausted arm. It is removed from the SOURCES rather than from
+    # `keys`, because `partition_problems` sums the source lengths against the population and
+    # a filter on the union alone would break that arithmetic.
+    #
+    # Read from `entries`, not from the population: an entry that is bimodal and currently
+    # contained is the #615 harm, and an entry that is bimodal and NOT contained must still
+    # be reported so a reader sees the wall is held rather than merely quiet.
+    declared_hold = {
+        key: reason
+        for key, entry in entries.items()
+        if (reason := declared_basis_hold(entry)) is not None
+    }
+    undeclared = sorted(key for key, entry in entries.items() if key not in declared_hold
+                        and isinstance(entry, dict) and BASIS_MODES_FIELD not in entry)
+    if declared_hold:
+        held_keys = set(declared_hold)
+        stale = tuple(s for s in stale if s.key not in held_keys)
+        exhausted = tuple(k for k in exhausted if k not in held_keys)
+        growth = tuple(g for g in growth if g.key not in held_keys)
+
     # The note is the sweep's OWN account, carried VERBATIM: it already names the
     # not-examined population once, by key, so this leg appends nothing to it (#442).
     note = budgets.stale_note
@@ -556,6 +585,12 @@ def containment_population(
         extras={"samples": samples, "sample_note": sample_note, "manifest": str(path),
                 "failed_only": failed_only, "sample_revision": sample_revision,
                 "round_id": round_id, "present": present,
+                # The DECLARED-MODE hold, and the UNDECLARED population beside it (#615).
+                # Both are printed by `apply_rederivation`: a held entry is a refusal with a
+                # reason, and an undeclared entry is the gap that would otherwise be a silent
+                # default. A count nobody prints is indistinguishable from a mechanism.
+                "declared_hold": tuple(sorted(declared_hold.items())),
+                "undeclared_modes": tuple(undeclared),
                 # THE RAW UNKNOWN SET, before any narrowing (#604). The containment
                 # partitions are narrowed against each other by precedence, so an entry that
                 # is BOTH stale and killed appears only under STALE -- and a kill record read
@@ -607,6 +642,61 @@ def _declared_sec(entry: object) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
         return None
     return float(value)
+
+def declared_basis_hold(entry: object) -> str | None:
+    """The reason an entry may NEVER be re-derived from a single sample, or None.
+
+    THE INVARIANT (#615, ruled n=4745): an entry whose own declaration names more than one
+    measurement mode can never be re-derived from one sample, because a single duration
+    cannot say WHICH mode it came from. The leg used to have no way to ask the question at
+    all -- `basis_note` was free prose, read by humans and by no instrument -- so a gate the
+    manifest declared BIMODAL was re-derived from whichever half the audit happened to
+    sample. On 2026-11-04 that was the WARM half, and it collapsed `tests/test_ledger_no_shrink.py`
+    from 550.91 s to 9.19 s (59.95x), arming the very failure the margin exists to prevent:
+    the cold path would have died with NO VERDICT. The note said so in its own words and
+    nothing could read it.
+
+    THE DECLARATION IS TYPED, and that is the durable half: `basis_modes` is a list, so the
+    answer is data rather than a phrase this leg would have to guess at. A word list over
+    prose was rejected deliberately -- it rots, and it would make the invariant depend on
+    which synonym a future author reached for.
+
+    ABSENCE IS NOT BIMODALITY, and it is not silence either: an entry with no `basis_modes`
+    is UNDECLARED, is derived as before, and is COUNTED AND PRINTED by the census line in
+    `apply_rederivation`, so the gap stays observable rather than becoming a default nobody
+    can see. Fail-closed is applied where it can be: a field that is PRESENT but unreadable
+    is HELD, because an entry whose declaration cannot be parsed is an entry whose mode
+    nobody knows.
+    """
+    if not isinstance(entry, dict):
+        return None
+    if BASIS_MODES_FIELD not in entry:
+        return None
+    raw = entry[BASIS_MODES_FIELD]
+    if isinstance(raw, str):
+        modes = (raw.strip(),) if raw.strip() else ()
+        problem = "" if modes else "is an empty string"
+    elif isinstance(raw, (list, tuple)):
+        if not all(isinstance(m, str) and m.strip() for m in raw):
+            modes, problem = (), "carries a non-string or blank member"
+        else:
+            modes, problem = tuple(m.strip() for m in raw), ""
+    else:
+        modes, problem = (), f"is a {type(raw).__name__}, not a list of mode names"
+    if problem:
+        return (
+            f"HELD — `{BASIS_MODES_FIELD}` {problem}, so the mode this entry's basis was "
+            f"measured in cannot be read; a sample is never derived against a declaration "
+            f"nobody can parse (#615)"
+        )
+    if len(set(modes)) > 1:
+        return (
+            f"HELD — declared BIMODAL: `{BASIS_MODES_FIELD}` names {len(set(modes))} modes "
+            f"({', '.join(sorted(set(modes)))}), and a single audit sample cannot say which "
+            f"one it came from; deriving from it would arm the failure the margin exists to "
+            f"prevent (#615, ruled n=4745)"
+        )
+    return None
 
 def _same_round(marker: object, round_id: str | None) -> bool:
     """True only when the marker and this report PROVABLY belong to the same round.
@@ -1382,6 +1472,23 @@ def apply_rederivation(
     probe_applied: list = []
     growth_keys = {g.key for g in pop.growth}
     stale_keys = {s.key for s in pop.stale}
+    # THE DECLARED-MODE REFUSALS (#615), stated FIRST so they can never be reached by a
+    # derivation branch below: the population was already narrowed against them, and this
+    # list is where the REASON reaches a reader. A hold nobody prints is a silent skip.
+    declared_hold = dict(pop.extras.get("declared_hold") or ())
+    for key, reason in sorted(declared_hold.items()):
+        held.append((key, reason))
+    # THE UNDECLARED CENSUS (#615). An entry with no `basis_modes` is derived as before, and
+    # that is a stated gap rather than a silent default: it prints on every run beside the
+    # hold, so the number of entries whose mode is still guesswork can only shrink visibly.
+    undeclared_modes = tuple(pop.extras.get("undeclared_modes") or ())
+    mode_note = (
+        f"declared-mode hold: {len(declared_hold)} entr"
+        f"{'y' if len(declared_hold) == 1 else 'ies'} HELD and never re-derived "
+        f"(#615); {len(undeclared_modes)} of {len(entries)} declared entr"
+        f"{'y' if len(entries) == 1 else 'ies'} name no `{BASIS_MODES_FIELD}` and are "
+        f"derived from the audit's sample as before"
+    )
     for growth in pop.growth:
         entry = entries.get(growth.key)
         if not isinstance(entry, dict):
@@ -1529,7 +1636,7 @@ def apply_rederivation(
                 note=(
                     f"REFUSED — the re-derived manifest does not read back with all "
                     f"{len(entries)} declared entries, so it was NOT written; "
-                    f"{manifest_path} is unchanged"
+                    f"{manifest_path} is unchanged | {mode_note}"
                 ),
                 extras=pop.extras,
                 kills=pop.kills,
@@ -1548,7 +1655,7 @@ def apply_rederivation(
         reported=tuple(reported),
         held=tuple(held),
         cleared=tuple(cleared),
-        note=pop.note,
+        note=f"{pop.note} | {mode_note}" if pop.note else mode_note,
         extras=pop.extras,
         kills=pop.kills,
         probes=pop.probes,
@@ -1616,6 +1723,22 @@ def render(pop: Population) -> str:
         f"({len(pop.stale)} by a moved basis, {len(pop.exhausted)} by an exhausted budget, "
         f"{len(pop.growth)} by growth)",
     ]
+    # THE DECLARED-MODE CENSUS (#615), printed on EVERY run -- read-only included, because a
+    # refusal a reader only sees when they pass `--apply` is not observability. The two facts
+    # are the mechanism and the gap: entries HELD because their own declaration names more
+    # than one mode, and entries naming NO mode, which are derived as before. The second
+    # number is the one that must be able to shrink; without it the absent field is a silent
+    # default and a factory cannot tell a declared wall from an undeclared one.
+    declared_hold = dict(pop.extras.get("declared_hold") or ())
+    undeclared_modes = tuple(pop.extras.get("undeclared_modes") or ())
+    lines.append(
+        f"  declared modes: {len(declared_hold)} HELD and never re-derived (#615); "
+        f"{len(undeclared_modes)} of {pop.declared} declared entr"
+        f"{'y' if pop.declared == 1 else 'ies'} name no `{BASIS_MODES_FIELD}` and are "
+        f"derived from the audit's sample as before"
+    )
+    for key, reason in sorted(declared_hold.items()):
+        lines.append(f"    [HELD] {key} — {reason}")
     cleared_keys = set(pop.cleared)
     for stale in pop.stale:
         line = f"    [STALE] {stale.key} — legs {', '.join(stale.legs)}: {stale.detail}"

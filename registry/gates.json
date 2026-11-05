@@ -436,6 +436,9 @@
     },
     "tests/test_patrol_wake_duty.py": {
       "class": "always-satisfiable"
+    },
+    "tests/test_gate_budget_declared_mode.py": {
+      "class": "always-satisfiable"
     }
   },
   "gates": {
@@ -667,7 +670,11 @@
       "load_at_measure": 4.3,
       "margin_x": 4.003964,
       "measured_at": "1eb21004ffb3591b1694cacefa018d9ad7e718e9",
-      "measured_sec": 189.18
+      "measured_sec": 189.18,
+      "basis_modes": [
+        "cold",
+        "warm"
+      ]
     },
     "tests/test_ledger_schema.py": {
       "budget_sec": 19.19,
@@ -1105,6 +1112,7 @@
     "tools/roadmap.py": "script",
     "tests/test_commit_subject_issue_refs.py": "script",
     "tests/test_close_ruling_paired.py": "script",
+    "tests/test_gate_budget_declared_mode.py": "script",
     "tests/test_patrol_wake_duty.py": "pytest"
   }
 }

@@ -1144,6 +1144,19 @@ OPTIONAL_GATES: dict[str, str] = {
         "DECLARED rather than left to a by-hand run: a probe the audit never executes is "
         "dead text."
     ),
+    "test_gate_budget_declared_mode.py": (
+        "meta-factory-only — its subject tool tools/gate_budget_rederive.py is live-only and "
+        "does not ship (it is absent from registry/kit.json's file set, so a bootstrapped "
+        "factory has no re-derivation leg to guard). It carries the #615 invariant: an entry "
+        "whose OWN declaration names more than one basis mode can never be re-derived from a "
+        "single sample of a mode its note does not name. Before it, the live entry for "
+        "tests/test_ledger_no_shrink.py declared itself bimodal in prose — 'a warm sample ... "
+        "kills every cold run with NO VERDICT' — and the one consumer that would act on that "
+        "declaration could not read it: grep for basis_note in the tool returned ZERO hits, "
+        "and the entry was re-derived 550.91 -> 9.19 on a warm sample. The gate is DECLARED "
+        "rather than left to a by-hand run because its arms are the only proof the hold "
+        "fires, and one mutant arm reproduces the exact collapse to keep that true."
+    ),
     "test_insights_author.py": (
         "meta-factory-only (owner order 2026-09-28) — its subject tool tools/insights.py is "
         "live-only and does not ship, the same reason both synthesizer siblings above are "
