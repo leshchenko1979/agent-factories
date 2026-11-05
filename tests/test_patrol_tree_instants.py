@@ -733,8 +733,23 @@ def test_a_SUPPRESSED_duty_keeps_its_EXCUSE_beside_the_CADENCE_finding() -> None
     rather than a declaration. A problem appended to the same leg must leave that excuse in
     `excused`, with its reason -- a finding that displaced an excuse would trade a false
     clean for a false MISSING, which is the #160 class from the other side.
+
+    THE FIXTURE IS MIXED SINCE #617, and that is the point rather than a convenience. The
+    exclusion surface now removes a suppressed round from the job's LATENCY observations as
+    well as from its judgement: a round whose trigger gate skipped it never woke the lane, so
+    whatever latency sits beside it measures something other than the lane's promptness. An
+    all-suppressed job therefore has NO observation to derive a residual from -- it falls back
+    to the short default and cannot report a cadence finding at all, which is the correct
+    answer for a job that never ran. To keep this arm measuring what it was written to measure
+    (a finding must not SWALLOW an excuse), one round is suppressed and two are real: the
+    suppressed round must stay in `excused` while the two real ones carry the cadence finding.
+    An all-suppressed fixture would now be asserting a state the instrument says cannot exist.
     """
-    fires = _fires((0.5, 24.5, 48.5), suppressed=True)
+    fires = _fires((0.5, 24.5, 48.5))
+    fires[0] = dict(fires[0],
+                    content=f"Trigger condition not met (exit_code=0, output_bytes=0). "
+                            f"{RUNNER.CRON_SUPPRESSION_MARKER}.")
+    fires[0]["suppressed"] = RUNNER.fire_is_suppressed(fires[0]["content"])
     ledger = [
         _fire_receipt(0.5, 25200.0, 51),
         _fire_receipt(24.5, 25200.0, 52),
