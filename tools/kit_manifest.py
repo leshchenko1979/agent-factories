@@ -242,6 +242,9 @@ CLOSURE_MODULES = frozenset({
                                              # and no __main__, so it is a closure
     "TEMPLATE/tests/hook_installation.py",   # imported by 2 gates
     "TEMPLATE/tests/ledger_boundary.py",     # imported_by 7 gates
+    "TEMPLATE/tests/citation_naming.py",     # #614: the ONE citation-naming convention,
+                                             # imported by BOTH citation legs so they cannot
+                                             # drift about what naming means; no CLI
     "TEMPLATE/tests/rework_table.py",        # the ONE entries-table parser (miidas
                                              # arrived at the same module independently
                                              # as tools/rework_entries.py -- Phase D

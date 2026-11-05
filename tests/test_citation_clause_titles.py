@@ -39,6 +39,15 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 OWN = Path(__file__).resolve()
+
+# The ONE naming convention, shared with the ledger's own citation leg (#614). Both legs
+# ask this module the same question -- does this token name an artifact a reader can
+# resolve? -- so they cannot disagree about what naming means. A comment saying "one
+# convention, both legs" was the previous mechanism, and it held until a token type neither
+# leg could see walked straight through it.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from citation_naming import MARKDOWN_TOKEN, artifact_index, names_artifact  # noqa: E402
+
 # This gate's own two halves. A predicate has to NAME the pattern it forbids — score the
 # prose that does so, and the check can never describe its own subject without failing it.
 SELF_NAMES = {OWN.name}
@@ -68,8 +77,11 @@ LAW_GLOBS = (
 SECTION = re.compile(r"§")
 SKILL_NUMBERED = re.compile(r"SKILL\.md\s*§\s*\d")
 HEADING = re.compile(r"^#{1,6}\s+(?:\d+\.\s*)?(.+?)\s*$")
-# A document named on the same line, BEFORE the marker: a markdown file.
-DOC_ON_LINE = re.compile(r"([A-Za-z0-9_./-]+\.md)")
+# A document named on the same line, BEFORE the marker: a markdown file. The convention
+# itself lives in `tests/citation_naming.py` (#614) so the ledger's leg and this one cannot
+# disagree; this name is kept because the title-resolution half below is markdown's alone --
+# a code artifact's numbered comment banner carries no clause TITLE to resolve.
+DOC_ON_LINE = MARKDOWN_TOKEN
 
 
 def doc_titles(path: Path) -> set[str]:
@@ -160,11 +172,24 @@ def scoped_files() -> list[Path]:
     return sorted(out)
 
 
+# The ambient artifact index, built lazily and once. A PROBE must never use it: a probe's
+# subject is the predicate, so it supplies its own index -- otherwise the probe becomes a
+# statement about the tree it happens to run in, which is the trap this file already
+# documents at PROBE_CARRIED.
+_AMBIENT_INDEX: list = []
+
+def _ambient_index():
+    """This repo's carried artifacts, walked once per process."""
+    if not _AMBIENT_INDEX:
+        _AMBIENT_INDEX.append(artifact_index(REPO))
+    return _AMBIENT_INDEX[0]
+
 def citation_problems(
     text: str,
     corpus: dict[str, set[str]],
     carried: set[str],
     member: set[str] | None = None,
+    index: object = None,
 ) -> tuple[list[str], list[str]]:
     """(problems, exemptions) for one file's text.
 
@@ -175,6 +200,7 @@ def citation_problems(
     titles = {t for ts in corpus.values() for t in ts}
     # A shipped file's reader is a MEMBER, so its corpus is the member's, not ours.
     shipped = member is not None
+    artifacts = _ambient_index() if index is None else index
     problems: list[str] = []
     exempt: list[str] = []
     for lineno, line in enumerate(text.splitlines(), 1):
@@ -202,6 +228,14 @@ def citation_problems(
             if after[0].isdigit():
                 if name:
                     continue  # a carried document's own numbering is that document's to keep
+                # #614: a CARRIED code artifact's numbered comment banner is that artifact's
+                # own numbering too -- `TEMPLATE/tools/questions`'s selftest numbers its arms
+                # `# -- 7.` / `# -- 8e.`. The markdown-only convention could not see the
+                # path, so this branch red on a citation that names its artifact precisely.
+                # The carriage test keeps it from becoming a blanket: `origin/main §5` names
+                # no artifact and still reds.
+                if names_artifact(line[: m.start()], artifacts):
+                    continue
                 problems.append(
                     f"{lineno}: bare `§<number>` with no document named — unresolvable in any "
                     f"other tree: {line.strip()[:90]}"
@@ -262,8 +296,9 @@ def probe(
     want: bool,
     failures: list[str],
     member: set[str] | None = None,
+    index: object = None,
 ) -> None:
-    problems, _ = citation_problems(text, corpus, PROBE_CARRIED, member)
+    problems, _ = citation_problems(text, corpus, PROBE_CARRIED, member, index)
     got = bool(problems)
     if got != want:
         failures.append(f"probe {name!r}: expected problems={want}, got {problems or 'none'}")
@@ -317,6 +352,23 @@ def _probes() -> list[str]:
     )
     probe("the title must be the HEAD of the citation, not a word inside it",
           "see SKILL.md §the clause named State — every surface has one writer", corpus, True, failures)
+    # --- #614: the shared naming convention, in BOTH directions -------------------
+    # These supply their OWN artifact index: a probe's subject is the predicate, never the
+    # tree it happens to run in.
+    fixture = (
+        frozenset({"TEMPLATE/tools/questions", "tools/ledger.py"}),
+        frozenset({"TEMPLATE/tools"}),
+        frozenset(),
+    )
+    probe("a CARRIED code artifact's own numbering is that artifact's to keep",
+          "the `gc` arms live in `TEMPLATE/tools/questions`'s selftest §7/8e",
+          corpus, False, failures, index=fixture)
+    probe("the SAME sentence with the path REMOVED is still the defect",
+          "the `gc` arms live in the tool's own selftest §7/8e",
+          corpus, True, failures, index=fixture)
+    probe("a path the tree does NOT carry names no artifact and stays bare",
+          "as read off origin/main §5 this round",
+          corpus, True, failures, index=fixture)
     return failures
 
 

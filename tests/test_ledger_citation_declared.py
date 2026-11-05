@@ -96,6 +96,11 @@ from typing import NamedTuple
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from citation_naming import (  # noqa: E402
+    MARKDOWN_TOKEN,
+    artifact_index,
+    names_artifact,
+)
 from ledger_boundary import (  # noqa: E402
     GateError,
     SkipGate,
@@ -146,12 +151,26 @@ EXEMPTIONS_PATH = "docs/ledger-citation-exemptions.json"
 # about numbers.
 SECTION_NUMBER = re.compile("\u00a7" + r"\s*\d")
 
-# What NAMES a document: a markdown token, which is `DOC_ON_LINE` in the shipped gate
-# (`tests/test_citation_clause_titles.py`) -- ONE convention, both legs, so the two cannot
-# disagree about what naming means. A bare `SKILL` is NOT here (a file every factory
-# carries its own copy of, with its own numbering), and neither is a row reference
-# (`n=950`), which is not a document at all.
-DOCUMENT_TOKEN = re.compile(r"([A-Za-z0-9_./-]+\.md)")
+# What NAMES a document is the ONE shared convention in `tests/citation_naming.py`, which
+# `tests/test_citation_clause_titles.py` imports for the same question -- so the two legs
+# cannot disagree about what naming means. Until #614 that convention was a markdown token
+# and nothing else, and a citation into a CODE artifact's numbered comment block (a path
+# with no extension) read as bare however precisely it was given. The module states why the
+# markdown half keeps its shape-only test and the path half is asked of the TREE. A bare
+# `SKILL` is still NOT a document (every factory carries its own copy, with its own
+# numbering), and neither is a row reference (`n=950`).
+DOCUMENT_TOKEN = MARKDOWN_TOKEN
+
+# The ambient artifact index, built lazily and once. Probes must NOT use it: a probe's
+# subject is the PREDICATE, so it supplies its own index -- otherwise the probe becomes a
+# statement about the tree it happens to run in.
+_AMBIENT_INDEX: list = []
+
+def _ambient_index():
+    """This repo's carried artifacts, walked once per process."""
+    if not _AMBIENT_INDEX:
+        _AMBIENT_INDEX.append(artifact_index(REPO))
+    return _AMBIENT_INDEX[0]
 
 # How far before the marker a document name may sit. The measurement that opened #262 used
 # this window, so the leg and the finding that ordered it read the same population.
@@ -269,7 +288,7 @@ def _clause_before(own: str, index: int) -> str:
         start = m.end()
     return head[start:]
 
-def bare_citations(detail: object) -> list[str]:
+def bare_citations(detail: object, index: object = None) -> list[str]:
     """Every BARE `\u00a7N` in one row's own voice, as a label plus a readable snippet.
 
     The scan runs over the own-voice TEXT itself, never by indexing the raw `detail` with
@@ -291,13 +310,14 @@ def bare_citations(detail: object) -> list[str]:
     reds.
     """
     own = own_voice_text(str(detail or ""))
+    artifacts = _ambient_index() if index is None else index
     own_numbers = set(OWN_HEADING.findall(own))
     qualified: set[str] = set()
     out: list[str] = []
     for m in SECTION_DIGITS.finditer(own):
         digits = m.group(1)
         before = own[max(0, m.start() - DOC_WINDOW): m.start()]
-        if DOCUMENT_TOKEN.search(before):
+        if names_artifact(before, artifacts):
             qualified.add(digits)
             continue
         if digits in own_numbers:
@@ -465,6 +485,89 @@ def test_probe_a_named_document_satisfies_the_predicate() -> None:
 
 def test_probe_a_markdown_basename_names_a_document() -> None:
     assert bare_citations("per SKILL.md \u00a7State the writer decides the content") == []
+
+# --- #614: the shared naming convention, in BOTH directions -----------------------
+#
+# These probes supply their OWN artifact index. A probe that read the ambient tree would
+# be a statement about where it happens to run -- the trap the shipped leg documents at
+# length, and one this repo has already paid for.
+
+def _fixture_index():
+    """A controlled artifact set: files, dirs, and one unique basename."""
+    return (
+        frozenset({"TEMPLATE/tools/questions", "tools/ledger.py", "docs/instruments/ledger.md"}),
+        frozenset({"TEMPLATE/tools"}),
+        frozenset({"ledger_boundary.py"}),
+    )
+
+def test_probe_a_code_artifact_named_by_full_path_qualifies_a_citation() -> None:
+    """#614's PASSING direction. `TEMPLATE/tools/questions`'s selftest numbers its arms in
+    comment banners, so `\u00a77/8e` is a precise, greppable, in-tree citation -- and the
+    markdown-only convention read it as bare because the artifact is not markdown."""
+    row = "the `gc` arms live in `TEMPLATE/tools/questions`'s selftest \u00a77/8e"
+    assert bare_citations(row, _fixture_index()) == []
+
+def test_probe_the_SAME_sentence_with_the_path_REMOVED_is_bare() -> None:
+    """#614's RED direction, and the arm that makes the widening TESTED rather than merely
+    present: a convention that admits every path token also has to keep reddening a
+    citation that names nothing. Same sentence, path deleted."""
+    row = "the `gc` arms live in the tool's own selftest \u00a77/8e"
+    assert len(bare_citations(row, _fixture_index())) == 1
+
+def test_probe_a_path_the_tree_does_not_carry_does_not_qualify() -> None:
+    """The carriage test is load-bearing, and this is what it is load-bearing AGAINST. A
+    pure shape test on a slash-bearing token also matches `origin/main` and
+    `Europe/Moscow`, and either would launder a citation that names no artifact at all --
+    the #184 harm shape this gate exists to red on."""
+    assert len(bare_citations("as read off origin/main \u00a75 this round", _fixture_index())) == 1
+    assert len(bare_citations("the desk rota sits in Europe/Moscow \u00a72", _fixture_index())) == 1
+    assert len(bare_citations("see TOPIC/ROLE \u00a73 for the mapping", _fixture_index())) == 1
+
+def test_probe_a_unique_basename_resolves_and_a_shared_one_does_not() -> None:
+    """A reader holding the tree can resolve an unambiguous name; a basename carried twice
+    names two different files, so it names neither."""
+    assert bare_citations("see ledger_boundary.py \u00a72", _fixture_index()) == []
+    assert len(bare_citations("see registry.py \u00a72", _fixture_index())) == 1
+
+def test_probe_a_markdown_token_still_qualifies_when_the_tree_does_not_carry_it() -> None:
+    """The half #614 did NOT change, and the reason the widening is additive: a citation
+    into a member's own `fleet-directives.md` names something a reader can follow even
+    though THIS tree carries no such document. Folding markdown into the carriage rule
+    would have turned every such citation red."""
+    row = "per fleet-directives.md \u00a7Open Questions the lane parks it"
+    assert bare_citations(row, _fixture_index()) == []
+
+def test_probe_a_carried_path_that_does_NOT_own_the_number_stays_bare() -> None:
+    """Carriage is not ownership, and this arm is the measurement that ordered the second
+    test. Each of these names an artifact this tree really carries, and in each the `\u00a7N`
+    belongs to something else: the SKILL's clause re-derived INTO the JSON file, the DOC's
+    \u00a72 mentioned beside a code file, and a row QUOTING a bare citation where the path
+    names the file the quote came from. A predicate that stopped at carriage turned all
+    three green -- two of them while they were already excused with a hand-written referent,
+    which would have silently retired real debt."""
+    idx = _fixture_index()
+    assert len(bare_citations("- registry/gates.json re-derived under \u00a75.2", idx)) == 1
+    assert len(bare_citations("the path it names, tools/ledger.py, is NOT one of \u00a72's", idx)) == 1
+    assert len(bare_citations("the arm at tools/ledger.py:2134 carried a bare \u00a75.2", idx)) == 1
+
+def test_probe_ownership_is_reached_through_a_possessive_or_by_adjacency() -> None:
+    """The two shapes that DO attach the number to the token, so the rule above is not
+    merely a rejection filter: a possessive (`\u2026's selftest \u00a77`, and through a line
+    reference `\u2026.py:740's "\u00a711"`) and bare adjacency (`\u2026 \u00a77`)."""
+    idx = _fixture_index()
+    assert bare_citations("`tools/ledger.py`'s repair clause \u00a79.6", idx) == []
+    assert bare_citations('`tools/ledger.py:740`\'s "\u00a711" is the rule', idx) == []
+    assert bare_citations("the arms live in tools/ledger.py \u00a79.6", idx) == []
+
+def test_probe_both_legs_import_ONE_convention() -> None:
+    """#614 leg 1 is "ONE convention shared by" three files, and a comment saying so is not
+    a mechanism. Both legs IMPORT the same module, so they cannot drift -- and this probe
+    reds if either leg ever stops, which is the only thing that keeps the claim true."""
+    sibling = Path(__file__).resolve().parent / "test_citation_clause_titles.py"
+    assert "citation_naming" in sibling.read_text(encoding="utf-8"), (
+        f"{sibling.name} no longer imports tests/citation_naming.py -- the two citation "
+        f"legs have split and now disagree about what naming means"
+    )
 
 
 def test_probe_a_bare_law_name_does_not_name_a_document() -> None:
