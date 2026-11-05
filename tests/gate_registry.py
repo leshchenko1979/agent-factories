@@ -771,6 +771,17 @@ REQUIRED_GATES: tuple[str, ...] = (
     # path checks EXISTENCE only, so a receipt asserting `intake row n=X` for a row that is
     # a CLOSE passes the write and misleads every reader who follows it.
     "test_ledger_ref_roles.py",
+    # Added with its registration (board #612, ruled n=4743). REQUIRED is the correct grain:
+    # the gate drives SYNTHETIC cron rows and SYNTHETIC stores under a temp directory with
+    # every reader INJECTED — no live box table, no fleet manifest on disk, no live ledger —
+    # so it passes in a bootstrapped factory exactly as it does here, and the leg it guards
+    # ships with the pair below. It is byte-paired with a TEMPLATE copy, so the manifest
+    # grain is what keeps a factory from dropping the runner and keeping the file. THE LEG
+    # IT GUARDS answers the question `duty-receipt` could never ask: a cron `success` is a
+    # DELIVERY receipt, and 31 unattributed rows — every member factory's thin wake — were
+    # judged by nothing, so `miidas-hq-daily-trigger` went green on 2026-11-03 while its
+    # target factory appended no row at all that day.
+    "test_patrol_wake_duty.py",
     "test_patrol_criterion.py",
     "test_patrol_ruling.py",
     "test_patrol_tree_instants.py",

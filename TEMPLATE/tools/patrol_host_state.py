@@ -7019,6 +7019,321 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
         },
     }
 
+# ---- the wake-duty leg (#612) ----------------------------------------------------------
+# A CRON `success` IS A DELIVERY RECEIPT, NEVER A WORK RECEIPT (#612, ruled at ledger
+# n=4743). Measured 2026-11-03: `miidas-hq-daily-trigger` started 09:00:31.129Z, completed
+# 09:01:21Z `status=success`, content "daily wake relayed to Miidas HQ lane (topic 4)" -- and
+# the target factory appended NOTHING that day. The wake landed ONE SECOND before the first of
+# NINE compaction markers, one every 69.4 s, and the duty was consumed before it was reached.
+# The cron's green was true and worthless.
+#
+# `duty-receipt` CANNOT SEE THAT ROW, and this is the gap this leg exists for. Its population
+# is the rows THIS factory declares -- `attribute_rows` on this factory's prefixes -- judged
+# against THIS factory's ledger; every other row is printed as `jobs_unattributed` and never
+# judged. Measured on this box 2026-11-05: 31 of 43 enabled rows are unattributed. A thin wake
+# that wakes a MEMBER factory leaves its receipt in THAT factory's ledger, so "did the woken
+# lane reach its duty" is unasked for every one of them.
+#
+# SO THIS LEG ASKS IT, and reads the TARGET'S OWN STORE to answer: the member's
+# `evidence/ledger.jsonl`, located from `registry/fleet.json`'s own `repo` field rather than a
+# second list, so a member that moves is followed by the manifest. A delivered wake whose
+# target store carries no row inside the window is NO VERDICT -- never `success`, and never a
+# FAIL of the lane either, which this leg cannot see. Where the store cannot be read the leg
+# reports UNKNOWN WITH ITS REASON: a zero from an unread store is not a zero, and a delivery
+# receipt standing in for a work receipt is the exact substitution the absence rules forbid.
+#
+# THE POPULATION IS THIN WAKES ONLY, keyed on the row's OWN DECLARED SHAPE
+# (`THIN_WAKE_MARKER`): a job that runs its own command leaves the work in its own run record,
+# so demanding a second receipt from it would red rows that are already auditable. Measured on
+# this box 2026-11-05: 22 thin wakes, 9 self-executing.
+#
+# THE RESIDUAL, STATED RATHER THAN HIDDEN. The fallback predicate is "the target factory
+# appended a row inside the window", which is a WORK receipt at FACTORY granularity, not at
+# DUTY granularity -- a factory doing unrelated work inside the window reads PASS. That is
+# deliberate and it is why the STRONG form is tried first: a wake whose prompt DECLARES a
+# `receipt_subject:` is judged on that subject alone, so the gap closes entirely for any
+# factory that declares one. The thin wakes on this box declare none, so for them the leg
+# catches the shape the incident actually had -- a lane consumed before it reached ANY ledger
+# write -- and says so here rather than implying a precision it does not have.
+WAKE_DUTY_WINDOW_SECS = 86400.0
+WAKE_DUTY_WINDOW_BASIS = (
+    "24 h, a DECLARED bound rather than a measured one: every thin wake row this box "
+    "enables is daily or faster, so a round a full day old whose target appended nothing is "
+    "not in flight. A round YOUNGER than the window is IN FLIGHT and NOT JUDGED, and it is "
+    "printed with its age so the skip is visible rather than silent"
+)
+THIN_WAKE_MARKER = "Thin trigger only"
+
+def declared_factory_stores() -> tuple[dict[str, dict], list[str]]:
+    """{job prefix -> {slug, repo}} from `registry/fleet.json`, plus unreadable reasons.
+
+    ONE reader for one declaration (SKILL.md section 11): the prefix that attributes a row to
+    a factory is the same `job_prefixes` the fleet manifest uses everywhere else, so a member
+    that renames a prefix is followed here rather than redding as unattributed.
+    """
+    registry = load_module("oc_registry", REGISTRY)
+    try:
+        manifest = registry.load_fleet_manifest()
+    except Exception as exc:  # noqa: BLE001 -- a manifest that cannot be read is a REASON
+        return {}, [
+            f"registry/fleet.json could not be read ({type(exc).__name__}: {exc}), so no "
+            f"member factory's store can be located and no wake can be judged"
+        ]
+    stores: dict[str, dict] = {}
+    reasons: list[str] = []
+    for record in manifest.get("factories") or []:
+        slug = str(record.get("slug") or "?")
+        repo = record.get("repo")
+        if not isinstance(repo, str) or not repo:
+            reasons.append(
+                f"{slug}: the fleet manifest declares no `repo`, so its own store cannot be "
+                f"located and any wake it owns reads UNKNOWN"
+            )
+            continue
+        for prefix in record.get("job_prefixes") or []:
+            if isinstance(prefix, str) and prefix:
+                stores[prefix] = {"slug": slug, "repo": Path(repo)}
+    return stores, reasons
+
+def ledger_entries(path: Path) -> tuple[list[dict] | None, str]:
+    """Every `{ts, subject}` a JSONL ledger carries, or None and WHY it could not be read.
+
+    A LEDGER THAT OPENS AND CARRIES NO READABLE INSTANT IS UNREADABLE, not empty: the two
+    render alike in a count and mean opposite things, and the whole point of this leg is that
+    a zero from an unread store is not a zero (#612).
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return None, f"{path} could not be read ({type(exc).__name__}: {exc})"
+    entries: list[dict] = []
+    unparseable = 0
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except ValueError:
+            unparseable += 1
+            continue
+        if not isinstance(record, dict):
+            unparseable += 1
+            continue
+        stamp = record.get("ts")
+        if not isinstance(stamp, str):
+            continue
+        try:
+            instant = reader_parse_ts(stamp)
+        except (ValueError, TypeError):
+            unparseable += 1
+            continue
+        entries.append({"instant": instant, "subject": str(record.get("subject") or "")})
+    if not entries and unparseable:
+        return None, (
+            f"{path} carries {unparseable} line(s) and NOT ONE readable `ts`, so the store "
+            f"cannot be read as a timeline"
+        )
+    return entries, ""
+
+def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str], *,
+                  prefixes: list[str], read_at: str = "",
+                  fires: list[dict] | None = None, factory_fn=None, ledger_fn=None,
+                  window_secs: float = WAKE_DUTY_WINDOW_SECS,
+                  now: dt.datetime | None = None) -> dict:
+    """Did the lane a delivered wake woke leave ANY work receipt in ITS OWN store? (#612)
+
+    The verdict is about the WAKE, never about the lane's industry: this leg cannot see what
+    the lane did, only whether its factory's ledger moved. A round with no movement is NO
+    VERDICT -- the ruling's own word -- and the problem string says exactly that, so a reader
+    is never left thinking a lane was called lazy by a leg that only read a file.
+    """
+    factory_fn = factory_fn or declared_factory_stores
+    ledger_fn = ledger_fn or ledger_entries
+    stores, store_reasons = factory_fn()
+    problems: list[str] = []
+    excused: list[str] = list(store_reasons)
+    # THE POPULATION IS DECLARED AND PRINTED (#126): a leg that examined nothing must not
+    # render like one that examined everything and found it clean.
+    attributed, foreign = attribute_rows(rows, prefixes)
+    thin: list[dict] = []
+    self_executing = 0
+    for row in foreign:
+        if THIN_WAKE_MARKER in str(row.get("prompt") or ""):
+            thin.append(row)
+        else:
+            self_executing += 1
+    judged = passed = missing = unreadable_store = delivery_failed = 0
+    in_flight = suppressed = no_fire = unresolved = 0
+    stores_read: set[str] = set()
+    stores_unreached: dict[str, str] = {}
+    now_instant = now
+    if now_instant is None:
+        try:
+            now_instant = reader_parse_ts(read_at) if read_at else None
+        except (ValueError, TypeError):
+            now_instant = None
+    if now_instant is None:
+        now_instant = dt.datetime.now(dt.timezone.utc)
+    newest_fire: dict[str, dict] = {}
+    for fire in fires or []:
+        job_id = str(fire.get("job_id") or "")
+        if not job_id:
+            continue
+        seen = newest_fire.get(job_id)
+        if seen is None or str(fire.get("started_at") or "") > str(seen.get("started_at") or ""):
+            newest_fire[job_id] = fire
+    for row in thin:
+        name = str(row.get("name") or "(unnamed row)")
+        job_id = str(row.get("id") or "unstated")
+        owner = None
+        for prefix, record in stores.items():
+            if name.startswith(prefix):
+                # THE LONGEST PREFIX WINS, so a member declaring both `ai-` and
+                # `ai-antispam-` is attributed by the more specific one rather than by
+                # whichever the manifest happened to list first.
+                if owner is None or len(prefix) > owner[0]:
+                    owner = (len(prefix), record)
+        if owner is None:
+            unresolved += 1
+            problems.append(
+                f"{name} (cron id {job_id}): a THIN WAKE that no factory in "
+                f"registry/fleet.json owns by prefix, so its target store cannot be located "
+                f"and its duty can never be audited -- the delivery receipt is the only "
+                f"record this row can leave (#612)"
+            )
+            continue
+        record = owner[1]
+        slug = str(record.get("slug") or "?")
+        ledger_path = Path(record["repo"]) / "evidence" / "ledger.jsonl"
+        fire = newest_fire.get(job_id)
+        if fire is None:
+            no_fire += 1
+            excused.append(
+                f"{name} (cron id {job_id}): the daemon's run record carries NO fire for this "
+                f"job, so no delivery instant exists to judge a round against -- NOT JUDGED"
+            )
+            continue
+        if fire.get("suppressed"):
+            suppressed += 1
+            excused.append(
+                f"{name} (cron id {job_id}): the newest fire "
+                f"({fire.get('started_at')}) was SUPPRESSED by its own trigger gate, so it "
+                f"delivered no wake and owed no receipt -- NOT JUDGED"
+            )
+            continue
+        status = str(fire.get("status") or "")
+        started = str(fire.get("started_at") or "")
+        try:
+            woke_at = reader_parse_ts(started)
+        except (ValueError, TypeError):
+            excused.append(
+                f"{name} (cron id {job_id}): the newest fire's own instant ({started!r}) "
+                f"cannot be dated, so no window can be placed against it -- NOT JUDGED"
+            )
+            continue
+        if status not in RUN_DELIVERED_STATUSES:
+            delivery_failed += 1
+            problems.append(
+                f"{name} (cron id {job_id}): the newest fire ({started}) carries "
+                f"status={status!r}, which is NOT a delivery ({'/'.join(RUN_DELIVERED_STATUSES)}"
+                f") -- the DELIVERY itself failed, so this is not the #612 class: no duty is "
+                f"owed by a wake that never arrived"
+            )
+            continue
+        age = (now_instant - woke_at).total_seconds()
+        if 0 <= age < window_secs:
+            in_flight += 1
+            excused.append(
+                f"{name} (cron id {job_id}, {slug}): the wake {started} is IN FLIGHT — "
+                f"{duty_age_text(age)} old at the {read_at or 'unstated'} read, against the "
+                f"declared window {duty_age_text(window_secs)}. A round younger than its "
+                f"window is NOT JUDGED: the lane may still be working"
+            )
+            continue
+        entries, why = ledger_fn(ledger_path)
+        if entries is None:
+            unreadable_store += 1
+            stores_unreached[slug] = why
+            problems.append(
+                f"{name} (cron id {job_id}, {slug}): the wake was DELIVERED ({started}, "
+                f"status=success) and the target's own store could NOT BE READ — {why}. The "
+                f"delivery receipt is the only record this round has, and a delivery receipt "
+                f"is not a work receipt (#612): UNKNOWN, never a pass"
+            )
+            continue
+        stores_read.add(slug)
+        # THE THREE BUCKETS, not one regex (#612). `receipt_subject: none` is a DECLARATION
+        # that the row owes no NAMED receipt, and reading it with `declared_receipt_stem`
+        # alone turns the literal word `none` into a stem: the hunt then asks every ledger in
+        # the fleet for a subject starting with "none", finds nothing, and reports a MISSING
+        # duty on a row that declared it owed no name. The disposition reader already
+        # separates declares / owes_none / undeclared, so this leg asks it rather than
+        # re-deriving the vocabulary (SKILL.md section 11: one reader for one field).
+        disposition, declared_stem = declared_receipt_disposition(str(row.get("prompt") or ""))
+        stem = declared_stem if disposition == "declares" else None
+        window_end = woke_at + dt.timedelta(seconds=window_secs)
+        if stem is not None:
+            hit = [
+                entry for entry in entries
+                if woke_at <= entry["instant"] <= window_end
+                and entry["subject"].startswith(stem)
+            ]
+            predicate = f"a row whose subject starts with the DECLARED stem {stem!r}"
+        else:
+            hit = [entry for entry in entries if woke_at <= entry["instant"] <= window_end]
+            predicate = (
+                "ANY row (this wake declares no `receipt_subject:`)"
+                if disposition == "undeclared"
+                else "ANY row (this wake declares `receipt_subject: none`, so it owes no NAMED receipt)"
+            )
+        judged += 1
+        if hit:
+            passed += 1
+            excused.append(
+                f"{name} (cron id {job_id}, {slug}): the wake {started} left {len(hit)} "
+                f"row(s) in {slug}'s own store inside the window — {predicate}"
+            )
+            continue
+        missing += 1
+        problems.append(
+            f"{name} (cron id {job_id}, {slug}): the wake was DELIVERED ({started}, "
+            f"status=success) but {slug}'s own ledger carries NO row between "
+            f"{started} and {window_end.strftime('%Y-%m-%dT%H:%M:%SZ')} — NO VERDICT. The "
+            f"cron's success proves the wake ARRIVED, never that the woken lane reached its "
+            f"declared duty (#612, ruled n=4743)"
+        )
+    return {
+        "name": "wake-duty",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": excused,
+        "coverage": {
+            "rows_read": len(rows),
+            "homes_read": len(homes_read),
+            "homes_read_names": list(homes_read),
+            "homes_unreached": list(unreached),
+            "rows_attributed": len(attributed),
+            "thin_wakes": len(thin),
+            "self_executing": self_executing,
+            "unresolved_factory": unresolved,
+            "judged": judged,
+            "passed": passed,
+            "missing": missing,
+            "unreadable_store": unreadable_store,
+            "delivery_failed": delivery_failed,
+            "in_flight": in_flight,
+            "suppressed": suppressed,
+            "no_fire": no_fire,
+            "stores_read": sorted(stores_read),
+            "stores_unreached": stores_unreached,
+            "window_secs": window_secs,
+            "window_basis": WAKE_DUTY_WINDOW_BASIS,
+            "thin_wake_marker": THIN_WAKE_MARKER,
+            "read_at": read_at,
+        },
+    }
+
 def duty_age_text(secs: float) -> str:
     """A duration a reader can compare against a window, never a bare second count."""
     if secs < 90:
@@ -15725,6 +16040,36 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['prose_token']}, and that is its population, not the size of the class"
             )
 
+        elif leg["name"] == "wake-duty":
+            # #612: the population is printed BESIDE the verdict, because this leg's whole
+            # point is that a cron `success` is a DELIVERY receipt. A reader must be able to
+            # tell "every thin wake left work in its own store" from "this leg could not
+            # reach a single store", and the unattributed/self-executing split is what says
+            # which rows this leg never judged at all.
+            lines.append(
+                f"  population: {cov['thin_wakes']} THIN WAKE row(s) of "
+                f"{cov['rows_read']} read ({cov['rows_attributed']} attributed to THIS "
+                f"factory and judged by duty-receipt instead; {cov['self_executing']} "
+                f"self-executing row(s) outside this population)"
+            )
+            lines.append(
+                f"  judged {cov['judged']}: {cov['passed']} left a work receipt, "
+                f"{cov['missing']} left NONE (the finding), {cov['unreadable_store']} "
+                f"store(s) unreadable (UNKNOWN, never a pass), "
+                f"{cov['delivery_failed']} never delivered"
+            )
+            lines.append(
+                f"  not judged: {cov['in_flight']} in flight, {cov['suppressed']} suppressed "
+                f"by their own gate, {cov['no_fire']} with no run record, "
+                f"{cov['unresolved_factory']} owned by no declared factory"
+            )
+            lines.append(
+                f"  window: {duty_age_text(cov['window_secs'])} — {cov['window_basis']}"
+            )
+            lines.append(
+                f"  stores read: {', '.join(cov['stores_read']) or 'none'} — read at "
+                f"{cov['read_at'] or 'unstated'}"
+            )
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -16413,6 +16758,18 @@ def main(
         # the stems come from one canonical reader and no second database is opened.
         leg_guard("duty-receipt-prose", lambda: duty_receipt_prose_leg(
             rows, cron_rows, read_at=read_at,
+        ), read_at),
+        # #612: the arm #528 named and left unfiled. `duty-receipt` above judges only the
+        # rows THIS factory declares, against THIS factory's ledger, and prints the rest as
+        # `jobs_unattributed` -- so a thin wake that wakes a MEMBER factory had no leg at
+        # all, and the cron's own `success` was the only record its duty ever left. This
+        # reads the TARGET's store instead, and reports NO VERDICT where the wake arrived
+        # and the target appended nothing. The window, the ledger reader and the fleet
+        # manifest are all injectable for the same reason the two receipt legs' fires are: a
+        # probe must never have its verdict decided by this box's own files.
+        leg_guard("wake-duty", lambda: wake_duty_leg(
+            cron_rows, homes_read, unreached, prefixes=prefixes_fn(),
+            read_at=read_at, fires=cron_fires_fn(),
         ), read_at),
 
         leg_guard("ledger-ref-roles", lambda: ledger_ref_roles_leg(

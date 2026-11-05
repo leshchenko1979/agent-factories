@@ -522,6 +522,11 @@ PAIRS = [
     # carrying the leg without the gate would ship an unguarded reader — and a factory
     # carrying the gate without the leg would probe a function that does not exist.
     ("tests/test_ledger_ref_roles.py", "TEMPLATE/tests/test_ledger_ref_roles.py"),
+    # Added with its registration (board #612, ruled n=4743): the gate drives
+    # `tools/patrol_host_state.py`'s `wake_duty_leg`, which is SHIPPED, so a factory carrying
+    # the leg without the gate would ship an unguarded reader — and a factory carrying the
+    # gate without the leg would probe a function that does not exist.
+    ("tests/test_patrol_wake_duty.py", "TEMPLATE/tests/test_patrol_wake_duty.py"),
     # Added with its registration (board #507, ruled n=3539): the gate drives
     # `tools/patrol_host_state.py`'s `criterion_path_leg`, which is SHIPPED, so a factory
     # carrying the leg without the gate would ship an unguarded reader — and a factory
@@ -754,6 +759,13 @@ PAIRS = [
     # this landing -- the two legs judge different populations and neither stands in for
     # the other.
     ("tests/test_ledger_citation_declared.py", "TEMPLATE/tests/test_ledger_citation_declared.py"),
+    # Added with its registration (#614). Paired for the ordinary manifest grain and for a
+    # property of its own: this is a SHARED MODULE, not a gate — two gates import it (the
+    # ledger citation leg and the clause-title leg), so a copy that drifted would have the two
+    # trees judging different admission rules while each read green in its own tree. It is the
+    # module that carries the two-test admission (carriage AND ownership), which is what stops
+    # a row from laundering itself by carrying a citation it does not own.
+    ("tests/citation_naming.py", "TEMPLATE/tests/citation_naming.py"),
     # Added with its registration (board #313, ruling n=3360, dispatched n=3363). Paired for
     # the manifest grain and for one property of its own: the gate reads SOURCE in BOTH trees
     # -- the law table and the instrument docs -- and asserts `B ⊆ A` independently at each

@@ -3212,6 +3212,24 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_ledger_ref_roles.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_ledger_ref_roles.py"])
 
+    # 97. the WAKE-DUTY gate (#612, ruled n=4743). `duty-receipt` judged only the rows THIS
+    #     factory declares, so the 31 unattributed rows — every member factory's thin wake —
+    #     were asked by nothing: `miidas-hq-daily-trigger` ran `success` at 2026-11-03
+    #     09:00:31Z and its target factory appended NOTHING that day, and no leg read the
+    #     difference. The leg now reads each thin wake's OWN declared store, and this gate
+    #     proves it can tell the incident from a round that left work behind — the pair
+    #     differs in ONE ledger row, so the verdict is a function of the store rather than of
+    #     the fixture. Two mutant arms neuter the absence write and the three-bucket reader
+    #     in turn, because a gate that cannot fail is decoration.
+    #     PYTEST form, not script form: the file is written as pytest arms (module-level
+    #     `test_*` functions, fixtures, `monkeypatch`), so `python3 <file>` would exit 0
+    #     having asserted NOTHING -- a gate whose only exits are barred. The arms are the
+    #     verdict, and pytest is what runs them.
+    if (repo_root / "tests/test_patrol_wake_duty.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "-q", "tests/test_patrol_wake_duty.py"]
+        )
+
     # 96. the CRITERION-PATH EXEMPTION gate (#507). The `criterion-paths` leg resolves every
     #     path a board item's criteria NAME — in the issue BODY and in the RULING COMMENT —
     #     against the COMMITTED tree, and reds each name that resolves to nothing. It could
