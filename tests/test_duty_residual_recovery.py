@@ -90,6 +90,24 @@ def _residual(rows, *, exclude_round=None, fires=None, job=None):
         exclude_round=exclude_round,
     )
 
+def _leg(rows):
+    """The leg with EVERY reader injected, so its verdict belongs to this fixture.
+
+    Called with the defaults the leg reads the tree it happens to be running in -- its
+    forward bound and both exemption stores. The SAME fixture then judged the round at root
+    and refused the bound under `TEMPLATE/`, so the arm's green at root said nothing about
+    the shipped tree it also has to hold in. The bound is the pre-#449 literal and both
+    stores are empty, which is the only state in which these arms assert what they name.
+    """
+    return P.duty_receipt_leg(
+        [_JOB], ["ops"], [], ["factory-"], rows,
+        read_at="2026-11-05T20:00:00Z", fires=_FIRES,
+        scope_fn=lambda repo: (P.reader_parse_ts("2026-09-25T07:01:07Z"),
+                              "2026-09-25T07:01:07Z", ""),
+        exemptions_fn=lambda: ({}, None),
+        round_exemptions_fn=lambda: ({}, None),
+    )
+
 
 # --- the arms --------------------------------------------------------------
 
@@ -136,10 +154,7 @@ def test_the_recovery_row_still_pairs_its_round():
     from the latencies is still a candidate when the leg asks "was this round receipted?".
     """
     rows = [_PRIOR_ROW, _recovery_row(declared=True)]
-    leg = P.duty_receipt_leg(
-        [_JOB], ["ops"], [], ["factory-"], rows,
-        read_at="2026-11-05T20:00:00Z", fires=_FIRES,
-    )
+    leg = _leg(rows)
     cov = leg["coverage"]
     judged = [j for j in cov.get("duties_judged", []) if j.get("name") == "factory-hq-pacemaker"]
     assert judged, cov.get("duties_judged")
@@ -216,10 +231,7 @@ def test_the_census_prints_zeros_on_a_clean_job():
 def test_the_leg_reports_the_exclusions_in_its_coverage():
     """The leg-level census: a reader of `--json` sees what was dropped, not just a window."""
     rows = [_PRIOR_ROW, _recovery_row(declared=True)]
-    leg = P.duty_receipt_leg(
-        [_JOB], ["ops"], [], ["factory-"], rows,
-        read_at="2026-11-05T20:00:00Z", fires=_FIRES,
-    )
+    leg = _leg(rows)
     cov = leg["coverage"]
     assert cov.get("observations_excluded_recovery") == 1, cov.get("observations_excluded_recovery")
     assert cov.get("round_exemptions_declared") == 0, cov.get("round_exemptions_declared")
