@@ -495,7 +495,19 @@
       "load_at_measure": 5.83,
       "margin_x": 4.326,
       "measured_at": "9312bd259f7adde408d65cf510a75479769e9456",
-      "measured_sec": 2.3
+      "measured_sec": 2.3,
+      "growth_breach": {
+        "sample_sec": 4.14,
+        "sample_revision": "04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
+        "basis_sec": 2.3,
+        "basis_revision": "9312bd259f7adde408d65cf510a75479769e9456",
+        "declared_sec": 9.95,
+        "derived_sec": 17.31,
+        "growth_x": 1.8,
+        "derived_over_declared": 1.7397,
+        "round_id": "2026-11-05:04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
+        "reported_at": "2026-11-05T06:58:57Z"
+      }
     },
     "tests/test_declared_event_population.py": {
       "budget_sec": 4.75,
@@ -605,7 +617,19 @@
       "load_at_measure": 5.83,
       "margin_x": 4.258,
       "measured_at": "9312bd259f7adde408d65cf510a75479769e9456",
-      "measured_sec": 2.91
+      "measured_sec": 2.91,
+      "growth_breach": {
+        "sample_sec": 3.38,
+        "sample_revision": "04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
+        "basis_sec": 2.91,
+        "basis_revision": "9312bd259f7adde408d65cf510a75479769e9456",
+        "declared_sec": 12.39,
+        "derived_sec": 14.27,
+        "growth_x": 1.1615,
+        "derived_over_declared": 1.1517,
+        "round_id": "2026-11-05:04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
+        "reported_at": "2026-11-05T06:58:57Z"
+      }
     },
     "tests/test_law_structure.py": {
       "budget_sec": 28.59,
@@ -635,12 +659,12 @@
       "measured_sec": 1.04
     },
     "tests/test_ledger_no_shrink.py": {
-      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED sample OF THE CODE THAT SHIPS: 137.54 s COLD at ~21:27Z, load 0.85, on a FRESH CLONE (git clone --local: no scan checkpoint, full walk of 2245 commit(s), MAXRSS 240 MB). Reproduce by cloning the repo and running /usr/bin/python3 tests/test_ledger_no_shrink.py inside it. THE GATE IS BIMODAL and this cap covers the SLOW half: with the #582 incremental scan checkpoint present it costs 2.39 s (this tree, load 0.87) or 2.66 s (the 2026-10-31 sample), and with the checkpoint ABSENT -- a fresh clone, CI, a new box; it is untracked machine-local state in the git COMMON dir -- it re-walks the whole history. The 289.73/258.25/280.218/176.024 s samples in this entry's PREVIOUS note are NOT the basis and cannot be: they were taken on blob 4ef10d74, the PRE-#582 file that walked in full on EVERY run, while this entry's subject at 6f6f5f7e is blob eff23d98 (= HEAD's), which walks in full only when cold; citing them would describe a tree whose file differs. 2.66/11.39 was the same error from the other side -- a warm sample from a machine that already held the checkpoint, declared as the gate's cost, which kills every cold run with NO VERDICT. This is a re-derivation after a CODE CHANGE that removed the cost (#582), not a fast-sample re-base: the pre-#582 cap of 1159.67 s described a file that no longer ships.",
-      "budget_sec": 550.91,
-      "load_at_measure": 0.85,
-      "margin_x": 4.0055,
-      "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 137.54
+      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED sample OF THE CODE THAT SHIPS: 189.18 s COLD at 2026-11-05T~06:57Z, load 4.28->5.55, on a FRESH CLONE of 1eb21004 (git clone --local: no scan checkpoint, full walk of 2265 commit(s), MAXRSS 246472 kB). Reproduce by cloning the repo and running /usr/bin/python3 tests/test_ledger_no_shrink.py inside it. THE GATE IS BIMODAL and this cap covers the SLOW half: with the #582 incremental scan checkpoint present it costs ~2.07-2.66 s, and with the checkpoint ABSENT -- a fresh clone, CI, a new box; it is untracked machine-local state in the git COMMON dir -- it re-walks the whole history. Prior cold samples: 137.54 s at 6f6f5f7e (load 0.85), 189.18 s at 1eb21004 (load 4.28) is the worst observed. The 289.73/258.25/280.218/176.024 s samples in earlier rounds describe the PRE-#582 file and are NOT the basis. MECHANICAL WARNING, measured 2026-11-04 and again 2026-11-05: tools/gate_budget_rederive.py does NOT read this field, so it re-derives from the WARM sample and collapses the wall by ~60-84x (#615, ruled n=4745). If this entry is ever re-derived to a single-digit budget, the cold path dies with NO VERDICT.",
+      "budget_sec": 757.47,
+      "load_at_measure": 4.3,
+      "margin_x": 4.003964,
+      "measured_at": "1eb21004ffb3591b1694cacefa018d9ad7e718e9",
+      "measured_sec": 189.18
     },
     "tests/test_ledger_schema.py": {
       "budget_sec": 19.19,
@@ -757,7 +781,19 @@
       "load_at_measure": 5.69,
       "margin_x": 4.001,
       "measured_at": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
-      "measured_sec": 843.17
+      "measured_sec": 843.17,
+      "growth_breach": {
+        "sample_sec": 1032.33,
+        "sample_revision": "04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
+        "basis_sec": 843.17,
+        "basis_revision": "6f6f5f7e8282259cf4bd012cd5211f36dfc1e77c",
+        "declared_sec": 3373.43,
+        "derived_sec": 4130.07,
+        "growth_x": 1.2243,
+        "derived_over_declared": 1.2243,
+        "round_id": "2026-11-05:04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
+        "reported_at": "2026-11-05T06:58:57Z"
+      }
     },
     "tests/test_reconstructed_claim_declared.py": {
       "budget_sec": 35.03,
@@ -875,7 +911,7 @@
       "measured_sec": 20.27
     },
     "tests/test_template_gate_pairing.py": {
-      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED sample per this manifest's slow-tail rule (#579, ruling n=4460): 192.11 s at load 8.31, 19 shipped gates touched (BASIS); 108.17 s at load 3.44, 20 shipped gates touched (at-tree sample, reproducible at the cited revision) — also observed, not the basis; 110.80 s at load 3.16, 19 shipped gates touched (the #602 lane's quiet-box sample, methodologically worse) — also observed, not the basis. Regime: 13 split patrol legs on disk, 57 staged paths, the gate's own control reading 20 shipped gates touched at ac08dfed; 4-core box. The population is 'shipped gates this commit touches' -- the staged index, read by the gate itself -- which the #602 split took from 1 (the monolith) to 20 (twelve legs plus the audit/hygiene registrations), and its cost is per-judged-gate work, which is why it left the 69.27 s default. The basis sample judged 19 of the 20 gates the cited tree carries: it was taken on the staged tree that became ac08dfed, before the commit's last two paths were added. The at-tree sample is recorded beside it, and the slow-tail rule makes the WORST observed the basis, not the quietest. Receipt: evidence/gate-budget-template-gate-pairing-2026-11-03.md.",
+      "basis_note": "COMPLETED run (rc=0), the WORST OBSERVED sample per this manifest's slow-tail rule (#579, ruling n=4460): 192.11 s at load 8.31, 19 shipped gates touched (BASIS); 108.17 s at load 3.44, 20 shipped gates touched (at-tree sample, reproducible at the cited revision) \u2014 also observed, not the basis; 110.80 s at load 3.16, 19 shipped gates touched (the #602 lane's quiet-box sample, methodologically worse) \u2014 also observed, not the basis. Regime: 13 split patrol legs on disk, 57 staged paths, the gate's own control reading 20 shipped gates touched at ac08dfed; 4-core box. The population is 'shipped gates this commit touches' -- the staged index, read by the gate itself -- which the #602 split took from 1 (the monolith) to 20 (twelve legs plus the audit/hygiene registrations), and its cost is per-judged-gate work, which is why it left the 69.27 s default. The basis sample judged 19 of the 20 gates the cited tree carries: it was taken on the staged tree that became ac08dfed, before the commit's last two paths were added. The at-tree sample is recorded beside it, and the slow-tail rule makes the WORST observed the basis, not the quietest. Receipt: evidence/gate-budget-template-gate-pairing-2026-11-03.md.",
       "budget_sec": 769.19,
       "load_at_measure": 8.31,
       "margin_x": 4.004,
@@ -890,11 +926,11 @@
       "measured_sec": 3.57
     },
     "tests/test_template_sync.py": {
-      "budget_sec": 7.43,
-      "load_at_measure": 5.83,
-      "margin_x": 4.449,
-      "measured_at": "9312bd259f7adde408d65cf510a75479769e9456",
-      "measured_sec": 1.67
+      "budget_sec": 7.27,
+      "load_at_measure": 4.3,
+      "margin_x": 4.46,
+      "measured_at": "04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
+      "measured_sec": 1.63
     },
     "tools/hygiene.py": {
       "budget_sec": 4.23,
@@ -904,11 +940,11 @@
       "measured_sec": 0.87
     },
     "tools/ledger.py": {
-      "budget_sec": 14.79,
-      "load_at_measure": 5.83,
-      "margin_x": 4.214,
-      "measured_at": "9312bd259f7adde408d65cf510a75479769e9456",
-      "measured_sec": 3.51
+      "budget_sec": 14.67,
+      "load_at_measure": 4.3,
+      "margin_x": 4.216,
+      "measured_at": "04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
+      "measured_sec": 3.48
     },
     "tools/roadmap.py": {
       "budget_sec": 2.47,
@@ -921,7 +957,19 @@
       "load_at_measure": 5.83,
       "margin_x": 4.277,
       "measured_at": "9312bd259f7adde408d65cf510a75479769e9456",
-      "measured_sec": 2.71
+      "measured_sec": 2.71,
+      "growth_breach": {
+        "sample_sec": 3.87,
+        "sample_revision": "04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
+        "basis_sec": 2.71,
+        "basis_revision": "9312bd259f7adde408d65cf510a75479769e9456",
+        "declared_sec": 11.59,
+        "derived_sec": 16.23,
+        "growth_x": 1.428,
+        "derived_over_declared": 1.4003,
+        "round_id": "2026-11-05:04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
+        "reported_at": "2026-11-05T06:58:57Z"
+      }
     },
     "tests/test_close_ruling_paired.py": {
       "budget_sec": 4.75,
