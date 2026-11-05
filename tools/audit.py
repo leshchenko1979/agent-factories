@@ -3260,6 +3260,24 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "-q", "tests/test_duty_residual_recovery.py"]
         )
 
+
+    # 100. the DUTY-GOAL-STEM gate (#618, filed by HQ on 2026-11-05). A woken lane reads TWO
+    #      texts: the job's `prompt` and, when `set_goal` is truthy, the goal rendered from
+    #      `goal_template`. The duty stem is declared in the PROMPT, and NOTHING checked that
+    #      it reached the goal text — so `factory-hq-pacemaker` declared `receipt_subject:
+    #      hq-cycle` while its goal named `#253`; the goal is the text the lane steers by, the
+    #      receipt went out under an identifier the stem predicate cannot pair, and the round
+    #      read MISSING for a duty that HAD been done. The prompt half is TAUTOLOGICAL (the
+    #      stem is read out of the prompt), so every finding arm removes the stem from the
+    #      GOAL and leaves the prompt untouched, and the coverage prints
+    #      `prompt_surface_tautological` so that half can never be read as diligence.
+    #      PYTEST form: the arms are module-level `test_*` functions, so `python3 <file>`
+    #      would exit 0 having asserted NOTHING. Ships with its TEMPLATE pair.
+    if (repo_root / "tests/test_duty_goal_stem.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "-q", "tests/test_duty_goal_stem.py"]
+        )
+
     # 96. the CRITERION-PATH EXEMPTION gate (#507). The `criterion-paths` leg resolves every
     #     path a board item's criteria NAME — in the issue BODY and in the RULING COMMENT —
     #     against the COMMITTED tree, and reds each name that resolves to nothing. It could

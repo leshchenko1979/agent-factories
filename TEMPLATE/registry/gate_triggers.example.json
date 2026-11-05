@@ -158,6 +158,11 @@
       "tests/patrol_fixtures.py",
       "tools/patrol_host_state.py"
     ],
+    "tests/test_duty_goal_stem.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "tests/patrol_fixtures.py",
+      "tools/patrol_host_state.py"
+    ],
     "tests/test_duty_receipt_exemptions.py": [
       "TEMPLATE/tools/patrol_host_state.py",
       "docs/duty-receipt-exemptions.json",

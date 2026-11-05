@@ -442,6 +442,9 @@
     },
     "tests/test_duty_residual_recovery.py": {
       "class": "always-satisfiable"
+    },
+    "tests/test_duty_goal_stem.py": {
+      "class": "always-satisfiable"
     }
   },
   "gates": {
@@ -1117,6 +1120,7 @@
     "tests/test_close_ruling_paired.py": "script",
     "tests/test_gate_budget_declared_mode.py": "script",
     "tests/test_patrol_wake_duty.py": "pytest",
-    "tests/test_duty_residual_recovery.py": "pytest"
+    "tests/test_duty_residual_recovery.py": "pytest",
+    "tests/test_duty_goal_stem.py": "pytest"
   }
 }

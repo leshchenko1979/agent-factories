@@ -783,6 +783,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     # target factory appended no row at all that day.
     "test_patrol_wake_duty.py",
     "test_duty_residual_recovery.py",
+    # #618: the GOAL surface of a cron job. `duty-receipt` hunts the declared stem in the
+    # TARGET's ledger and `duty-receipt-prose` censuses how receipts are written, but
+    # nothing asked whether the job's own GOAL text carries the stem its prompt declares —
+    # so `factory-hq-pacemaker` steered by `#253` while declaring `hq-cycle` and its round
+    # read MISSING for a duty that had been done. REQUIRED is the correct grain: every
+    # reader is INJECTED, the arms drive synthetic cron rows, and no verdict depends on a
+    # live table or a live goal template — it passes in a bootstrapped factory exactly as
+    # it does here. Byte-paired with its TEMPLATE copy.
+    "test_duty_goal_stem.py",
     "test_patrol_criterion.py",
     "test_patrol_ruling.py",
     "test_patrol_tree_instants.py",

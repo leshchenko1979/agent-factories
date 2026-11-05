@@ -528,6 +528,7 @@ PAIRS = [
     # gate without the leg would probe a function that does not exist.
     ("tests/test_patrol_wake_duty.py", "TEMPLATE/tests/test_patrol_wake_duty.py"),
     ("tests/test_duty_residual_recovery.py", "TEMPLATE/tests/test_duty_residual_recovery.py"),
+    ("tests/test_duty_goal_stem.py", "TEMPLATE/tests/test_duty_goal_stem.py"),
     # Added with its registration (board #507, ruled n=3539): the gate drives
     # `tools/patrol_host_state.py`'s `criterion_path_leg`, which is SHIPPED, so a factory
     # carrying the leg without the gate would ship an unguarded reader — and a factory

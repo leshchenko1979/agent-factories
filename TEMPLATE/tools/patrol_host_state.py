@@ -2203,9 +2203,22 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
                 col if col in columns else f"NULL as {col}"
                 for col in ("cron_expr", "next_run_at", "timezone")
             ]
+            # THE GOAL SURFACE (#618) IS CARRIED FOR THE SAME REASON, AND PROBED THE SAME WAY.
+            # A woken lane reads TWO texts: the job's `prompt` and, when `set_goal=1`, the goal
+            # rendered from `goal_template`. The duty stem is declared in the PROMPT, and
+            # nothing checked that it reached the goal text — so `factory-hq-pacemaker`'s goal
+            # named `#253` while its prompt declared `receipt_subject: hq-cycle`, the goal won
+            # the lane's attention, and the receipt went out under an identifier the stem
+            # predicate cannot pair. A home whose `cron_jobs` predates these columns reads
+            # NULL and is still READ, exactly like the three schedule columns above.
+            goal_cols = [
+                col if col in columns else f"NULL as {col}"
+                for col in ("set_goal", "goal_template")
+            ]
             fetched = list(conn.execute(
                 "select id, name, coalesce(deliver_to,''), coalesce(prompt,''), "
-                "coalesce(last_run_at,''), " + ", ".join(sched) + " "
+                "coalesce(last_run_at,''), " + ", ".join(sched) + ", "
+                + ", ".join(goal_cols) + " "
                 "from cron_jobs where enabled = 1"
             ))
         except sqlite3.Error as exc:
@@ -2214,7 +2227,7 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
         finally:
             conn.close()
         for (row_id, name, deliver_to, prompt, last_run_at, cron_expr, next_run_at,
-             timezone) in fetched:
+             timezone, set_goal, goal_template) in fetched:
             rows.append({
                 # The id is read because a report must RESOLVE the row it names: two jobs
                 # may share a name across homes, and a name alone is not an address. The
@@ -2242,6 +2255,12 @@ def box_cron_rows(root: Path | None = None) -> tuple[list[dict], list[str], list
                 # zone only to make a verdict READABLE ("09:15 Moscow" is an address; 06:15Z
                 # alone is not) and must never apply it a second time.
                 "timezone": timezone,
+                # #618: the TWO TEXTS a woken lane reads. `set_goal` is carried as the raw
+                # column (NULL on a home that predates it) and read as "does this job render a
+                # goal at all"; `goal_template` is carried whole, never truncated, because the
+                # leg's question is whether a token APPEARS in it.
+                "set_goal": set_goal,
+                "goal_template": goal_template or "",
                 "home": db.parent.name,
             })
         homes_read.append(db.parent.name)
@@ -7584,6 +7603,182 @@ def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
             "thin_wake_marker": THIN_WAKE_MARKER,
             "read_at": read_at,
         },
+    }
+
+# ---- the duty-goal-stem leg (#618) ------------------------------------------------------
+#
+# THE DECLARATION MUST REACH EVERY TEXT THE WOKEN LANE READS. A job declares its duty in
+# `prompt` (`receipt_subject: <stem>`), and a woken lane reads TWO texts: that prompt and,
+# when `set_goal` is truthy, the GOAL rendered from `goal_template`. Nothing checked the
+# second one, and the omission was measured rather than supposed: on this box
+# `factory-hq-pacemaker` declared `receipt_subject: hq-cycle` while its goal named `#253`.
+# The goal is the text the lane steers by, the receipt went out under an identifier no stem
+# predicate can pair, and the round read MISSING for a duty that HAD been done (#618).
+#
+# THE PROMPT HALF IS TAUTOLOGICAL AND SAYS SO. `declared_receipt_stem` reads the stem OUT OF
+# the prompt, so for any row this leg can judge, `stem in prompt` is true by construction and
+# can never be the finding. It is still checked -- the ruling asks for both surfaces, and a
+# declaration ever read from a field other than `prompt` would make it real -- but the
+# coverage prints `prompt_surface_tautological: True` so no reader mistakes it for evidence
+# of diligence. The GOAL surface is where this leg can bite, and the probe that drives it
+# removes the stem from the goal, never from the prompt.
+#
+# THE COLUMN IS PROBED, NEVER ASSUMED (`box_cron_rows`): a home whose `cron_jobs` predates
+# `set_goal`/`goal_template` reads NULL for both, and NULL is not "renders no goal" -- it is
+# "this reader cannot tell". Those rows are EXCUSED with their reason and counted, because a
+# zero from a surface that could not be read is not a zero (the #271 class).
+GOAL_STEM_LEG = "duty-goal-stem"
+
+def goal_surface_state(set_goal) -> str:
+    """`yes` / `no` / `unknown` for the raw `set_goal` column of ONE cron row.
+
+    THREE states, never two: the column is carried as read, and a home that predates it
+    yields NULL. Folding NULL into `no` would report "this job renders no goal" about a row
+    whose goal state was never read -- a verdict from a surface that does not exist.
+    """
+    if set_goal is None:
+        return "unknown"
+    text = str(set_goal).strip().lower()
+    if text in ("", "0", "false", "no", "none"):
+        return "no"
+    return "yes"
+
+def stem_carried(stem: str, text: str) -> bool:
+    """Does `text` name `stem`? The ONE predicate this leg's verdict turns on.
+
+    A named function rather than an inline `in`, so the mutant arm can monkeypatch it away
+    and assert the incident reproduces: a gate that cannot fail is decoration, and the arm
+    has to remove the THING UNDER TEST rather than a neighbouring convenience.
+    """
+    return bool(stem) and stem in (text or "")
+
+def duty_goal_stem_leg(cron_rows: list[dict], *, read_at: str = "",
+                       disposition_fn=None, carries_fn=None) -> dict:
+    """Does the GOAL a job renders name the duty stem its PROMPT declares? (#618)
+
+    POPULATION: every enabled cron row whose prompt puts it in the `declares` bucket of the
+    canonical disposition reader AND whose goal surface is READABLE AND RENDERS A GOAL. The
+    buckets this leg does NOT judge are printed beside it -- `undeclared`, `owes_none`,
+    `malformed` (#506's attempted-declaration class, which `duty-receipt` reports and this
+    leg must not double-report), `goal_not_rendered` (`set_goal` falsy: no goal text exists
+    to carry the stem) and `goal_surface_unknown` (the column is absent on that home).
+
+    A row that renders a goal from an EMPTY template is a finding of the same class, not a
+    skip: the lane steers by an empty goal, so the declared stem reaches no text it reads.
+
+    INJECTED READER (`disposition_fn`) like every other leg here, so a probe's verdict is
+    decided by the declaration it hands in and never by this box's live prompts.
+    """
+    disposition_fn = disposition_fn or declared_receipt_disposition
+    carries_fn = carries_fn or stem_carried
+    problems: list[str] = []
+    excused: list[str] = []
+    declared = no_goal = goal_unknown = malformed = undeclared = owes_none = 0
+    judged = passed = 0
+    stems: set[str] = set()
+    for row in cron_rows:
+        name = str(row.get("name") or "?")
+        job_id = str(row.get("id") or "?")
+        home = str(row.get("home") or "?")
+        prompt = str(row.get("prompt") or "")
+        bucket, stem = disposition_fn(prompt)
+        if bucket == "malformed":
+            malformed += 1
+            excused.append(
+                f"{name} (cron id {job_id}, {home}): its prompt ATTEMPTS a "
+                f"`receipt_subject:` line the canonical reader cannot parse ({stem}), so no "
+                f"goal surface can be judged against a declaration that does not exist (#506)"
+            )
+            continue
+        if bucket == "owes_none":
+            owes_none += 1
+            continue
+        if bucket != "declares" or not stem:
+            undeclared += 1
+            continue
+        declared += 1
+        stems.add(stem)
+        surface = goal_surface_state(row.get("set_goal"))
+        if surface == "unknown":
+            goal_unknown += 1
+            excused.append(
+                f"{name} (cron id {job_id}, {home}): declares `receipt_subject: {stem}` but "
+                f"this home's `cron_jobs` carries no readable `set_goal` column, so whether a "
+                f"goal is rendered is UNREAD, not absent -- NOT JUDGED"
+            )
+            continue
+        if surface == "no":
+            no_goal += 1
+            continue
+        goal = str(row.get("goal_template") or "")
+        judged += 1
+        # TAUTOLOGICAL BY CONSTRUCTION, and kept for the reason stated in the header: the
+        # stem is read OUT OF this prompt, so only a second declaration reader could make
+        # this arm bite. It is never counted as coverage of the goal surface.
+        if not carries_fn(stem, prompt):
+            problems.append(
+                f"{name} (cron id {job_id}, {home}): declares the duty stem {stem!r} through "
+                f"a reader that then cannot find it in the prompt it read it from -- the "
+                f"declaration and its surface have diverged (#618)"
+            )
+        if not goal.strip():
+            problems.append(
+                f"{name} (cron id {job_id}, {home}): renders a goal from an EMPTY "
+                f"`goal_template`, so its declared duty stem {stem!r} reaches NO text the "
+                f"woken lane steers by -- the lane gets an empty goal and its receipt can "
+                f"only be paired by luck (#618)"
+            )
+            continue
+        if not carries_fn(stem, goal):
+            problems.append(
+                f"{name} (cron id {job_id}, {home}): its prompt declares `receipt_subject: "
+                f"{stem}` but the GOAL it renders never names {stem!r} -- the goal is what "
+                f"the woken lane steers by, so the duty is declared on a surface the lane "
+                f"does not read and the receipt can be filed under a name the stem predicate "
+                f"cannot pair (#618)"
+            )
+            continue
+        passed += 1
+    coverage = {
+        "cron_rows_read": len(cron_rows),
+        "declares_stem": declared,
+        "goal_judged": judged,
+        "goal_passed": passed,
+        "goal_not_rendered": no_goal,
+        "goal_surface_unknown": goal_unknown,
+        "undeclared": undeclared,
+        "owes_none": owes_none,
+        "malformed_declarations": malformed,
+        # NOT a coverage claim: printed so the tautological half can never be read as one.
+        "prompt_surface_tautological": True,
+        "stems_declared": sorted(stems),
+        "read_at": read_at,
+    }
+    if judged == 0:
+        # A leg that examined ZERO goal surfaces has reported nothing (#126): the status is
+        # NOT RUN and the reason counts the population it could not reach.
+        return {
+            "name": GOAL_STEM_LEG,
+            "status": "NOT RUN",
+            "problems": [],
+            "excused": excused,
+            "coverage": {
+                **coverage,
+                "reason": (
+                    f"no enabled job on this box both DECLARES a `receipt_subject:` stem and "
+                    f"RENDERS a readable goal: {declared} declared, of which {no_goal} render "
+                    f"no goal (`set_goal` falsy) and {goal_unknown} sit on a home whose "
+                    f"`set_goal` column cannot be read -- the goal surface was examined ZERO "
+                    f"times and that is not a clean verdict (#126)"
+                ),
+            },
+        }
+    return {
+        "name": GOAL_STEM_LEG,
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": excused,
+        "coverage": coverage,
     }
 
 def duty_age_text(secs: float) -> str:
@@ -16313,6 +16508,36 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['prose_token']}, and that is its population, not the size of the class"
             )
 
+        elif leg["name"] == "duty-goal-stem":
+            # #618: the population is printed BESIDE the verdict because the interesting
+            # fact is often which rows this leg could NOT judge. A reader must be able to
+            # tell "every rendered goal names its declared stem" from "no job both declares
+            # a stem and renders a goal", and the bucket counts are what says which.
+            lines.append(
+                f"  population: {cov['goal_judged']} goal surface(s) judged of "
+                f"{cov['declares_stem']} job(s) declaring a `receipt_subject:` stem, out of "
+                f"{cov['cron_rows_read']} enabled cron row(s) read"
+            )
+            lines.append(
+                f"  judged {cov['goal_judged']}: {cov['goal_passed']} render a goal naming "
+                f"their declared stem, {len(leg['problems'])} do NOT (the finding)"
+            )
+            lines.append(
+                f"  not judged: {cov['goal_not_rendered']} render no goal (`set_goal` "
+                f"falsy), {cov['goal_surface_unknown']} on a home with no readable "
+                f"`set_goal` column (UNKNOWN, never a pass), {cov['undeclared']} undeclared, "
+                f"{cov['owes_none']} declare `receipt_subject: none`, "
+                f"{cov['malformed_declarations']} malformed (#506, reported by duty-receipt)"
+            )
+            lines.append(
+                f"  prompt surface: TAUTOLOGICAL for every row judged here -- the stem is "
+                f"read out of the prompt, so the prompt half can never be the finding; the "
+                f"GOAL surface is where this leg bites (#618)"
+            )
+            lines.append(
+                f"  stems: {', '.join(cov['stems_declared']) or 'none declared'} — read at "
+                f"{cov['read_at'] or 'unstated'}"
+            )
         elif leg["name"] == "wake-duty":
             # #612: the population is printed BESIDE the verdict, because this leg's whole
             # point is that a cron `success` is a DELIVERY receipt. A reader must be able to
@@ -17052,6 +17277,16 @@ def main(
         leg_guard("wake-duty", lambda: wake_duty_leg(
             cron_rows, homes_read, unreached, prefixes=prefixes_fn(),
             read_at=read_at, fires=cron_fires_fn(),
+        ), read_at),
+
+        # #618: the GOAL surface. `duty-receipt` hunts the declared stem in the TARGET's
+        # ledger, and `duty-receipt-prose` censuses how receipts are written -- neither ever
+        # asked whether the job's own GOAL text carries the stem its prompt declares. On
+        # `factory-hq-pacemaker` the prompt said `hq-cycle` and the goal said `#253`, so the
+        # lane steered by an identifier the receipt could never pair. Handed the SAME cron
+        # rows the two legs above take: one reader for one row set, no second database.
+        leg_guard("duty-goal-stem", lambda: duty_goal_stem_leg(
+            cron_rows, read_at=read_at,
         ), read_at),
 
         leg_guard("ledger-ref-roles", lambda: ledger_ref_roles_leg(
