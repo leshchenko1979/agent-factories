@@ -782,6 +782,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # judged by nothing, so `miidas-hq-daily-trigger` went green on 2026-11-03 while its
     # target factory appended no row at all that day.
     "test_patrol_wake_duty.py",
+    "test_duty_residual_recovery.py",
     "test_patrol_criterion.py",
     "test_patrol_ruling.py",
     "test_patrol_tree_instants.py",

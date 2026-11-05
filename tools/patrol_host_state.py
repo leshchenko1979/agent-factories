@@ -3651,7 +3651,60 @@ def receipt_declaration_exemptions(
     for entry in rows:
         if not isinstance(entry, dict) or not isinstance(entry.get("job"), str) or not entry["job"]:
             return {}, f"{target.name} carries an entry naming no `job`, so no exemption can be honoured"
+        # #617: a ROUND-SCOPED entry names one round of a job that DOES declare a stem, so it
+        # is not a job exemption -- read by `receipt_round_exemptions` below. Bucketing it
+        # here would excuse the whole duty, which is a different and much wider claim.
+        if isinstance(entry.get("round"), str) and entry["round"].strip():
+            continue
         out[entry["job"]] = str(entry.get("reason") or "")
+    return out, None
+
+def receipt_round_exemptions(
+    path: Path | None = None,
+) -> tuple[dict[tuple[str, str], str], str | None]:
+    """((job name, round date) -> reason, PROBLEM) for the store's ROUND-SCOPED entries (#617).
+
+    A round-scoped entry excuses ONE ROUND of a job that DOES declare a `receipt_subject:`
+    stem. It exists because the job-level store cannot express this case at all: a job-level
+    exemption is only ever consulted for a row that declares NOTHING, and such a row never
+    reaches the residual derivation, so the surface the residual needed did not exist.
+
+    WHAT AN ENTRY HERE BUYS, stated in both directions. The round is EXCUSED from the round
+    judgement (it is named in `excused:` and counted, never silently dropped) and EXCLUDED
+    from the residual's latency population -- a round the factory has declared owed no
+    receipt is not a datum about lane promptness (#617).
+
+    A malformed entry is a PROBLEM, never a silent empty set: an unreadable exemption list
+    would red every round it was written to excuse, and a typo'd one would hide a finding
+    behind a name that matches nothing. Same rule the job store already carries.
+    """
+    target = path or DUTY_RECEIPT_EXEMPTIONS
+    if not target.is_file():
+        return {}, None
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {}, (
+            f"{target.name} could not be read ({type(exc).__name__}), so no round-scoped "
+            f"exemption can be honoured and every round it names is judged"
+        )
+    rows = data.get("exempt") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        return {}, f"{target.name} declares no `exempt` list, so no round exemption can be honoured"
+    out: dict[tuple[str, str], str] = {}
+    for entry in rows:
+        if not isinstance(entry, dict):
+            return {}, f"{target.name} carries a non-object entry, so no round exemption can be honoured"
+        round_date = entry.get("round")
+        if not (isinstance(round_date, str) and round_date.strip()):
+            continue
+        job = entry.get("job")
+        if not (isinstance(job, str) and job):
+            return {}, (
+                f"{target.name} carries a round-scoped entry naming no `job`, so no round "
+                f"exemption can be honoured"
+            )
+        out[(job, round_date.strip())] = str(entry.get("reason") or "")
     return out, None
 
 def declared_log_stems(prompt: str) -> tuple[str, ...]:
@@ -5460,8 +5513,77 @@ def render_cadence_slot(coverage: dict) -> list[str]:
     lines.append(f"  bound: {coverage.get('bound', 'unstated')}")
     return lines
 
+# ---- #617: the residual's observation population needs an EXCLUSION SURFACE -----------
+#
+# `duty_residual_for` takes the MAXIMUM fire-to-receipt latency over a job's rounds, and
+# that maximum is the whole basis of the job's forward window. Two classes of row enter it
+# that are not promptness observations at all, and one of them was measured doing real
+# damage on this box.
+#
+# 1. A RECOVERY RECEIPT. A row written to make an EARLIER round visible again carries the
+#    RECOVERY instant as its `ts`, so its latency measures how late the repair was written
+#    -- never how promptly the lane receipted. Measured on `factory-hq-pacemaker`: the row
+#    `n=4781` (ts 2026-11-05T18:10:17Z, subject `hq-cycle-2026-11-02T09`) was written to
+#    pair a round that was completed ON TIME at `n=4652` (2026-11-02T13:29:21Z, 3.65 h
+#    after its fire) under a subject the stem predicate cannot reach. Its own latency is
+#    80.33 h, which lifted the job's measured max from 18.97 h to 80.33 h and its derived
+#    residual from 75.87 h to 321.31 h -- 1.91x the job's own 168 h cadence, so BOTH live
+#    rounds fell inside the window and the job had NO round to judge at all, permanently.
+#    The repair bought one pairing and cost the job its judgeability.
+#
+# 2. A ROUND THE LEG ITSELF EXCUSES (suppressed by its trigger gate, before the declared
+#    bound, or named by a round-scoped entry in the duty exemption store). Such a round owed
+#    no receipt, so its latency is not a datum about lane promptness. `duty_receipt_leg` has
+#    always passed `exemptions_fn` to its own round judgement and called this function with
+#    no exclusion argument at all, so an excused round still contributed.
+#
+# BOTH ARE ONE DEFECT: the observation population had no exclusion surface. It now has one
+# -- `exclude_round`, plus the recovery declaration below -- and the leg passes it.
+#
+# THE TWO QUESTIONS ARE NOT THE SAME QUESTION, and collapsing them is the trap. A recovery
+# row must REMAIN a valid pairing for `duty_receipt_leg` (the round WAS receipted) while
+# being EXCLUDED from this function's latency list (it is not a promptness datum). Excluding
+# it from both restores the false "NO duty receipt"; excluding it from neither keeps the job
+# unjudgeable. So the filter lives HERE, inside the residual derivation, and the round
+# judgement's own pairing is untouched.
+#
+# THE DECLARATION IS A TRAILER TOKEN. A row declares its own class as
+# `observation=recovery` in its CANONICAL TRAILER, which is the surface the shared predicate
+# already reads for every other field (`field_predicate.trailer_tokens`), so a sentence that
+# merely DISCUSSES recovery cannot satisfy it.
+RECOVERY_OBSERVATION_KEY = "observation"
+RECOVERY_OBSERVATION_VALUE = "recovery"
+# THE PRE-CONVENTION FORM, and it exists because one row that must be read predates the
+# convention and cannot be given the trailer: `n=4781` was written to say, in its own words,
+# that it is not an observation, and it is the row this fix exists for. Accepted ONLY as the
+# full declarative clause (never a bare "recovery"), and only when the row is already a
+# candidate receipt -- i.e. it matched this job's stem, this round, and declares a duty. The
+# exclusion direction is the fail-safe one: a wrongly excluded row SHORTENS the window, which
+# judges a round the leg would have excused (a false MISSING, loud, costs one look) rather
+# than lengthening it (a false CLEAN, silent -- the #160 class this leg exists to catch).
+RECOVERY_DECLARATION_CLAUSE = "RECOVERY record, not a latency observation"
+
+def declares_recovery_observation(detail: str, predicate=None) -> bool:
+    """True when `detail` declares its row a RECOVERY receipt rather than an observation.
+
+    Read in the row's OWN VOICE only: the canonical trailer (`observation=recovery`), or the
+    pre-convention declarative clause named beside it. A row that merely discusses recovery
+    declares nothing, which is why the trailer half goes through the shared positional
+    predicate rather than a scan of the whole detail.
+    """
+    predicate = predicate or field_predicate_readers()
+    text = str(detail or "")
+    for token in predicate.trailer_tokens(text):
+        if predicate.token_key(token) != RECOVERY_OBSERVATION_KEY:
+            continue
+        value = token.partition("=")[2].strip().strip(".,;:")
+        if value == RECOVERY_OBSERVATION_VALUE:
+            return True
+    return RECOVERY_DECLARATION_CLAUSE in " ".join(text.split())
+
 def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: list[dict],
-                      predicate=None, margin_for=None, parse=None) -> dict:
+                      predicate=None, margin_for=None, parse=None,
+                      exclude_round=None) -> dict:
     """The forward window for ONE job, DERIVED from that job's own measured max (#449).
 
     THE MEASUREMENT. Each of the job's own fires opens a round (`receipt_round`), and the
@@ -5491,6 +5613,16 @@ def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: l
     job's own fires, and `over_cadence` is true when the derived residual reaches it. Such
     a residual cannot discriminate (n=1518 FINDING 3) — it outlives the next fire — and
     the honest output is the number AND that statement, never a clamp that hides it.
+
+    THE OBSERVATION POPULATION HAS AN EXCLUSION SURFACE (#617). Two classes of round are
+    NOT promptness data and are dropped before the maximum is taken, each COUNTED and
+    NAMED so an exclusion can never be mistaken for a job that simply measured less:
+    a round `exclude_round` excuses (the leg's own excuses: suppressed by its trigger
+    gate, before the declared bound, or named by a round-scoped exemption), and a receipt
+    that DECLARES ITSELF A RECOVERY (`declares_recovery_observation`). Both exclusions are
+    READ-SIDE and are scoped to THIS function: `duty_receipt_leg` still pairs a recovery
+    row, because "was this round receipted?" and "how prompt is this lane?" are two
+    questions and only the second one is answered here.
     """
     if predicate is None:
         predicate = field_predicate_readers()
@@ -5501,15 +5633,34 @@ def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: l
 
     instants = duty_fire_instants(job, fires, parse)
     latencies: list[float] = []
+    # #617: WHAT THE EXCLUSIONS DROPPED. A short window must never be readable as a prompt
+    # lane, so both exclusions are COUNTED and the excused rounds are NAMED. They print as an
+    # explicit `0` on a job that excluded nothing, like this leg's other counters.
+    rounds_excluded_excuse = 0
+    observations_excluded_recovery = 0
+    excluded_rounds: list[dict] = []
     for instant in instants:
         round_date = receipt_round(instant.isoformat())
         if round_date is None:
             continue
-        candidates = [
-            r for r in ledger_rows
-            if receipt_subject_matches(str(r.get("subject") or ""), stem, round_date)
-            and predicate.declared_duty(str(r.get("detail") or ""))
-        ]
+        if exclude_round is not None:
+            why = exclude_round(job, round_date, instant)
+            if why:
+                rounds_excluded_excuse += 1
+                excluded_rounds.append({"round": round_date, "reason": str(why)})
+                continue
+        candidates: list[dict] = []
+        for candidate in ledger_rows:
+            if not receipt_subject_matches(str(candidate.get("subject") or ""), stem, round_date):
+                continue
+            if not predicate.declared_duty(str(candidate.get("detail") or "")):
+                continue
+            if declares_recovery_observation(str(candidate.get("detail") or ""), predicate):
+                # A RECOVERY receipt is a valid PAIRING and not an OBSERVATION: this row made
+                # an earlier round visible, so its latency dates the repair, not the lane.
+                observations_excluded_recovery += 1
+                continue
+            candidates.append(candidate)
         if not candidates:
             continue
         newest = max(candidates, key=lambda r: str(r.get("ts") or ""))
@@ -5560,6 +5711,10 @@ def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: l
         "margin_x": margin,
         "measured_max_secs": measured_max,
         "measured_rounds": len(latencies),
+        # #617: the exclusions, printed so a short window is never read as a prompt lane.
+        "rounds_excluded_excuse": rounds_excluded_excuse,
+        "observations_excluded_recovery": observations_excluded_recovery,
+        "excluded_rounds": excluded_rounds,
         "fires_read": len(instants),
         "cadence_secs": cadence,
         "over_cadence": cadence is not None and residual >= cadence,
@@ -6582,12 +6737,55 @@ def duty_round_finding(*, name: str, job_id: str, stem: str, round_date: str, fi
             finding["problems"], fallback_from, schedule_text)
     return finding
 
+def residual_round_exclusion(*, fires: list[dict] | None, round_exemptions: dict | None,
+                             bound_instant, parse=None):
+    """The exclusion surface `duty_residual_for` is handed (#617).
+
+    It answers the ONE question the residual derivation could not ask: would the LEG excuse
+    this round? Three answers qualify, and each is the same fact in a different shape — the
+    round owed no receipt, so its latency says nothing about how promptly the lane works:
+
+    - a ROUND-SCOPED entry in the duty exemption store names it (the factory has declared
+      the round owed nothing);
+    - the round's own fire record reads SUPPRESSED by its trigger gate (the daemon's record,
+      never a declaration — the excuse this leg already applies to the round judgement);
+    - the round fired BEFORE the declared bound, where no receipt was possible.
+
+    A CALLABLE rather than a set, because two of the three answers need the round's own fire
+    record and the declared bound, which are properties of the ROUND rather than of its name.
+    Returning `None` means "this round is a valid observation"; returning a string means it is
+    not, and the string is what the coverage prints so the exclusion is never invisible.
+    """
+    parse = parse or reader_parse_ts
+    exemptions = round_exemptions or {}
+
+    def exclude(job: dict, round_date: str, instant) -> str | None:
+        name = str(job.get("name") or "")
+        declared = exemptions.get((name, round_date))
+        if declared is not None:
+            return (
+                f"a round-scoped duty exemption names it "
+                f"(docs/duty-receipt-exemptions.json): {declared or 'no reason stated'}"
+            )
+        fire = round_fire_record(job, fires or [], instant, parse)
+        if fire is not None and fire.get("suppressed"):
+            return (
+                f"its own fire record reads `{CRON_SUPPRESSION_MARKER}` -- the trigger gate "
+                f"suppressed the round, so it owed no receipt"
+            )
+        if bound_instant is not None and instant < bound_instant:
+            return f"it fired before the declared `{DUTY_RECEIPT_BOUNDARY_KEY}` bound"
+        return None
+
+    return exclude
+
 def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
                      prefixes: list[str], ledger_rows: list[dict], *,
                      read_at: str = "", store: Path = FRAGMENT_STORE,
                      predicate=None, repo: Path = REPO, now=None,
                      fires: list[dict] | None = None, margin_for=None,
-                     scope_fn=None, exemptions_fn=None) -> dict:
+                     scope_fn=None, exemptions_fn=None,
+                     round_exemptions_fn=None) -> dict:
     """The duty-completion leg: did the round each thin trigger woke LEAVE A RECEIPT?
 
     POPULATION. The ENABLED cron rows this factory DECLARES that carry a receipt
@@ -6618,6 +6816,11 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     # store rather than reading this factory's, so the pair of halves stays honest in a
     # member tree that has declared exemptions of its own.
     exemptions, exemption_problem = (exemptions_fn or receipt_declaration_exemptions)()
+    # #617: the ROUND-SCOPED half of the same store, read here and handed to the residual
+    # derivation below. Injected for the same reason as the job half: a probe drives its own
+    # store, so neither half can be decided by the live box.
+    round_exemptions, round_exemption_problem = (
+        round_exemptions_fn or receipt_round_exemptions)()
     for row in attributed:
         disposition, detail = declared_receipt_disposition(str(row.get("prompt") or ""))
         if disposition == "declares":
@@ -6635,6 +6838,8 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     excused: list[str] = []
     if exemption_problem:
         problems.append(exemption_problem)
+    if round_exemption_problem:
+        problems.append(round_exemption_problem)
     # #506 HALF 1 -- A DECLARATION THE READER CANNOT PARSE IS A PROBLEM. The alternative is
     # what the box did for a whole round: a duty printed NOT JUDGED beside `problems: 0`,
     # which is indistinguishable from a clean round. The shape is NAMED so the author can
@@ -6684,6 +6889,10 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
     residuals: list[dict] = []
     rounds_superseded = 0
     rounds_excused_by_bound = 0
+    # #617: rounds excused by a ROUND-SCOPED entry in the duty exemption store. Separate from
+    # the bound and suppression counters because the reason is a factory DECLARATION, not an
+    # inference from a record, and a reader who must act on it needs to know which.
+    rounds_excused_by_exemption = 0
     rounds_excused_by_residual = 0
     rounds_over_cadence = 0
     # #281's two counters. `rounds_judged_by_fallback` counts the rounds judged as the
@@ -6745,6 +6954,12 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
         residual = duty_residual_for(
             row, stem, fires=fires or [], ledger_rows=ledger_rows,
             predicate=predicate, margin_for=margin_for, parse=reader_parse_ts,
+            # #617: the leg's OWN excuses are excluded from the observation population, so a
+            # round that owed no receipt cannot widen the window it is judged against.
+            exclude_round=residual_round_exclusion(
+                fires=fires, round_exemptions=round_exemptions,
+                bound_instant=bound_instant, parse=reader_parse_ts,
+            ),
         )
         residuals.append(residual)
         if residual["over_cadence"]:
@@ -6779,6 +6994,20 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                 f"{name} (cron id {job_id}): the round {round_date} records a fire "
                 f"instant this leg cannot date ({fired!r}), so it cannot be placed "
                 f"against the declared bound either — NOT JUDGED"
+            )
+            continue
+        # #617: A ROUND THE FACTORY HAS DECLARED OWED NOTHING. Read before the suppression
+        # and bound excuses so the DECLARED reason is the one printed -- a factory's own
+        # declaration outranks an inferred one. The round is EXCUSED and COUNTED, never
+        # silently dropped, and it was already excluded from the residual above.
+        declared_round_exempt = round_exemptions.get((name, round_date))
+        if declared_round_exempt is not None:
+            rounds_excused_by_exemption += 1
+            excused.append(
+                f"{name} (cron id {job_id}): the round {round_date} (fired {fired}) is "
+                f"excused by a ROUND-SCOPED entry in docs/duty-receipt-exemptions.json -- "
+                f"{declared_round_exempt or 'no reason stated'} -- so it owed no receipt, is "
+                f"NOT JUDGED, and is EXCLUDED from this job's residual observations (#617)"
             )
             continue
         # #477: THE ROUND'S OWN SUPPRESSION, read from the fire record the round names. A
@@ -6985,6 +7214,17 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             "bound_refusal": bound_refusal,
             "rounds_superseded": rounds_superseded,
             "rounds_excused_by_bound": rounds_excused_by_bound,
+            "rounds_excused_by_exemption": rounds_excused_by_exemption,
+            "round_exemptions_declared": len(round_exemptions),
+            # #617: the residual's exclusion surface, printed. A job whose window rests on
+            # fewer observations than it has rounds must SAY so, or a short window reads as a
+            # prompt lane.
+            "observations_excluded_recovery": sum(
+                int(r.get("observations_excluded_recovery") or 0) for r in residuals
+            ),
+            "rounds_excluded_from_residual": sum(
+                int(r.get("rounds_excluded_excuse") or 0) for r in residuals
+            ),
             # THE WINDOW IS PER JOB (#449): there is no single fleet residual to print, so
             # the coverage carries the DEFAULT and the FORM beside the per-job derivations.
             # A scalar here would be a number no round was judged against.
@@ -14920,6 +15160,27 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"    {cov['rounds_excused_by_bound']} round(s) fired BEFORE that "
                     f"bound and are excused by it, NAMED above — never backfilled"
                 )
+            # #617: THE EXCLUSION SURFACE, printed. Both lines exist so a window resting on
+            # fewer observations than the job has rounds can never be read as a prompt lane:
+            # the count of what was DROPPED is the only thing that distinguishes "measured
+            # 48 rounds" from "measured 49 and threw one away".
+            if cov.get("rounds_excused_by_exemption"):
+                lines.append(
+                    f"    {cov['rounds_excused_by_exemption']} round(s) are excused by a "
+                    f"ROUND-SCOPED entry in docs/duty-receipt-exemptions.json "
+                    f"({cov.get('round_exemptions_declared', 0)} declared), NAMED above — the "
+                    f"factory declared the round owed no receipt, so it is NOT JUDGED and is "
+                    f"EXCLUDED from that job's residual observations (#617)"
+                )
+            if cov.get("observations_excluded_recovery") or cov.get("rounds_excluded_from_residual"):
+                lines.append(
+                    f"    residual observations EXCLUDED (#617): "
+                    f"{cov.get('observations_excluded_recovery', 0)} receipt(s) declaring "
+                    f"themselves a RECOVERY and "
+                    f"{cov.get('rounds_excluded_from_residual', 0)} excused round(s) were "
+                    f"dropped before the maximum was taken — a recovery receipt dates the "
+                    f"repair, never the lane, and an excused round owed no receipt at all"
+                )
             if cov.get("rounds_judged_by_fallback"):
                 lines.append(
                     f"    {cov['rounds_judged_by_fallback']} round(s) were judged as the "
@@ -16502,6 +16763,12 @@ def main(
     # whichever exemptions the live factory happens to hold, and a probe that CANNOT drive
     # an exemption cannot prove the store is reconciled at all.
     duty_exemptions_fn=None,
+    # #617: the ROUND-SCOPED half of that same store, injected separately because it is a
+    # different exclusion surface with a different consequence -- a job exemption removes the
+    # JOB from the population, a round exemption removes ONE ROUND from both the judgement and
+    # the residual's observations while the job stays judged. A probe that cannot drive one
+    # cannot prove the other, so they are not folded into a single injection.
+    round_exemptions_fn=None,
     # #330: the ref-role exemption store, injected for the seventh time and the same
     # reason -- a probe must never have its verdict decided by whichever exemptions the
     # live factory happens to hold, and a probe that CANNOT drive an exemption cannot
@@ -16761,6 +17028,9 @@ def main(
             scope_fn=duty_scope,
             # #506: and the exemption store with it, for the same reason one layer down.
             exemptions_fn=duty_exemptions_fn,
+            # #617: and its ROUND-SCOPED half, which is what keeps a RECOVERY receipt out of
+            # the latency observations without breaking its pairing with the round.
+            round_exemptions_fn=round_exemptions_fn,
         ), read_at),
         leg_guard("canonicality-tier", lambda: canonicality_leg(rows, read_at=read_at), read_at),
         # #587: the census of receipts whose duty token sits in PROSE, so `declared_duty`

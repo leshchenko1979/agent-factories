@@ -3243,6 +3243,23 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_gate_budget_declared_mode.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_gate_budget_declared_mode.py"])
 
+    # 99. the RECOVERY-OBSERVATION gate (#617, filed by HQ on 2026-11-05). A row written to
+    #     make an already-completed round VISIBLE to the duty-receipt leg was itself counted
+    #     as a latency observation: `n=4781`'s own timestamp entered as 80.33 h, taking
+    #     `factory-hq-pacemaker`'s measured max from 18.97 h to 80.33 h, its residual from
+    #     75.87 h to 321.31 h, and — because that window then excused BOTH of the job's rounds
+    #     — leaving the job with no round to judge at all. The two questions are different and
+    #     only the second is this function's: the row must STILL pair its round, and must
+    #     never enter the observations. The gate drives the leg's own injections, so both
+    #     arms differ in ONE substring of ONE detail, and a mutant arm strips the exclusion
+    #     to prove the incident's own figure returns — a gate that cannot fail is decoration.
+    #     PYTEST form: the arms are module-level `test_*` functions, so `python3 <file>` would
+    #     exit 0 having asserted NOTHING. Ships with its TEMPLATE pair.
+    if (repo_root / "tests/test_duty_residual_recovery.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "-q", "tests/test_duty_residual_recovery.py"]
+        )
+
     # 96. the CRITERION-PATH EXEMPTION gate (#507). The `criterion-paths` leg resolves every
     #     path a board item's criteria NAME — in the issue BODY and in the RULING COMMENT —
     #     against the COMMITTED tree, and reds each name that resolves to nothing. It could

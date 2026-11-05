@@ -83,3 +83,30 @@ counted and named as OUTSIDE the population rather than folded into the finding 
 **Write `duty=<value>` as the terminal line of `detail`.** If a receipt already reads
 `declared_duty -> []` while its author believes it declared, the token is in the prose: move it
 to the trailer. The reader cannot meet you halfway — the position IS the declaration.
+
+## 6. The residual has an exclusion surface (#617)
+
+The forward window a job is judged against is DERIVED from that job's own measured
+fire-to-receipt latency, so every observation that enters it must be a fact about the LANE.
+Two classes are not, and both are dropped before the maximum is taken:
+
+| class | why it is not promptness data | how a row declares itself |
+|---|---|---|
+| a round the factory declared owed nothing | the duty never existed, so there was nothing to be prompt about | a ROUND-SCOPED entry in `docs/duty-receipt-exemptions.json` (an entry carrying a `round` key) |
+| a RECOVERY receipt | it exists to make an already-completed round VISIBLE to the pairing, so its timestamp dates the repair, not the lane | the terminal trailer `observation=recovery`, or the clause `RECOVERY record, not a latency observation` |
+
+The distinction the first row rests on is that **"was this round receipted?" and "how prompt is
+this lane?" are two questions**, and only the second one is the residual's. A recovery row must
+therefore REMAIN a valid pairing — the leg still sees its round as receipted — while never
+entering the observations.
+
+Measured cost of getting this wrong, on `factory-hq-pacemaker` (2026-11-05): one recovery row
+(`n=4781`) entered as an 80.33 h observation, lifting the job's measured max from 18.97 h to
+80.33 h and its derived residual from 75.87 h to 321.31 h — and because that window then
+excused BOTH of the job's rounds as still inside it, the job had no round left to judge at all.
+A wider window is SILENT; a narrower one costs one look. So both exclusions err narrow, and both
+are COUNTED and PRINTED: a window resting on fewer observations than the job has rounds must
+never be readable as a prompt lane.
+
+No backfill is ordered and none is possible: the fix is read-side, and the ledger is
+append-only.
