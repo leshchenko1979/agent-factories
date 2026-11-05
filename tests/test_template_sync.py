@@ -807,6 +807,10 @@ PAIRS = [
     # instrument doc -- a member factory that ships the reader without the rule keeps
     # writing prose tokens the census then reports against it.
     ("docs/instruments/duty-receipt.md", "TEMPLATE/docs/instruments/duty-receipt.md"),
+    # #613: the register's set-never-closes law. Paired because the executing copy ships into
+    # every member's tree alongside `tools/questions` -- a member carrying `reopen` without the
+    # clause that says why a set never closes by machine would reach for archiving instead.
+    ("docs/instruments/open-questions.md", "TEMPLATE/docs/instruments/open-questions.md"),
 ]
 
 def main() -> int:

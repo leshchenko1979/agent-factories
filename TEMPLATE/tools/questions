@@ -38,7 +38,7 @@ VERSION = "2.0.0"
 # The verb set, named once so the selftest can assert a DELETED verb stays
 # deleted rather than merely unrouted (#547 C3).
 _VERBS = ("ask", "answer", "amend", "withdraw", "list", "publish", "lint",
-          "gc", "notify", "redeliver")
+          "gc", "notify", "redeliver", "reopen")
 
 # =============================================================================
 # FLAG_SPEC — the ONE declaration of what each verb accepts (#709).
@@ -126,6 +126,15 @@ FLAG_SPEC = {
         },
         "positional": "none",
     },
+    # #613 leg 2: the exit for a set the DELETED set-status write closed. It
+    # takes the factory id positionally (`reopen <factory>`) because that is
+    # how the order and the issue name it, and --set stays as the flag form so
+    # a bridge caller has one spelling.
+    "reopen": {
+        "valued": {"set_id": "--set", "by": "--by"},
+        "boolean": {"json": "--json", "no_publish": "--no-publish"},
+        "positional": "<factory>",
+    },
     "notify": {
         "valued": {
             "set_id": "--set", "lane": "--lane", "qid": "--qid",
@@ -165,6 +174,7 @@ def flag_spec(verb):
 POSITIONAL_PARAMS = {
     "answer": [("set_id", True), ("qid", True), ("choice", False)],
     "notify": [("set_id", False)],
+    "reopen": [("set_id", False)],
 }
 
 
@@ -1037,10 +1047,24 @@ def apply_mechanical_closures(data):
                 closed.append("%s/%s -> %s (%s)"
                               % (entry.get("id"), question.get("qid"),
                                  question["status"], reason))
-        if entry.get("questions") and all(question_is_closed(q)
-                                          for q in entry["questions"]):
-            entry["status"] = "answered"
-            entry["closed_at"] = now_iso()
+        # THE SET NEVER CLOSES HERE (#613). This function closes QUESTIONS and
+        # returns; it touches no set status. It used to stamp
+        # entry["status"]="answered" + closed_at on any set whose every
+        # question was closed, which contradicts the owner's order stated in
+        # terms at cmd_gc: "TTL expires the QUESTION, never the SET. A factory
+        # set stays open at 0..N so the page and its lane anchors remain
+        # permanent."
+        #
+        # The write was INERT until #497 armed it: before #497 widened
+        # CLOSED_STATUSES to name `resolved_mechanically`, set_is_closed()
+        # returned False for such a set, so this branch could never fire. #497
+        # was correct for its own subject and armed this one; it is NOT
+        # reverted.
+        #
+        # set_is_closed() STAYS and is not weakened: `gc --archive-closed`
+        # consults it, and an explicit archive remains the one lawful way a set
+        # leaves the live register. A set whose status was already stamped by
+        # the old write is repaired by `reopen`, never by a second write here.
     return closed, notes
 
 def set_is_closed(entry):
@@ -2028,6 +2052,102 @@ def cmd_amend(argv):
     else:
         print(f"{set_id}/{qid} amended ({', '.join(changed)}) — "
               f"{was} -> open, amend #{question['amend_count']}")
+        if page:
+            print(f"  page {page}")
+    return 0
+
+# =============================================================================
+# reopen — put a CLOSED SET back in service, touching no question (#613)
+#
+# Leg 1 deletes the set-status write from apply_mechanical_closures, and an
+# intent fix alone repairs NO state: the live meta-factory set was stamped
+# status=answered / closed_at=2026-11-02T08:02:48Z by that write (48 questions,
+# 39 answered / 9 withdrawn, still inside open.json, never archived), so from
+# that instant the factory had no working register and every blocked owner
+# decision in the window had no home (#324 is the live instance).
+#
+# This is NOT `amend`. amend clears an ANSWER and puts a question the owner
+# already dismissed back on his page -- wrong verb for a closed set, and it
+# touches question rows this must leave alone.
+#
+# This is NOT `gc --archive-closed`. That moves the set into archive.jsonl and
+# restarts qid numbering at q1, fragmenting exactly the lane anchors the
+# owner's order exists to protect. ARCHIVING IS REFUSED AS A REMEDY for a
+# closed set; it stays available as an explicit request for a set genuinely
+# done with.
+#
+# Idempotent by contract: a set already open is a no-op that says so and exits
+# 0, so a caller retrying after a timeout does not have to know whether the
+# first write landed.
+# =============================================================================
+def cmd_reopen(argv):
+    positional, flags = parse_flags(argv, *flag_spec("reopen"))
+    set_id = (positional[0] if positional else (flags.get("--set") or "")).strip()
+    if not set_id:
+        die(2, "reopen requires <factory> (or --set <id>)")
+    if len(positional) > 1:
+        die(2, "reopen takes ONE set id (got %d)" % len(positional))
+
+    with RegisterLock():
+        data = read_register()
+        entry = next((s for s in data["sets"] if s.get("id") == set_id), None)
+        if entry is None:
+            die(1, "no set %r in the live register — an archived set is not "
+                   "reopenable (archiving is terminal by design; a set that "
+                   "must come back needs a fresh ask)" % set_id)
+        was = entry.get("status")
+        was_closed_at = entry.get("closed_at")
+        # Snapshot the question rows so the "touches no question" guarantee is
+        # MEASURED rather than asserted: a hardcoded `0` reports the invariant
+        # instead of checking it, and a future edit that rewrote a row would
+        # leave the field still reading zero. Compared on the full row, not on
+        # status alone -- a rewrite that kept the status would otherwise pass.
+        _rows_before = [json.dumps(q, sort_keys=True)
+                        for q in entry.get("questions", [])]
+        changed = []
+        if was != "open":
+            entry["status"] = "open"
+            changed.append("status")
+        # closed_reason travels with closed_at: a set left `open` while still
+        # carrying why it was closed asserts two things at once, the same class
+        # #451 removed from question rows.
+        for key in ("closed_at", "closed_reason"):
+            if key in entry:
+                entry.pop(key)
+                changed.append(key)
+        # NOT ONE QUESTION ROW IS TOUCHED. This is the discriminator against
+        # `amend`: a reopen that rewrote a question's status would silently
+        # re-ask something the owner already settled.
+        _rows_after = entry.get("questions", [])
+        questions_touched = sum(
+            1 for _i, _q in enumerate(_rows_after)
+            if _i >= len(_rows_before)
+            or json.dumps(_q, sort_keys=True) != _rows_before[_i]
+        ) + max(0, len(_rows_before) - len(_rows_after))
+        if questions_touched:
+            die(4, "reopen changed %d question row(s) -- it must touch NONE "
+                   "(the write is refused, not reported)" % questions_touched)
+        if changed:
+            write_register_atomic(data)
+
+    oc_log_extra("set", set_id)
+    meta = republish(flags)
+    page = (meta or {}).get("url")
+    if flags.get("--json"):
+        print(json.dumps({"set": set_id, "was": was,
+                          "status": entry.get("status"),
+                          "was_closed_at": was_closed_at,
+                          "changed": changed,
+                          "questions_touched": questions_touched,
+                          "page": page}, indent=2, ensure_ascii=False))
+    else:
+        if changed:
+            cleared = ", ".join(k for k in changed if k != "status") or "nothing"
+            print(f"{set_id} reopened ({was} -> open; cleared {cleared}) — "
+                  f"0 question rows touched")
+        else:
+            print(f"{set_id} already open — nothing changed "
+                  f"(0 question rows touched)")
         if page:
             print(f"  page {page}")
     return 0
@@ -5628,8 +5748,17 @@ def selftest():
         # question was never closed, so the set stayed `open` forever.
         ck(set_is_closed({"questions": [{"status": "resolved_mechanically"}]}),
            "\u2026and set_is_closed reads a mechanically-resolved set as CLOSED")
-        ck(get_set(mech_set).get("status") == "answered",
-           "\u2026so gc marks the set itself answered once every question is "
+        # #613: THIS ARM USED TO ASSERT THE DEFECT. It read
+        # `status == "answered"` and its own message called the set-closing
+        # write correct ("so gc marks the set itself answered once every
+        # question is closed"). The owner's order at cmd_gc says the opposite
+        # in terms -- "TTL expires the QUESTION, never the SET. A factory set
+        # stays open at 0..N so the page and its lane anchors remain
+        # permanent." So the arm is INVERTED rather than a second arm added
+        # beside it: an arm that asserts the defect goes RED on the correct
+        # fix, which is worse than a missing arm because it defends the bug.
+        ck(get_set(mech_set).get("status") == "open",
+           "\u2026and gc leaves the SET OPEN once every question in it is "
            "closed (status=%r)" % (get_set(mech_set) or {}).get("status"))
         # The third reader is `cmd_answer`'s idempotent-by-contract guard. It must
         # REFUSE (rc 3) and leave the row untouched -- not flip it to `answered`.
@@ -5639,6 +5768,74 @@ def selftest():
         ck(get_set(mech_set)["questions"][0]["status"] == "resolved_mechanically",
            "\u2026and the row keeps its status instead of being flipped to "
            "answered (%r)" % get_set(mech_set)["questions"][0]["status"])
+
+        # -- 8e. #613: the SET's own exit, and the control that keeps
+        # --archive-closed alive.
+        #
+        # POSITIVE CONTROL for the inverted arm above: if this read False, the
+        # fix would have bought the set's openness by breaking the ONE lawful
+        # exit -- `gc --archive-closed` consults this very predicate for its
+        # victims -- so a fix passing the arm above while failing this one is
+        # exactly the trade the ruling forbids.
+        ck(set_is_closed(get_set(mech_set)),
+           "\u2026and set_is_closed STILL reads an all-closed set as CLOSED, "
+           "so --archive-closed keeps its target")
+        # A fully-closed-but-OPEN set must still accept a question, and must
+        # CONTINUE qid numbering rather than restarting at q1: a restart is how
+        # lane anchors fragment, which is the outcome the owner's order exists
+        # to prevent.
+        rc, out, err = run("ask", "--factory", mech_set,
+                           "--title", "After every question closed",
+                           "--description", "d", "--no-publish", "--json")
+        ck(rc == 0, "a set with every question closed still accepts an ask "
+                    "(rc=%d, err=%r)" % (rc, (err or "").strip()[:80]))
+        _qids = [q.get("qid") for q in
+                 (json.loads(out).get("entry") or {}).get("questions", [])]
+        ck(_qids == ["q1", "q2"],
+           "\u2026and the new question CONTINUES qid numbering (qids=%r)"
+           % (_qids,))
+        # `reopen` is the EXIT for a set the DELETED write closed. That write is
+        # gone, so the only way to reach the state in a fixture is to stamp it
+        # -- which is also exactly the state the live meta-factory set is in
+        # (status=answered, closed_at 2026-11-02T08:02:48Z, every question row
+        # intact, still inside open.json, never archived).
+        _store = os.path.join(env["OC_QUESTIONS_DIR"], "open.json")
+        with open(_store, encoding="utf-8") as _fh:
+            _stamped = json.load(_fh)
+        _victim = next(s for s in _stamped["sets"] if s.get("id") == mech_set)
+        _victim["status"] = "answered"
+        _victim["closed_at"] = "2026-11-02T08:02:48+00:00"
+        _victim["closed_reason"] = "every question closed"
+        with open(_store, "w", encoding="utf-8") as _fh:
+            json.dump(_stamped, _fh, ensure_ascii=False)
+        _before = [q.get("status") for q in _victim["questions"]]
+        rc, out, err = run("reopen", mech_set, "--no-publish", "--json")
+        _after = get_set(mech_set) or {}
+        ck(rc == 0 and _after.get("status") == "open",
+           "reopen restores a closed set to open (rc=%d, status=%r)"
+           % (rc, _after.get("status")))
+        ck("closed_at" not in _after and "closed_reason" not in _after,
+           "\u2026and CLEARS closed_at + closed_reason rather than leaving a "
+           "set that asserts both at once (closed_at=%r)"
+           % (_after.get("closed_at"),))
+        ck([q.get("status") for q in _after.get("questions", [])] == _before,
+           "\u2026and touches NOT ONE question row -- the discriminator "
+           "against `amend` (before=%r, after=%r)"
+           % (_before, [q.get("status") for q in _after.get("questions", [])]))
+        # The guarantee is MEASURED, not reported: the verb compares the rows
+        # before and after and prints how many differ. An arm that only read a
+        # constant would pass even if a future edit rewrote a row.
+        _touched = (json.loads(out) if out.strip() else {}).get("questions_touched")
+        ck(_touched == 0,
+           "\u2026and REPORTS that measured count as 0 (got %r) -- a constant "
+           "here would report the invariant instead of checking it" % (_touched,))
+        # IDEMPOTENT BY CONTRACT: a caller retrying after a timeout must not
+        # have to know whether the first write landed.
+        rc, out, err = run("reopen", mech_set, "--no-publish", "--json")
+        _again = json.loads(out) if out.strip() else {}
+        ck(rc == 0 and _again.get("changed") == [],
+           "reopen is IDEMPOTENT: a set already open reports NO change "
+           "(rc=%d, changed=%r)" % (rc, _again.get("changed")))
         # THE POSITIVE CONTROL. A fix that widened the guard to refuse everything
         # would pass every leg above, so the three statuses that were ALREADY in
         # the vocabulary must keep reading closed, and the three that were never
@@ -6840,7 +7037,7 @@ printf '{"state": "%s"}\\n' "$state"
 
         # -- #310: --help on every subcommand --------------------------------
         for _verb in ("ask", "list", "notify", "answer", "amend", "withdraw",
-                      "publish", "lint", "gc", "redeliver"):
+                      "publish", "lint", "gc", "reopen", "redeliver"):
             rc, out, _ = run(_verb, "--help")
             ck(rc == 0 and "the Open Questions register" in (out or ""),
                "%s --help prints usage, rc=0 (rc=%d)" % (_verb, rc))
@@ -6975,6 +7172,16 @@ USAGE = """questions — the Open Questions register (#547)
            re-renders the one shared page at its constant slug
   lint     [--json]
   gc       [--dry-run] [--json]        also applies mechanical closure
+  reopen   <factory> [--json] [--no-publish]
+           Puts a CLOSED SET back in service: status -> open, closed_at and
+           closed_reason cleared, and NOT ONE question row touched (that is
+           the discriminator against `amend`, which clears an answer and puts
+           a dismissed question back on the page). Idempotent: a set already
+           open is a no-op, rc 0. This is the exit for a set the old
+           set-status write in `gc` closed (#613); archiving is NOT a remedy
+           for it -- `gc --archive-closed` moves the set to archive.jsonl and
+           restarts qid numbering, fragmenting the lane anchors the owner's
+           order protects. An archived set is not reopenable.
   --schema                             machine-readable flag schema (JSON) for
                                        the dynamic-tool bridge: per verb, the
                                        valued/boolean flags it accepts, plus
@@ -7045,7 +7252,7 @@ def main(argv):
                 "withdraw": cmd_withdraw, "list": cmd_list,
                 "publish": cmd_publish, "lint": cmd_lint,
                 "gc": cmd_gc, "notify": cmd_notify,
-                "redeliver": cmd_redeliver}
+                "redeliver": cmd_redeliver, "reopen": cmd_reopen}
     if set(handlers) != set(_VERBS):
         sys.stderr.write("%s: verb set drifted from _VERBS\n" % PROG)
         return 2

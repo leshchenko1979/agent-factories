@@ -332,6 +332,20 @@ declined-as-internal: N of M answered
 
 **NOT RUN carries its reason.** The store lives outside any tree, so a factory with no register reports the absence rather than a zero — an absent store and a store with no declines must never read alike, or the metric's own silence becomes indistinguishable from a clean run. The store path is **resolved at call time**, never pinned here (§5.1).
 
+### 5.9 The set never closes — TTL expires the QUESTION, never the SET (#613)
+
+The owner's order, verbatim: *"TTL expires the QUESTION, never the SET. A factory set stays open at 0..N so the page and its lane anchors remain permanent."* The set is the STANDING container a factory's lane anchors resolve against; closing it is not a tidy-up, it is the removal of the surface. So `apply_mechanical_closures` closes **questions** and returns: it touches no set status. The write that did — `entry["status"] = "answered"` plus `closed_at` on any set whose every question happened to be closed — is deleted, and its absence is pinned by the tool's own selftest (`# -- 8e. #613`), which asserts the set is still `open` after `gc` closes every question in it. That arm was previously INVERTED, asserting the defect; an arm that asserts a bug goes RED on the correct fix, so it is inverted rather than joined by a second arm.
+
+**`set_is_closed` STAYS.** It is the predicate `gc --archive-closed` consults, and explicit archiving remains the one lawful way a set leaves the live register. A positive control in the same block keeps it TRUE for an all-closed set, so the fix cannot be traded away for the archive path.
+
+**`reopen <factory>` is the exit, and it is not any of its neighbours.** It sets `status="open"`, clears `closed_at` and `closed_reason`, touches **no question row**, is idempotent, and prints what it changed. It is NOT `amend` — that clears an answer and puts a question the owner already dismissed back on his page. It is NOT `gc --archive-closed` — that moves the set to `archive.jsonl` and restarts `qid` numbering at `q1`, fragmenting exactly the lane anchors this order protects. **Archiving is refused as a remedy for a wrongly-closed set.**
+
+**The contradiction was INERT until #497 armed it.** Before #497 widened `CLOSED_STATUSES` to name `resolved_mechanically`, `set_is_closed` returned `False` for such a set, so the closing write could never fire. #497 was correct for its own subject and is not reverted; it armed this one. This is why the defect was invisible for as long as it was — an unreachable branch is not a behaviour, and the comment recording that interval is the evidence.
+
+**The live instance, and why the gap mattered** ***(meta-factory tree only)***. From `2026-11-02T08:02:48Z` this factory's own set carried `status=answered` with 48 questions (39 answered, 9 withdrawn) while still inside `open.json`, never archived — so `ask` refused and **no working register existed for 14.8 days**. Every owner decision blocked in that window had no home; #324 is the named instance (owner-gated at n=2360, design landed `9cf93fe1` on 2026-10-23, no surface re-raising it). `ask`'s own refusal comment claimed *"this only happens after an explicit archive"*, and the live store falsifies it: the premise of the refusal was the thing being repaired.
+
+**The follow-up is the owning lane's, and no backfill.** Reopening a wrongly-closed set and giving a starved work unit its register entry belong to the lane holding that claim — a repair run by a different lane would duplicate the duty. Nothing in the gap is reconstructed in code or in any row: the register records what it is asked from the fix forward.
+
 ## 6. Ownership, and the reload leg
 
 | who | what |
