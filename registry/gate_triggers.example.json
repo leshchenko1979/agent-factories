@@ -158,6 +158,12 @@
       "tools/patrol_host_state.py",
       "tools/registry*.py"
     ],
+    "tests/test_gate_budget_declared_mode.py": [
+      "TEMPLATE/tools/gate_budget_rederive.py",
+      "registry/gates.json",
+      "tests/gate_registry.py",
+      "tools/gate_budget_rederive.py"
+    ],
     "tests/test_gate_direct_invocation.py": [
       "TEMPLATE/tests/test_*.py",
       "TEMPLATE/tests/test_gate_direct_invocation.py",
@@ -654,6 +660,13 @@
       "tools/patrol_host_state.py",
       "tools/registry*.py",
       "tests/patrol_fixtures.py"
+    ],
+    "tests/test_patrol_wake_duty.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "registry/fleet.json",
+      "tests/patrol_fixtures.py",
+      "tools/patrol_host_state.py",
+      "tools/registry*.py"
     ],
     "tests/test_patrol_workspace.py": [
       "TEMPLATE/tools/patrol_host_state.py",
