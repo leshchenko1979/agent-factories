@@ -3772,6 +3772,51 @@ def receipt_subject_matches(subject: str, stem: str, round_date: str) -> bool:
     rest = str(subject)[len(prefix):]
     return not rest[:1].isdigit()
 
+def receipt_answering_fire(candidates: list[dict], instant, parse) -> dict | None:
+    """The receipt that ANSWERS this fire, not merely one that shares its round (#621).
+
+    THE DEFECT THIS REPLACES. The loop above iterates FIRES but used to match receipts at
+    ROUND (YYYY-MM-DD) granularity and then take the round's NEWEST row as the answer to
+    every fire that date. A stem+date subject is shared by every fire of the day, so the
+    day's earliest fire was charged with the day's latest receipt: measured on
+    `factory-triage-patrol` at HEAD, the fire at `2026-09-26T00:00:35Z` was charged
+    `n=1225` (22:36Z, 22.60 h) while its own answer `n=1143` (00:10:35Z) sat 0.17 h away.
+    Three individually-correct changes composed into it -- `082ba8e8` (#217, newest
+    receipt governs), `00435900` (#449, the per-fire loop) and `47d5fafb` (#499, judge a
+    round's fires against its receipts) -- each right at its OWN granularity.
+
+    THE INVARIANT. A receipt may answer a fire that PRECEDES it, never one that FOLLOWS
+    it: a candidate whose instant is before the fire instant is not an answer, and is
+    dropped here rather than charged as a negative latency downstream. Among the rows that
+    may answer, the FIRST is the answer -- a later row that also matches the round answered
+    a later fire of that round, which is exactly the confusion this function removes.
+
+    #217 IS NOT WEAKENED BY THIS, because it answers a DIFFERENT QUESTION. "Newest governs"
+    is the VERDICT rule in `duty_receipt_leg`: a round may fail at T and complete at T+n,
+    and the newest declaration decides whether the duty stands. That function is untouched.
+    Latency asks when the duty was FIRST answered, and a supersession cannot move an
+    instant that has already happened -- so the two questions do not share an answer, and
+    collapsing them is what produced the defect. Two independent predicates (hour-token
+    match, and first-at-or-after) were measured to agree over the whole population, so this
+    is not one guess.
+
+    A RECOVERY row is still an ANSWER (#617). It pairs, and it stops the search -- falling
+    through to a later row would charge the fire with a receipt that answered a different
+    fire -- but it contributes no latency, because its instant dates the repair.
+    """
+    answers = []
+    for candidate in candidates:
+        try:
+            candidate_instant = parse(str(candidate.get("ts") or ""))
+        except (ValueError, TypeError):
+            continue
+        if candidate_instant < instant:
+            continue
+        answers.append((candidate_instant, candidate))
+    if not answers:
+        return None
+    return min(answers, key=lambda pair: pair[0])[1]
+
 def receipt_round(last_run_at: str) -> str | None:
     """The round date a fire instant belongs to — its UTC date, `YYYY-MM-DD`.
 
@@ -5674,19 +5719,18 @@ def duty_residual_for(job: dict, stem: str, *, fires: list[dict], ledger_rows: l
                 continue
             if not predicate.declared_duty(str(candidate.get("detail") or "")):
                 continue
-            if declares_recovery_observation(str(candidate.get("detail") or ""), predicate):
-                # A RECOVERY receipt is a valid PAIRING and not an OBSERVATION: this row made
-                # an earlier round visible, so its latency dates the repair, not the lane.
-                observations_excluded_recovery += 1
-                continue
             candidates.append(candidate)
-        if not candidates:
+        # #621: pair the fire with the receipt that ANSWERS it. The round only narrows the
+        # search (a duty's subject carries the round date); it is never the pairing key.
+        answering = receipt_answering_fire(candidates, instant, parse)
+        if answering is None:
             continue
-        newest = max(candidates, key=lambda r: str(r.get("ts") or ""))
-        try:
-            receipt_instant = parse(str(newest.get("ts") or ""))
-        except (ValueError, TypeError):
+        if declares_recovery_observation(str(answering.get("detail") or ""), predicate):
+            # A RECOVERY receipt is a valid PAIRING and not an OBSERVATION: this row made
+            # an earlier round visible, so its latency dates the repair, not the lane.
+            observations_excluded_recovery += 1
             continue
+        receipt_instant = parse(str(answering.get("ts") or ""))
         latency = (receipt_instant - instant).total_seconds()
         # A NEGATIVE latency is a clock artefact, not a fast duty: the receipt cannot
         # precede the fire that opened its round. Dropped rather than clamped to zero,

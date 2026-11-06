@@ -792,6 +792,7 @@ REQUIRED_GATES: tuple[str, ...] = (
     # live table or a live goal template — it passes in a bootstrapped factory exactly as
     # it does here. Byte-paired with its TEMPLATE copy.
     "test_duty_goal_stem.py",
+    "test_duty_fire_pairing.py",
     "test_patrol_criterion.py",
     "test_patrol_ruling.py",
     "test_patrol_tree_instants.py",

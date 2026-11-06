@@ -3300,6 +3300,26 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "-q", "tests/test_duty_goal_stem.py"]
         )
 
+    # 101. the FIRE-PAIRING gate (#621, filed by HQ on 2026-11-06). `duty_residual_for` loops
+    #      over FIRES but matched receipts at ROUND (`YYYY-MM-DD`) granularity, then took the
+    #      round's NEWEST row as the answer to every fire that date. A stem+date subject is
+    #      shared by every fire of the day, so the day's EARLIEST fire was charged with the
+    #      day's LATEST receipt: measured on `factory-triage-patrol`, a fire at `00:00:35Z`
+    #      that its own receipt answered in ten minutes was charged 22.60 h, which inflated
+    #      the job's measured max and its derived residual (48.67 h -> 90.39 h) — a 1.86x
+    #      magnitude error on a REAL alarm, not a manufactured one. #217's NEWEST-GOVERNS is
+    #      not the rule here and is deliberately untouched: it decides the VERDICT in
+    #      `duty_receipt_leg` (a round may fail at T and complete at T+n), and no supersession
+    #      can move an instant that has already happened. The mutant arm restores the
+    #      round-newest rule and the incident's own 22.60 h must reappear, so the green is
+    #      attributable to the pairing and nothing else.
+    #      PYTEST form: the arms are module-level `test_*` functions, so `python3 <file>`
+    #      would exit 0 having asserted NOTHING. Ships with its TEMPLATE pair.
+    if (repo_root / "tests/test_duty_fire_pairing.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "-q", "tests/test_duty_fire_pairing.py"]
+        )
+
     # 96. the CRITERION-PATH EXEMPTION gate (#507). The `criterion-paths` leg resolves every
     #     path a board item's criteria NAME — in the issue BODY and in the RULING COMMENT —
     #     against the COMMITTED tree, and reds each name that resolves to nothing. It could
