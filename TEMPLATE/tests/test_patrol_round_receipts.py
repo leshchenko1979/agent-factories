@@ -147,15 +147,24 @@ def test_the_fires_arm_is_CLEAN_when_every_fire_answered() -> None:
     cov = leg["coverage"]
     assert cov["fires_unanswered"] == 0, (cov, leg["problems"])
     assert cov["rounds_under_receipted"] == 0, cov
-    # SCOPED TO THE RECEIPT ARMS, because `problems` now carries a SECOND class. The
-    # cadence finding (ruling n=4153) fires on this fixture by construction: all four
-    # receipts key ONE round date, so "newest candidate wins" gives the FIRST fire a
-    # 12.25 h latency (44100 s measured max over 4 rounds) and the derived residual
-    # reaches 12.25x the 4 h cadence. That is the derivation's own behaviour, not a
-    # receipt that failed to answer a fire -- so a blanket `problems == []` here would
-    # conflate two arms and stay RED forever on a fixture whose receipts are all present.
+    # SCOPED TO THE RECEIPT ARMS, because `problems` also carries the cadence class
+    # (ruling n=4153) and this arm's subject is the FIRES arm.
     assert not [p for p in leg["problems"] if "UNDER-RECEIPTED" in p], leg["problems"]
-    assert cov["rounds_over_cadence"] == 1, cov
+    # #621 PINNED HERE, and it is the whole point of the fix. All four receipts key ONE
+    # round date, so while the round was the PAIRING key "newest candidate wins" charged
+    # the FIRST fire a 12.25 h latency (44100 s measured max over 4 rounds) and the derived
+    # residual reached 12.25x the 4 h cadence. Each fire is now answered by its own
+    # receipt, which the fixture writes at fire + 0.25 h -- so the measured max must be
+    # exactly 900 s over 4 rounds, and the cadence finding must be GONE because nothing
+    # was actually late. Asserting only `rounds_over_cadence == 0` would leave the
+    # latency unmeasured and pass equally if the arm had simply stopped observing.
+    residual = cov["residuals"][0]
+    assert residual["measured_rounds"] == 4, residual
+    assert residual["measured_max_secs"] == 900.0, residual
+    assert cov["rounds_over_cadence"] == 0, cov
+    # The cadence class's own positive controls live in tests/test_patrol_tree_instants.py
+    # (arms asserting rounds_over_cadence == 1 on a genuinely over-cadence fixture), so
+    # reading 0 here cannot silently retire the class.
 
 def test_the_fires_arm_REDs_a_receipt_that_keys_its_COMPLETION_hour() -> None:
     """The 10-06 miss, reproduced: the fire is at 06:50 and the lane wrote a `T09` row.
