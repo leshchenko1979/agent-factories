@@ -2365,6 +2365,18 @@ LANE_ACTIVITY_READ = "read"              # source read; this session carries mea
 LANE_ACTIVITY_NONE = "none"              # source read; this session carries NO work at all
 LANE_ACTIVITY_UNREADABLE = "unreadable"  # source could not be read -- never a zero (#271)
 
+# THE SECOND FACT, BESIDE THE FIRST AND NOT INSTEAD OF IT (#624). The activity fact answers "was
+# this session MEASURED doing anything", and ONE `tool_executions` row satisfies it -- so a lane
+# that wakes, runs a single tool and closes nothing reads as a lane draining a backlog. The
+# completion fact answers the different question "did any WORK UNIT FINISH inside that window",
+# from the ledger's own `close` rows, which carry the `session` that wrote them.
+#
+# #532's ACTIVITY FACT SURVIVES UNTOUCHED. Deleting it is what produced 33 false DRIVERLESS
+# verdicts; the repair is a SECOND fact consulted inside the first one's arm, never a swap.
+LANE_COMPLETION_READ = "read"            # ledger read; this session closed >=1 unit in window
+LANE_COMPLETION_NONE = "none"            # ledger read; this session closed NO unit in window
+LANE_COMPLETION_UNREADABLE = "unreadable"  # ledger could not be read -- never a zero (#271)
+
 def activity_epoch(value) -> tuple[int | None, str]:
     """One `tool_executions.created_at` as a UTC epoch second, or `(None, why)`.
 
@@ -2502,6 +2514,92 @@ def box_lane_activity(root: Path | None = None) -> dict:
         "unparsed": unparsed,
         "readable": readable,
         "reason": reason,
+    }
+
+def box_lane_completions(ledger_path: Path | None = None) -> dict:
+    """{newest, epochs, rows_read, close_rows, unattributed, unparsed, readable, reason} for
+    every `close` row this factory's ledger carries, newest instant PER SESSION (#624).
+
+    THE SECOND FACT, and the one the driverless leg was missing. `box_lane_activity` answers
+    "was this session MEASURED doing anything", and ONE `tool_executions` row satisfies it -- so
+    a lane that woke, ran a single tool and closed nothing read as UNARMED-ACTIVE, i.e. as a
+    lane draining a backlog through some trigger the leg cannot see. It was draining nothing: it
+    executed, and finished no unit.
+
+    THE SOURCE IS THE LEDGER'S OWN `close` ROWS, keyed on their `session` field, which names the
+    session that WROTE the row. That is the only completion fact this factory keeps: a unit is
+    closed by a ledger row and by nothing else, so a lane's closes ARE its finished work.
+
+    ATTRIBUTION IS PER SESSION, AND AN UNATTRIBUTED ROW IS COUNTED, NOT DROPPED SILENTLY. Older
+    rows predate the `session` field (3,000 of 4,834 carried it at the #624 read); a `close` row
+    with no session cannot be assigned to a lane, so it is reported as `unattributed` beside the
+    count and never guessed onto one.
+
+    TWO OUTCOMES, mirroring `box_lane_activity`'s split: a ledger that OPENED is READ, even with
+    zero `close` rows -- that is a real zero, and it is the reading that says "this lane closed
+    nothing"; a ledger that could not be opened is UNREADABLE with its reason, and the leg turns
+    that into UNREADABLE rather than "finished nothing" (#271).
+    """
+    path = Path(ledger_path) if ledger_path is not None else LEDGER
+    newest: dict[str, str] = {}
+    epochs: dict[str, int] = {}
+    unparsed: list[str] = []
+    unattributed = 0
+    rows_read = 0
+    close_rows = 0
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            raw_lines = handle.readlines()
+    except OSError as exc:
+        return {
+            "newest": {},
+            "epochs": {},
+            "rows_read": 0,
+            "close_rows": 0,
+            "unattributed": 0,
+            "unparsed": [],
+            "readable": False,
+            "reason": f"the ledger could not be read ({exc})",
+        }
+    for line in raw_lines:
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            row = json.loads(text)
+        except (json.JSONDecodeError, ValueError) as exc:
+            unparsed.append(f"{path.name}: {exc}")
+            continue
+        if not isinstance(row, dict):
+            unparsed.append(f"{path.name}: a row that is not an object")
+            continue
+        rows_read += 1
+        if str(row.get("event") or "") != "close":
+            continue
+        close_rows += 1
+        session_id = str(row.get("session") or "").strip()
+        if not session_id:
+            unattributed += 1
+            continue
+        epoch, why = activity_epoch(row.get("ts"))
+        if epoch is None:
+            unparsed.append(f"{path.name}:{session_id}: the row's ts does not place ({why})")
+            continue
+        prior = epochs.get(session_id)
+        if prior is None or epoch > prior:
+            epochs[session_id] = epoch
+            newest[session_id] = dt.datetime.fromtimestamp(
+                epoch, dt.timezone.utc
+            ).isoformat()
+    return {
+        "newest": newest,
+        "epochs": epochs,
+        "rows_read": rows_read,
+        "close_rows": close_rows,
+        "unattributed": unattributed,
+        "unparsed": unparsed,
+        "readable": True,
+        "reason": "",
     }
 
 
@@ -10342,11 +10440,15 @@ def stall_census_leg(
 # the reading the leg could not produce while it read goal rows alone, and the one that made a
 # draining lane read DRIVERLESS. `UNREADABLE` is not a reading of a lane but of the SOURCE: it
 # exists so an unread activity store can never render as "no work" (#271).
+# `UNARMED-BUSY` SPLITS THE FOURTH READING (#624): the activity fact is satisfied by ONE
+# `tool_executions` row, so "measured working" and "finished a unit" are different facts, and a
+# lane that executes without closing anything is the defect that reading could not see.
 DRIVERLESS_READINGS = (
     "DRIVEN",
     "ARMED-INERT",
     "DRIVERLESS",
     "UNARMED-ACTIVE",
+    "UNARMED-BUSY",
     "UNREADABLE",
 )
 
@@ -10391,6 +10493,7 @@ def driver_reading(
     *,
     turn_open: bool = False,
     activity: dict,
+    completion: dict,
 ) -> tuple[str, dict | None]:
     """(reading, newest goal row) for ONE session's goal rows -- the CARD's predicates.
 
@@ -10407,13 +10510,18 @@ def driver_reading(
                        created_at` is the card's named case, and it covers every other
                        active-but-motionless row too. The loop exists and steers a turn that is
                        not coming.
-    * UNARMED-ACTIVE-- no active row, and MEASURED WORK inside the declared window: the lane is
-                       draining through something other than a goal loop. Re-arm is REFUSED --
-                       a working lane does not need a driver installed (#532).
+    * UNARMED-ACTIVE-- no active row, MEASURED WORK inside the declared window, AND a COMPLETED
+                       UNIT inside that window: the lane is draining through something other
+                       than a goal loop. Re-arm is REFUSED -- a working lane does not need a
+                       driver installed (#532) -- and this is the SILENT reading: a lane that
+                       executes AND closes is not a finding (#624).
+    * UNARMED-BUSY  -- no active row, MEASURED WORK inside the window, and NO completed unit in
+                       it: the lane is EXECUTING and finishing nothing (#624). Named as a
+                       problem, because "one tool execution" is not a lane doing work.
     * DRIVERLESS    -- no active row and no measured work inside that window: no goal-loop
                        driver and no measured work since the instant the reading prints.
-    * UNREADABLE    -- the ACTIVITY source could not be read, so the lane's driving state is
-                       not known. Never a zero (#271).
+    * UNREADABLE    -- the ACTIVITY source, or the COMPLETION source, could not be read, so the
+                       lane's driving state is not known. Never a zero (#271).
 
     NO BRANCH ASSERTS THE FUTURE (#532). The pre-#532 text said DRIVERLESS meant "nothing will
     evaluate this session's goal"; two facts cannot support a claim about what happens next,
@@ -10427,6 +10535,28 @@ def driver_reading(
     the pre-#532 reading back silently, which is exactly the defect. Its `state` is one of
     LANE_ACTIVITY_READ / LANE_ACTIVITY_NONE / LANE_ACTIVITY_UNREADABLE, and only the READ arm
     carries `in_window` and `instant`.
+
+    `completion` IS REQUIRED FOR THE SAME REASON (#624), and it is the SECOND fact, never a
+    replacement: the activity fact still decides whether the lane was measured doing anything at
+    all, and deleting it is what produced 33 false DRIVERLESS verdicts. What the completion fact
+    decides is the question ONE `tool_executions` row cannot answer -- whether anything FINISHED
+    -- and it splits the pre-#624 UNARMED-ACTIVE arm in two. Its `state` is one of
+    LANE_COMPLETION_READ / LANE_COMPLETION_NONE / LANE_COMPLETION_UNREADABLE, and only the READ
+    arm carries `in_window` and `instant`.
+
+    THE SPLIT SUPERSEDES #532's "still a problem" CLAUSE, deliberately. #532 printed
+    UNARMED-ACTIVE as a problem on the reasoning that a backlog behind a lane this leg cannot see
+    driving is still owed an owner's look. That reasoning assumed the activity fact meant WORK;
+    it means EXECUTION, and a lane can execute for a fortnight while closing nothing -- which is
+    the case #624 was filed for. So the attention follows the completion: a lane that executes
+    AND closes goes silent, and a lane that executes and closes nothing is named.
+
+    A COMPLETION-ONLY LANE IS STILL DRIVERLESS, and that boundary is stated rather than implied.
+    The completion fact is consulted INSIDE the activity arm, so a session whose `close` row is
+    in the window but whose `tool_executions` are unreadable still reads DRIVERLESS. That is the
+    direction #271 requires (an unread source never becomes a zero) and the one #532's repair
+    rests on; widening the rescue to a completion-only lane would be a separate change with its
+    own evidence, and no such lane has been measured.
 
     THE MOTION CLAUSE IS SCOPED TO A LIVE ROW, and that scoping is the ONE place the card's
     rows did not already agree. Read literally, a `paused` row that advanced before it stopped
@@ -10455,7 +10585,18 @@ def driver_reading(
     if kind == LANE_ACTIVITY_UNREADABLE:
         return "UNREADABLE", newest
     if kind == LANE_ACTIVITY_READ and bool((activity or {}).get("in_window")):
-        return "UNARMED-ACTIVE", newest
+        # ... and INSIDE that arm the COMPLETION fact splits the lane in two (#624). Measured
+        # execution is not measured WORK: a single `tool_executions` row satisfies the first and
+        # says nothing about the second, which is why a lane that woke, ran one tool and closed
+        # nothing read as a lane draining a backlog.
+        ckind = str((completion or {}).get("state") or "")
+        if ckind == LANE_COMPLETION_UNREADABLE:
+            # An unread ledger cannot support "closed nothing" -- the same #271 direction as
+            # above, one fact over. UNREADABLE, never the BUSY verdict.
+            return "UNREADABLE", newest
+        if ckind == LANE_COMPLETION_READ and bool((completion or {}).get("in_window")):
+            return "UNARMED-ACTIVE", newest
+        return "UNARMED-BUSY", newest
     return "DRIVERLESS", newest
 
 def stall_lane_turn_open() -> dict[str, bool]:
@@ -10492,6 +10633,7 @@ def driverless_leg(
     lane_names_fn=None,
     lane_turn_open_fn=None,
     lane_activity_fn,
+    lane_completion_fn,
     threshold_days: float = STALL_CENSUS_THRESHOLD_DAYS,
     now: dt.datetime | None = None,
 ) -> dict:
@@ -10525,6 +10667,12 @@ def driverless_leg(
     "the shortest interval in which a lane that intends to take a dispatched item would have
     claimed it", which is exactly the question the fourth reading asks, and it is PRINTED with
     its basis on every run.
+
+    THE COMPLETION FACT IS INJECTED THE SAME WAY, and it is REQUIRED (#624): a default would let
+    a probe be decided by this box's own ledger, which is the same defect the activity injection
+    exists to prevent. It is a SECOND read, not a replacement -- #532's activity fact decides
+    whether the lane was measured doing anything at all, and the completion fact splits that arm
+    into "draining" and "executing and finishing nothing".
     """
     coverage = census.get("coverage") or {}
     grouped = coverage.get("owed_by_lane")
@@ -10542,8 +10690,34 @@ def driverless_leg(
     activity_readable = bool(activity_store.get("readable"))
     activity_epochs = activity_store.get("epochs") or {}
     activity_newest = activity_store.get("newest") or {}
+    # "did any WORK UNIT FINISH" is the second fact (#624), and it rides the same discipline: a
+    # ledger that could not be read yields UNREADABLE, never "finished nothing".
+    completion_store = lane_completion_fn()
+    completion_readable = bool(completion_store.get("readable"))
+    completion_epochs = completion_store.get("epochs") or {}
+    completion_newest = completion_store.get("newest") or {}
     window_secs = float(threshold_days) * 86400.0
     now_epoch = (now or dt.datetime.now(dt.timezone.utc)).timestamp()
+
+    def completion_for(session_ref: str) -> dict:
+        """ONE session's completion fact, in the shape `driver_reading` decides on."""
+        if not completion_readable:
+            return {
+                "state": LANE_COMPLETION_UNREADABLE,
+                "reason": str(
+                    completion_store.get("reason") or "the source gave no reason"
+                ),
+            }
+        epoch = completion_epochs.get(session_ref)
+        if epoch is None:
+            return {"state": LANE_COMPLETION_NONE}
+        age_secs = now_epoch - float(epoch)
+        return {
+            "state": LANE_COMPLETION_READ,
+            "instant": completion_newest.get(session_ref),
+            "age_days": age_secs / 86400.0,
+            "in_window": age_secs <= window_secs,
+        }
 
     def activity_for(session_ref: str) -> dict:
         """ONE session's activity fact, in the shape `driver_reading` decides on."""
@@ -10599,10 +10773,12 @@ def driverless_leg(
             continue
         lane = slot.get("lane") or names.get(session_ref) or session_ref
         activity = activity_for(session_ref)
+        completion = completion_for(session_ref)
         reading, newest = driver_reading(
             by_session.get(session_ref, []),
             turn_open=bool(open_turns.get(session_ref)),
             activity=activity,
+            completion=completion,
         )
         counts[reading] += 1
         state = str((newest or {}).get("state") or "")
@@ -10621,10 +10797,22 @@ def driverless_leg(
             "activity_state": activity.get("state"),
             "activity_instant": activity.get("instant"),
             "activity_age_days": activity.get("age_days"),
+            # ... AND THE INSTANT THE FIFTH RESTS ON (#624): "executing" and "finishing" are
+            # different findings, and a line that prints only the first merges them.
+            "completion_state": completion.get("state"),
+            "completion_instant": completion.get("instant"),
+            "completion_age_days": completion.get("age_days"),
             "units": units,
             "oldest_age_days": slot.get("oldest_age_days"),
         })
-        if reading == "DRIVEN":
+        # THE SILENT READINGS (#624). A lane with a driver is not a finding, and neither is a
+        # lane that EXECUTES AND CLOSES inside the window: that lane is draining, which is the
+        # very question this leg asks, so there is nothing to report. UNARMED-ACTIVE printed here
+        # until #624, on the reasoning that a backlog behind a lane the leg cannot see driving is
+        # owed a look -- but the fact behind that reading is EXECUTION, and a lane can execute for
+        # a fortnight without finishing anything. The completion fact is what earns the silence;
+        # a lane that executes and closes nothing is UNARMED-BUSY and still prints.
+        if reading in ("DRIVEN", "UNARMED-ACTIVE"):
             continue
         held = ", ".join(units[:6]) + (", ..." if len(units) > 6 else "")
         # THE ACTIVITY FACT IN WORDS, on every line that is not DRIVEN (#532): "no work since
@@ -10639,18 +10827,42 @@ def driverless_leg(
             measured = "its activity could not be read at all"
         else:
             measured = "no tool execution for that session in any home this read reached"
-        if reading == "UNREADABLE":
-            detail = (
-                f"the ACTIVITY source could not be read ({activity.get('reason')}), so this "
-                f"line reports an UNREAD source and NOT an absent driver"
+        # ... AND THE COMPLETION FACT IN WORDS, on the reading that turns on it (#624): "closed
+        # nothing in the window" and "closed nothing, ever" are different findings, and a line
+        # that omits the instant merges them.
+        if completion.get("state") == LANE_COMPLETION_READ:
+            completion_note = (
+                f"its newest completed unit is {completion.get('instant')}, "
+                f"{float(completion.get('age_days') or 0.0):.2f} d before this read"
             )
-        elif reading == "UNARMED-ACTIVE":
+        elif completion.get("state") == LANE_COMPLETION_UNREADABLE:
+            completion_note = "its completion source could not be read at all"
+        else:
+            completion_note = "no `close` row carries its session at all"
+        if reading == "UNREADABLE":
+            if activity.get("state") == LANE_ACTIVITY_UNREADABLE:
+                detail = (
+                    f"the ACTIVITY source could not be read ({activity.get('reason')}), so "
+                    f"this line reports an UNREAD source and NOT an absent driver"
+                )
+            else:
+                # The other arm of the same reading (#624): the lane WAS measured executing, and
+                # what could not be read is whether anything finished. Saying "the activity
+                # source could not be read" here would name the wrong fact.
+                detail = (
+                    f"it was MEASURED EXECUTING at {activity.get('instant')} "
+                    f"({float(activity.get('age_days') or 0.0):.2f} d before this read, inside "
+                    f"the {float(threshold_days):.2f} d window), but the COMPLETION source could "
+                    f"not be read ({completion.get('reason')}), so this line reports an UNREAD "
+                    f"source and NOT a lane that finished nothing"
+                )
+        elif reading == "UNARMED-BUSY":
             detail = (
-                f"it has NO active goal row, but it was MEASURED WORKING at "
+                f"it has NO active goal row and was MEASURED EXECUTING at "
                 f"{activity.get('instant')} ({float(activity.get('age_days') or 0.0):.2f} d "
-                f"before this read, inside the {float(threshold_days):.2f} d window), so it is "
-                f"draining through a trigger this leg cannot see -- and a driver is not what "
-                f"it lacks"
+                f"before this read, inside the {float(threshold_days):.2f} d window), but it "
+                f"COMPLETED NOTHING in that window ({completion_note}) -- executing is not "
+                f"draining, and one tool execution is not a lane doing work"
             )
         elif newest is None:
             detail = (
@@ -10674,14 +10886,14 @@ def driverless_leg(
                 f"no goal-loop driver and no measured work since that instant -- a stopped "
                 f"loop is not a driver, whatever it did before it stopped"
             )
-        # THE REMEDY IS PER-READING (#532): the fourth reading refuses the re-arm for a reason
-        # of its own, and printing #133's sentence on it would invite exactly the act the
-        # ruling forbids.
+        # THE REMEDY IS PER-READING (#532/#624): the busy reading refuses the re-arm for a reason
+        # of its own, and printing #133's sentence on it would invite exactly the act the rulings
+        # forbid -- adding a driver to a lane that is already running.
         remedy = (
-            "The ACT is NOT a re-arm: a lane measured working inside the window is draining, "
-            "and installing a driver on a running lane is this leg's own false positive "
-            "(board #532)"
-            if reading == "UNARMED-ACTIVE"
+            "The ACT is NOT a re-arm: the lane is already running, and its problem is that its "
+            "work never becomes a CLOSED UNIT, so installing a driver would add a loop to a lane "
+            "that is executing without finishing (board #624)"
+            if reading == "UNARMED-BUSY"
             else (
                 "The ACT is the lane's own or the sweep owner's: this leg detects and prints, "
                 "and MUST NOT re-arm another lane's goal (board #133)"
@@ -10708,6 +10920,7 @@ def driverless_leg(
             "armed_inert": counts["ARMED-INERT"],
             "driverless": counts["DRIVERLESS"],
             "unarmed_active": counts["UNARMED-ACTIVE"],
+            "unarmed_busy": counts["UNARMED-BUSY"],
             "unreadable": counts["UNREADABLE"],
             "readings": DRIVERLESS_READINGS,
             # THE POPULATION IDENTITY TRAVELS TO EVERY INHERITING LEG (#607 shape 2c). This
@@ -10736,6 +10949,17 @@ def driverless_leg(
             ),
             "activity_homes_unreached": list(activity_store.get("unreached") or []),
             "activity_instants_unparsed": list(activity_store.get("unparsed") or []),
+            # THE COMPLETION STORE PRINTS BESIDE THE ACTIVITY STORE (#624), for the same reason
+            # and with the same shape: an unread ledger must read as "could not look", never as
+            # "this lane finished nothing".
+            "completion_readable": completion_readable,
+            "completion_reason": str(completion_store.get("reason") or ""),
+            "completion_rows_read": int(completion_store.get("rows_read") or 0),
+            "completion_close_rows": int(completion_store.get("close_rows") or 0),
+            "completion_rows_unattributed": int(
+                completion_store.get("unattributed") or 0
+            ),
+            "completion_instants_unparsed": list(completion_store.get("unparsed") or []),
             "goal_rows_read": len(rows),
             "goal_homes_read": list(goals.get("homes_read") or []),
             "goal_homes_without_store": list(goals.get("homes_without_store") or []),
@@ -16107,7 +16331,9 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{cov['driverless']} DRIVERLESS (no active row, no turn in flight, and "
                     f"no measured work inside the window), "
                     f"{cov['unarmed_active']} UNARMED-ACTIVE (no active row, but measured "
-                    f"work inside the window), "
+                    f"work AND a completed unit inside the window), "
+                    f"{cov['unarmed_busy']} UNARMED-BUSY (no active row, measured work, but "
+                    f"NO completed unit inside the window), "
                     f"{cov['unreadable']} UNREADABLE (the activity source could not be read)"
                 )
                 # THE WINDOW AND ITS BASIS, printed on every run: the reading that says
@@ -16133,6 +16359,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                         f"{'yes' if entry.get('turn_open') else 'no'}, "
                         f"work measured at {entry.get('activity_instant')} "
                         f"({entry.get('activity_state')}), "
+                        f"completed at {entry.get('completion_instant')} "
+                        f"({entry.get('completion_state')}), "
                         f"{len(entry.get('units') or [])} "
                         f"unclaimed unit(s) ({', '.join(entry.get('units') or [])})"
                     )
@@ -16187,11 +16415,38 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                         else ""
                     )
                 )
+                # THE COMPLETION STORE PRINTS BESIDE THE ACTIVITY STORE (#624): the reading that
+                # says "closed nothing" is only as good as the ledger behind it, and an unread
+                # ledger must be visible as such rather than as a clean zero.
+                lines.append(
+                    f"  completion store: "
+                    f"{'READ' if cov.get('completion_readable') else 'UNREADABLE'}"
+                    f" — {cov.get('completion_rows_read', 0)} row(s) read, "
+                    f"{cov.get('completion_close_rows', 0)} `close` row(s)"
+                    + (
+                        f"; {cov['completion_rows_unattributed']} carry no `session` and are "
+                        f"NOT attributed to any lane"
+                        if cov.get("completion_rows_unattributed")
+                        else ""
+                    )
+                    + (
+                        f"; {len(cov['completion_instants_unparsed'])} instant(s) unparsed"
+                        if cov.get("completion_instants_unparsed")
+                        else ""
+                    )
+                    + (
+                        f" — REASON: {cov['completion_reason']}"
+                        if cov.get("completion_reason")
+                        else ""
+                    )
+                )
                 lines.append(
                     "  remedy: the ACT is the lane's own or the sweep owner's — this leg "
                     "DETECTS and prints, and MUST NOT re-arm another lane's goal (#133). "
-                    "A re-arm is REFUSED for UNARMED-ACTIVE: a lane with measured work "
-                    "inside the window does not need a driver installed (#532)"
+                    "A re-arm is REFUSED for UNARMED-ACTIVE and for UNARMED-BUSY: the first "
+                    "lane is draining and does not need a driver installed (#532), and the "
+                    "second is already running and its problem is that its work never becomes "
+                    "a closed unit (#624)"
                 )
             lines.append(f"  read at {cov.get('read_at')}")
         elif leg["name"] == "board-unruled":
@@ -17135,6 +17390,13 @@ def main(
     # probe cannot silently read this box's live `tool_executions` and have its verdict decided
     # by whichever lanes happened to be busy.
     driverless_activity_fn=None,
+    # #624: "did this session FINISH anything" -- the fact that separates a lane draining a
+    # backlog from one executing and completing nothing. The activity fact alone is satisfied
+    # by a single `tool_executions` row, so it cannot tell those two apart, and reading it as
+    # UNARMED-ACTIVE asserts work the store never measured. Injected and REQUIRED for the same
+    # reason as every read above: a probe must not have its verdict decided by this box's own
+    # ledger history.
+    driverless_completion_fn=None,
     lane_names_fn=None,
     # #555: the unit-citation map. Injected for the same reason as every other read here -- a
     # probe must be able to drive both an OWED and an OWED-CLOSE line from a hermetic map,
@@ -17430,6 +17692,7 @@ def main(
             lane_names_fn=lane_names_fn or stall_lane_names,
             lane_turn_open_fn=driverless_turn_open_fn,
             lane_activity_fn=driverless_activity_fn or box_lane_activity,
+            lane_completion_fn=driverless_completion_fn or box_lane_completions,
         ), read_at),
         leg_guard("board-unruled", lambda: board_unruled_leg(issues, rows, read_at=read_at, predicate=predicate), read_at),
         leg_guard("undispatched-ruling", lambda: undispatched_ruling_leg(

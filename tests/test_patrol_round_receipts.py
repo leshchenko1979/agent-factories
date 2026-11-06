@@ -33,6 +33,7 @@ from patrol_fixtures import (  # noqa: F401
     _NO_RULING_EXEMPTIONS,
     _activity_store,
     _comment_numeric,
+    _completion_store,
     _duty_leg,
     _duty_row,
     _fires,
@@ -1011,7 +1012,8 @@ def test_the_census_EXCLUDES_a_declared_standing_item_and_NEVER_a_REFUSED_one() 
         predicate=RUNNER.load_predicate(), standing=declared)
     dl = RUNNER.driverless_leg(
         driven_census, goals=_goal_store(), read_at=read_at,
-        lane_names_fn=lambda: {}, lane_activity_fn=lambda: _activity_store())
+        lane_names_fn=lambda: {}, lane_activity_fn=lambda: _activity_store(),
+        lane_completion_fn=lambda: _completion_store())
     dl_cov = dl["coverage"]
     assert dl_cov["units_standing"] == driven_census["coverage"]["units_standing"], dl_cov
     assert dl_cov["population_before"] == driven_census["coverage"]["population_before"], dl_cov

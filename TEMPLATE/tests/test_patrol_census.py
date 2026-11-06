@@ -25,6 +25,7 @@ from patrol_fixtures import (  # noqa: F401
     _GOAL_CREATED,
     _NOW,
     _activity_store,
+    _completion_store,
     _goal_store,
     _SKIPS,
 )
@@ -65,8 +66,14 @@ def _goal_row(session_id, state, *, turns=1, updated=_GOAL_CREATED):
             "max_turns": 20, "created_at": _GOAL_CREATED,
             "updated_at": updated}
 
-def _driverless_probe(activity, *, goal_state="paused", turn_open=False):
-    """One lane, one paused row, one injected activity source -- the (a)/(b) pair's shared half."""
+def _driverless_probe(activity, *, goal_state="paused", turn_open=False, completion=None):
+    """One lane, one paused row, one injected activity source -- the (a)/(b) pair's shared half.
+
+    `completion` is the SECOND fact (#624) and defaults to a READ ledger carrying NO closes, so a
+    probe that does not name a completed unit gets UNARMED-BUSY from measured activity -- which is
+    the honest reading, because executing a tool was never evidence of finishing a unit. A probe
+    that wants the draining reading has to say a unit closed.
+    """
     census = _census_with(_lane_slot("sess-x", ["#9"], lane="Probe Lane"))
     return RUNNER.driverless_leg(
         census,
@@ -76,6 +83,9 @@ def _driverless_probe(activity, *, goal_state="paused", turn_open=False):
         lane_names_fn=lambda: {},
         lane_turn_open_fn=lambda: {"sess-x": turn_open},
         lane_activity_fn=lambda: activity,
+        lane_completion_fn=lambda: (
+            completion if completion is not None else _completion_store()
+        ),
         now=_NOW,
     )
 
@@ -112,6 +122,7 @@ def test_the_readings_are_DISTINCT_and_counted_separately() -> None:
     leg = RUNNER.driverless_leg(census, goals=goals, read_at="2026-10-18T00:00:00Z",
                                 lane_names_fn=lambda: {},
                                 lane_activity_fn=lambda: _activity_store(),
+                                lane_completion_fn=lambda: _completion_store(),
                                 now=dt.datetime(2026, 10, 18, tzinfo=dt.timezone.utc))
 
     assert leg["status"] == "ASSERTED", leg
@@ -162,6 +173,7 @@ def test_a_TURN_IN_FLIGHT_drives_a_lane_whose_arm_is_INERT() -> None:
         lane_names_fn=lambda: {},
         lane_turn_open_fn=lambda: {"sess-busy": True},
         lane_activity_fn=lambda: _activity_store(),
+        lane_completion_fn=lambda: _completion_store(),
         now=dt.datetime(2026, 10, 18, tzinfo=dt.timezone.utc),
     )
 
@@ -179,6 +191,7 @@ def test_a_TURN_IN_FLIGHT_drives_a_lane_whose_arm_is_INERT() -> None:
         lane_names_fn=lambda: {},
         lane_turn_open_fn=lambda: {"sess-busy": False},
         lane_activity_fn=lambda: _activity_store(),
+        lane_completion_fn=lambda: _completion_store(),
         now=dt.datetime(2026, 10, 18, tzinfo=dt.timezone.utc),
     )
     assert idle["coverage"]["armed_inert"] == 1, idle["coverage"]
@@ -195,7 +208,8 @@ def test_a_census_with_NO_grouping_renders_NOT_RUN_never_a_clean_lane() -> None:
                                  "problems": [], "excused": [],
                                  "coverage": {"reason": "the ledger could not be read"}},
                                 goals=_goal_store(), read_at="2026-10-18T00:00:00Z",
-                                lane_activity_fn=lambda: _activity_store())
+                                lane_activity_fn=lambda: _activity_store(),
+                                lane_completion_fn=lambda: _completion_store())
     assert leg["status"] == "NOT RUN", leg
     assert leg["problems"] == [], leg
     assert "owed_by_lane" in leg["coverage"]["reason"], leg["coverage"]
@@ -225,6 +239,7 @@ def test_an_UNREACHED_goal_store_prints_as_UNREACHED_not_as_a_driverless_lane() 
         read_at="2026-10-18T00:00:00Z",
         lane_names_fn=lambda: {},
         lane_activity_fn=lambda: _activity_store(),
+        lane_completion_fn=lambda: _completion_store(),
         now=dt.datetime(2026, 10, 18, tzinfo=dt.timezone.utc),
     )
     # The reading itself is honest: no row was found, so nothing was armed AS FAR AS THIS READ.
@@ -241,6 +256,7 @@ def test_an_UNREACHED_goal_store_prints_as_UNREACHED_not_as_a_driverless_lane() 
     clean = RUNNER.driverless_leg(census, goals=_goal_store(_goal_row("sess-x", "active")),
                                   read_at="2026-10-18T00:00:00Z", lane_names_fn=lambda: {},
                                   lane_activity_fn=lambda: _activity_store(),
+                                  lane_completion_fn=lambda: _completion_store(),
                                   now=dt.datetime(2026, 10, 18, tzinfo=dt.timezone.utc))
     assert clean["coverage"]["driverless"] == 0, clean["coverage"]
     clean_out = RUNNER.render([clean], [], slug="owner/repo",
@@ -248,34 +264,47 @@ def test_an_UNREACHED_goal_store_prints_as_UNREACHED_not_as_a_driverless_lane() 
     assert "UNREACHED" not in clean_out, clean_out
 
 def test_a_PAUSED_row_with_measured_WORK_inside_the_window_is_UNARMED_ACTIVE() -> None:
-    """(a) The filed defect, in one assertion: work inside the window is NOT driverless.
+    """(a) The #532 defect, in one assertion: work inside the window is NOT driverless.
 
     The lane below is exactly the shape the ledger carried -- a goal row that stopped four days
     before the read, and work landing inside the census's own window. The pre-#532 leg called
     that DRIVERLESS and refused a re-arm on the strength of a claim about the future it could
-    not support. It is UNARMED-ACTIVE, and the re-arm is refused for the OPPOSITE reason: the
-    lane is working, so it does not need a driver installed.
+    not support. It is UNARMED-ACTIVE: the lane is draining, so it does not need a driver
+    installed.
+
+    #624 SHARPENS WHAT EARNS THIS READING. The activity fact is satisfied by ONE
+    `tool_executions` row, so on its own it could not distinguish a lane draining a backlog from
+    a lane executing and finishing nothing. The completion fact is now the discriminator, and
+    this probe supplies it -- a `close` row inside the same window. WITHOUT it the identical
+    lane reads UNARMED-BUSY (asserted in the #624 pair below), which is why the fixture has to
+    say a unit closed rather than inheriting the reading from measured activity.
     """
-    leg = _driverless_probe(_activity_store(work={"sess-x": "2026-10-21T06:00:00+00:00"}))
+    leg = _driverless_probe(
+        _activity_store(work={"sess-x": "2026-10-21T06:00:00+00:00"}),
+        completion=_completion_store(finished={"sess-x": "2026-10-21T07:00:00+00:00"}),
+    )
 
     cov = leg["coverage"]
     assert cov["unarmed_active"] == 1, cov
+    assert cov["unarmed_busy"] == 0, cov
     assert cov["driverless"] == 0, cov
     assert cov["lanes"][0]["reading"] == "UNARMED-ACTIVE", cov["lanes"]
-    # THE INSTANT IT RESTS ON IS ON THE RECORD AND IN THE RENDER (#532, criterion 3): a reading
-    # that says "working" without saying WHEN is unfalsifiable by the reader.
+    # BOTH INSTANTS ARE ON THE RECORD AND IN THE RENDER (#532 criterion 3, #624): a reading that
+    # says "working" without saying WHEN -- and now, without saying what it FINISHED -- is
+    # unfalsifiable by the reader.
     assert cov["lanes"][0]["activity_instant"] == "2026-10-21T06:00:00+00:00", cov["lanes"]
+    assert cov["lanes"][0]["completion_instant"] == "2026-10-21T07:00:00+00:00", cov["lanes"]
     out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T12:00:00Z",
                         issues=[])
     assert "1 UNARMED-ACTIVE" in out, out
     assert "2026-10-21T06:00:00+00:00" in out, out
-    # ... and it is still a PROBLEM, because a backlog behind a lane this leg cannot see driving
-    # is still owed an owner's look -- the reading changes the REMEDY, not the attention.
-    assert len(leg["problems"]) == 1, leg["problems"]
-    assert "UNARMED-ACTIVE LANE Probe Lane" in leg["problems"][0], leg["problems"][0]
-    # THE BITE, and it is the whole ruling: no re-arm, and the reason cites the measurement.
-    assert "The ACT is NOT a re-arm" in leg["problems"][0], leg["problems"][0]
-    assert "installing a driver on a running lane" in leg["problems"][0], leg["problems"][0]
+    assert "2026-10-21T07:00:00+00:00" in out, out
+    # SILENT, and #624 is what earns the silence: a lane that executes AND closes inside the
+    # window is draining, which is the very question this leg asks, so there is nothing to
+    # report. #532 printed a problem here on the reasoning that the leg could not see the lane
+    # being driven -- but the fact behind that reading was EXECUTION, and execution alone is
+    # exactly what #624 showed proves nothing.
+    assert leg["problems"] == [], leg["problems"]
 
 def test_the_SAME_paused_row_with_NO_work_in_the_window_still_reads_DRIVERLESS() -> None:
     """(b) The control for (a), same fixture, one fact changed.
@@ -361,11 +390,145 @@ def test_the_window_BOUNDARY_is_INCLUSIVE_and_the_probe_CAN_cross_it() -> None:
     edge = _NOW - dt.timedelta(seconds=window_secs)
     just_past = edge - dt.timedelta(seconds=1)
 
-    inside = _driverless_probe(_activity_store(work={"sess-x": edge.isoformat()}))
-    outside = _driverless_probe(_activity_store(work={"sess-x": just_past.isoformat()}))
+    inside = _driverless_probe(
+        _activity_store(work={"sess-x": edge.isoformat()}),
+        completion=_completion_store(finished={"sess-x": edge.isoformat()}),
+    )
+    outside = _driverless_probe(
+        _activity_store(work={"sess-x": just_past.isoformat()}),
+        completion=_completion_store(finished={"sess-x": just_past.isoformat()}),
+    )
 
     assert inside["coverage"]["lanes"][0]["reading"] == "UNARMED-ACTIVE", inside["coverage"]
     assert outside["coverage"]["lanes"][0]["reading"] == "DRIVERLESS", outside["coverage"]
+
+def test_the_COMPLETION_window_boundary_is_INCLUSIVE_from_BOTH_sides() -> None:
+    """The SECOND fact's boundary, asserted from both sides one second apart (#624).
+
+    The activity window's edge was already pinned; the completion window is a separate predicate
+    over a separate store, so it gets its own pair. A `close` row exactly at the edge is inside
+    the window (UNARMED-ACTIVE, silent); one second past it is outside, and the lane falls back
+    to UNARMED-BUSY -- because its execution is still measured inside the window while nothing
+    finished. A leg that reused the activity epoch, or dropped the boundary test on the new fact,
+    would return the same reading twice.
+    """
+    window_secs = float(RUNNER.STALL_CENSUS_THRESHOLD_DAYS) * 86400.0
+    edge = _NOW - dt.timedelta(seconds=window_secs)
+    just_past = edge - dt.timedelta(seconds=1)
+    work = {"sess-x": "2026-10-21T06:00:00+00:00"}
+
+    inside = _driverless_probe(
+        _activity_store(work=work),
+        completion=_completion_store(finished={"sess-x": edge.isoformat()}),
+    )
+    outside = _driverless_probe(
+        _activity_store(work=work),
+        completion=_completion_store(finished={"sess-x": just_past.isoformat()}),
+    )
+
+    assert inside["coverage"]["lanes"][0]["reading"] == "UNARMED-ACTIVE", inside["coverage"]
+    assert inside["problems"] == [], inside["problems"]
+    assert outside["coverage"]["lanes"][0]["reading"] == "UNARMED-BUSY", outside["coverage"]
+    assert len(outside["problems"]) == 1, outside["problems"]
+
+def test_EXECUTING_without_COMPLETING_is_UNARMED_BUSY_and_still_a_PROBLEM() -> None:
+    """#624's whole finding: ONE tool execution is not a lane doing work.
+
+    The lane below is the shape the filed defect describes -- a paused goal row and measured
+    execution inside the window, which the pre-#624 leg read as UNARMED-ACTIVE and then excused
+    as "draining a backlog". Nothing closed. The activity fact cannot tell those two apart; the
+    completion fact can, and the reading it produces is a DIFFERENT finding with a DIFFERENT
+    remedy, so it must not be merged with the draining one.
+
+    THE BITE is in two halves and both are asserted: the lane is still named as a problem (it is
+    not excused into silence, which is what an activity-only reading would do), and the problem
+    does NOT invite a re-arm -- adding a driver to a lane that is already executing is the act
+    #133 forbids.
+    """
+    leg = _driverless_probe(
+        _activity_store(work={"sess-x": "2026-10-21T06:00:00+00:00"}),
+        completion=_completion_store(),
+    )
+
+    cov = leg["coverage"]
+    assert cov["unarmed_busy"] == 1, cov
+    assert cov["unarmed_active"] == 0, cov
+    assert cov["driverless"] == 0, cov
+    assert cov["lanes"][0]["reading"] == "UNARMED-BUSY", cov["lanes"]
+
+    # THE POPULATION AND BOTH FACTS PRINT, so the verdict is checkable from the report alone.
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T12:00:00Z",
+                        issues=[])
+    assert "1 UNARMED-BUSY" in out, out
+    assert "completion store: READ" in out, out
+
+    assert len(leg["problems"]) == 1, leg["problems"]
+    problem = leg["problems"][0]
+    assert "UNARMED-BUSY LANE Probe Lane" in problem, problem
+    # The finding names the measurement, and the absence it rests on.
+    assert "MEASURED EXECUTING at 2026-10-21T06:00:00+00:00" in problem, problem
+    assert "COMPLETED NOTHING" in problem, problem
+    assert "no `close` row carries its session at all" in problem, problem
+    # THE REMEDY: never a re-arm, and it says why this lane is different from a draining one.
+    assert "The ACT is NOT a re-arm" in problem, problem
+    assert "never becomes a CLOSED UNIT" in problem, problem
+    assert "installing a driver would add a loop" in problem, problem
+    # ... and the #133 sentence is NOT printed on this reading: a lane that is already running
+    # must not be told to go find a driver.
+    assert "(board #133)" not in problem, problem
+
+def test_an_UNREADABLE_completion_source_is_UNREADABLE_and_never_UNARMED_BUSY() -> None:
+    """#271, one fact over: "could not look" is not "finished nothing".
+
+    A lane measured executing whose COMPLETION source could not be read must not be reported as
+    a lane that closed nothing -- that is a claim about the lane made out of a failure of this
+    reader. The discriminating half is the reading itself: UNREADABLE, and the reason names the
+    COMPLETION source rather than the activity one, because the activity source was read fine.
+    """
+    leg = _driverless_probe(
+        _activity_store(work={"sess-x": "2026-10-21T06:00:00+00:00"}),
+        completion=_completion_store(
+            readable=False, reason="the ledger could not be read (permission denied)"
+        ),
+    )
+
+    cov = leg["coverage"]
+    assert cov["unreadable"] == 1, cov
+    assert cov["unarmed_busy"] == 0, cov
+    assert cov["unarmed_active"] == 0, cov
+    assert cov["lanes"][0]["reading"] == "UNREADABLE", cov["lanes"]
+    assert cov["completion_readable"] is False, cov
+    assert "permission denied" in cov["completion_reason"], cov
+
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T12:00:00Z",
+                        issues=[])
+    assert "completion store: UNREADABLE" in out, out
+    assert "permission denied" in out, out
+    # THE DISCRIMINATING HALF: no UNARMED-BUSY count at all, so the unread ledger cannot be read
+    # as "this lane finished nothing".
+    assert "1 UNARMED-BUSY" not in out, out
+    assert len(leg["problems"]) == 1, leg["problems"]
+    assert "COMPLETION source could not be read" in leg["problems"][0], leg["problems"][0]
+    assert "NOT a lane that finished nothing" in leg["problems"][0], leg["problems"][0]
+
+def test_the_completion_STORE_population_prints_even_at_ZERO() -> None:
+    """A leg that read no `close` rows must be distinguishable from one that could not look.
+
+    The store line prints on every run, with its row counts and its unattributed rows, because
+    the reading "closed nothing" is only as good as the ledger behind it. The unattributed count
+    is printed rather than folded in: a `close` row carrying no `session` predates the field and
+    cannot be assigned to a lane, so guessing it onto one would manufacture a completion.
+    """
+    leg = _driverless_probe(
+        _activity_store(work={"sess-x": "2026-10-21T06:00:00+00:00"}),
+        completion=_completion_store(unattributed=7),
+    )
+    out = RUNNER.render([leg], [], slug="owner/repo", read_at="2026-10-21T12:00:00Z",
+                        issues=[])
+    assert "completion store: READ" in out, out
+    assert "0 row(s) read, 0 `close` row(s)" in out, out
+    assert "7 carry no `session`" in out, out
+    assert "NOT attributed to any lane" in out, out
 
 def test_an_ACTIVE_row_still_outranks_the_activity_fact() -> None:
     """The fourth reading must not steal a lane that HAS a driver.

@@ -1087,6 +1087,38 @@ def _activity_store(*, work=None, readable=True, reason="", unreached=(),
         "unparsed": [],
     }
 
+def _completion_store(*, finished=None, readable=True, reason="", unattributed=0,
+                      unparsed=(), without_store=()):
+    """One injected `box_lane_completions` payload (#624).
+
+    `finished` maps a session id to the ISO instant of its newest `close` row. THE DEFAULT IS A
+    READ LEDGER WITH NO CLOSES, which is the honest reading for a probe that does not care about
+    completion: a lane with measured activity then reads UNARMED-BUSY rather than the
+    UNARMED-ACTIVE it used to get for free, because "executed a tool" was never evidence of
+    "finished a unit". A probe that wants the draining reading must SAY a unit closed -- the same
+    discipline as `_activity_store`, one fact over, so a verdict can never be decided by this
+    box's own close history.
+    """
+    finished = dict(finished or {})
+    epochs = {}
+    for session_ref, instant in finished.items():
+        epochs[session_ref] = int(
+            dt.datetime.fromisoformat(instant.replace("Z", "+00:00")).timestamp()
+        )
+    return {
+        "readable": readable,
+        "reason": reason,
+        "newest": finished,
+        "epochs": epochs,
+        "rows_read": len(finished),
+        "close_rows": len(finished),
+        "unattributed": unattributed,
+        "unparsed": list(unparsed),
+        "homes_read": ["probe-home"] if readable else [],
+        "homes_without_store": list(without_store),
+        "unreached": [],
+    }
+
 _NOW = dt.datetime(2026, 10, 21, 12, 0, 0, tzinfo=dt.timezone.utc)
 
 _ROW_SET_CLEAN_CLAIMS = (

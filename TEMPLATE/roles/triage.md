@@ -162,28 +162,41 @@ item set. An arm over the whole backlog reproduces the 2026-09-18 churn: an elev
 whose all-or-nothing judge rejected it on turn 1 for covering one item's work.
 
 **Never re-arm a lane that is being DRIVEN — and "driven" is measured as MOTION, never as
-declared state.** Four readings, and a bare "has an active goal" test conflates them:
+declared state.** Six readings, and a bare "has an active goal" test conflates them:
 
 | Reading | Predicate | Re-arm |
 |---|---|---|
 | **DRIVEN** | `state='active'` **and** the evaluation is advancing (`turns_used > 0` **and** `updated_at > created_at`), **or** a turn is in flight | refused |
 | **ARMED-INERT** | `state='active'` **and** `turns_used = 0` **and** `updated_at = created_at` | permitted — an arm that has never been evaluated is not a driver |
-| **UNARMED-ACTIVE** | no active row, no turn in flight, **and** measured work inside the activity window | **refused** — a lane with measured work does not need a driver installed |
+| **UNARMED-ACTIVE** | no active row, no turn in flight, **and** measured work **and** a completed unit inside the activity window | **refused** — a lane that is executing *and* closing does not need a driver installed |
+| **UNARMED-BUSY** | no active row, no turn in flight, **and** measured work inside the activity window but **no completed unit** in it | **refused** — but for its own reason: the lane is already running, and what it lacks is a finished unit, not a loop |
 | **DRIVERLESS** | no active row, no turn in flight, **and** no measured work inside the activity window | permitted |
-| **UNREADABLE** | the activity source could not be read | refused — an unread source is not an absent driver |
+| **UNREADABLE** | the **activity** or the **completion** source could not be read | refused — an unread source is not an absent driver |
+
+**Two facts, and the second one is what separates "draining" from "spinning" (#624).** The
+activity fact is satisfied by **one** `tool_executions` row: a lane that woke, ran a single tool
+and finished nothing wrote exactly the same evidence as a lane working through a backlog. Reading
+that as **UNARMED-ACTIVE** asserted work the store never measured — and it excused the lane into
+silence, which is the worse half, because a lane executing for a fortnight without closing a unit
+is precisely what this sweep exists to surface. So the fourth reading splits: **a completed unit
+inside the window is the discriminator**, and its source is the ledger's own `close` rows, keyed
+on their `session` field. A `close` row that carries no `session` predates the field and cannot
+be attributed to a lane; it is **counted and printed beside the verdict**, never guessed onto
+one.
 
 **No reading asserts the future (#532).** DRIVERLESS says *"no goal-loop driver and no measured
 work since T"*, never *"nothing will evaluate it again"*: the ledger carried 33 `close` rows from
 a lane whose goal row had stopped five days earlier, and a leg that read a stopped row as "no
-driver at all" reported a working lane as dead. The activity instant **T** prints on every
-DRIVERLESS and every UNARMED-ACTIVE line, so *"no work since T"* is distinguishable from *"not
-read"*.
+driver at all" reported a working lane as dead. The activity instant **T** — and, on the two
+unarmed readings, the completion instant — prints on every line, so *"no work since T"* is
+distinguishable from *"not read"*.
 
-**UNARMED-ACTIVE names no mechanism, deliberately.** The instrument sees a `tool_executions` row
-and cannot see WHY the lane woke — cron, notify, a completed plan and a peer push all write the
-same row — so a mechanism name (*NOTIFY-DRIVEN*) would assert a cause from a proxy. The window
-is the census's own `STALL_CENSUS_THRESHOLD_DAYS`, printed with its basis on every run: the
-shortest interval in which a lane that intends to take a dispatched item would have claimed it.
+**UNARMED-ACTIVE and UNARMED-BUSY name no mechanism, deliberately.** The instrument sees a
+`tool_executions` row and cannot see WHY the lane woke — cron, notify, a completed plan and a
+peer push all write the same row — so a mechanism name (*NOTIFY-DRIVEN*) would assert a cause
+from a proxy. The window is the census's own `STALL_CENSUS_THRESHOLD_DAYS`, printed with its
+basis on every run: the shortest interval in which a lane that intends to take a dispatched item
+would have claimed it.
 
 **The motion half is scoped to a LIVE row, and the scope is load-bearing.** Read without it, a
 `paused` row that advanced before it stopped satisfies **DRIVEN** (`turns_used > 0`,
