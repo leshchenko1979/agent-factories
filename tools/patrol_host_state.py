@@ -226,9 +226,12 @@ GATE_BUDGET = REPO / "tools" / "gate_budget.py"
 # failure the population law bars, because the enumeration asserted non-empty is
 # `rows_read`, never the tier count. What proves this leg BITES is the probe in
 # `tests/test_patrol_host_state.py`, not a live hit (#112, ruling n=657 item 8).
-CANONICALITY_KEY = "tier"
-CANONICALITY_TIERS = ("T0", "T1", "T2", "T3", "T4")
-CANONICALITY_UNRESOLVED = "T4"
+# THE VOCABULARY IS NOT DECLARED HERE. `CANONICALITY_KEY` / `_TIERS` / `_UNRESOLVED`
+# used to live at this line and were the ONLY copy — which is how the field came to
+# have a reader, a gate and no writer for 113 rounds (#596). They now live in
+# `tools/field_predicate.py` beside `BOARD_KEY`, and this module reads them through
+# `field_predicate_readers()` like every other shared predicate. A leg-local copy
+# here would be the second home the one-home law bars.
 PREDICATE = REPO / "tests" / "test_board_intake_recorded.py"
 
 # --- the stall-census leg (#260) -------------------------------------------------
@@ -8299,19 +8302,19 @@ def canonicality_leg(rows: list[dict], *, read_at: str) -> dict:
 
     for index, row in enumerate(rows):
         detail = str(row.get("detail") or "")
-        if CANONICALITY_KEY not in fp.declared_keys(detail):
+        if fp.TIER_KEY not in fp.declared_keys(detail):
             continue
         value = ""
         for token in fp.trailer_tokens(detail):
-            found = fp.keyed_value(token, CANONICALITY_KEY)
+            found = fp.keyed_value(token, fp.TIER_KEY)
             if found is not None:
                 value = found
                 break
         tier = value.upper()
-        if tier not in CANONICALITY_TIERS:
+        if tier not in fp.TIER_VOCABULARY:
             problems.append(
                 f"n={row.get('n')} ({row.get('subject')}): tier={value!r} is not one of "
-                f"{'/'.join(CANONICALITY_TIERS)} — an unrecognised tier cannot have "
+                f"{'/'.join(fp.TIER_VOCABULARY)} — an unrecognised tier cannot have "
                 f"resolved a discrepancy, and reading it as one is the defect this leg "
                 f"exists to catch"
             )
@@ -8321,12 +8324,12 @@ def canonicality_leg(rows: list[dict], *, read_at: str) -> dict:
     unresolved: list[tuple[int, str]] = []
     superseded = 0
     for index, subject, tier in declared:
-        if tier != CANONICALITY_UNRESOLVED:
+        if tier != fp.TIER_UNRESOLVED:
             continue
         answered = any(
             later_index > index
             and later_subject == subject
-            and later_tier != CANONICALITY_UNRESOLVED
+            and later_tier != fp.TIER_UNRESOLVED
             for later_index, later_subject, later_tier in declared
         )
         if answered:
@@ -8337,7 +8340,7 @@ def canonicality_leg(rows: list[dict], *, read_at: str) -> dict:
     for index, subject in unresolved:
         row = rows[index]
         problems.append(
-            f"n={row.get('n')} ({subject}): tier={CANONICALITY_UNRESOLVED} — NEITHER side "
+            f"n={row.get('n')} ({subject}): tier={fp.TIER_UNRESOLVED} — NEITHER side "
             f"is canonical and no later row for this subject resolves it. Re-measure, or "
             f"route the open question; an unresolved tier is a finding, never a clean result"
         )
@@ -15556,7 +15559,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             lines.append(
                 f"  rows: {cov['rows_declaring_tier']} of {cov['rows_read']} declare a "
                 f"tier ({tiers}); {cov['t4_standing']} standing tier="
-                f"{CANONICALITY_UNRESOLVED}, {cov['t4_superseded']} superseded"
+                f"{field_predicate_readers().TIER_UNRESOLVED}, "
+                f"{cov['t4_superseded']} superseded"
             )
             if cov["unresolved_subjects"]:
                 lines.append(

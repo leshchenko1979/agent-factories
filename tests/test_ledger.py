@@ -1905,13 +1905,93 @@ def main() -> int:
         check("and none of the three refusals wrote anything",
               len(rows(pair)) == 0, f"{len(rows(pair))} row(s)")
 
-        # The accepting arm. Without it the probes would pass on a refusal that rejected
-        # EVERY ruling row — the one-sided shape that proves nothing about the predicate.
+        print("\nthe ruling-row TIER — refused at the WRITE PATH when never declared (#596)")
+        # THE READER HAD A GATE AND NO WRITER. The patrol's `canonicality-tier` leg read 0
+        # of 4,821 rows for 113 consecutive rounds while every round reported "every
+        # canonicality tier still unpopulated" — TRUE every time, and invisible from every
+        # surface a lane actually reads. These arms are the write path's half, and the
+        # accepting arm below is SHARED with the pairing probes: a refusal that rejected
+        # every ruling row would satisfy all three of them.
         r = run(pair, "append", "--event", "ruling", "--actor", "hq", "--subject", "#999",
                 "--detail", "a ruling paired with its board comment.\n\ncomment=123456",
                 actors=pair_actors)
+        check("a ruling that PAIRS but declares no tier is REFUSED",
+              r.returncode != 0, (r.stderr or r.stdout).strip()[:90])
+        check("and the refusal names the tier token it wants",
+              "tier=" in (r.stderr + r.stdout), (r.stderr or r.stdout).strip()[:160])
+
+        r = run(pair, "append", "--event", "ruling", "--actor", "hq", "--subject", "#999",
+                "--detail", "a ruling with an unrecognised tier.\n\ntier=T9 comment=123456",
+                actors=pair_actors)
+        check("a tier= outside the declared vocabulary is REFUSED (the FILTERED predicate)",
+              r.returncode != 0, (r.stderr or r.stdout).strip()[:90])
+
+        r = run(pair, "append", "--event", "ruling", "--actor", "hq", "--subject", "#999",
+                "--detail", "the row reports tier=T2 in prose, then keeps talking.\n\n"
+                            "comment=123456",
+                actors=pair_actors)
+        check("a tier= only MENTIONED in prose is REFUSED (the discriminator)",
+              r.returncode != 0, (r.stderr or r.stdout).strip()[:90])
+        check("and none of the tier refusals wrote anything",
+              len(rows(pair)) == 0, f"{len(rows(pair))} row(s)")
+
+        # (596j) THE MUTATION CONTROL. Stage the tool's import closure, neuter the ONE
+        # predicate the tier guard binds, and re-run the "pairs but declares no tier" detail
+        # unchanged: the unlawful append must now be ACCEPTED and its row must LAND. Without
+        # this, the three arms above could be passing because some OTHER refusal happens to
+        # reject the same details — the one-sided shape a refusal gate is likeliest to wear,
+        # and the reason every refusal probe in this file is paired with an accepting arm.
+        tier_mut = Path(tmp) / "tier-mut"
+        (tier_mut / "evidence").mkdir(parents=True)
+        staged = stage_tool(TOOL, tier_mut / "tools", LOCAL_TOOLS)
+        check("(596j-pre) the staged closure carries the predicate the tier guard binds",
+              any(p.name == "field_predicate.py" for p in staged),
+              f"{len(staged)} module(s) staged")
+        tier_guard = tier_mut / "tools" / "ledger.py"
+        guard_src = tier_guard.read_text(encoding="utf-8")
+        needle = ('if args.event == "ruling" and declared_tier_resolution(args.detail) '
+                  "is None:")
+        check("(596j-pre) the tier guard is reachable in the staged copy",
+              needle in guard_src, f"looked for {needle!r}")
+        tier_guard.write_text(
+            guard_src.replace(
+                needle,
+                'if False and args.event == "ruling" '
+                "and declared_tier_resolution(args.detail) is None:",
+            ),
+            encoding="utf-8",
+        )
+        mut_tier_ledger = tier_mut / "evidence" / "ledger.jsonl"
+        r = subprocess.run(
+            [sys.executable, "-B", str(tier_guard), "append",
+             "--event", "ruling", "--actor", "hq", "--subject", "#999",
+             "--detail", "a ruling paired with its board comment.\n\ncomment=123456"],
+            capture_output=True, text=True, cwd=str(tier_mut),
+            env={**os.environ, "OC_LEDGER_PATH": str(mut_tier_ledger),
+                 "OC_ACTORS_PATH": str(pair_actors),
+                 "OC_AUTHORIZATIONS_PATH": str(tier_mut / "no-auth.json")},
+        )
+        mut_tier_rows = (
+            [json.loads(line) for line in
+             mut_tier_ledger.read_text(encoding="utf-8").splitlines() if line.strip()]
+            if mut_tier_ledger.exists() else []
+        )
+        check("(596j) MUTANT: with the tier guard neutered the unlawful ruling is ACCEPTED "
+              "and its row LANDS -- so the three arms above can fail",
+              r.returncode == 0 and len(mut_tier_rows) == 1,
+              f"rc={r.returncode} rows={len(mut_tier_rows)} :: "
+              + (r.stdout + r.stderr).strip()[-110:])
+
+        # The accepting arm. Without it the probes would pass on a refusal that rejected
+        # EVERY ruling row — the one-sided shape that proves nothing about the predicate.
+        r = run(pair, "append", "--event", "ruling", "--actor", "hq", "--subject", "#999",
+                "--detail", "a ruling paired with its board comment.\n\ntier=T1 comment=123456",
+                actors=pair_actors)
         check("a comment= the CANONICAL RUN declares is ACCEPTED",
               r.returncode == 0, (r.stderr or r.stdout).strip()[:90])
+        check("and so is a tier= in that same run (one accepting arm, two fields)",
+              bool(rows(pair)) and "tier=T1" in str(rows(pair)[0].get("detail", "")),
+              (str(rows(pair)[0].get("detail", "")) if rows(pair) else "no row")[-60:])
         check("and the row carries the pairing token",
               bool(rows(pair)) and str(rows(pair)[0].get("detail", "")).endswith("comment=123456"),
               (str(rows(pair)[0].get("detail", "")) if rows(pair) else "no row")[-40:])

@@ -237,7 +237,8 @@ def arm_the_writer_resolves_the_state_before_touching_a_surface() -> None:
     check("posted_body = body + citation_note(cited, state, _now_iso())" in src,
           "and the note is composed into the text both surfaces carry",
           "the comment and the row must not diverge — one text, two surfaces")
-    check("handle.write(posted_body)" in src and "build_detail(posted_body, comment_id)" in src,
+    check("handle.write(posted_body)" in src
+          and "build_detail(posted_body, comment_id, args.tier)" in src,
           "BOTH surfaces carry the noted body, not the bare one",
           "a note on the comment alone leaves the row citing unreachable numbers silently")
 
@@ -292,7 +293,8 @@ def arm_the_dry_run_stays_offline_and_counts_the_citations() -> None:
     patrol = load(REPO / "tools" / "patrol_host_state.py", "_gate_patrol")
     body = f"{patrol.RULING_CANONICAL_HEADING} probe\n\nrows n=2900-2905 were named.\n"
     proc = subprocess.run(
-        [sys.executable, str(RULE_TOOL), "--dry-run", "--issue", "1", "--body", body],
+        [sys.executable, str(RULE_TOOL), "--dry-run", "--issue", "1", "--tier", "T1",
+         "--body", body],
         capture_output=True, text=True, cwd=str(REPO), timeout=120,
         env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
     )

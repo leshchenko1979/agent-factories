@@ -62,7 +62,7 @@ from pathlib import Path
 # that the reader does not look for, and the pairing would exist and be invisible. The bare
 # neighbour import is the form `tools/ledger.py` uses for the same reason: this tool runs as
 # `python3 tools/rule.py`, so `tools/` is on `sys.path`.
-from field_predicate import PAIRING_KEY
+from field_predicate import PAIRING_KEY, TIER_KEY, TIER_UNRESOLVED, TIER_VOCABULARY
 
 REPO = Path(__file__).resolve().parent.parent
 PATROL = REPO / "tools" / "patrol_host_state.py"
@@ -304,9 +304,21 @@ def head_problem(body: str, patrol) -> str | None:
     return None
 
 
-def build_detail(body: str, comment_id: str) -> str:
-    """The row's `detail`: the ruling body, then the pairing token as the LAST token."""
-    return f"{body.rstrip()}\n\n{PAIRING_KEY}={comment_id}"
+def build_detail(body: str, comment_id: str, tier: str) -> str:
+    """The row's `detail`: the ruling body, then the trailer, with the pairing token LAST.
+
+    THE TIER RIDES IN THE SAME TRAILER AS THE PAIRING TOKEN (#596). Both are declarations
+    about THIS row and both readers — `field_predicate.declared_tier` and
+    `declared_comment_id` — read the canonical terminal run, so they sit side by side and
+    neither depends on the other's position. The pairing token stays LAST regardless: a
+    token after it is the one a reader takes for the terminator of the run, and the
+    comment/row pairing is the field that must never be ambiguous.
+
+    A writer that emitted no tier is the defect #596 measured: the patrol's
+    `canonicality-tier` leg read 0 of 4,821 rows for 113 consecutive rounds because the
+    field had a reader, a gate and no writer.
+    """
+    return f"{body.rstrip()}\n\n{TIER_KEY}={tier} {PAIRING_KEY}={comment_id}"
 
 
 def _run(cmd: list[str]) -> subprocess.CompletedProcess:
@@ -357,6 +369,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--issue", type=int, required=True, help="the board issue number")
     parser.add_argument("--repo", default=None, help="OWNER/NAME; derived from origin when omitted")
+    parser.add_argument(
+        "--tier", required=True, metavar="T0..T4",
+        help="the canonicality tier this ruling carries, emitted into the row's trailer as "
+             f"`{TIER_KEY}=<T>`: T0/T1/T2/T3 name which side of a duplicate or a fork is "
+             f"canonical, {TIER_UNRESOLVED} states the question is still UNRESOLVED. "
+             "REQUIRED and never defaulted — a tier this tool chose for the author is a "
+             "tier nobody decided, and the leg that reads the field cannot tell that "
+             "apart from a considered one (#596)",
+    )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--body-file", help="a file holding the ruling body")
     source.add_argument("--body", help="the ruling body as one argument")
@@ -371,6 +392,26 @@ def main(argv: list[str] | None = None) -> int:
         help="validate and report what would happen; write NOTHING to either surface",
     )
     args = parser.parse_args(argv)
+
+    # THE TIER IS REFUSED BEFORE THE BODY IS EVEN READ (#596). A value outside the declared
+    # vocabulary is the same defect the append path refuses one step later, and catching it
+    # HERE costs nothing: nothing has been posted and nothing stamped, so the refusal is
+    # free rather than a rollback. `TIER_VOCABULARY` is imported from its ONE home, so this
+    # check and the ledger's refuser cannot disagree about what a tier is — the drift that
+    # class is about lands on exactly the rows the token exists to make readable.
+    #
+    # It is NOT rewritten to fit. `--tier t2` is refused rather than upper-cased: a writer
+    # that silently repairs its author's argument is a writer whose output no longer says
+    # what was asked of it.
+    if args.tier not in TIER_VOCABULARY:
+        print(
+            f"rule refused (nothing posted, nothing stamped): --tier {args.tier!r} is not "
+            f"one of {', '.join(TIER_VOCABULARY)}. A tier is a DECLARATION, so it is never "
+            f"rewritten to fit — pass the tier this ruling actually resolved, or "
+            f"{TIER_UNRESOLVED} when the question it concerns is still open (#596).",
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         body = (
@@ -428,7 +469,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"rule: DRY RUN — would post a {patrol.RULING_CANONICAL_HEADING!r} comment on "
             f"{where}#{args.issue} and stamp `ruling` for '#{args.issue}' carrying "
-            f"{PAIRING_KEY}=<id>; wrote NOTHING\n"
+            f"{TIER_KEY}={args.tier} {PAIRING_KEY}=<id>; wrote NOTHING\n"
             f"  citation state NOT resolved (hermetic): the live run would name the "
             f"publication of the {len(cited_rows(body))} ledger row(s) this body mentions\n"
             f"  refs: {', '.join(refs) if refs else 'NONE declared'}"
@@ -479,10 +520,16 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     # ---- leg 2: the ledger row ----------------------------------------------------
+    #
+    # THE TIER GOES IN THIS ONE APPEND, inside the same `--detail` as the pairing token
+    # (#596). A tier stamped by a SECOND invocation could fail on its own and leave a
+    # ruling row that pairs with its comment and declares no tier — the exact starvation
+    # this item closed, one field over — so the field rides the act that already exists
+    # rather than adding one that can diverge from it.
     append_cmd = [
         sys.executable, str(LEDGER_TOOL), "append",
         "--event", "ruling", "--subject", f"#{args.issue}",
-        "--detail", build_detail(posted_body, comment_id),
+        "--detail", build_detail(posted_body, comment_id, args.tier),
     ]
     # THE TYPED EDGE TRAVELS IN THE SAME ACT AS THE COMMENT (#585, ruling n=4493). A ref
     # stamped in a SECOND invocation could fail on its own, leaving a ruling whose ordered
@@ -513,7 +560,7 @@ def main(argv: list[str] | None = None) -> int:
         f"rule: PAIRED — {repo}#{args.issue}\n"
         f"  comment: https://github.com/{repo}/issues/{args.issue}"
         f"#issuecomment-{comment_id}\n"
-        f"  row:     n={row} ({PAIRING_KEY}={comment_id})\n"
+        f"  row:     n={row} ({TIER_KEY}={args.tier} {PAIRING_KEY}={comment_id})\n"
         f"  refs:    {', '.join(refs) if refs else 'none'}\n"
         f"  {citation_acknowledgement(row, cited, state)}"
     )

@@ -157,6 +157,7 @@ from field_predicate import (
     declared_repo_refs,
     declared_revision,
     declared_rework,
+    declared_tier_resolution,
     defect_key_problem,
     mentions_reclaim,
     mentions_reclose,
@@ -168,6 +169,11 @@ from field_predicate import (
     # The `repo` kind's own key, so the write path's form refusal below and the reader that
     # the patrol's leg calls cannot drift about which value is a name (#592, ruling n=4551).
     REPO_REF_KEY,
+    # The canonicality tier's key and vocabulary, for the `ruling` refusal below (#596). The
+    # message names the accepted values, and naming them from the ONE home is what keeps it
+    # from drifting into a second copy of the vocabulary (`n=405` PART 5).
+    TIER_KEY,
+    TIER_VOCABULARY,
 )
 
 # The reconstruction predicate — which rows are reconstructed claims and the interval
@@ -1509,6 +1515,45 @@ def cmd_append(args: argparse.Namespace) -> int:
             "that names no comment is half-recorded, so no reader can pair them. Stamp it "
             "with `tools/rule.py`, which posts the comment and writes the row carrying "
             "its id in one invocation (#297)."
+        )
+    # A `ruling` ROW IS REFUSED AT THE WRITE PATH WHEN ITS TRAILER DECLARES NO TIER (#596).
+    #
+    # THE DEFECT THIS CLOSES IS THE ONE THIS FACTORY IS WORST AT: a READER was built,
+    # shipped and gated — the patrol's `canonicality-tier` leg, with its own gate arms — and
+    # no WRITER ever emitted the field it reads, so the leg reported 0 of 4,821 rows
+    # declaring a tier for 113 consecutive rounds. Every round printed "every canonicality
+    # tier still unpopulated" and every round it was TRUE, which is why nobody looked: a
+    # reader with no writer on the path is a detector, not a mechanism (P29), and the
+    # omission was invisible from every surface a lane actually reads.
+    #
+    # THE PREDICATE IS THE SHARED FILTERED ONE, `declared_tier_resolution`, never a private
+    # membership test: one field, one predicate (`n=405` PART 5, `n=599`). It asks whether
+    # the row DECLARES AN ACCEPTED VALUE, so `tier=`, `tier=T9` and a `tier=` mentioned in
+    # prose all fail it. The filtered form is the WRITE PATH's for the reason `board=` uses
+    # it: the ledger is append-only and `repair` has no value-rewrite mode (#584 measured
+    # that dead end), so a tier no reader can interpret can never be corrected afterwards.
+    #
+    # REFUSED BEFORE THE LOCK IS TAKEN, for the reason the sibling refusals state: this
+    # rejects the caller's own argument, so acquiring the lock first would serialise a lane
+    # against nothing.
+    #
+    # NO BOUNDARY AND NO EXEMPTION SURFACE, for the reason the sibling refusals state: this
+    # binds the row ABOUT TO BE WRITTEN, so it can never predate itself. Nothing is
+    # backfilled — 4,821 live rows declare no tier, and a tier written today for a ruling
+    # that predates the rule would be a falsified record, not a repair. The historical
+    # population is the patrol leg's business, which is why it reads `rows_declaring_tier`
+    # beside `rows_read` instead of reporting a bare zero.
+    if args.event == "ruling" and declared_tier_resolution(args.detail) is None:
+        sys.exit(
+            "ledger append refused: a `ruling` row must declare an accepted "
+            f"`{TIER_KEY}=<tier>` in its canonical terminal run — the canonicality tier the "
+            "ruling resolved — and this detail declares none (a bare `tier=`, a value "
+            f"outside {'/'.join(TIER_VOCABULARY)}, and a `tier=` mentioned in prose name no "
+            "tier either). A tier that is never declared cannot be reported, superseded or "
+            "judged, and the patrol's canonicality leg reads this field to decide whether a "
+            f"duplicate or fork was routed. Stamp the ruling with `tools/rule.py --tier "
+            f"<T0..T4>`, which posts the comment and writes the row carrying the tier and "
+            "its comment id in one invocation (#596)."
         )
     # A `dispatch` ROW IS REFUSED AT THE WRITE PATH WHEN ITS DETAIL CARRIES NO DELIVERY
     # VERDICT (#49 shape 1, ruled at ledger n=1893).

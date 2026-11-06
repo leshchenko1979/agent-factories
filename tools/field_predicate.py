@@ -533,6 +533,59 @@ def declared_board_closed(detail: str) -> bool:
     """
     return declared_board(detail) == BOARD_CLOSED
 
+# The canonicality TIER a discrepancy was resolved at — the ladder `ONTOLOGY.md` defines
+# (T0 identity · T1 precedence · T2 metric · T3 strategy · T4 NEITHER side canonical).
+#
+# ONE HOME, and this module is it for the same reason `BOARD_KEY` is here: FOUR surfaces
+# ask for this vocabulary — the rulings writer (`tools/rule.py`) that must put the token on
+# the row, the ledger refuser that will not stamp a ruling without it, the patrol leg that
+# enumerates the tiers declared, and the gate that judges history. A private `("T0", ...)`
+# tuple in any of the four drifts in silence, and the drift lands on exactly the rows the
+# token exists to make readable (#596: the reader was written, shipped and gated while NO
+# writer emitted the field, so the leg read 0 of 4,821 rows for 113 consecutive rounds and
+# the omission was invisible from every surface a lane actually reads).
+#
+# THE SCOPE SPLIT IS THE SAME ONE `board=` MAKES. `declared_tier` is RAW: a token that is
+# DECLARED and wrong (`tier=T9`) is a different defect from one that is ABSENT, with a
+# different remedy, so readers judging HISTORY ask it and classify the value themselves —
+# the patrol leg needs that distinction because "declared but unrecognised" is a finding
+# while "not declared" is merely silence. `declared_tier_resolution` is the FILTERED read
+# the WRITE PATH asks, exactly as `declared_board_closed` is for `board=`: a refusal must
+# not be satisfied by a token that fails to name an accepted value, or the append-only
+# ledger accepts a tier no reader can interpret and `repair` has no value-rewrite mode to
+# fix it (#584 measured that dead end for `rework=`).
+TIER_KEY = "tier"
+TIER_VOCABULARY = ("T0", "T1", "T2", "T3", "T4")
+TIER_UNRESOLVED = "T4"
+
+def declared_tier(detail: str) -> str | None:
+    """The `tier=<value>` `detail`'s CANONICAL TRAILER declares, else None.
+
+    RAW and unfiltered — see the block above. Case is preserved so a caller can report the
+    token as written; classification is the caller's.
+    """
+    for token in trailer_tokens(detail):
+        value = keyed_value(token, TIER_KEY)
+        if value:
+            return value
+    return None
+
+def declared_tier_resolution(detail: str) -> str | None:
+    """The tier `detail` declares AS A RESOLUTION, else None.
+
+    The WRITE PATH's predicate: the row must DECLARE AN ACCEPTED VALUE, not merely occupy
+    the key. Case-insensitive on the way in (the patrol leg upper-cases before its own
+    membership test, and a refuser stricter than its reader would refuse rows the reader
+    would accept), and `None` for anything outside `TIER_VOCABULARY` — so `tier=`, `tier=T9`
+    and `tier=none` all fail to satisfy it.
+    """
+    value = declared_tier(detail)
+    if not value:
+        return None
+    tier = value.upper()
+    return tier if tier in TIER_VOCABULARY else None
+
+
 # The close trailer's `rework` field — the disposition a close DECLARES. Its domain is
 # exactly two canonical values, ruled at ledger `n=386` clause 3 (reusing #53 clauses
 # 3/4): `rework=#N` names the rework entry THIS close produced, and `rework=none`

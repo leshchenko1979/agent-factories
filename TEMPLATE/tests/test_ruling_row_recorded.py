@@ -488,11 +488,12 @@ def test_probe_the_population_guard_is_proportional(tmp_path: Path) -> None:
 # --- probes: the WRITER's half of the pairing ---------------------------------------
 
 
-def _run_tool(body: str, tmp_path) -> subprocess.CompletedProcess:
+def _run_tool(body: str, tmp_path, tier: str = "T1") -> subprocess.CompletedProcess:
     path = tmp_path / "body.md"
     path.write_text(body, encoding="utf-8")
     return subprocess.run(
-        [sys.executable, str(RULE_TOOL), "--issue", "1", "--body-file", str(path), "--dry-run"],
+        [sys.executable, str(RULE_TOOL), "--issue", "1", "--body-file", str(path),
+         "--tier", tier, "--dry-run"],
         capture_output=True,
         text=True,
     )
@@ -537,6 +538,76 @@ def test_the_writer_is_registered_as_the_pairing_writer() -> None:
     assert f'PAIRING_KEY = "{PAIRING_KEY}"' in home, (
         "tools/field_predicate.py no longer declares the pairing key this gate reads"
     )
+
+
+# --- probes: the WRITER's half of the canonicality TIER (#596) ----------------------
+
+
+def _load_rule_tool():
+    """`tools/rule.py`, loaded by path with `tools/` on `sys.path` for the exec.
+
+    The writer imports its sibling predicate by BARE NAME (`from field_predicate import …`)
+    because it runs as `python3 tools/rule.py`, where `sys.path[0]` is `tools/`. That is not
+    true when it is loaded by path from a test, so the directory is placed on the path for
+    the exec and removed again afterwards — the same discipline
+    `tools/patrol_host_state.py::field_predicate_readers` states for its own load.
+    """
+    tools_dir = str(REPO / "tools")
+    added = tools_dir not in sys.path
+    if added:
+        sys.path.insert(0, tools_dir)
+    try:
+        return _load("_pairing_rule_tier", RULE_TOOL)
+    finally:
+        if added:
+            sys.path.remove(tools_dir)
+
+
+def test_the_writer_emits_a_tier_the_READER_can_read() -> None:
+    """#596: the `canonicality-tier` leg had a gate and NO WRITER, and read 0 of 4,821 rows
+    for 113 consecutive rounds while every round reported "every canonicality tier still
+    unpopulated" — TRUE every time, and invisible from every surface a lane actually reads.
+
+    THIS IS AN AGREEMENT PROBE, NOT A STRING PIN. It calls the writer's OWN `build_detail`
+    and hands the result to the SAME predicate the ledger's refuser and the patrol leg call.
+    A pin on the source text would pass on a token the reader cannot parse, which is exactly
+    the defect class #297 and #596 are both about.
+    """
+    rule = _load_rule_tool()
+    fp = _load("_pairing_fp_tier", FIELD_PREDICATE)
+    detail = rule.build_detail("## RULED — a ruling\n\nprose", "123456", "T2")
+    assert fp.declared_tier_resolution(detail) == "T2", (
+        f"the reader cannot read the tier the writer emits: {detail!r}"
+    )
+    assert fp.declared_comment_id(detail) == "123456", detail
+    assert detail.endswith("comment=123456"), (
+        "the pairing token must stay LAST — a token after it is the one a reader takes for "
+        f"the terminator of the run: {detail!r}"
+    )
+
+
+def test_the_writer_refuses_a_tier_outside_the_declared_vocabulary(tmp_path) -> None:
+    """A tier outside the vocabulary is refused HERE, before anything is posted, so the
+    refusal is free rather than a rollback of a published comment."""
+    proc = _run_tool("## RULED — a ruling\n\nprose\n", tmp_path, tier="T9")
+    assert proc.returncode != 0, f"a tier outside the vocabulary was accepted\n{proc.stdout}"
+    assert "T4" in proc.stderr, proc.stderr
+
+
+def test_the_writer_REQUIRES_a_tier(tmp_path) -> None:
+    """The flag is required rather than defaulted: a tier this tool chose for the author is
+    a tier nobody decided, and no reader can tell that apart from a considered one. A
+    defaulted `T4` would have made every lazy row read as a deliberate open question."""
+    path = tmp_path / "body.md"
+    path.write_text("## RULED — a ruling\n\nprose\n", encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, str(RULE_TOOL), "--issue", "1", "--body-file", str(path),
+         "--dry-run"],
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode != 0, f"a ruling was accepted with NO tier\n{proc.stdout}"
+    assert "--tier" in proc.stderr, proc.stderr
 
 
 def test_gate_is_registered_in_the_audit() -> None:
