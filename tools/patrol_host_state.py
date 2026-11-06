@@ -3840,8 +3840,7 @@ def round_fire_instants(job: dict, fires: list[dict], round_date: str,
     come from `cron_job_runs` through `duty_fire_instants`, so a fire this reader cannot date
     contributes no round rather than a composed one.
     """
-    return [inst for inst in duty_fire_instants(job, fires, parse)
-            if inst.strftime("%Y-%m-%d") == round_date]
+    return [rec["instant"] for rec in round_fire_records(job, fires, round_date, parse)]
 
 def fire_receipt_token(stem: str, round_date: str, fire_iso: str) -> str:
     """The subject token a receipt for THIS fire carries — `<stem>-<date>T<HH>`.
@@ -4079,8 +4078,8 @@ def gate_budget_module():
         _GATE_BUDGET = load_module("gate_budget", GATE_BUDGET)
     return _GATE_BUDGET
 
-def duty_fire_instants(job: dict, fires: list[dict], parse) -> list[dt.datetime]:
-    """This job's OWN fire instants, oldest first — the measurement's population.
+def job_fire_records(job: dict, fires: list[dict], parse) -> list[dict]:
+    """This job's OWN fire records, oldest first — the ONE matcher, carrying suppression.
 
     Matched by `job_id` where both sides carry one, because a NAME is not an address: two
     jobs may share a name across homes (#126). A fire carrying no id falls back to the
@@ -4088,10 +4087,17 @@ def duty_fire_instants(job: dict, fires: list[dict], parse) -> list[dt.datetime]
     an older daemon still yields the fires it does carry. An unparseable instant is
     dropped rather than defaulted: a fire this reader cannot date contributes no latency,
     and inventing one would put a fabricated measurement under a derived cap.
+
+    THE RECORD, NOT THE INSTANT, because a fire has a STATE the instant cannot carry (#622).
+    `cron_run_fires()` sets `suppressed` from the daemon's own `Execution skipped` prose
+    (#477), and a caller that only ever sees ISO strings cannot tell a round that RAN from a
+    round the trigger gate SKIPPED — which is how two skipped fires came to be charged as
+    missing receipts. Every caller that needs only instants takes them from here, so there
+    is still exactly one matcher and it cannot disagree with itself about which fires exist.
     """
     job_id = str(job.get("id") or "")
     name = str(job.get("name") or "")
-    instants: list[dt.datetime] = []
+    out: list[dict] = []
     for fire in fires:
         fire_id = str(fire.get("job_id") or "")
         fire_name = str(fire.get("job_name") or "")
@@ -4104,10 +4110,41 @@ def duty_fire_instants(job: dict, fires: list[dict], parse) -> list[dt.datetime]
         else:
             continue
         try:
-            instants.append(parse(str(fire.get("started_at") or "")))
+            instant = parse(str(fire.get("started_at") or ""))
         except (ValueError, TypeError):
             continue
-    return sorted(instants)
+        out.append({
+            "instant": instant,
+            "started_at": str(fire.get("started_at") or ""),
+            "suppressed": bool(fire.get("suppressed")),
+            "content": str(fire.get("content") or ""),
+        })
+    return sorted(out, key=lambda r: r["instant"])
+
+def duty_fire_instants(job: dict, fires: list[dict], parse) -> list[dt.datetime]:
+    """This job's OWN fire instants, oldest first — the measurement's population.
+
+    A thin view over `job_fire_records()`, deliberately: the matcher lives in ONE place, so
+    a caller taking instants and a caller taking records can never disagree about which
+    fires this job has (#622).
+    """
+    return [rec["instant"] for rec in job_fire_records(job, fires, parse)]
+
+def round_fire_records(job: dict, fires: list[dict], round_date: str,
+                       parse) -> list[dict]:
+    """This job's fires on `round_date`, oldest first, WITH their suppression state (#622).
+
+    The round is a DAY and a sub-daily job fires several times inside it, so the round's
+    receipt question is per FIRE: a day carrying four fires and three receipts has one round
+    unaccounted, and `last_run_at` alone can never show it (#499, ruling n=3446).
+
+    A fire the trigger gate SKIPPED is still a fire the daemon recorded — it is returned
+    here, marked `suppressed`, so the caller can EXCUSE it by name rather than charge it or
+    silently drop it. Excusing silently would hide a real suppression; charging it would
+    demand a receipt the job was never allowed to owe.
+    """
+    return [rec for rec in job_fire_records(job, fires, parse)
+            if rec["instant"].strftime("%Y-%m-%d") == round_date]
 
 def prior_fire_instant(job: dict, fires: list[dict], newest: dt.datetime,
                        parse) -> dt.datetime | None:
@@ -6639,6 +6676,7 @@ def duty_round_finding(*, name: str, job_id: str, stem: str, round_date: str, fi
                        ledger_rows: list[dict], predicate,
                        fallback_from: str | None = None, schedule_text: str = "",
                        round_fires: list[str] | None = None,
+                       suppressed_fires: list[dict] | None = None,
                        residual_secs: float | None = None,
                        read_instant: dt.datetime | None = None) -> dict:
     """Judge ONE round of one job — the rows matching its subject, and what they DECLARE.
@@ -6747,6 +6785,26 @@ def duty_round_finding(*, name: str, job_id: str, stem: str, round_date: str, fi
                 f"job ran, its lane did not report, and a round judged on the newest fire "
                 f"alone reads clean while the earlier one did nothing"
             )
+
+    # A FIRE THE TRIGGER GATE SUPPRESSED OWED NO RECEIPT (#622). `cron_job_runs` records
+    # the trigger gate's own verdict on every fire it declined to run, and such a fire
+    # never woke a lane, so no receipt for it can exist and charging one is a false RED.
+    # `factory-questions-gc` read 2 problems for fires at 2026-11-06T00:42:03Z and
+    # 2026-11-06T06:42:58Z that the daemon's own record marks `Execution skipped`. The
+    # excuse is PRINTED rather than silently subtracted: a reader must be able to see
+    # WHICH fires were excused and on what evidence, and the count of fires that DID run
+    # travels beside it so a fully-suppressed round cannot read as a fully-receipted one.
+    if suppressed_fires:
+        finding["judged"]["fires_suppressed"] = len(suppressed_fires)
+        finding["excused"].append(
+            f"{name} (cron id {job_id}): the round {round_date} FIRED "
+            f"{len(suppressed_fires) + len(round_fires or [])} time(s) and "
+            f"{len(suppressed_fires)} of those were SUPPRESSED by the trigger gate — "
+            f"{'; '.join(str(rec.get('started_at') or '') for rec in suppressed_fires)} "
+            f"carry `{CRON_SUPPRESSION_MARKER}` in the daemon's own run record, so they "
+            f"owed no receipt and are EXCUSED, not unanswered (#622). "
+            f"{len(round_fires or [])} fire(s) actually ran"
+        )
     # THE ROUND'S NEWEST DECLARATION GOVERNS (#217). A round can fail at T and complete
     # at T+n — the reporting lane measured exactly that on round 2026-09-28, where a
     # `duty=failed` row at 5-of-6 was cleared by a later `duty=completed` row and the
@@ -7046,9 +7104,20 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
         # the residual above uses -- one population, one reader, so the comparison this feeds
         # cannot disagree with the window it is judged against. A day is a round and a
         # sub-daily job fires several times inside it; these are the fires that owe receipts.
+        # A FIRE THE TRIGGER GATE SKIPPED OWES NO RECEIPT (#622). The daemon stores a
+        # suppressed fire with `status=success` and the only field that separates it from a
+        # round that ran and produced nothing is its own `content` prose (#477), which
+        # `cron_run_fires()` already carries as `suppressed`. Reading the round's fires as
+        # INSTANTS threw that away, so `factory-questions-gc` was charged two receipts for
+        # two fires its own trigger gate skipped -- a false RED on the leg that exists to
+        # catch false CLEANs. The suppressed fires are EXCUSED BY NAME with the daemon's own
+        # wording and COUNTED, never silently dropped: a suppression nobody can see is
+        # indistinguishable from a fire that never happened.
+        round_fire_recs = round_fire_records(row, fires or [], round_date, reader_parse_ts)
+        suppressed_recs = [rec for rec in round_fire_recs if rec["suppressed"]]
         round_fires = [
-            inst.strftime("%Y-%m-%dT%H:%M:%SZ")
-            for inst in round_fire_instants(row, fires or [], round_date, reader_parse_ts)
+            rec["instant"].strftime("%Y-%m-%dT%H:%M:%SZ")
+            for rec in round_fire_recs if not rec["suppressed"]
         ]
         try:
             fired_instant = reader_parse_ts(fired)
@@ -7183,16 +7252,21 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
                     f"both inside one window leave this job with no round to judge"
                 )
                 continue
+            prior_round_recs = round_fire_records(
+                row, fires or [], prior_date, reader_parse_ts
+            )
+            prior_suppressed = [rec for rec in prior_round_recs if rec["suppressed"]]
             prior_round_fires = [
-                inst.strftime("%Y-%m-%dT%H:%M:%SZ")
-                for inst in round_fire_instants(row, fires or [], prior_date, reader_parse_ts)
+                rec["instant"].strftime("%Y-%m-%dT%H:%M:%SZ")
+                for rec in prior_round_recs if not rec["suppressed"]
             ]
             rounds_judged_by_fallback += 1
             finding = duty_round_finding(
                 name=name, job_id=job_id, stem=stem, round_date=prior_date,
                 fired=prior_fired, ledger_rows=ledger_rows, predicate=predicate,
                 fallback_from=round_date, schedule_text=job_schedule_text(row),
-                round_fires=prior_round_fires, residual_secs=residual_secs,
+                round_fires=prior_round_fires, suppressed_fires=prior_suppressed,
+                residual_secs=residual_secs,
                 read_instant=residual_now,
             )
             judged.append(finding["judged"])
@@ -7208,7 +7282,8 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
         finding = duty_round_finding(
             name=name, job_id=job_id, stem=stem, round_date=round_date, fired=fired,
             ledger_rows=ledger_rows, predicate=predicate,
-            round_fires=round_fires, residual_secs=residual_secs,
+            round_fires=round_fires, suppressed_fires=suppressed_recs,
+            residual_secs=residual_secs,
             read_instant=residual_now,
         )
         judged.append(finding["judged"])

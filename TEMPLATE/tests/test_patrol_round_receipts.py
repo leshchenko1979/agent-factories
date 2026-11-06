@@ -294,6 +294,101 @@ def test_the_fires_arm_renders_the_UNDER_RECEIPTED_round_it_found() -> None:
         cron_fires=_fires(_499_FIRE_HOURS))
     assert "fires vs receipts:" in out or "UNDER-RECEIPTED" in out, out[-4000:]
 
+def _622_fires(hours, suppressed_hours) -> list[dict]:
+    """Fire records for one job with PER-FIRE suppression — the mixed day #622 is about.
+
+    The suppression is written as the DAEMON's own wording and read back through the
+    module's own reader, so a probe carries the same two fields the live source builds
+    rather than a hand-set flag with no prose behind it.
+    """
+    records = []
+    for hour in hours:
+        content = (
+            "Trigger condition not met (exit_code=0, output_bytes=0). "
+            f"{RUNNER.CRON_SUPPRESSION_MARKER}." if hour in suppressed_hours else ""
+        )
+        records.append({
+            "job_id": _499_row()["id"], "job_name": "factory-registry-attest",
+            "started_at": _plus(_DUTY_BOUND, hour),
+            "content": content,
+            "suppressed": RUNNER.fire_is_suppressed(content),
+        })
+    return records
+
+def test_622_a_A_SUPPRESSED_FIRE_OWES_NO_RECEIPT_and_is_printed_as_excused() -> None:
+    """#622 arm (a): 3 fires, 1 receipt, 2 suppressed -> ZERO problems.
+
+    `factory-questions-gc` was charged two missing receipts for fires its own trigger gate
+    skipped at 2026-11-06T00:42:03Z and 06:42:58Z — the daemon's run record carries
+    `Execution skipped` for both, so no lane was ever woken and no receipt could exist.
+    The excuse is PRINTED with the fires it names, because a silent subtraction would make
+    a fully-suppressed round indistinguishable from a fully-receipted one.
+    """
+    hours = _499_FIRE_HOURS[:3]
+    fires = _622_fires(hours, suppressed_hours=hours[:2])
+    leg = _duty_leg([_499_row()], [_499_receipt(hours[2], 1)],
+                    fires=fires, read_at=_499_READ_AT)
+    cov, judged = leg["coverage"], leg["coverage"]["duties_judged"]
+    assert not leg["problems"], (
+        "a fire the trigger gate suppressed woke no lane, so it owes no receipt — "
+        f"charging it is the #622 false RED: {leg['problems']}")
+    assert cov["fires_unanswered"] == 0, cov
+    assert cov["rounds_under_receipted"] == 0, cov
+    assert judged[0]["fires"] == 1, (
+        f"only the fire that RAN is a fire that owes a receipt: {judged}")
+    assert judged[0].get("fires_suppressed") == 2, (
+        f"the suppressed fires must be COUNTED, not silently dropped: {judged}")
+    excused = "\n".join(leg["excused"])
+    assert "SUPPRESSED by the trigger gate" in excused, leg["excused"]
+    for hour in hours[:2]:
+        assert _plus(_DUTY_BOUND, hour) in excused, (
+            f"the excuse must name the fire it excuses ({hour}): {leg['excused']}")
+
+def test_622_b_MUTANT_a_suppression_blind_reader_restores_the_false_RED(monkeypatch) -> None:
+    """#622 arm (b): the mutant that discards the suppression flag must reproduce the bug.
+
+    Without this arm the green above is unattributable — any change that emptied the fire
+    population would read clean for the same reason the fix does.
+    """
+    hours = _499_FIRE_HOURS[:3]
+    fires = _622_fires(hours, suppressed_hours=hours[:2])
+    real = RUNNER.round_fire_records
+
+    def blind(job, fire_rows, round_date, parse):
+        return [{**rec, "suppressed": False} for rec in real(job, fire_rows, round_date, parse)]
+
+    monkeypatch.setattr(RUNNER, "round_fire_records", blind)
+    leg = _duty_leg([_499_row()], [_499_receipt(hours[2], 1)],
+                    fires=fires, read_at=_499_READ_AT)
+    problems = "\n".join(leg["problems"])
+    assert leg["coverage"]["fires_unanswered"] == 2, (
+        f"the mutant must charge both suppressed fires: {leg['coverage']}")
+    for hour in hours[:2]:
+        assert _plus(_DUTY_BOUND, hour) in problems, (
+            f"the mutant must name {hour} exactly as the live incident did: {problems}")
+
+def test_622_c_WITHOUT_SUPPRESSION_the_same_day_is_still_UNDER_RECEIPTED() -> None:
+    """#622 arm (c), the acceptance criterion: the SAME 3 fires with NO suppression and ONE
+    receipt must still report 2 problems.
+
+    This is what stops the fix from laundering a genuinely under-receipted day: if the
+    excuse keyed on anything but the daemon's own skip marker, an honest 3-fire day with a
+    silent lane would read CLEAN, which is the failure this leg exists to catch.
+    """
+    hours = _499_FIRE_HOURS[:3]
+    fires = _622_fires(hours, suppressed_hours=())
+    leg = _duty_leg([_499_row()], [_499_receipt(hours[2], 1)],
+                    fires=fires, read_at=_499_READ_AT)
+    problems = "\n".join(leg["problems"])
+    assert leg["coverage"]["fires_unanswered"] == 2, (
+        f"an unsuppressed fire that ran owes a receipt: {leg['coverage']}")
+    assert leg["coverage"]["rounds_under_receipted"] == 1, leg["coverage"]
+    for hour in hours[:2]:
+        assert _plus(_DUTY_BOUND, hour) in problems, (
+            f"{hour} left no receipt and must be NAMED: {problems}")
+    assert not leg["coverage"]["duties_judged"][0].get("fires_suppressed"), (
+        "nothing was suppressed here, so nothing may be excused as suppressed")
+
 def test_the_zero_max_guard_keeps_margin_for_RAISING() -> None:
     """Acceptance 1: the guard is at the CALLER, so the SHARED law is unchanged.
 
