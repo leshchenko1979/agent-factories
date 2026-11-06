@@ -274,6 +274,17 @@ def format_yield_percent(value: float | None) -> str:
     """
     return "n/a" if value is None else f"{round(value * 100, 1)}%"
 
+def format_cost_usd(value: float | None) -> str:
+    """A per-task cost figure — `n/a` when the ratio is UNDEFINED, never `$0.0000`.
+
+    Origin (#620): a zero denominator published `0.0`, which renders as `$0.0000` — "a
+    successful task costs nothing", the most favourable possible value for the least
+    measurable state. The yield already carries the three-state contract (`None` -> `n/a`);
+    a cost ratio whose denominator is zero is undefined in exactly the same way, so it
+    travels the same shape rather than defaulting to a number nobody measured.
+    """
+    return "n/a" if value is None else f"${value:.4f}"
+
 def format_elapsed_seconds(elapsed_secs: float) -> str:
     """The run row's `duration=` value, rendered from the run's OWN measured wall time.
 
@@ -348,7 +359,7 @@ def format_yield_text(stats: dict[str, Any]) -> str:
 def format_cost_per_success_text(stats: dict[str, Any]) -> str:
     """Cost / Successful Task with its population and its coverage (clause 5)."""
     return (
-        f"${stats.get('cost_per_successful_task_usd', 0.0):.4f} "
+        f"{format_cost_usd(stats.get('cost_per_successful_task_usd'))} "
         f"(${stats.get('total_cost_usd', 0.0):.4f} total cost ÷ "
         f"{stats.get('successful_closed_tasks', 0)} accepted closed subjects "
         f"— coverage: {stats.get('close_rows_stating_outcome', 0)} of "
@@ -434,7 +445,9 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
             "lead_times_sec": [],
             "avg_lead_time_sec": 0.0,
             "total_cost_usd": 0.0,
-            "avg_cost_per_closed_task_usd": 0.0,
+            "avg_cost_per_closed_task_usd": None,
+            "cost_per_successful_task_usd": None,
+            "successful_closed_tasks": 0,
             "total_tokens_in": 0,
             "total_tokens_out": 0,
             "total_turns": 0,
@@ -614,8 +627,13 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
     # reconcilable rather than silently disagreeing.
     closed_count = len(subjects_close)
     successful_closed_tasks = len(successful_closed_subjects)
-    avg_cost_per_closed_task = (total_cost_usd / closed_count) if closed_count > 0 else 0.0
-    cost_per_successful_task = (total_cost_usd / successful_closed_tasks) if successful_closed_tasks > 0 else 0.0
+    # An UNDEFINED quotient is `None`, never `0.0` (#620): a zero denominator publishes
+    # `$0.0000`, which reads as "this costs nothing" — the flattering value for a state
+    # nobody measured. `None` travels to the formatter as `n/a`.
+    avg_cost_per_closed_task = (total_cost_usd / closed_count) if closed_count > 0 else None
+    cost_per_successful_task = (
+        total_cost_usd / successful_closed_tasks if successful_closed_tasks > 0 else None
+    )
 
     # Spot check the latest closed subject
     latest_closed = None
@@ -667,8 +685,12 @@ def parse_ledger(ledger_path: Path) -> tuple[dict[str, Any], set[str]]:
         "lead_times_sec": lead_times_sec,
         "avg_lead_time_sec": round(avg_lead_time, 1),
         "total_cost_usd": round(total_cost_usd, 4),
-        "avg_cost_per_closed_task_usd": round(avg_cost_per_closed_task, 4),
-        "cost_per_successful_task_usd": round(cost_per_successful_task, 4),
+        "avg_cost_per_closed_task_usd": (
+            None if avg_cost_per_closed_task is None else round(avg_cost_per_closed_task, 4)
+        ),
+        "cost_per_successful_task_usd": (
+            None if cost_per_successful_task is None else round(cost_per_successful_task, 4)
+        ),
         "successful_closed_tasks": successful_closed_tasks,
         "total_tokens_in": total_tokens_in,
         "total_tokens_out": total_tokens_out,
@@ -3526,8 +3548,8 @@ def format_report_markdown(
         f"| **Avg Task Lead Time** | `{ledger_stats.get('avg_lead_time_sec', 0.0)}s` | Mean intake→close duration over {len(ledger_stats.get('lead_times_sec', []))} sampled subjects |",
         f"| **Total Inference Cost** | `${ledger_stats.get('total_cost_usd', 0.0):.4f}` | Tracked cost across ledger task telemetry — summed from each row's canonical TRAILER only, by position and across every event (issue #90) |",
         f"| **Telemetry Outside the Trailer** | `{ledger_stats.get('out_of_trailer_count', 0)}` row(s) | {format_out_of_trailer_note(ledger_stats)} |",
-        f"| **Avg Cost / Closed Task** | `${ledger_stats.get('avg_cost_per_closed_task_usd', 0.0):.4f}` | ${ledger_stats.get('total_cost_usd', 0.0):.4f} total cost ÷ {ledger_stats.get('closed_subjects', 0)} distinct closed subjects |",
-        f"| **Cost / Successful Task** | `${ledger_stats.get('cost_per_successful_task_usd', 0.0):.4f}` | {format_cost_note(ledger_stats)} |",
+        f"| **Avg Cost / Closed Task** | `{format_cost_usd(ledger_stats.get('avg_cost_per_closed_task_usd'))}` | ${ledger_stats.get('total_cost_usd', 0.0):.4f} total cost ÷ {ledger_stats.get('closed_subjects', 0)} distinct closed subjects |",
+        f"| **Cost / Successful Task** | `{format_cost_usd(ledger_stats.get('cost_per_successful_task_usd'))}` | {format_cost_note(ledger_stats)} |",
         f"| **Total Tokens (In/Out)** | `{ledger_stats.get('total_tokens_in', 0)} / {ledger_stats.get('total_tokens_out', 0)}` | Cumulative prompt and completion tokens |",
         f"| **Cadence Status** | `{'HELD' if cadence_stats.get('cadence_held') else 'MISSED'}` | Last run: {cadence_stats.get('hours_since_last_run')}h ago |",
         "",
