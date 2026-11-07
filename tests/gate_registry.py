@@ -480,6 +480,16 @@ REQUIRED_GATES: tuple[str, ...] = (
     # The mechanism it guards is the one surface with NO other observer: the pusher runs
     # from a clock, so a pusher that stopped working is visible here and nowhere else.
     "test_audit_rates.py",
+    # Added with its registration (board #600, ruled n=4645 shape 2). REQUIRED is the correct
+    # grain: every arm drives a synthetic argv and a temp copy of the module, so it reads no
+    # live cgroup, no box state and no board, and it passes in a bootstrapped factory exactly
+    # as it does here. THE MECHANISM IT GUARDS is a ceiling that existed as dead code --
+    # `ensure_scoped` defined and never called -- so the load-bearing arm is a WIRING arm
+    # (`main()` must CALL it, before `acquire_run_lock`), not an existence check. Its MUTANT
+    # ARM deletes that call from a copy and requires the arm to red; its POSITIVE CONTROL runs
+    # a real single tree to completion under `--no-scope`, so a green is never a green over
+    # nothing (#116).
+    "test_audit_scope.py",
     # Added with its registration (board #150, ruling n=919). REQUIRED is the correct grain
     # and OPTIONAL is not: its seven probes drive a synthetic dirty repo and a synthetic
     # unreadable one, so it reads no live board, no fleet manifest and no box-local fixture,

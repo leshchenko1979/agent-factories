@@ -18,6 +18,10 @@
       "tests/test_audit_rates.py",
       "tools/audit.py"
     ],
+    "tests/test_audit_scope.py": [
+      "TEMPLATE/tools/audit.py",
+      "tools/audit.py"
+    ],
     "tests/test_audit_tree_condition.py": [
       "TEMPLATE/tools/audit.py",
       "tools/audit.py"
@@ -65,6 +69,13 @@
       "tools/publish.py",
       "tools/rule.py"
     ],
+    "tests/test_claim_standing.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "registry/kit.json",
+      "tools/patrol_host_state.py",
+      "tests/gate_registry.py",
+      "tests/patrol_fixtures.py"
+    ],
     "tests/test_close_board_recorded.py": [
       "docs/close-board-exemptions.json",
       "evidence/ledger.jsonl",
@@ -75,6 +86,20 @@
       "docs/ledger-retirements.json",
       "evidence/ledger.jsonl",
       "tools/ledger.py"
+    ],
+    "tests/test_close_ruling_paired.py": [
+      "TEMPLATE/tests/test_board_intake_recorded.py",
+      "TEMPLATE/tests/test_close_ruling_paired.py",
+      "TEMPLATE/tools/field_predicate.py",
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/patrol_host_state.py",
+      "docs/ruling-board-exemptions.json",
+      "tests/ledger_boundary.py",
+      "tests/test_board_intake_recorded.py",
+      "tests/test_close_ruling_paired.py",
+      "tools/field_predicate.py",
+      "tools/ledger.py",
+      "tools/patrol_host_state.py"
     ],
     "tests/test_close_telemetry_provenance.py": [
       "evidence/ledger.jsonl"
@@ -97,6 +122,17 @@
     "tests/test_commit_session_trailer.py": [
       "TEMPLATE/tools/hooks/**",
       "tools/hooks/**"
+    ],
+    "tests/test_commit_subject_issue_refs.py": [
+      "TEMPLATE/tests/test_commit_subject_issue_refs.py",
+      "TEMPLATE/tools/ledger.py",
+      "TEMPLATE/tools/ledger_declaration.py",
+      "docs/commit-subject-issue-refs.json",
+      "docs/instruments/ledger.md",
+      "evidence/ledger.jsonl",
+      "tests/test_commit_subject_issue_refs.py",
+      "tools/ledger.py",
+      "tools/ledger_declaration.py"
     ],
     "tests/test_criteria_count.py": [
       "docs/quality-criteria.md"
@@ -152,18 +188,12 @@
       "docs/**",
       "skills/**"
     ],
-    "tests/test_duty_residual_recovery.py": [
+    "tests/test_duty_fire_pairing.py": [
       "TEMPLATE/tools/patrol_host_state.py",
-      "docs/duty-receipt-exemptions.json",
       "tests/patrol_fixtures.py",
       "tools/patrol_host_state.py"
     ],
     "tests/test_duty_goal_stem.py": [
-      "TEMPLATE/tools/patrol_host_state.py",
-      "tests/patrol_fixtures.py",
-      "tools/patrol_host_state.py"
-    ],
-    "tests/test_duty_fire_pairing.py": [
       "TEMPLATE/tools/patrol_host_state.py",
       "tests/patrol_fixtures.py",
       "tools/patrol_host_state.py"
@@ -173,6 +203,12 @@
       "docs/duty-receipt-exemptions.json",
       "tools/patrol_host_state.py",
       "tools/registry*.py"
+    ],
+    "tests/test_duty_residual_recovery.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "docs/duty-receipt-exemptions.json",
+      "tests/patrol_fixtures.py",
+      "tools/patrol_host_state.py"
     ],
     "tests/test_gate_budget_declared_mode.py": [
       "TEMPLATE/tools/gate_budget_rederive.py",
@@ -607,13 +643,6 @@
       "evidence/rework.md",
       "skills/**"
     ],
-    "tests/test_claim_standing.py": [
-      "TEMPLATE/tools/patrol_host_state.py",
-      "registry/kit.json",
-      "tools/patrol_host_state.py",
-      "tests/gate_registry.py",
-      "tests/patrol_fixtures.py"
-    ],
     "tests/test_patrol_board.py": [
       "TEMPLATE/tools/patrol_host_state.py",
       "registry/kit.json",
@@ -913,31 +942,6 @@
       "docs/products.example.json",
       "docs/products.json",
       "tools/roadmap.py"
-    ],
-    "tests/test_commit_subject_issue_refs.py": [
-      "TEMPLATE/tests/test_commit_subject_issue_refs.py",
-      "TEMPLATE/tools/ledger.py",
-      "TEMPLATE/tools/ledger_declaration.py",
-      "docs/commit-subject-issue-refs.json",
-      "docs/instruments/ledger.md",
-      "evidence/ledger.jsonl",
-      "tests/test_commit_subject_issue_refs.py",
-      "tools/ledger.py",
-      "tools/ledger_declaration.py"
-    ],
-    "tests/test_close_ruling_paired.py": [
-      "TEMPLATE/tests/test_board_intake_recorded.py",
-      "TEMPLATE/tests/test_close_ruling_paired.py",
-      "TEMPLATE/tools/field_predicate.py",
-      "TEMPLATE/tools/ledger.py",
-      "TEMPLATE/tools/patrol_host_state.py",
-      "docs/ruling-board-exemptions.json",
-      "tests/ledger_boundary.py",
-      "tests/test_board_intake_recorded.py",
-      "tests/test_close_ruling_paired.py",
-      "tools/field_predicate.py",
-      "tools/ledger.py",
-      "tools/patrol_host_state.py"
     ]
   }
 }

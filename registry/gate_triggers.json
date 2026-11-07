@@ -18,6 +18,10 @@
       "tests/test_audit_rates.py",
       "tools/audit.py"
     ],
+    "tests/test_audit_scope.py": [
+      "TEMPLATE/tools/audit.py",
+      "tools/audit.py"
+    ],
     "tests/test_audit_tree_condition.py": [
       "TEMPLATE/tools/audit.py",
       "tools/audit.py"

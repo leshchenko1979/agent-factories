@@ -24,6 +24,7 @@ import fcntl
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -1359,6 +1360,117 @@ def run_lock_path(repo_root: Path = REPO_ROOT) -> Path:
 
 AUDIT_LOCK = run_lock_path()
 LOCK_HELD_EXIT_CODE = 3
+
+# THE HOST-WIDE AUDIT CEILING (issue #600, owner ruling n=4645).
+#
+# WHAT IT BOUNDS: the aggregate RSS of audit TREES, across every repository and every
+# factory on this host. The measured failure is a SUM, not a single run: three peer
+# `audit.py` suites live in one window took loadavg to 47.18, and the ops daemon was
+# OOM-killed at 2.51 GiB anon-rss -- INSIDE its own 3 GiB bound, because the HOST ran out
+# and not the cgroup. Memory is charged to whichever daemon spawned a run, so no
+# repository owns the budget and no per-repository lock can bound it.
+#
+# THE SHAPE IS THE OWNER'S, and shape (1) is REFUSED in terms: a shared lock at a host
+# path bounds a COUNT of concurrent trees and says nothing about their SIZE, so a close
+# citing a semaphore is refused. Raising `MemoryMax` is named REFUTED by the same ruling.
+#
+# THE VALUE IS A MEASURED PEAK WITH DECLARED HEADROOM, never a round number: see
+# `AUDIT_SCOPE_MEMORY_MAX_BASIS`. A ceiling below the real peak would turn a measurement
+# duty into a reliable OOM, which is the failure this exists to prevent.
+AUDIT_SCOPE_MEMORY_MAX_MIB = 2560
+AUDIT_SCOPE_MEMORY_MAX_BASIS = (
+    "the tree's own measured peak, read from the kernel: one full `python3 tools/audit.py --json` "
+    "run under `systemd-run --user --scope` (unit `audit-peak-283291.scope`), polled every 5 s from "
+    "the unit's `MemoryPeak` for its whole life -- 418 samples, peak 1265.9 MiB -- at "
+    "2026-11-07T13:36:37Z. The run exited 1 on a dirty tree, which does not affect the peak. Polled "
+    "DURING the run, never read at the end: a transient scope's cgroup vanishes on exit, so an "
+    "end-only read answers 0 and manufactures a basis out of nothing. Declared headroom is 2x that "
+    "peak (2531.8 MiB), rounded up to the next 256 MiB. Re-measure whenever the gate suite's size "
+    "changes materially; the basis is printed on every run that applies the ceiling."
+)
+AUDIT_SCOPE_MEMORY_SWAP_MAX = "0"
+AUDIT_SCOPE_ENV_MARKER = "AUDIT_TREE_SCOPED"
+
+
+def audit_scope_unavailable_reason() -> str:
+    """Why this run cannot be scoped, or "" when it can be.
+
+    THE ABSENCE IS STATED, NEVER SILENT (#271). A run that cannot apply the ceiling must
+    say so on its own output, because "no ceiling was applied" and "the ceiling was applied
+    and held" are the same silence otherwise -- and the second is what a reader assumes.
+    """
+    if shutil.which("systemd-run") is None:
+        return "systemd-run is not on PATH"
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if not runtime:
+        return "XDG_RUNTIME_DIR is unset, so there is no systemd user session to scope into"
+    if not (Path(runtime) / "systemd" / "private").exists():
+        return f"no systemd user session at {runtime}/systemd/private"
+    return ""
+
+
+def ensure_scoped(argv: list[str]) -> int | None:
+    """Re-exec this run under a systemd scope carrying the host-wide ceiling (#600).
+
+    Returns the run's exit code when the scope CARRIED it, or None when this process
+    should go on and run the audit itself. The two returns are deliberately different
+    types: `0` is a successful audit, and a caller that confused the two would report a
+    completed run for a process that never started one.
+
+    THE SCOPE WRAPS THE WHOLE TREE -- the lock, the metrics, and every gate -- because the
+    load this bounds is the tree's, and a ceiling on the parent alone bounds nothing that
+    a forked gate does.
+    """
+    if os.environ.get(AUDIT_SCOPE_ENV_MARKER) == "1":
+        return None  # already inside the scope: this IS the tree
+    if "--no-scope" in argv:
+        print(
+            "audit scope: NOT APPLIED (--no-scope) -- this run is UNBOUNDED and contributes "
+            "its whole tree's RSS to the host. Diagnostic use only.",
+            file=sys.stderr,
+        )
+        return None
+    if "--no-gates" in argv:
+        # The same principled exemption the run lock takes: `--no-gates` spawns no gate
+        # processes, so it contributes none of the load the ceiling bounds. It is also
+        # what keeps the suite green -- `tests/test_audit_rates.py` is a registered gate
+        # that runs `audit.py --json --no-gates` and asserts rc==0.
+        return None
+    reason = audit_scope_unavailable_reason()
+    if reason:
+        print(
+            f"audit scope: NOT APPLIED ({reason}) -- this run is UNBOUNDED. The host-wide "
+            f"ceiling of {AUDIT_SCOPE_MEMORY_MAX_MIB} MiB was NOT enforced for this tree.",
+            file=sys.stderr,
+        )
+        return None
+    systemd_run = shutil.which("systemd-run")
+    unit = f"audit-tree-{os.getpid()}-{int(time.time())}"
+    ceiling = f"{AUDIT_SCOPE_MEMORY_MAX_MIB}M"
+    cmd = [
+        systemd_run,
+        "--user",
+        "--scope",
+        f"--unit={unit}",
+        "-p",
+        f"MemoryMax={ceiling}",
+        "-p",
+        f"MemorySwapMax={AUDIT_SCOPE_MEMORY_SWAP_MAX}",
+        "--",
+        sys.executable,
+        str(Path(__file__).resolve()),
+        *argv,
+    ]
+    env = dict(os.environ)
+    env[AUDIT_SCOPE_ENV_MARKER] = "1"
+    print(
+        f"audit scope: ceiling {ceiling} (MemorySwapMax={AUDIT_SCOPE_MEMORY_SWAP_MAX}), "
+        f"unit {unit}. Basis: {AUDIT_SCOPE_MEMORY_MAX_BASIS}",
+        file=sys.stderr,
+    )
+    completed = subprocess.run(cmd, env=env, cwd=str(REPO_ROOT))
+    return completed.returncode
+
 
 def _orphan_guard() -> Callable[[], None]:
     """Build the child-side `preexec_fn` that binds a child's life to THIS process.
@@ -3431,6 +3543,25 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_gate_entry_point_equivalence.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_gate_entry_point_equivalence.py"])
 
+    # 102. the AUDIT-SCOPE gate (#600, ruled n=4645 shape 2). THE MECHANISM IT GUARDS: the
+    # per-run memory ceiling on an audit tree. `systemd-run --scope -p MemoryMax=` bounds ONE
+    # tree's aggregate RSS; the ruling REFUSED a shared host lock (shape 1) and REFUTED raising
+    # the ceiling, so the scope is the whole remedy. The defect it closes is not a missing
+    # feature but DEAD CODE: `ensure_scoped` was defined and never called, so the ceiling
+    # existed on paper while every tree ran unbounded -- one grep hit, its own `def`. A gate
+    # that only asserts the constant exists would have been green through all of it, which is
+    # why the load-bearing arm is a WIRING arm: `main()` must CALL it, and before
+    # `acquire_run_lock` (a tree that takes the lock then refuses to start leaves the lock
+    # held). Its MUTANT ARM deletes that call from a copy of the module and requires the arm
+    # to red; its POSITIVE CONTROL runs a real single tree to completion under `--no-scope`,
+    # so green is never a green over nothing (#116). `--no-scope` is a documented diagnostic
+    # escape and must stay REGISTERED in the parser, or the control itself exits 2.
+    #
+    #     Script-form via `pytest`, and it is hermetic: every arm drives a synthetic argv and a
+    #     temp module copy, so it reads no live box, no cgroup and no board.
+    if (repo_root / "tests/test_audit_scope.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_audit_scope.py"])
+
     return gates_to_run
 
 
@@ -3647,7 +3778,29 @@ def main() -> int:
         action="store_true",
         help="Block on the run lock instead of refusing. The default is a non-blocking refuse (exit 3), because a blocked caller is what leaves an orphan when its turn dies.",
     )
+    # `--no-scope` is read by `ensure_scoped` straight off argv, but it MUST be registered
+    # here: an unregistered flag makes argparse exit 2, so the escape hatch for the ceiling
+    # would be unreachable exactly when a diagnostic run needs it (#600).
+    parser.add_argument(
+        "--no-scope",
+        action="store_true",
+        help="Do NOT re-exec this run under the host-wide memory ceiling (#600). Diagnostic use only: the run is then UNBOUNDED and states that on stderr rather than running silently unbounded.",
+    )
     args = parser.parse_args()
+
+    # THE HOST-WIDE CEILING (#600, owner ruling n=4645 shape (2)). Ordered AFTER
+    # `parse_args` because it reads argv and `--no-scope` must parse; ordered BEFORE
+    # `acquire_run_lock` because the scope wraps the WHOLE tree — the lock, the metrics
+    # and every forked gate — and a ceiling applied after the lock would bound nothing
+    # the lock guards.
+    #
+    # THE TWO RETURN TYPES ARE THE POINT: `None` means this process is the tree and must
+    # carry on; an int means the scope already ran the tree and this process must return
+    # that code WITHOUT running anything. Confusing the two would report a completed run
+    # for a process that never started one.
+    scope_exit = ensure_scoped(sys.argv[1:])
+    if scope_exit is not None:
+        return scope_exit
 
     # THE WHOLE-RUN IN-FLIGHT GUARD (issue #145, ruling n=940). Two runs contending for
     # one cgroup is the load this bounds: 17 cron jobs fired inside a 19-second window

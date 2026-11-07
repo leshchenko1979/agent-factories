@@ -44,6 +44,9 @@
       "refuser": "tools/ledger.py",
       "table": "docs/audit-rates-exemptions.json"
     },
+    "tests/test_audit_scope.py": {
+      "class": "always-satisfiable"
+    },
     "tests/test_audit_tree_condition.py": {
       "class": "always-satisfiable"
     },
@@ -968,6 +971,7 @@
   "modes": {
     "tests/test_audit_inflight_guard.py": "script",
     "tests/test_audit_rates.py": "pytest",
+    "tests/test_audit_scope.py": "pytest",
     "tests/test_audit_tree_condition.py": "script",
     "tests/test_audit_undefined_names.py": "script",
     "tests/test_binding_mechanism_exists.py": "pytest",

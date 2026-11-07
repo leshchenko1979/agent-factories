@@ -99,6 +99,21 @@ automated **hygiene process** upholding workspace resource safety:
 | **3. Operational Measurement & Consulting** | Surveys | Owner & Member Factory HQs | Surveys lane / cron (`factory-measurement-daily`) | **Score diff, Consulting advisory, & Insights entries** (Client Value: Objective bottleneck visibility, prioritized actionable fixes, predictable growth trajectory) | daily (09:00 MSK) | Objective, reproducible score diffs; actionable consulting guidance for member HQs | `evidence/scores/<date>.md`, `evidence/insights.jsonl`, ledger `score` row carrying the workspace-gate verdict (`workspace_gate=rc=0`) | cadence · duration · resources consumed · throughput |
 | **4. Workspace Hygiene Sweep** | HQ | Host Environment / Operators | Automated runner / cron (`python3 tools/hygiene.py`) | **Clean tree** (Client Value: Zero runaway storage, zero stale scratch interference, reproducible builds) | daily | Zero resource exhaustion; stale scratch scripts reaped; clean git tree | Clean audit log from `tools/hygiene.py` | cadence · duration · first-pass yield |
 
+**Process 4's resource bound on audit trees (board #600, ruled n=4645 shape 2).** An audit
+tree — `tools/audit.py` and every gate it forks — runs under a **per-run memory ceiling**
+applied by `systemd-run --user --scope -p MemoryMax=<AUDIT_SCOPE_MEMORY_MAX_MIB>`, with
+`MemorySwapMax=0`. The ceiling bounds the tree's **aggregate RSS**, read from the kernel's
+own cgroup `memory.peak`, and never a count of concurrent trees: the ruling REFUSED a shared
+host lock (shape 1) because a semaphore bounds how MANY trees run and says nothing about how
+LARGE one is, and it named raising `MemoryMax` REFUTED. The value is a **measured peak with
+declared headroom** (2x, rounded up to the next 256 MiB), carried in
+`AUDIT_SCOPE_MEMORY_MAX_BASIS` and **printed on every run that applies it** — so a reader can
+always tell a bounded run from an unbounded one. A host that cannot scope (`systemd-run`
+absent) STATES the absence on its own output and proceeds unbounded; the absence is never
+silent (#271). Upholding gate: `tests/test_audit_scope.py`, whose load-bearing arm is a
+**wiring** arm (`main()` must CALL the ceiling, before `acquire_run_lock`) and whose mutant
+arm deletes that call and requires the gate to red.
+
 ---
 
 ## 3.1 Product-to-Process Synthesis
