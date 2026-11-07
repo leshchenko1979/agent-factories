@@ -202,6 +202,45 @@ LOCAL_BLOCKS: tuple[dict, ...] = (
         ),
         "executing": None,
     },
+    {
+        "label": (
+            "#627's TITLE-ONLY closing blob -- ADOPTION OWED, not yet taken (declared "
+            "2026-11-07, same day the fix landed on the template). The template's "
+            "`mechanical_close()` reads the question's TITLE alone; the executing copy still "
+            "joins title + description + the set subject, so on the LIVE register a set whose "
+            "subject names a closed issue still kills every question in it at the next gc, "
+            "and a description citing a closed issue still closes a question it merely "
+            "supports. The divergence is the fix itself, not a variant: the executing copy "
+            "carries the defect, and this block bounds it until `leshchenko1979/opencrabs-skill` "
+            "adopts it. Registered here so a live defect reads as DEBT with its verdict rather "
+            "than as undeclared drift, and named in #188."
+        ),
+        "template": (
+            r"^\s+\* default . the question's TITLE names a fork issue",
+            r'^\s+blob = str\(question\.get\("title"\) or ""\)$',
+        ),
+        "executing": (
+            r"^\s+\* default . the question's text \(or the set subject\) names a fork issue",
+            r"^\s+if x\)$",
+        ),
+    },
+    {
+        "label": (
+            "#627's GATE ARMS -- a PURE ADDITION on the template side, adoption OWED with the "
+            "predicate above. The template's selftest carries three arms for the TITLE-only "
+            "blob (subject must not close and its issue is never queried; description must not "
+            "close; and the positive control that the same closed issue in the title still "
+            "closes). The executing copy has no such arms because it has not adopted the fix, "
+            "and an arm for a predicate a home does not carry would fail there. Declared as "
+            "the addition it is -- it bounds the arms, it does not bless a missing predicate: "
+            "block above this one carries that debt, and it prints on every run."
+        ),
+        "template": (
+            r"^\s+# -- 8f\. #627: the closing blob is the TITLE ONLY",
+            r'^\s+% \(get_set\(_pctl\)\["questions"\]\[0\]\.get\("closed_reason"\),\)\)$',
+        ),
+        "executing": None,
+    },
 )
 
 
