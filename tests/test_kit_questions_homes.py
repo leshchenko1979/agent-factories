@@ -372,6 +372,60 @@ def controls(template_text: str) -> list[str]:
     return problems
 
 
+def _uncommitted_divergence(executing: Path, executing_text: str) -> str | None:
+    """Why the executing copy's COMMITTED state differs from its working tree, or None.
+
+    None covers three states that are NOT this defect and must not be reported as it:
+    the copy is outside a git repository (a member factory's vendored tree), git is
+    unavailable, or the file is untracked in its repo. In each case there is no
+    committed state to compare against, so this leg says nothing rather than guessing.
+    """
+    import subprocess
+
+    try:
+        repo = subprocess.run(
+            ["git", "-C", str(executing.parent), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=30,
+        )
+        if repo.returncode != 0:
+            return None
+        root = repo.stdout.strip()
+        if not root:
+            return None
+        rel = str(executing.resolve().relative_to(Path(root).resolve()))
+        head = subprocess.run(
+            ["git", "-C", root, "show", f"HEAD:{rel}"],
+            capture_output=True, text=True, timeout=60,
+        )
+        if head.returncode != 0:
+            return None
+        if head.stdout == executing_text:
+            return None
+        import hashlib
+        want = hashlib.sha256(executing_text.encode("utf-8")).hexdigest()[:12]
+        got = hashlib.sha256(head.stdout.encode("utf-8")).hexdigest()[:12]
+        return (
+            f"{rel} in {root} -- worktree sha256 {want} != HEAD sha256 {got} "
+            f"(HEAD is {_short_head(root)})"
+        )
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def _short_head(root: str) -> str:
+    """HEAD's short sha, or 'unknown' -- a label, never a verdict."""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "-C", root, "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=30,
+        )
+        return out.stdout.strip() or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
 def main() -> int:
     if not TEMPLATE_HOME.is_file():
         print(f"questions-homes gate ERROR: {TEMPLATE_HOME.relative_to(REPO)} is missing")
@@ -400,6 +454,24 @@ def main() -> int:
 
     executing = Path(info["resolved"])
     executing_text = executing.read_text(encoding="utf-8")
+
+    # THE WORKING TREE IS NOT THE ADOPTION (#627, measured 2026-11-07). The backend
+    # EXECUTES whatever sits at this path, so reading it describes live BEHAVIOUR --
+    # but a fix present only in an uncommitted working tree is one `git checkout`
+    # from being erased, and a gate that reads the worktree alone calls that clean.
+    # Measured on this very fix: HEAD 5a6b4585 still carried the pre-#627
+    # three-part blob while the worktree read the TITLE-only predicate, so a green
+    # verdict here rested on work that existed in no commit. Reported as a FAIL
+    # rather than a note: the debt is the same one this gate exists to make
+    # visible, and it clears when the owning lane commits.
+    inflight = _uncommitted_divergence(executing, executing_text)
+    if inflight:
+        print(f"FAIL: the executing copy's fix is UNCOMMITTED -- {inflight}")
+        print("  the backend runs this working tree, so the behaviour IS fixed; but a")
+        print("  `git checkout` in that repository silently re-arms the defect and this")
+        print("  gate would go green on work that exists in no commit. Adoption lands")
+        print("  when the owning lane commits it, not when its worktree changes.")
+        return 1
     diff = residual(template_text, executing_text)
     block_problems: list[str] = []
     bad = undeclared(template_text, executing_text, block_problems)
