@@ -466,6 +466,13 @@ PAIRS = [
     # that took the law without the hook leg would carry a clause whose mechanism is absent.
     ("tests/test_law_mechanism_same_commit.py", "TEMPLATE/tests/test_law_mechanism_same_commit.py"),
     ("tests/test_audit_rates.py", "TEMPLATE/tests/test_audit_rates.py"),
+    # Added with its mechanism (issue #600): the gate proves `tools/audit.py` runs its tree
+    # inside a memory scope, so it is only meaningful where the tool ships with it — a factory
+    # that took the gate without the `ensure_scoped` mechanism would run arms that cannot pass,
+    # and one that took the tool without the gate would carry a ceiling nothing verifies. The
+    # measured basis is derived from a peak the gate itself recomputes, so the pair must travel
+    # together or the number loses the thing that keeps it honest.
+    ("tests/test_audit_scope.py", "TEMPLATE/tests/test_audit_scope.py"),
     # Added with its registration (issue #145): the gate drives `tools/audit.py`, which is a
     # paired file, so it is only meaningful where BOTH ship — a factory that took the tool's
     # in-flight guard without the gate proving it would carry a guard nothing checks, and one
