@@ -121,10 +121,12 @@ from field_predicate import (  # noqa: E402
 # reason: this file is run as a script (its own dir is already on the path) and
 # imported by `tests/`, and both must resolve the same reader (issue #94).
 from gate_budget import (  # noqa: E402
+    GATES_MANIFEST_ENV,
     GateBudgetManifestError,
     GateBudgets,
     TIMEOUT_EXIT_CODE,
     gate_key_for_cmd,
+    gates_manifest_path,
     load_gate_budgets,
 )
 
@@ -835,7 +837,71 @@ def parse_intake_metric(days: float = 30.0) -> dict[str, Any]:
     return stats
 
 
-def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
+KILL_DRAIN_SEC = 5.0
+"""How long a killed gate's pipes are given to drain before its output is abandoned.
+
+Bounded rather than unbounded: the subtree was just SIGKILLed, so the pipes close as soon
+as the kernel has reaped it -- but a grandchild that escaped the group could hold one open
+forever, and a drain with no ceiling would turn a budget kill into a second hang.
+"""
+
+def _kill_gate_tree(proc: subprocess.Popen) -> str:
+    """SIGKILL the gate's whole PROCESS GROUP, and say in words what was signalled.
+
+    THE SUBTREE, NOT THE CHILD (#629 condition 3). `Popen.kill()` -- and the kill
+    `subprocess.run` performs for you on a timeout -- signals the DIRECT CHILD only, so a
+    gate that spawns anything of its own (a selftest, a pytest session, a shell) leaves
+    that subtree running: measured twice on this box, alive 6 m 39 s and 4 m 39 s after the
+    audit that started them had exited, still holding their pipes, reparented to the
+    daemon. A leaked gate is not cosmetic. It deposits load on the box whose load every
+    wall in `registry/gates.json` was measured under, so the leak corrupts the very regime
+    that sizes the next wall -- the class #226 exists to keep out of the manifest.
+
+    WHY THIS CAN REACH THE SUBTREE: the child is started with `start_new_session=True`, so
+    it is a session and process-group leader and every process it forks inherits that
+    group. `os.getpgid` is read rather than assumed, because the guarantee is the child's,
+    not ours: a platform that ignored the flag would leave the child in OUR group, and
+    signalling that group would kill the audit itself. The guard below therefore only ever
+    signals a group that is NOT this process's own.
+
+    FAIL-OPEN, like `_orphan_guard`: a group that cannot be resolved or has already exited
+    is REPORTED, never raised -- the kill is a load bound, and losing it must not turn a
+    budget exhaustion into a crash.
+    """
+    try:
+        pgid = os.getpgid(proc.pid)
+    except OSError:
+        return f"no process group resolved for pid {proc.pid} — nothing was reaped"
+    try:
+        own = os.getpgid(0)
+    except OSError:  # pragma: no cover - defensive; getpgid(0) does not fail in practice
+        own = None
+    if own is not None and pgid == own:
+        # The flag did not take: this group is the AUDIT's. Killing it would kill the run
+        # that is reporting the kill, so the direct child is signalled instead and the
+        # shortfall is stated rather than hidden.
+        try:
+            proc.kill()
+        except OSError as exc:
+            return f"pid {proc.pid} shares this process group and could not be killed ({exc})"
+        return (
+            f"pid {proc.pid} shares the audit's own process group, so only the DIRECT CHILD "
+            f"was killed — its subtree may survive"
+        )
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        return f"process group {pgid} had already exited — nothing was left to reap"
+    except OSError as exc:
+        return f"process group {pgid} could NOT be signalled ({exc}) — its subtree may survive"
+    return f"process group {pgid} SIGKILLed, subtree included"
+
+def run_gate(
+    cmd: list[str],
+    cwd: Path,
+    budget_sec: float,
+    budget_source_label: str = "source unknown",
+) -> dict[str, Any]:
     """Run an individual verification gate under its DECLARED time budget.
 
     `budget_sec` is a PARAMETER, never a constant, and that is the point of #94: the
@@ -864,24 +930,33 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
     while True:
         attempts += 1
         t0 = datetime.datetime.now()
+        proc: subprocess.Popen | None = None
         try:
-            res = subprocess.run(
+            proc = subprocess.Popen(
                 cmd,
                 cwd=cwd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                timeout=budget_sec,
+                # THE GATE GETS ITS OWN SESSION (#629 condition 3), which is what lets a
+                # timeout reap the SUBTREE rather than the direct child. A gate that forks
+                # -- a selftest, a pytest session, a shell -- leaves its children running
+                # when only the child is signalled: measured twice, alive 6 m 39 s and
+                # 4 m 39 s after the audit that started them had exited. Those orphans
+                # deposit load on the box every wall in the manifest was measured under, so
+                # the leak corrupts the regime that sizes the next wall.
+                start_new_session=True,
                 # The orphan half of #145: a gate must not outlive the run that started
                 # it. `preexec_fn` leaves `cmd` untouched, so the budget key still
                 # describes the command that ran.
                 preexec_fn=_orphan_guard(),
             )
+            out, err = proc.communicate(timeout=budget_sec)
             t_el = (datetime.datetime.now() - t0).total_seconds()
             return {
                 "cmd": " ".join(cmd),
-                "exit_code": res.returncode,
-                "passed": res.returncode == 0,
+                "exit_code": proc.returncode,
+                "passed": proc.returncode == 0,
                 # A gate that CHOOSES the kill code exits NORMALLY, so it never raises
                 # `TimeoutExpired` and would otherwise be recorded `unknown: False` -- a
                 # plain FAILURE. That is one run described two ways by two surfaces, and
@@ -890,7 +965,7 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 # same reason a kill is: no verdict was taken. The wall-clock below stays a
                 # real measurement -- the gate ended on its own -- which is why
                 # `duration_is_lower_bound` remains False here and only here.
-                "unknown": res.returncode == TIMEOUT_EXIT_CODE,
+                "unknown": proc.returncode == TIMEOUT_EXIT_CODE,
                 "duration_sec": round(t_el, 2),
                 # A COMPLETED run's wall-clock is the measurement. Its presence on every
                 # record is what makes its ABSENCE on a kill readable as "this number is not
@@ -898,10 +973,21 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 "duration_is_lower_bound": False,
                 "attempts": attempts,
                 "retried": attempts > 1,
-                "stdout": res.stdout.strip(),
-                "stderr": res.stderr.strip(),
+                "stdout": (out or "").strip(),
+                "stderr": (err or "").strip(),
             }
         except subprocess.TimeoutExpired:
+            # REAP THE SUBTREE FIRST, then drain what it wrote. The order matters: a
+            # surviving grandchild holds the pipe open, so a drain before the kill blocks
+            # on the very process the kill exists to remove.
+            reaped = (
+                _kill_gate_tree(proc) if proc is not None
+                else "no child was started"
+            )
+            try:
+                out, err = proc.communicate(timeout=KILL_DRAIN_SEC)
+            except subprocess.TimeoutExpired:  # pragma: no cover - a group member escaped
+                out, err = "", ""
             t_el = (datetime.datetime.now() - t0).total_seconds()
             if attempts == 1:
                 first_attempt_sec = round(t_el, 2)
@@ -923,9 +1009,10 @@ def run_gate(cmd: list[str], cwd: Path, budget_sec: float) -> dict[str, Any]:
                 "first_attempt_sec": first_attempt_sec,
                 "stdout": "",
                 "stderr": (
-                    f"budget exhausted: the gate was killed at {budget_sec:.2f}s after "
-                    f"running {t_el:.2f}s, and killed AGAIN on the one bounded retry "
-                    f"(first attempt {first_attempt_sec}s) -- UNKNOWN, no verdict taken"
+                    f"budget exhausted: the gate was killed at {budget_sec:.2f}s "
+                    f"({budget_source_label}) after running {t_el:.2f}s, and killed AGAIN "
+                    f"on the one bounded retry (first attempt {first_attempt_sec}s) — "
+                    f"UNKNOWN, no verdict taken. Reap: {reaped}"
                 ),
             }
         except Exception as e:
@@ -1158,6 +1245,14 @@ def render_gate_line(g: dict) -> str:
     mark = "UNKNOWN" if g.get("unknown") else ("PASS" if g["passed"] else "FAIL")
     dur = f">={g['duration_sec']}" if g.get("duration_is_lower_bound") else f"{g['duration_sec']}"
     line = f"  [{mark}] {g['cmd']} ({dur}s of {g.get('budget_sec', 0.0):.2f}s)"
+    if mark == "UNKNOWN":
+        # THE CAP'S ORIGIN, BESIDE THE KILL (#629 condition 2). A reader meeting
+        # `killed at its budget` cannot tell a DECLARED wall -- a measurement of this gate
+        # -- from the fleet default, a cap nobody measured for it, and the two mean
+        # opposite things about the gate. It is not inferable from `exit 124` either: that
+        # code says the gate was STOPPED, never why at that number. So the label resolved
+        # with the cap is printed here, on the line that carries the verdict.
+        line += f" [cap: {g.get('budget_source_label') or 'source unknown'}]"
     if mark != "PASS":
         cause = g.get("note") or ""
         if cause:
@@ -3589,10 +3684,23 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
     for cmd in gates_to_run:
         key = gate_key_for_cmd(cmd, repo_root)
         budget_sec, source = budgets.resolve(key)
-        result = run_gate(cmd, repo_root, budget_sec)
+        # WHAT THE CAP IS, in words, so it can be printed BESIDE a kill (#629 condition 2).
+        # A reader who sees `killed at its budget` cannot tell whether that budget was
+        # DECLARED for this gate or was the fleet default, and the two mean opposite things:
+        # a declared wall is a measurement of this gate, a default is a cap nobody measured
+        # for it. The origin is therefore stated at the point the cap is resolved and
+        # travels with the record, instead of being INFERRED later from `exit 124` -- the
+        # kill code says the gate was stopped, never why at that number.
+        source_label = (
+            f"declared for this gate in {gates_manifest_path()}"
+            if source == "declared"
+            else f"NOT declared for this gate — {budgets.default_source}"
+        )
+        result = run_gate(cmd, repo_root, budget_sec, source_label)
         result["gate_key"] = key
         result["budget_sec"] = budget_sec
         result["budget_source"] = source
+        result["budget_source_label"] = source_label
         results.append(result)
     return results, budgets
 
@@ -3903,6 +4011,18 @@ def main() -> int:
             "status": verdict.status,
             "all_gates_pass": all_gates_pass,
             "gates_skipped": not gates_ran,
+            # WHICH MANIFEST SIZED THIS RUN (#629 condition 1), carried IN the payload.
+            #
+            # The text render prints it below, but a `--json` consumer returns from this
+            # block before ever reaching that print -- so a machine-readable run named no
+            # manifest at all, and the shipped audit (which invokes exactly that way) could
+            # not report one. Printing the path a caller HOPED to hand in is not the same
+            # fact: it says what was asked for, never what was READ. This field is what the
+            # reader resolved, so a caller can compare the two and a probe can fail on the
+            # difference -- which is the whole point of naming it.
+            "gate_budget_manifest": (
+                gate_budgets.default_source if gate_budgets is not None else None
+            ),
             "unknown_gates": len(verdict.unknown),
             "cadence": cadence_stats,
             "delivery": ledger_stats,
@@ -3957,6 +4077,19 @@ def main() -> int:
     # is stated even when it is zero, so an empty population is visibly empty rather
     # than indistinguishable from a print that never ran.
     default_gates = [g for g in gate_results if g.get("budget_source") == "default"]
+    # WHICH MANIFEST WAS READ (#629 condition 1). The per-gate source is printed below for
+    # every gate that fell through, but the MANIFEST ITSELF was never named -- so an audit
+    # run whose `cwd` put it in a tree with no `registry/gates.json`, or one carrying
+    # `OC_GATES_MANIFEST`, read a different file and said nothing about it. Handing a
+    # manifest in without printing which one was read moves the silence, it does not
+    # remove it: the caps in a payload are uninterpretable until the reader knows whose.
+    if gate_budgets is None:
+        print("\nGate-budget manifest: NOT READ — no caps were resolved this run")
+    else:
+        print(f"\nGate-budget manifest: {gate_budgets.default_source}")
+        override = os.environ.get(GATES_MANIFEST_ENV)
+        if override:
+            print(f"  {GATES_MANIFEST_ENV}={override} — the environment override is in force")
     print(
         f"\nGate budgets: {len(gate_results)} gate(s) run — "
         f"{len(gate_results) - len(default_gates)} declared, "

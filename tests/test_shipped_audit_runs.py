@@ -58,6 +58,7 @@ import ast
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -111,6 +112,101 @@ def inner_wall(manifest: Path | None = None) -> tuple[float, str]:
     """
     budgets = load_gate_budgets(manifest)
     return budgets.resolve(BUDGET_KEY)
+
+# HOW LONG A KILLED INNER AUDIT'S PIPES ARE GIVEN TO DRAIN (#629 condition 3).
+#
+# Bounded, not unbounded: the subtree was just SIGKILLed, so the pipes close as soon as the
+# kernel has reaped it -- but a process that escaped the group could hold one open forever,
+# and a drain with no ceiling would turn a budget kill into a second hang.
+KILL_DRAIN_SEC = 5.0
+
+def _reap_inner_tree(proc: subprocess.Popen | None) -> str:
+    """SIGKILL the inner audit's whole PROCESS GROUP, and say in words what was signalled.
+
+    THE SUBTREE, NOT THE CHILD (#629 condition 3). `subprocess.run`'s own timeout kill --
+    which this call used before -- signals the DIRECT CHILD only. The inner audit spawns a
+    gate per registration, so the kill leaves that gate running: the issue measured two
+    selftests alive 6 m 39 s and 4 m 39 s after the audit that started them had exited,
+    still holding their pipes, reparented to the daemon. The ruling measured the token set
+    as ZERO in THIS file as well as in `tools/audit.py`, so the leak is structural here too,
+    and this is the worse of the two places: it is the wall that fires after the longest run
+    (3289 s), i.e. the one most likely to have a subtree under it when it fires.
+
+    WHY THIS CAN REACH IT: the child is started with `start_new_session=True`, so it leads
+    its own session and process group and every gate it spawns inherits that group. The
+    group is READ, never assumed -- a platform that ignored the flag would leave the child in
+    OUR group, and signalling that would kill this gate. Only a group that is not our own is
+    ever signalled, and the shortfall is stated rather than hidden.
+
+    FAIL-OPEN: an unresolvable or already-exited group is REPORTED, never raised. The kill is
+    a load bound; losing it must not turn a budget exhaustion into a crash.
+    """
+    if proc is None:
+        return "no child was started"
+    try:
+        pgid = os.getpgid(proc.pid)
+    except OSError:
+        return f"no process group resolved for pid {proc.pid} — nothing was reaped"
+    try:
+        own = os.getpgid(0)
+    except OSError:  # pragma: no cover - defensive; getpgid(0) does not fail in practice
+        own = None
+    if own is not None and pgid == own:
+        try:
+            proc.kill()
+        except OSError as exc:
+            return f"pid {proc.pid} shares this gate's process group and could not be killed ({exc})"
+        return (
+            f"pid {proc.pid} shares this gate's own process group, so only the DIRECT CHILD "
+            f"was killed — its subtree may survive"
+        )
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        return f"process group {pgid} had already exited — nothing was left to reap"
+    except OSError as exc:
+        return f"process group {pgid} could NOT be signalled ({exc}) — its subtree may survive"
+    return f"process group {pgid} SIGKILLed, subtree included"
+
+class _Ran:
+    """The three fields this gate reads off a finished child, so the run stays one shape.
+
+    The call is a `Popen` + `communicate` now that the kill has to reap a group; carrying the
+    result in one small object keeps every consumer below reading `returncode` / `stdout` /
+    `stderr` exactly as it did, instead of threading three names through the classifiers.
+    """
+
+    def __init__(self, returncode: int | None, stdout: str | None, stderr: str | None) -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+def inner_read_problem(handed: Path, read: object) -> str | None:
+    """None when the inner audit READ the manifest it was handed, else WHY it did not.
+
+    A PURE predicate, so its two arms are testable without a 55-minute run: the live check in
+    `main()` and the control in `budget_controls()` are the SAME function, which is the only
+    way a control can claim anything about the assertion it guards.
+
+    Three ways to be wrong, and they are different facts, so each gets its own words: the
+    payload names no manifest at all (`None` — a run that skipped its budgets), the payload
+    names a DIFFERENT one (the override was ignored, or another tree's manifest was read),
+    and the payload names something that is not a string at all (a shape change upstream).
+    """
+    if read is None:
+        return (
+            "the payload names NO manifest — this run resolved no budgets, so no cap it "
+            "applied can be interpreted"
+        )
+    if not isinstance(read, str):
+        return f"the payload's manifest field is {type(read).__name__}, not a path: {read!r}"
+    if not read.startswith(str(handed)):
+        return (
+            f"the inner audit read {read!r}, NOT the manifest this gate handed it "
+            f"({handed}) — a run that fell back re-caps every gate at the fleet default "
+            f"instead of its declared budget"
+        )
+    return None
 
 _failures: list[str] = []
 
@@ -555,10 +651,16 @@ def budget_controls() -> None:
         # Measured: that mutant read 124 exactly like the real gate. Raising it to a longer
         # literal did not fix it, it moved the collision up a level (the anchor then matched
         # its own assignment). The halves below cannot collide with either.
-        anchor = "text=True, timeout=" + "wall_sec,"
+        #
+        # THE CALL SITE MOVED (#629): the wall is now applied on `Popen.communicate`, because
+        # a `subprocess.run` timeout kill can only reach the direct child and the subtree has
+        # to be reaped. The anchor moved with it — an anchor left naming a call that no longer
+        # exists matches ZERO times, which the next check catches rather than the mutant arm
+        # silently passing on an unmutated file.
+        anchor = "communicate(timeout=" + "wall_sec)"
         check("MUTATION: the anchor names the CALL SITE and is unique in the file",
               gate_src.count(anchor) == 1, f"{gate_src.count(anchor)} occurrence(s)")
-        mutated = gate_src.replace(anchor, "text=True, timeout=" + "900,", 1)
+        mutated = gate_src.replace(anchor, "communicate(timeout=" + "900)", 1)
         check("MUTATION: the mutant carries the old literal, so it is a real mutation",
               mutated != gate_src, "call site rewritten to `timeout=900`")
         mutant = root / "tests" / "mutant_shipped_audit_runs.py"
@@ -572,6 +674,25 @@ def budget_controls() -> None:
               f"the class NAME still prints as `NO VERDICT: 0`, which is why this asserts on "
               f"the kill MESSAGE and not on the class")
 
+
+    # ARM 4 — the manifest the inner audit READ is asserted, and the assertion BITES (#629
+    # condition 1). A check that only ever sees a correct payload is a check nobody has seen
+    # fail, and this one guards the exact silence the issue was filed about: an inner run that
+    # falls back to the 120 s fleet default still produces a payload and still classifies, so
+    # nothing but this comparison would notice. Driven through the SAME predicate `main()`
+    # uses, against the two wrong shapes the reader can actually produce plus the right one.
+    with tempfile.TemporaryDirectory() as tmp:
+        handed = (Path(tmp) / "registry" / "gates.json").resolve()
+        check("CONTROL: the predicate ACCEPTS the manifest the reader actually resolved",
+              inner_read_problem(handed, f"{handed}:default") is None,
+              "a readable manifest's `default_source` is `<path>:default`")
+        fell_back = f"no manifest at {handed.parent.parent / 'TEMPLATE'} — declared fallback"
+        check("CONTROL: and it REFUSES a run that fell back to the fleet default",
+              inner_read_problem(handed, fell_back) is not None,
+              f"the reader's own fallback string, {fell_back!r}")
+        check("CONTROL: and it REFUSES a payload that names no manifest at all",
+              inner_read_problem(handed, None) is not None,
+              "`--no-gates` resolves no budgets, so its payload carries null")
 
 def main() -> int:
     print("shipped audit — the tree the kit hands to members, EXECUTED (#199)")
@@ -620,11 +741,33 @@ def main() -> int:
         return 1
     print(f"  wall: {wall_sec:.2f}s for this gate ({wall_source} — {gates_manifest_path()})")
 
+    # THE INNER AUDIT IS POINTED AT THE REPO-ROOT MANIFEST (#629, ruling n=4879 shape (a)).
+    # The shipped audit runs with `cwd=TEMPLATE/`, so its `gate_budget.REPO_ROOT` resolves to
+    # `TEMPLATE/` and the `registry/gates.json` it looks for DOES NOT EXIST there -- every one
+    # of its registrations then fell to `FALLBACK_DEFAULT_SEC = 120.0`, a cap nobody measured
+    # for any of them, in complete silence. The override below is the mechanism
+    # `gate_budget.gates_manifest_path()` already documents for exactly this ("so a probe can
+    # point the reader at a manifest it built") and that the kill arm of this same file
+    # already exercises, so it creates no SECOND declaration of the budgets and there is
+    # nothing to drift. RESOLVED, not passed through: the inner audit's cwd is `TEMPLATE/`, so
+    # a relative override would be read relative to the wrong tree.
+    inner_manifest = gates_manifest_path().resolve()
+    inner_env = dict(os.environ, OC_GATES_MANIFEST=str(inner_manifest))
+    print(f"  inner audit: OC_GATES_MANIFEST={inner_manifest}")
+    inner_proc: subprocess.Popen | None = None
     try:
-        proc = subprocess.run(
+        # ITS OWN SESSION (#629 condition 3), which is what lets the wall kill below reap
+        # the SUBTREE instead of the direct child: every gate the inner audit spawns
+        # inherits this group, so one signal reaches all of them. A `subprocess.run` cannot
+        # be asked for that and its own timeout kill signals the child alone.
+        inner_proc = subprocess.Popen(
             [sys.executable, "tools/audit.py", "--json"],
-            cwd=str(SHIPPED), capture_output=True, text=True, timeout=wall_sec,
+            cwd=str(SHIPPED), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            env=inner_env,
+            start_new_session=True,
         )
+        out, err = inner_proc.communicate(timeout=wall_sec)
+        proc = _Ran(inner_proc.returncode, out, err)
     except subprocess.TimeoutExpired as exc:
         # A BUDGET KILL IS NOT A FAILURE (#206, #414). `TimeoutExpired` is an unhandled
         # exception here, so a kill raised out of this call and the gate exited as a plain
@@ -633,8 +776,20 @@ def main() -> int:
         # gate has none to give: it says so, in the class's own words, and exits with the
         # kill code the fleet already uses, so a caller can tell this from a red.
         killed = f"{wall_sec:.2f}s ({wall_source})"
+        # REAP THE SUBTREE FIRST, then drain what it wrote (#629 condition 3). The order
+        # matters: a surviving gate holds the pipe open, so a drain before the kill blocks on
+        # the very process the kill exists to remove.
+        reaped = _reap_inner_tree(inner_proc)
+        try:
+            if inner_proc is not None:
+                # REAP THE ZOMBIE and close the pipes, on a BOUNDED wait: the group is dead,
+                # so this returns at once unless something escaped it.
+                inner_proc.communicate(timeout=KILL_DRAIN_SEC)
+        except subprocess.TimeoutExpired:  # pragma: no cover - a group member escaped
+            pass
         print(f"  NO VERDICT  the shipped audit was killed at this gate's declared budget — "
               f"{killed}")
+        print(f"      reap: {reaped}")
         print(f"      it neither passed nor failed: the audit produced no verdict to "
               f"classify. Its own record, if it wrote one, is the authority on WHICH gate "
               f"was still running; this gate's `timeout` is the OUTER wall and says nothing "
@@ -674,6 +829,23 @@ def main() -> int:
         for path in registered:
             if key.endswith(path) or path in (rec.get("cmd") or ""):
                 results.setdefault(path, rec)
+
+    # WHAT THE INNER AUDIT ACTUALLY READ (#629 condition 1), and a check that it is the
+    # manifest this gate handed it. The line above prints the OVERRIDE THIS GATE SET, which
+    # is a request, not a fact: if `gate_budget` ever stopped honouring the variable, that
+    # line would keep naming the root manifest while the inner run silently re-capped every
+    # gate at the 120 s fleet default -- the exact silence #629 exists to remove, wearing a
+    # reassuring path. So the assertion is on the PAYLOAD's own `gate_budget_manifest`, which
+    # the reader writes from what it resolved, and the two are compared by the manifest PATH
+    # the reader names (its `default_source` is `<path>:default` for a readable manifest).
+    inner_read = payload.get("gate_budget_manifest")
+    print(f"  inner audit read: {inner_read}")
+    problem = inner_read_problem(inner_manifest, inner_read)
+    check(
+        "the inner audit READ the manifest this gate handed it (#629)",
+        problem is None,
+        problem or f"read {inner_read}, which is the manifest this gate handed it",
+    )
 
     def _source_of(path: str) -> str:
         p = SHIPPED / path

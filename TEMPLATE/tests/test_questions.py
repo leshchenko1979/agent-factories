@@ -36,6 +36,16 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
+# The gate-budget reader, on the same path-insert convention `tools/audit.py` and the other
+# gates use: this file runs as a script (its own dir is already on the path) and is imported
+# by the suite, and both must resolve the SAME reader (#94).
+sys.path.insert(0, str(REPO / "tools"))
+from gate_budget import (  # noqa: E402
+    GateBudgetManifestError,
+    gates_manifest_path,
+    load_gate_budgets,
+)
+
 # A factory layout first, then this repo's own. Both are named so a tree carrying neither
 # can say WHICH two paths it looked in rather than reporting a bare absence.
 CANDIDATES = (
@@ -43,26 +53,63 @@ CANDIDATES = (
     REPO / "TEMPLATE" / "tools" / "questions",
 )
 
-# The cap is a DECLARED MULTIPLE of a MEASURED runtime, never a round number (#94, ruling
-# n=744), and the runtime is the WORST COMPLETED SAMPLE, not the quietest one (#226 ruling 2:
-# `measured_sec` is "a MEASURED runtime", never "a quiet-window runtime", so the base is the
-# slow tail the budget must contain). This cap was first derived from a 101.44 s quiet sample
-# (2026-09-27), and that sample went stale by 6.27x in two days while the string naming it
-# stayed constant -- the "a stated basis nothing re-derives" shape #208 and #230 both found
-# one layer down.
+# THE CAP IS DERIVED FROM THE DECLARED BUDGET IT SITS UNDER (#629 rider).
 #
-# RE-DERIVED 2026-09-29 (#230, #226). The measured quantity is this gate's WHOLE COMMAND,
-# which is what the audit times (`python3 tests/test_questions.py`, per the registration in
-# tools/audit.py), not the selftest it spawns. Completed samples: 635.7 s at load 15.34->19.66
-# for the whole command, and 595.58 s at load 10.19->13.80 for the child selftest it spawns.
-# Censored runs (390.34 s killed by this cap, and 280.28 s killed by the manifest default) are
-# LOWER BOUNDS and are never promoted to a base (#226 ruling 3). The base is therefore the
-# worst completed sample, 635.7 s, and 4 x 635.7 + 0.75 = 2543.55 s is this gate's declared
-# budget in registry/gates.json. The internal cap sits just below that budget (int(2543.55) =
-# 2543, i.e. 0.55 s under it) so a HUNG run is reported HERE, with its reason, rather than
-# killed by the harness that would then read it as an unknown -- while a healthy run keeps the
-# full 4x headroom above its own worst measurement. A timeout is UNKNOWN, never a pass.
-SELFTEST_TIMEOUT_SEC = 2543
+# The invariant, as ruled: an internal cap must be DERIVED from the declared budget it sits
+# under; where no budget is declared there is NO cap, and the gate says so.
+#
+# Why the cap exists at all survives that form; a literal does not. Its job is to turn a
+# would-be HARNESS kill into a SELF-REPORTED failure that carries a reason -- a run that hangs
+# should say so HERE, with its own account, instead of being stopped by the wall above it and
+# read as an UNKNOWN nobody explained. That justification only holds while the cap TRACKS the
+# wall it guards, and it did not.
+#
+# MEASURED (#629). The cap was `2543`, justified by a docstring asserting 2543.55 was this
+# gate's declared budget (`4 x 635.7 + 0.75`). The manifest was then re-measured to
+# `measured_sec 843.17`, `margin_x 4.001`, `budget_sec 3373.43` -- and the literal and its
+# docstring stayed behind, so the cap sat 830.43 s BELOW the budget it exists to sit under. A
+# run between 2543 s and 3373 s, i.e. INSIDE its own declared allowance, was reported as a
+# FAIL here. A literal plus a stated basis that has since moved is the same "a stated basis
+# nothing re-derives" shape #208 and #230 both found one layer down.
+#
+# So the number is READ, never written: `selftest_cap()` resolves this gate's own entry
+# through the shared reader and sits CAP_HEADROOM_SEC under it, which keeps the cap's
+# justification (the harness never wins the race) while removing the second source for one
+# number. The derivation is printed on every run, so the value is checkable rather than
+# asserted.
+BUDGET_KEY = "tests/test_questions.py"
+
+CAP_HEADROOM_SEC = 1.0
+"""How far under the declared wall the internal cap sits.
+
+SMALL, and its size is the whole point: a cap that is a large FRACTION of the budget turns a
+slow-but-legitimate run into a FAIL, which is the defect #629 filed. One whole second is
+enough to lose the race to the harness reliably, and stays negligible against a 3373 s wall.
+"""
+
+
+def selftest_cap() -> tuple[float | None, str]:
+    """This gate's internal cap, DERIVED from its declared budget, and the derivation in words.
+
+    `(None, reason)` when no budget is declared: the invariant says there is then no cap, and
+    the gate SAYS SO rather than inventing a number -- an undeclared gate's only real bound is
+    the audit's own wall, and a cap invented here would be a second, quieter wall below it.
+
+    Raises `GateBudgetManifestError` for a manifest that exists and cannot be read, on the
+    same rule `gate_budget` itself states: an unreadable budget set is indistinguishable from
+    no budget set, and defaulting over it would silently re-cap every gate.
+    """
+    budgets = load_gate_budgets()
+    budget_sec, source = budgets.resolve(BUDGET_KEY)
+    if source != "declared":
+        return None, (
+            f"no declared budget for {BUDGET_KEY} — no internal cap, so a hung selftest is "
+            f"bounded only by the audit's own wall"
+        )
+    cap = budget_sec - CAP_HEADROOM_SEC
+    return cap, (
+        f"{cap:.2f}s, derived from the declared {budget_sec:.2f}s for {BUDGET_KEY}"
+    )
 
 # NON-VACUITY FLOOR. The selftest reported 237 checks on 2026-09-27; the floor is well below
 # it, so a run that STOPPED EARLY is caught without pinning a count that moves every time a
@@ -78,14 +125,28 @@ def main() -> int:
         return 0
 
     print("gate: %s selftest" % tool.relative_to(REPO))
+
+    # THE CAP, RESOLVED AND PRINTED (#629 rider). Printed on EVERY run, so the number is
+    # checkable against the manifest beside it instead of being taken on trust -- the defect
+    # was precisely a stated basis that nothing re-derived.
+    try:
+        cap_sec, cap_note = selftest_cap()
+    except GateBudgetManifestError as exc:
+        print("FAIL: the gate-budget manifest exists and cannot be read: %s" % exc)
+        print("      an unreadable budget set is indistinguishable from no budget set, and")
+        print("      inventing a cap over it would be the silent re-cap this gate removes")
+        return 1
+    print("  cap: %s" % cap_note)
+    print("       manifest: %s" % gates_manifest_path())
+
     try:
         proc = subprocess.run(
             [sys.executable, str(tool), "selftest"],
-            capture_output=True, text=True, timeout=SELFTEST_TIMEOUT_SEC,
+            capture_output=True, text=True, timeout=cap_sec,
         )
     except subprocess.TimeoutExpired:
-        print("FAIL: the selftest exceeded %d s -- a timeout is UNKNOWN, never a pass"
-              % SELFTEST_TIMEOUT_SEC)
+        print("FAIL: the selftest exceeded %.2f s -- a timeout is UNKNOWN, never a pass"
+              % cap_sec)
         return 1
 
     out = (proc.stdout or "") + (proc.stderr or "")

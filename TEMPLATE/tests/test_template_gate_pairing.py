@@ -71,6 +71,39 @@ STATED_SKIP = "# STATED SKIP: TEMPLATE/"
 # shipped depth did not deliver a green.
 CARRY_TIMEOUT_SECS = 300
 
+# ...BUT A TIMEOUT IS NOT A VERDICT, and folding it in is only sound while the window can
+# HOLD the subject (#629). A gate whose own DECLARED budget is longer than this window
+# cannot be time-judged by it at all: the probe kills a run that is working, and reports
+# "does not carry at the shipped depth" — a claim it did not measure. Measured: the first
+# commit ever to touch `TEMPLATE/tests/test_questions.py` after this gate landed reded on
+# it, while the same file runs and PASSES at that depth in 843.17 s against a 300 s window;
+# the gate's checks are hundreds of subprocess spawns, so the runtime is structural and not
+# a defect to fix.
+#
+# So a gate whose declared budget exceeds the window is UNPROBED — named, with both
+# numbers, and NOT counted as a problem. This does not open the class the gate exists for:
+# #459 and #487 were gates whose subject was ABSENT at the depth, and an absent subject
+# exits NON-ZERO in seconds, never by running for 300 s. A gate that genuinely HANGS there
+# is still caught — by `tests/test_shipped_audit_runs.py`, whose wall is sized for the
+# shipped tree and which classifies the kill as NO VERDICT rather than as a pass.
+UNPROBED: list[str] = []
+
+def _declared_budget(rel: str) -> float | None:
+    """The gate's declared budget in the ROOT manifest, or None when it declares none.
+
+    Read from the tree that CARRIES this gate, never from the shipped depth: at
+    `TEMPLATE/` there is no manifest at all (#629), which is the whole reason the inner
+    audit is handed one. Fails OPEN in every direction — no reader, no manifest, no
+    entry — because this only ever decides whether a probe is worth ATTEMPTING.
+    """
+    try:
+        sys.path.insert(0, str(REPO / "tools"))
+        from gate_budget import load_gate_budgets
+        budget, source = load_gate_budgets().resolve(rel)
+    except Exception:
+        return None
+    return budget if source == "declared" else None
+
 _failures: list[str] = []
 
 
@@ -212,6 +245,7 @@ def unpaired_gates(top: Path) -> list[str]:
     registered = registered_shipped_gates(top)
     declared = declared_skips(top)
     problems: list[str] = []
+    UNPROBED.clear()
     for path in sorted(touched):
         rel = path[len("TEMPLATE/"):]
         entry = registered.get(rel)
@@ -219,6 +253,16 @@ def unpaired_gates(top: Path) -> list[str]:
             continue  # (c) unregistered: the shipped audit never runs it there
         if rel in declared:
             continue  # (b) a declared skip, its marker verified against the source
+        # A subject longer than the window is UNPROBED, never "not carried": the probe
+        # would be killing a run that is working, and a kill is not a verdict.
+        declared_sec = _declared_budget(rel)
+        if declared_sec is not None and declared_sec > CARRY_TIMEOUT_SECS:
+            UNPROBED.append(
+                f"{path} — UNPROBED: its declared budget {declared_sec:.2f}s exceeds this "
+                f"probe's {CARRY_TIMEOUT_SECS}s window, so it was not time-judged here; "
+                f"`tests/test_shipped_audit_runs.py` carries the verdict at that depth"
+            )
+            continue
         if carries_at_shipped_depth(top, rel, entry):
             continue  # (a) the shipped depth carries the subject
         how = "added" if touched[path] == "A" else "modified"
@@ -447,9 +491,14 @@ def main() -> int:
     staged = unpaired_gates(REPO)
     touched = touched_shipped_gates(REPO)
     print(f"  population: {len(touched)} shipped gate(s) touched by this commit; "
-          f"{len(staged)} unpaired")
+          f"{len(staged)} unpaired; {len(UNPROBED)} unprobed")
     for entry in staged:
         print(f"  FAIL  {entry}")
+    # PRINTED EVEN AT ZERO, on the same reasoning the audit's own default population is: a
+    # population nobody prints is indistinguishable from one that was never computed, and an
+    # unprobed subject is a stated gap rather than a clean one.
+    for entry in UNPROBED:
+        print(f"  {entry}")
 
     if problems or _failures or staged:
         print(f"template gate pairing FAILED — {len(problems)} wiring, "
