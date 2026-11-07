@@ -632,11 +632,11 @@
       "measured_sec": 6.96
     },
     "tests/test_ledger.py": {
-      "budget_sec": 485.87,
-      "load_at_measure": 10.93,
-      "margin_x": 4.006,
-      "measured_at": "4f3192c462cef02a29ba59b05e6bb206c02cb25c",
-      "measured_sec": 121.28
+      "budget_sec": 224.47,
+      "load_at_measure": 1.76,
+      "margin_x": 4.013,
+      "measured_at": "9b5be80e11e4b4456f50831480331bff2aad9ab6",
+      "measured_sec": 55.93
     },
     "tests/test_ledger_close_preflight.py": {
       "budget_sec": 63.95,
@@ -687,11 +687,11 @@
       "basis_note": "The declared basis is the WORST OBSERVED sample, per this manifest's slow-tail rule (#579, ruling n=4460): 269.68 s at load 5.75, observed on the pre-commit staging tree that became this revision. CORROBORATING at-tree sample, reproducible at the cited revision with `git worktree add <dir> ac08dfed` then `python3 -m pytest tests/test_patrol_board.py -q`: 107.53 s, rc=0, load 0.43->1.05. It is FASTER because the box was quiet (the whole twelve-leg sweep totalled 1570.68 s at load 0.43-4.23), so per #128/n=823 it does NOT re-base: a fresh sample that stays inside the cap is absorbed by margin_x, and re-basing on every new maximum ratchets the cap toward the too-high direction. measured_at is the revision whose TREE carries the twelve-leg population and whose blobs are unchanged to HEAD; the earlier basis was taken on the staging copy before the shared `_SKIPS` ownership fix, a change that removes a NameError and adds no test work, so the declared seconds remain an upper bound on what ships."
     },
     "tests/test_patrol_census.py": {
-      "budget_sec": 31.11,
-      "load_at_measure": 6.23,
-      "margin_x": 4.099,
-      "measured_at": "ac08dfedbfbf7dce66016e0a1c67d313d8286228",
-      "measured_sec": 7.59,
+      "budget_sec": 9.39,
+      "load_at_measure": 1.76,
+      "margin_x": 4.347,
+      "measured_at": "9b5be80e11e4b4456f50831480331bff2aad9ab6",
+      "measured_sec": 2.16,
       "basis_note": "The declared basis is the WORST OBSERVED sample, per this manifest's slow-tail rule (#579, ruling n=4460): 7.59 s at load 6.23, observed on the pre-commit staging tree that became this revision. CORROBORATING at-tree sample, reproducible at the cited revision with `git worktree add <dir> ac08dfed` then `python3 -m pytest tests/test_patrol_census.py -q`: 2.47 s, rc=0, load 1.05->1.05. It is FASTER because the box was quiet (the whole twelve-leg sweep totalled 1570.68 s at load 0.43-4.23), so per #128/n=823 it does NOT re-base: a fresh sample that stays inside the cap is absorbed by margin_x, and re-basing on every new maximum ratchets the cap toward the too-high direction. measured_at is the revision whose TREE carries the twelve-leg population and whose blobs are unchanged to HEAD; the earlier basis was taken on the staging copy before the shared `_SKIPS` ownership fix, a change that removes a NameError and adds no test work, so the declared seconds remain an upper bound on what ships."
     },
     "tests/test_patrol_criterion.py": {
@@ -735,11 +735,11 @@
       "basis_note": "The declared basis is the WORST OBSERVED sample, per this manifest's slow-tail rule (#579, ruling n=4460): 230.75 s at load 6.25, observed on the pre-commit staging tree that became this revision. CORROBORATING at-tree sample, reproducible at the cited revision with `git worktree add <dir> ac08dfed` then `python3 -m pytest tests/test_patrol_render.py -q`: 80.23 s, rc=0, load 1.59->1.75. It is FASTER because the box was quiet (the whole twelve-leg sweep totalled 1570.68 s at load 0.43-4.23), so per #128/n=823 it does NOT re-base: a fresh sample that stays inside the cap is absorbed by margin_x, and re-basing on every new maximum ratchets the cap toward the too-high direction. measured_at is the revision whose TREE carries the twelve-leg population and whose blobs are unchanged to HEAD; the earlier basis was taken on the staging copy before the shared `_SKIPS` ownership fix, a change that removes a NameError and adds no test work, so the declared seconds remain an upper bound on what ships."
     },
     "tests/test_patrol_round_receipts.py": {
-      "budget_sec": 1410.79,
-      "load_at_measure": 6.26,
-      "margin_x": 4.002,
-      "measured_at": "ac08dfedbfbf7dce66016e0a1c67d313d8286228",
-      "measured_sec": 352.51,
+      "budget_sec": 294.71,
+      "load_at_measure": 1.76,
+      "margin_x": 4.01,
+      "measured_at": "9b5be80e11e4b4456f50831480331bff2aad9ab6",
+      "measured_sec": 73.49,
       "basis_note": "The declared basis is the WORST OBSERVED sample, per this manifest's slow-tail rule (#579, ruling n=4460): 352.51 s at load 6.26, observed on the pre-commit staging tree that became this revision. CORROBORATING at-tree sample, reproducible at the cited revision with `git worktree add <dir> ac08dfed` then `python3 -m pytest tests/test_patrol_round_receipts.py -q`: 116.92 s, rc=0, load 1.75->1.63. It is FASTER because the box was quiet (the whole twelve-leg sweep totalled 1570.68 s at load 0.43-4.23), so per #128/n=823 it does NOT re-base: a fresh sample that stays inside the cap is absorbed by margin_x, and re-basing on every new maximum ratchets the cap toward the too-high direction. measured_at is the revision whose TREE carries the twelve-leg population and whose blobs are unchanged to HEAD; the earlier basis was taken on the staging copy before the shared `_SKIPS` ownership fix, a change that removes a NameError and adds no test work, so the declared seconds remain an upper bound on what ships."
     },
     "tests/test_patrol_ruling.py": {
@@ -912,11 +912,11 @@
       "measured_sec": 3.57
     },
     "tests/test_template_sync.py": {
-      "budget_sec": 6.91,
-      "load_at_measure": 3.94,
-      "margin_x": 4.487,
-      "measured_at": "3d8ff95e9c04f96893a22fc253b28e8ef8263d2b",
-      "measured_sec": 1.54
+      "budget_sec": 6.11,
+      "load_at_measure": 1.76,
+      "margin_x": 4.56,
+      "measured_at": "9b5be80e11e4b4456f50831480331bff2aad9ab6",
+      "measured_sec": 1.34
     },
     "tools/hygiene.py": {
       "budget_sec": 4.23,
@@ -926,11 +926,11 @@
       "measured_sec": 0.87
     },
     "tools/ledger.py": {
-      "budget_sec": 14.67,
-      "load_at_measure": 4.3,
-      "margin_x": 4.216,
-      "measured_at": "04620d6e42c1a49ff8b239efe1d96e0744b5a5f9",
-      "measured_sec": 3.48
+      "budget_sec": 13.31,
+      "load_at_measure": 1.76,
+      "margin_x": 4.239,
+      "measured_at": "9b5be80e11e4b4456f50831480331bff2aad9ab6",
+      "measured_sec": 3.14
     },
     "tools/roadmap.py": {
       "budget_sec": 2.47,
@@ -943,7 +943,19 @@
       "load_at_measure": 3.94,
       "margin_x": 4.105,
       "measured_at": "3d8ff95e9c04f96893a22fc253b28e8ef8263d2b",
-      "measured_sec": 7.14
+      "measured_sec": 7.14,
+      "growth_breach": {
+        "sample_sec": 10.58,
+        "sample_revision": "9b5be80e11e4b4456f50831480331bff2aad9ab6",
+        "basis_sec": 7.14,
+        "basis_revision": "3d8ff95e9c04f96893a22fc253b28e8ef8263d2b",
+        "declared_sec": 29.31,
+        "derived_sec": 43.07,
+        "growth_x": 1.4818,
+        "derived_over_declared": 1.4695,
+        "round_id": "2026-11-07:9b5be80e11e4b4456f50831480331bff2aad9ab6",
+        "reported_at": "2026-11-07T06:36:44Z"
+      }
     },
     "tests/test_close_ruling_paired.py": {
       "budget_sec": 4.75,
