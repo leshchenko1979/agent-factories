@@ -265,25 +265,31 @@ STALL_CENSUS_THRESHOLD_DAYS = 1.0
 # examined it and found it clean.
 #
 # WHY 7.0 d, AND WHY IT IS NOT DERIVED FROM THE POPULATION IT JUDGES. Measured on this
-# ledger at 2026-11-07T00:18:37Z over 4,843 rows: 13 units carry a `claim`, are OPEN on the
-# board and carry no `close` row, and their standing ages have a MEDIAN of 14.73 d (min
-# 0.01 d -- #625, this leg's own claim -- max 37.04 d, #252). The threshold is
-# deliberately set BELOW that median, because the median case here IS the class: half of the
-# standing claims are a fortnight old. And it is deliberately set ABOVE the two newest
-# instances (#608 at 3.45 d, #600 at 2.75 d), because a claim a couple of days old is
-# ordinary in-flight work and a leg that reddens on it teaches lanes to ignore red. 7 d is a
-# week: far beyond any legitimate in-flight duration in a factory whose lanes are woken
-# every 6 h, and still under half the measured median.
+# ledger at 2026-11-07T06:09:08Z over 4,849 rows: 11 units carry a claim that no release has
+# withdrawn, are OPEN on the board and carry no `close` row, and their standing ages have a
+# MEDIAN of 16.10 d (min 0.00 d -- #626, this leg's own claim -- max 37.29 d, #252). The
+# threshold is deliberately set BELOW that median, because the median case here IS the class:
+# half of the standing claims are a fortnight old. And it is deliberately set ABOVE the three
+# newest instances (#626 at 0.00 d, #600 at 3.00 d, #608 at 3.69 d), because a claim a couple
+# of days old is ordinary in-flight work and a leg that reddens on it teaches lanes to ignore
+# red. 7 d is a week: far beyond any legitimate in-flight duration in a factory whose lanes
+# are woken every 6 h, and still under half the measured median.
+#
+# THE POPULATION IS NET OF RELEASES (#626). Two units that stood in this class when #625 was
+# filed (#561, #563) were released by their claimer on 2026-11-02, so they are NOT standing
+# and are counted in their own bucket instead. The threshold's basis is re-measured whenever
+# the population moves; the figures above are the read this change was made on.
 CLAIM_STANDING_THRESHOLD_DAYS = 7.0
 
 # THE DECLARATION TRAVELS WITH THE VERDICT (acceptance criterion 4): the threshold is a
 # DECLARED value with a stated basis, and both are PRINTED on every run, so a reader never
 # has to hold the number in memory or guess why it is that number.
 CLAIM_STANDING_THRESHOLD_BASIS = (
-    "declared 2026-11-07 against a measured population of 13 standing claims (read "
-    "at 2026-11-07T00:18:37Z) whose median standing is 14.73 d; set below that median because the "
-    "median case IS the class, and above the two newest instances (#608 3.45 d, #600 2.75 d) "
-    "because a claim days old is ordinary in-flight work"
+    "declared 2026-11-07 against a measured population of 11 standing claims (read "
+    "at 2026-11-07T06:09:08Z, net of 2 claims withdrawn by release) whose median standing is "
+    "16.10 d; set below that median because the median case IS the class, and above the three "
+    "newest instances (#626 0.00 d, #600 3.00 d, #608 3.69 d) because a claim days old is "
+    "ordinary in-flight work"
 )
 
 # THE UNIT-CITATION FORM (#555, ruling n=4182). A commit that DOES a unit's work writes the
@@ -9483,6 +9489,35 @@ def stall_census_leg(
         elif event == "close":
             closed.add(subject)
 
+    # A RELEASED CLAIM IS NOT A CLAIM (#626, the census half). `claimed` decides whether a
+    # unit carrying a live never-claimed dispatch is still OWED, so a claim that was later
+    # WITHDRAWN must not drop that unit out of the population -- and it did: Triage released
+    # its INTAKE-AND-ROUTING claim on #561/#563 while the WORKER dispatch (n=4280/n=4314)
+    # still stood unclaimed, so those two units vanished from a population of 430 dispatched
+    # ones and the leg printed "0 never claimed past the declared threshold" over them.
+    #
+    # THE SAME ROWS FEED THE DRAIN EVIDENCE (#465, `claims_by_unit`), where a released claim
+    # would otherwise be read as a lane taking work it had already handed back -- so both
+    # readings are filtered from ONE predicate rather than patched separately (#98 shape).
+    released_claims = _released_claim_rows(rows)
+    # THE UNITS THIS EXCLUSION RESCUES, NAMED (#116): every unit whose claims were ALL
+    # withdrawn is a unit the OWED predicate used to drop in silence. A count alone would
+    # rebuild that gap in a smaller font, so the units travel and the render names them.
+    released_claim_units = sorted(
+        unit for unit, unit_rows in claims_by_unit.items()
+        if unit_rows and all(
+            int(row.get("n") or -1) in released_claims for row in unit_rows
+        )
+    )
+    if released_claims:
+        claims_by_unit = {
+            unit: [row for row in unit_rows
+                   if int(row.get("n") or -1) not in released_claims]
+            for unit, unit_rows in claims_by_unit.items()
+        }
+        claims_by_unit = {u: rs for u, rs in claims_by_unit.items() if rs}
+        claimed &= set(claims_by_unit)
+
     open_on_board: set[str] = set()
     for issue in issues:
         number = issue.get("number")
@@ -10403,6 +10438,12 @@ def stall_census_leg(
             # from before this change stays comparable to one taken after it.
             "population_before": population_before,
             "population_judged": len(owed),
+            # #626, the census half: units whose every `claim` row was withdrawn by a LATER
+            # `release`, so they are NOT claimed and stay in this population. They are named
+            # because the leg's own receipt is the only place the exclusion is visible -- the
+            # alternative was two units silently missing from 430 dispatched ones.
+            "released_claim_units": released_claim_units,
+            "released_claim_units_count": len(released_claim_units),
             "excluded": (
                 len(parked_units) + len(voided_units) + len(standing_units)
             ),
@@ -10486,6 +10527,43 @@ DRIVERLESS_READINGS = (
     "UNREADABLE",
 )
 
+def _released_claim_rows(rows: list[dict]) -> dict[int, dict]:
+    """Claim row number -> the `release` row that withdraws it (#626).
+
+    A release NAMES the claim row it terminates as a ref of kind `row`
+    (docs/instruments/ledger.md:264, :286), so the target is read from the REF and never
+    inferred from the subject or from position in the file. This is the predicate
+    `ledger verify`'s claim-lifecycle leg applies at :3595 -- one predicate, two call sites
+    (#98 shape), so the two readers cannot disagree about which claims are still open.
+
+    It is a named function rather than an inline loop for one reason: the gate's MUTANT ARM
+    replaces it, and a mutation that can only be imitated by a fixture is not a mutation.
+    """
+    released: dict[int, dict] = {}
+    for row in rows:
+        if row.get("event") != "release":
+            continue
+        try:
+            release_n = int(row.get("n"))
+        except (TypeError, ValueError):
+            release_n = None
+        for ref in row.get("refs") or []:
+            for kind, value in ref.items():
+                if kind != "row" or not str(value).isdigit():
+                    continue
+                claim_n = int(value)
+                # LATER, read rather than assumed (#626 criterion 4): the ledger is
+                # append-only, so a release that names a claim row was written after it --
+                # but a read that ASSUMES that cannot tell a withdrawal from a release that
+                # happens to cite an older row, and the ordering is the whole difference
+                # between "this claim is dead" and "this claim still stands". Where either
+                # number is unreadable the release is honoured, because it did name the row.
+                if release_n is not None and release_n <= claim_n:
+                    continue
+                released.setdefault(claim_n, row)
+    return released
+
+
 def claim_standing_leg(
     issues: list[dict],
     rows: list[dict],
@@ -10520,6 +10598,26 @@ def claim_standing_leg(
     AN INSTANT THIS LEG CANNOT READ IS NOT JUDGED, never counted as fresh (#271). A claim
     row whose `ts` will not parse is named in `excused` with its row number, because an
     unread clock must not read as a short standing.
+
+    A CLAIM WITHDRAWN BY A `release` IS NOT STANDING (#626). The instrument's own law is
+    that "a claim is withdrawn by a `release`, never by a `close`"
+    (docs/instruments/ledger.md:264), and the release NAMES the claim row it terminates as
+    a ref of kind `row` -- so the target is read from the REF, never inferred from the
+    subject or from proximity. This is the same predicate `ledger verify`'s claim-lifecycle
+    leg applies (:3595): one predicate, two call sites, so the two readers cannot disagree
+    about which claims are still open. Before #626 this leg read only `claim`/`close`, so
+    every release a lane wrote added a PERMANENT false positive -- and the remedy that
+    produced the release was the act the leg punished.
+
+    THE FILTER IS PER CLAIM ROW, NEVER PER UNIT. A unit is released OFF only when EVERY
+    claim it carries is withdrawn: `claim -> release -> claim` is STANDING again on the
+    second claim, and `claim -> claim -> release(first)` still stands on the second, because
+    a release terminates exactly the row it names and nothing else (ledger.md:286). A
+    unit-level filter would read either of those as withdrawn.
+
+    A RELEASED UNIT IS COUNTED, NOT DROPPED (#116). It prints in its own bucket beside the
+    population, because a leg that silently subtracts its own exclusions reads identically
+    to one that never examined them.
     """
     predicate = predicate or load_predicate()
 
@@ -10535,6 +10633,11 @@ def claim_standing_leg(
     closed_units: set[int] = set()
     claim_rows_examined = 0
     non_unit_rows = 0
+    # A CLAIM IS WITHDRAWN BY A `release`, NEVER BY A `close` (docs/instruments/ledger.md
+    # :264). The reader is the same one `ledger verify`'s claim-lifecycle leg applies at
+    # :3595: one predicate, two call sites (#98 shape).
+    released_claim_rows = _released_claim_rows(rows)
+    release_rows_examined = sum(1 for row in rows if row.get("event") == "release")
     for row in rows:
         event = row.get("event")
         if event not in ("claim", "close"):
@@ -10555,6 +10658,7 @@ def claim_standing_leg(
     population_lines: list[str] = []
     off_board = 0
     closed_off = 0
+    released_off = 0
     past = 0
     in_population = 0
     unparsed = 0
@@ -10566,7 +10670,16 @@ def claim_standing_leg(
         if unit not in open_units:
             off_board += 1
             continue
-        newest = max(claims[unit], key=lambda r: str(r.get("ts") or ""))
+        # A WITHDRAWN CLAIM IS NOT STANDING (#626), and the unit is COUNTED rather than
+        # dropped (#116). The filter is PER ROW, not per unit: `claim -> release -> claim`
+        # stands again on the second claim, and `claim -> claim -> release(first)` still
+        # stands on the second, because a release terminates exactly the row it names
+        # (ledger.md:286). A unit-level filter would read both of those as withdrawn.
+        live = [r for r in claims[unit] if r.get("n") not in released_claim_rows]
+        if not live:
+            released_off += 1
+            continue
+        newest = max(live, key=lambda r: str(r.get("ts") or ""))
         try:
             claimed_at = reader_parse_ts(str(newest.get("ts") or ""))
             now = reader_parse_ts(read_at)
@@ -10612,8 +10725,10 @@ def claim_standing_leg(
         "coverage": {
             "claim_rows_examined": claim_rows_examined,
             "claim_rows_not_naming_a_unit": non_unit_rows,
+            "release_rows_examined": release_rows_examined,
             "units_claimed": len(claims),
             "units_with_close_row": closed_off,
+            "units_released_off": released_off,
             "units_off_board": off_board,
             "units_in_population": in_population,
             "units_past_threshold": past,
@@ -16345,6 +16460,19 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov.get('excluded', 0)} = {cov.get('population_before', 0)} "
                 f"(reached the declaration chain; #607)"
             )
+            # A RELEASED CLAIM IS NOT A CLAIM (#626). This line is the ONLY place the
+            # exclusion is visible: before it, a unit whose claim a lane had withdrawn was
+            # dropped from the OWED population in silence, so a live never-claimed dispatch
+            # on it could not be reported by this leg or any other. Printed on every round,
+            # with the units named, so a reader can see WHICH units the fix keeps in.
+            released_units = cov.get("released_claim_units") or []
+            lines.append(
+                f"  released claims: {cov.get('released_claim_units_count', 0)} unit(s) "
+                f"whose every claim was withdrawn by a LATER release are NOT claimed, so "
+                f"they stay in this population (#626)"
+            )
+            for unit in released_units:
+                lines.append(f"    {unit}")
             # THE MENTION POPULATION IS PRINTED BESIDE THE ROUTED ONE (#470): the population
             # admits ROUTED units alone, so a reader must be able to see how many units the
             # harvest saw and refused the population slot -- a narrowed read that hides what
@@ -16466,7 +16594,10 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  claim rows examined: {cov['claim_rows_examined']} "
                 f"({cov['claim_rows_not_naming_a_unit']} naming no work unit; "
                 f"{cov['units_with_close_row']} unit(s) excluded because a close row "
-                f"exists; {cov['units_off_board']} claimed unit(s) not OPEN on this board)"
+                f"exists; {cov['units_released_off']} unit(s) excluded because EVERY claim "
+                f"they carry was withdrawn by a release, read over "
+                f"{cov['release_rows_examined']} release row(s); "
+                f"{cov['units_off_board']} claimed unit(s) not OPEN on this board)"
             )
             lines.append(
                 f"  population: {cov['units_in_population']} claimed unit(s) still OPEN with "

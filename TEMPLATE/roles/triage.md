@@ -27,12 +27,24 @@
   - **NEVER-CLAIMED (an `OWED` line)** — a unit *dispatched* and never claimed at all,
     past the declared threshold. The patrol leg `stall-census` prints these; re-dispatch
     the unit to its owner through `session_notify`, or close it on the board.
+    **A claim withdrawn by a later `release` is NOT a claim** — so it does not take the
+    unit out of this population. The two readings are one predicate, and reading only one
+    of them is how a unit goes invisible: a release on the routing claim leaves any
+    *dispatch* to a worker standing, and the unit is still owed to that addressee. The leg
+    prints those units in its own `released claims` line, because an exclusion that is not
+    printed is indistinguishable from a miss.
   - **CLAIMED-NEVER-CLOSED** — a unit **claimed** (a ledger `claim` row exists) whose
-    board item is **still open** and which carries **no `close` row**, past the declared
-    threshold. The patrol leg `claim-standing` prints these with their standing age; the
+    board item is **still open**, which carries **no `close` row**, and whose claim has
+    **not been withdrawn by a `release`**, past the declared threshold. The patrol leg
+    `claim-standing` prints these with their standing age, and prints the units it
+    EXCLUDED because their claim was released in its own bucket beside them; the
     remedy is to drive the unit to a close or hand it back, never to leave a claim
     standing as though it were progress. A claim is not a receipt: only a `close` row
     moves a unit, so a standing claim is work that has stopped while still looking taken.
+    **A withdrawal is a `release`, never a `close`** (`docs/instruments/ledger.md:264`),
+    and it terminates exactly the claim row it names — so a lane that handed a unit back
+    is not a lane standing on it, while `claim → release → claim` is standing again on the
+    second claim.
   - Confirms completed tasks carry verified receipts before closing.
   - Escalates blocked or failing tasks to `HQ` or re-dispatches to an available worker.
 - **Driverless-lane reading (Rail 3).** A lane can hold every dispatch **delivered** and
