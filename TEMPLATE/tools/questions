@@ -989,8 +989,9 @@ def mechanical_close(entry, question):
     """(reason, note) — whether a predicate now closes this question.
 
     C6 (owner order: "why not close the questions mechanically?"). Two arms:
-      * default — the question's text (or the set subject) names a fork issue
-        that reads CLOSED;
+      * default — the question's TITLE names a fork issue that reads CLOSED.
+        The title only, never the description and never the set subject
+        (#627, below);
       * explicit — close_when is a shell command whose rc=0 closes.
     An unreadable predicate returns a NOTE, never a close: a question must not
     disappear because a probe failed."""
@@ -1005,9 +1006,25 @@ def mechanical_close(entry, question):
             return "close-when predicate returned rc=0", None
         return None, None
 
-    blob = " ".join(str(x) for x in (
-        question.get("title"), question.get("description"), entry.get("subject"))
-        if x)
+    # THE BLOB IS THE QUESTION'S OWN CLAIM OF DEPENDENCE, AND IT IS THE TITLE
+    # ONLY (#627, defect reported by Miidas HQ 2026-11-07). Two exclusions, each
+    # measured rather than assumed:
+    #   * entry["subject"] is CREATION-ONLY (:1505): an immutable, set-level
+    #     field can never be corrected, so once its issue closed, EVERY question
+    #     in that set died at the next gc with no verb to repair it. Measured
+    #     (miidas): set subject `leshchenko1979/miidas#61`, #61 CLOSED
+    #     2026-09-28; a question about a Kalinin slot was closed
+    #     2026-11-06T12:42:53Z with the reason
+    #     "leshchenko1979/miidas#61 is CLOSED" -- a question that has nothing to
+    #     do with #61, which never reached the owner. Dropping the field here is
+    #     RETROACTIVE: it de-poisons every already-minted set without touching
+    #     the immutable value.
+    #   * description is where RATIONALE citations live ("see #122"), and a
+    #     closed citation does not moot the question it merely supports.
+    # What remains is the title: the question's own statement of what it is
+    # about. `close_when` still short-circuits both arms, above, so the explicit
+    # predicate is unaffected and remains the correct arm for a real dependency.
+    blob = str(question.get("title") or "")
     qualified = QUALIFIED_ISSUE_RE.search(blob)
     if qualified:
         board, number = qualified.group(1), qualified.group(2)
@@ -6029,6 +6046,65 @@ printf '{"state": "%s"}\\n' "$state"
                "OC_QUESTIONS_TRACKER still overrides the derived board")
         finally:
             env.pop("OC_QUESTIONS_TRACKER", None)
+
+        # -- 8f. #627: the closing blob is the TITLE ONLY ------------------
+        # A set-level field must never feed a closing predicate, because
+        # `--subject` is CREATION-ONLY (:1505) and an uncorrectable field turns
+        # one closed issue into a PERMANENT kill switch for every question in
+        # the set. And a description is where rationale citations live, so a
+        # closed CITATION must not close the question it merely supports.
+        #
+        # The three arms are a SET: two negatives that must not close, and a
+        # positive that MUST -- without the positive, a predicate that closed
+        # nothing at all would pass this block (rule: a zero is a verdict only
+        # from a working instrument).
+        rc, out, _ = run("ask", "--factory", "f-poison-subject",
+                         "--subject", "leshchenko1979/other#7",
+                         "--title", "Slot is silent: how do we fix it?",
+                         "--description", "no issue reference here", "--json")
+        _psub = json.loads(out)["set"]
+        ck((get_set(_psub) or {}).get("subject") == "leshchenko1979/other#7",
+           "\u2026the poisoned set really carries a CLOSED issue as its subject "
+           "(%r)" % ((get_set(_psub) or {}).get("subject"),))
+        _before = len(_gh_queries())
+        run("gc", "--json")
+        ck(get_set(_psub)["questions"][0]["status"] == "open",
+           "a CLOSED issue in the SET SUBJECT does NOT close the question "
+           "(#627): an immutable field must not feed a closing predicate")
+        # The DELTA, never the whole log: an earlier arm legitimately queried
+        # this same issue from a TITLE, so a whole-log scan would fail on a
+        # correct fix. (Caught by this arm's own first run -- the assertion
+        # passed only for a question that had not been asked before it.)
+        ck(not any("other#7" in q for q in _gh_queries()[_before:]),
+           "\u2026and that issue was never even queried for this question")
+
+        rc, out, _ = run("ask", "--factory", "f-poison-desc",
+                         "--title", "Slot is silent: how do we fix it?",
+                         "--description", "Rationale: leshchenko1979/other#7 "
+                                          "was closed as the precedent.",
+                         "--json")
+        _pdesc = json.loads(out)["set"]
+        run("gc", "--json")
+        ck(get_set(_pdesc)["questions"][0]["status"] == "open",
+           "a CLOSED issue cited in the DESCRIPTION does not close the "
+           "question (#627): a citation is not a dependency")
+
+        # The positive control: the SAME closed issue, this time in the title,
+        # still closes. This is what proves the two negatives above are the
+        # predicate declining rather than the predicate being dead.
+        rc, out, _ = run("ask", "--factory", "f-poison-control",
+                         "--title", "leshchenko1979/other#7 is closed",
+                         "--description", "d", "--json")
+        _pctl = json.loads(out)["set"]
+        run("gc", "--json")
+        ck(get_set(_pctl)["questions"][0]["status"] == "resolved_mechanically",
+           "POSITIVE CONTROL: the same CLOSED issue named in the TITLE still "
+           "closes the question, so the title arm is alive")
+        ck(get_set(_pctl)["questions"][0].get("closed_reason")
+           == "leshchenko1979/other#7 is CLOSED",
+           "\u2026and it records the reason (%r)"
+           % (get_set(_pctl)["questions"][0].get("closed_reason"),))
+
         env["PATH"] = _saved_path
 
         # -- 9. the LOGGING path, unsuppressed -----------------------------
