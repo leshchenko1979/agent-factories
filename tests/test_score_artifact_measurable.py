@@ -79,6 +79,15 @@ PROCEDURE = REPO / "docs" / "measurement-procedure.md"
 # already written and is never backfilled — `evidence/scores/2026-10-07.md` still prints Output's family mean over
 # all 18 cells, so requiring it there would demand a rewritten record rather than a repair.
 INVARIANT_KEY = "score_artifact_measurable"
+# The criterion-row invariant landed 2026-11-07 (#630). Its boundary is deliberately the
+# PREVIOUS day's last instant: every section test here treats a boundary as EXCLUSIVE
+# (`day <= landed` is excused, never checked), so `2026-11-06T23:59:59Z` GOVERNS
+# `2026-11-07.md` -- the artifact that shipped 456 cells replaced by six family totals --
+# and excuses the twenty-one rounds that predate the requirement. Forward only: no
+# published artifact is retro-reddened and none is repaired. The arm reads its OWN key and
+# never rides the measurable loop, which would govern it from 2026-10-07 and red the
+# published, cell-less `2026-10-17.md`.
+INVARIANT_KEY_CRITERION_ROWS = "score_artifact_criterion_rows"
 
 # The PROBES' own boundary — a fixture, never the factory's declaration.
 _PROBE_BOUNDARY = dt.date(2026, 10, 7)
@@ -447,6 +456,46 @@ def aggregate_problems(text: str) -> list[str]:
                 )
     return problems
 
+# --- the criterion-row arm: cells are the population, family totals are their ROLLUP (#630) ---
+
+# A criterion code as a scorecard carries it: one capital letter, then digits (`D1`, `O3`).
+# Read STRUCTURALLY, never against a declared order -- that is the whole point of this arm.
+# The aggregate arm above reads its family map from the artifact's own
+# `**Order of criteria throughout:**` line and returns NO problems at all when there is none,
+# so it is BLIND on exactly the artifacts that carry no cells. This one needs no declaration
+# and therefore cannot be excused by a missing one.
+_CRITERION_CODE_RE = re.compile(r"^[A-Z]\d+")
+
+def criterion_row_present(body: list[str]) -> bool:
+    """True when this scorecard block carries at least one row keyed by a criterion code.
+
+    Deliberately SHAPE-AGNOSTIC, because the tree carries the cells in two legitimate forms
+    and a predicate written for one reports the other as absent:
+      * the FLAT form -- a `| D1 | D2 | ... | A2 |` header row and a 19-value row under it;
+      * the LONG form -- one row per criterion, `| D1 Subject matter specification | 3 | ... |`,
+        which is the shape `2026-10-08.md` uses for all six scorecards.
+    Both begin their first cell with a criterion code; a family-totals row begins with a family
+    NAME (`| Documentation | 71 | 96 |`), so the two cannot be confused. That is the whole
+    predicate: the cells are present, or the block is a rollup with nothing under it.
+    """
+    return any(
+        cells and _CRITERION_CODE_RE.match(cells[0]) for cells in map(_table_cells, body)
+    )
+
+def criterion_row_problems(text: str) -> list[str]:
+    """Every scorecard that prints a total but no per-criterion row (#630).
+
+    The failure this names is not cosmetic: with no cells the patrol's `score-conversion` leg
+    cannot attribute a regression to a factory at all, which is why the 2026-11-07 round
+    returned NOT RUN with `criteria_cells 0`.
+    """
+    return [
+        f"scorecard {heading.lstrip('#').strip()}: no readable criterion row"
+        for heading, body in scorecard_blocks(text)
+        if not criterion_row_present(body)
+    ]
+
+
 def artifacts() -> list[tuple[dt.date, Path]]:
     """Every dated score artifact, oldest first. `*-self-audit.md` is not one."""
     out: list[tuple[dt.date, Path]] = []
@@ -606,6 +655,60 @@ def probe_aggregates() -> list[str]:
             problems.append(f"{label}: expected {expected!r}, got {got!r}")
     return problems
 
+def _criterion_labels(problems: list[str]) -> list[str]:
+    """The scorecard each criterion-row problem names, so an arm asserts WHICH one it caught."""
+    return [problem.split(":", 1)[0].removeprefix("scorecard ") for problem in problems]
+
+def probe_criterion_rows() -> list[str]:
+    """The criterion-row arm's discriminating arms, over synthetic text (#630).
+
+    TWO positive controls, not one, and the second is here because its absence WAS the bug:
+    the flat form passed from the first draft while the LONG form -- all six scorecards of
+    `2026-10-08.md` -- was reported cell-less by the same predicate. A detector proved only on
+    the shape its author had in mind is not proved at all. A predicate answering `True` for
+    every input would red nothing, and one answering `False` would red everything; only arms
+    that fire on the defect AND stay quiet on BOTH correct shapes are evidence.
+    """
+    problems: list[str] = []
+    cellless = _AGGREGATE_FIXTURE.replace(
+        "| D1 | D2 | O1 | O2 |\n|---:|---:|---:|---:|\n| 2 | 3 | 1 | 1 |\n", "", 1
+    )
+    assert cellless != _AGGREGATE_FIXTURE, "the cell-stripping arm did not change the fixture"
+    long_form = (
+        "### 1. Alpha — 7 / 8\n\n"
+        "| Criterion | Score | Evidence |\n|---|---:|---|\n"
+        "| D1 Subject matter specification | 2 | carried |\n"
+        "| D2 Process specification | 3 | carried |\n"
+        "| O1 Throughput | 1 | carried |\n"
+        "| O2 Stability | 1 | carried |\n"
+    )
+    cases: list[tuple[str, str, list[str]]] = [
+        ("GREEN (flat form -- a positive control)", _AGGREGATE_FIXTURE, []),
+        ("GREEN (long form, one row per criterion -- a positive control)", long_form, []),
+        ("RED (one scorecard lost its cells)", cellless, ["1. Alpha — 7 / 8"]),
+        (
+            "GREEN (cells present, NO order line -- the aggregate arm's blind spot)",
+            _AGGREGATE_FIXTURE.replace(
+                "**Order of criteria throughout:** `D1 D2 · O1 O2` — Documentation, Output.\n",
+                "",
+            ),
+            [],
+        ),
+        (
+            "RED (a family-totals table where the cells belong)",
+            "### 1. Alpha — 7 / 8\n\n"
+            "| Family | Score | Max |\n|---|---:|---:|\n"
+            "| Documentation | 5 | 8 |\n| Output | 2 | 8 |\n| Total | 7 | 16 |\n",
+            ["1. Alpha — 7 / 8"],
+        ),
+    ]
+    for label, text, expected in cases:
+        got = _criterion_labels(criterion_row_problems(text))
+        if got != expected:
+            problems.append(f"{label}: expected {expected!r}, got {got!r}")
+    return problems
+
+
 def test_predicate_rejects_a_mean_with_no_measurable_count() -> None:
     assert probe() == [], "\n".join(probe())
 
@@ -616,6 +719,10 @@ def test_predicate_rejects_a_re_based_denominator() -> None:
 
 def test_predicate_rejects_a_family_row_that_disagrees_with_the_scorecards() -> None:
     assert probe_aggregates() == [], "\n".join(probe_aggregates())
+
+
+def test_predicate_rejects_a_scorecard_with_no_criterion_row() -> None:
+    assert probe_criterion_rows() == [], "\n".join(probe_criterion_rows())
 
 
 def test_procedure_names_every_anchor() -> None:
@@ -676,6 +783,36 @@ def test_post_boundary_artifacts_re_add_their_own_family_view() -> None:
             continue
         for problem in aggregate_problems(path.read_text(encoding="utf-8")):
             problems.append(f"{path.name}: {problem}")
+    assert problems == [], "\n".join(problems)
+
+
+def test_post_boundary_artifacts_carry_criterion_rows() -> None:
+    """Every post-boundary scorecard carries its cells, not only its family totals (#630).
+
+    WHY THIS ARM EXISTS SEPARATELY. `aggregate_problems` already reds on
+    `no readable criterion row`, but it reads the artifact's declared criteria order first and
+    returns NO PROBLEMS when there is none. That declaration appears in 8 of 56 artifacts, the
+    last being `2026-10-16.md`, so the arm sat dormant for 21 consecutive rounds while the gate
+    printed `6 scorecard(s) re-added` -- a count of BLOCKS, never of cells -- and the
+    2026-11-07 round shipped six fictional family tables and zero cells. A leg that reports
+    clean over a population it never read is the `#531` class, and the remedy is a reading that
+    needs no declaration to be made.
+    """
+    if not declared():
+        return
+    landed = _declared_day_or_skip(REPO, INVARIANT_KEY_CRITERION_ROWS)
+    problems: list[str] = []
+    checked: list[str] = []
+    for day, path in artifacts():
+        if day <= landed:
+            continue
+        checked.append(path.name)
+        for problem in criterion_row_problems(path.read_text(encoding="utf-8")):
+            problems.append(f"{path.name}: {problem}")
+    assert checked, (
+        "no artifact is post-boundary, so a green here would be a verdict about an EMPTY "
+        f"population: the criterion-row invariant is declared at {landed}"
+    )
     assert problems == [], "\n".join(problems)
 
 
@@ -850,6 +987,29 @@ def main() -> int:
 
     problems.extend(probe())
     problems.extend(probe_denominators())
+    # The criterion-row arm reads its OWN boundary. Riding the measurable loop above would
+    # govern it from 2026-10-07 and retro-red 2026-10-17.md, a published artifact nobody is
+    # repairing -- the forward-only rule this arm exists to obey.
+    try:
+        landed_rows = declared_day(REPO, INVARIANT_KEY_CRITERION_ROWS)
+    except SkipGate as exc:
+        print(f"criterion-row arm: SKIPPED -- {exc}")
+        landed_rows = None
+    except GateError as exc:
+        problems.extend(exc.problems)
+        landed_rows = None
+    if landed_rows is not None:
+        rows_checked: list[str] = []
+        for day, path in artifacts():
+            if day <= landed_rows:
+                continue
+            rows_checked.append(path.name)
+            for problem in criterion_row_problems(path.read_text(encoding="utf-8")):
+                problems.append(f"{path.name}: {problem}")
+        print(
+            f"criterion rows: {len(rows_checked)} artifact(s) checked -- "
+            f"{', '.join(rows_checked) if rows_checked else 'NONE (empty population)'}"
+        )
     problems.extend(probe_aggregates())
 
     if problems:
