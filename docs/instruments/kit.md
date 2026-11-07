@@ -313,10 +313,23 @@ surface; §9's O-series carries what the **member** owes.
 
 | probe | where | what it shows |
 |---|---|---|
-| the pin comparison BITES on a drifted file | `TEMPLATE/tests/test_kit_pin.py` | a manifest that names a file whose digest moved produces `differs-from-kit`, not a clean run |
-| the pin reports a file **absent** from the tree | `TEMPLATE/tests/test_kit_pin.py` | a `missing` outcome is distinguishable from a match |
-| the pin reports a file **not in the manifest** | `TEMPLATE/tests/test_kit_pin.py` | `not-in-kit` is reported rather than folded into a match |
-| the gate leaves the live `registry/kit.json` and `tools/kit_pin.py` **unmodified** | `TEMPLATE/tests/test_kit_pin.py:258-259`, `:408-409` | the probe is read-only: it hashes both before and after |
+| the pin comparison BITES on a carried path off its pin's bytes | `TEMPLATE/tests/test_kit_pin.py:290` | a **MUTATION CONTROL**: the divergence is reported and the path is NAMED, not folded into a clean run |
+| a divergence the member DECLARED exempt is GREEN again | `TEMPLATE/tests/test_kit_pin.py:301` | the exemption is what moves the verdict, so the bite above is not a gate that reds on everything |
+| an absent **pin** SKIPS with its reason named | `TEMPLATE/tests/test_kit_pin.py:316` | *"no pin vendored here"* is distinguishable from a clean pass — the skip is a stated outcome, never a silent green |
+| a pin with **NOTHING carried** is REFUSED as vacuous | `TEMPLATE/tests/test_kit_pin.py:329` | absence cannot buy a vacuous green: a pin that judges **no path at all** is an error, not a pass |
+| a `seed`-class divergence is excluded by class **and counted** | `TEMPLATE/tests/test_kit_pin.py:278`, `:282` | the exclusion is visible — a caller can print how many paths left the population and why |
+| the gate leaves the live tree **unmodified** | `TEMPLATE/tests/test_kit_pin.py:479` | the probe is read-only: the live digests are compared before and after the run |
+
+**ABSENT is a filter, not a verdict — and the two callers say so in different words.** The member's
+judgement path, `undeclared_divergence()`, **SKIPS** a manifest path the tree does not carry, because
+a factory ports a subset and a fresh one reads as ~104 absent cells that must not red; the **vacuous**
+probe above is what stops that filter from becoming a pass. The census path, `compare()`, **COUNTS**
+those same paths as `ABSENT` and returns `absent_files` by name. **Neither reports a `missing`
+outcome** — no code in this tree emits that string. The `differs-from-kit` and `not-in-kit` outcomes
+belong to the **manifest** instrument (`tools/kit_manifest.py:509`, `:514`) and are probed by
+`tests/test_kit_manifest.py:140`, not by this gate. A reader who takes them for the pin's own
+vocabulary will believe an absent declaration is judged, and will look for a gate that is not
+missing because the semantics were never the gap (issue #628).
 
 ### 7.2 The probes the gate carries — named, not implied
 
