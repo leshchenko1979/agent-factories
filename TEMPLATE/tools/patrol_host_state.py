@@ -252,6 +252,40 @@ PREDICATE = REPO / "tests" / "test_board_intake_recorded.py"
 # (acceptance criterion 3), never carried in a reader's memory.
 STALL_CENSUS_THRESHOLD_DAYS = 1.0
 
+# --- the claim-standing leg (#625) -------------------------------------------
+#
+# WHY THIS LEG EXISTS. The factory's own standing rule is that a CLAIM is not a receipt: it
+# records that a lane ACCEPTED a unit, never that the unit was done. Nothing mechanical
+# measured it, and the reason is structural rather than an oversight -- every adjacent leg
+# excludes a claimed unit BY ITS OWN DEFINITION. `stall-census`'s population is units
+# dispatched and NEVER claimed (a unit is dropped the moment a claim exists),
+# `driverless-lane`'s population is lanes carrying an UNCLAIMED backlog, and `board-closed`
+# reads CLOSED items. Their union is not a coverage of this class (#116 shape): a green over
+# three legs that each exclude the population reads identically to a green over a leg that
+# examined it and found it clean.
+#
+# WHY 7.0 d, AND WHY IT IS NOT DERIVED FROM THE POPULATION IT JUDGES. Measured on this
+# ledger at 2026-11-07T00:18:37Z over 4,843 rows: 13 units carry a `claim`, are OPEN on the
+# board and carry no `close` row, and their standing ages have a MEDIAN of 14.73 d (min
+# 0.01 d -- #625, this leg's own claim -- max 37.04 d, #252). The threshold is
+# deliberately set BELOW that median, because the median case here IS the class: half of the
+# standing claims are a fortnight old. And it is deliberately set ABOVE the two newest
+# instances (#608 at 3.45 d, #600 at 2.75 d), because a claim a couple of days old is
+# ordinary in-flight work and a leg that reddens on it teaches lanes to ignore red. 7 d is a
+# week: far beyond any legitimate in-flight duration in a factory whose lanes are woken
+# every 6 h, and still under half the measured median.
+CLAIM_STANDING_THRESHOLD_DAYS = 7.0
+
+# THE DECLARATION TRAVELS WITH THE VERDICT (acceptance criterion 4): the threshold is a
+# DECLARED value with a stated basis, and both are PRINTED on every run, so a reader never
+# has to hold the number in memory or guess why it is that number.
+CLAIM_STANDING_THRESHOLD_BASIS = (
+    "declared 2026-11-07 against a measured population of 13 standing claims (read "
+    "at 2026-11-07T00:18:37Z) whose median standing is 14.73 d; set below that median because the "
+    "median case IS the class, and above the two newest instances (#608 3.45 d, #600 2.75 d) "
+    "because a claim days old is ordinary in-flight work"
+)
+
 # THE UNIT-CITATION FORM (#555, ruling n=4182). A commit that DOES a unit's work writes the
 # unit in parentheses in its subject -- `score-conversion(#531): ...`. It is deliberately NOT
 # `--grep` over the whole message: on the ruling's own measured instance the message scan
@@ -10452,6 +10486,146 @@ DRIVERLESS_READINGS = (
     "UNREADABLE",
 )
 
+def claim_standing_leg(
+    issues: list[dict],
+    rows: list[dict],
+    *,
+    read_at: str,
+    threshold_days: float = CLAIM_STANDING_THRESHOLD_DAYS,
+    predicate=None,
+) -> dict:
+    """Units CLAIMED, still OPEN on the board, carrying NO `close` row (#625).
+
+    THE POPULATION is the class no leg measured: a unit a lane ACCEPTED and never closed.
+    Three conditions, each read from the surface that owns the fact rather than inferred --
+    a `claim` row (the ledger), state OPEN (the board), no `close` row (the ledger).
+
+    A CLAIMED UNIT THAT IS CLOSED ON THE BOARD IS OUTSIDE THIS POPULATION, and it is
+    COUNTED rather than dropped. The close row's absence there is `board-closed`'s
+    direction, not this leg's: judging it here would be a second predicate for one
+    question, and the two would eventually disagree.
+
+    THE STANDING AGE RUNS FROM THE NEWEST CLAIM ROW, never the earliest. A re-claim is the
+    DESIGNED outcome of a wake-latency gap (a lane that woke late still takes the work), so
+    the newest claim is the instant the CURRENT taking began; an age measured from the
+    earliest would report a unit re-claimed yesterday as standing for a fortnight.
+
+    IT DETECTS AND PRINTS; IT NEVER RE-ARMS (#133). A standing claim may be legitimate work
+    in progress, so this leg notifies nothing and names no addressee to re-dispatch to. Its
+    product is the POPULATION ITSELF, printed line by line on every round -- which is the
+    answer to #625 criterion 6: the class becomes VISIBLE rather than merely measured, so
+    the units standing when the item was filed are named by number on its first run rather
+    than summarised as a count.
+
+    AN INSTANT THIS LEG CANNOT READ IS NOT JUDGED, never counted as fresh (#271). A claim
+    row whose `ts` will not parse is named in `excused` with its row number, because an
+    unread clock must not read as a short standing.
+    """
+    predicate = predicate or load_predicate()
+
+    open_units: dict[int, dict] = {}
+    for item in issues:
+        if str(item.get("state", "")).strip().lower() != "open":
+            continue
+        number = item.get("number")
+        if isinstance(number, int):
+            open_units[number] = item
+
+    claims: dict[int, list[dict]] = {}
+    closed_units: set[int] = set()
+    claim_rows_examined = 0
+    non_unit_rows = 0
+    for row in rows:
+        event = row.get("event")
+        if event not in ("claim", "close"):
+            continue
+        number = predicate.issue_reference(row.get("subject"))
+        if number is None:
+            if event == "claim":
+                non_unit_rows += 1
+            continue
+        if event == "close":
+            closed_units.add(number)
+            continue
+        claim_rows_examined += 1
+        claims.setdefault(number, []).append(row)
+
+    problems: list[str] = []
+    excused: list[str] = []
+    population_lines: list[str] = []
+    off_board = 0
+    closed_off = 0
+    past = 0
+    in_population = 0
+    unparsed = 0
+
+    for unit in sorted(claims):
+        if unit in closed_units:
+            closed_off += 1
+            continue
+        if unit not in open_units:
+            off_board += 1
+            continue
+        newest = max(claims[unit], key=lambda r: str(r.get("ts") or ""))
+        try:
+            claimed_at = reader_parse_ts(str(newest.get("ts") or ""))
+            now = reader_parse_ts(read_at)
+        except (ValueError, TypeError):
+            unparsed += 1
+            excused.append(
+                f"#{unit}: the newest claim row n={newest.get('n')} records an instant this "
+                f"leg cannot date ({newest.get('ts')!r}), so its standing cannot be "
+                f"measured -- NOT JUDGED, and never read as a short standing"
+            )
+            continue
+        age_days = (now - claimed_at).total_seconds() / 86400.0
+        in_population += 1
+        actor = str(newest.get("actor") or "") or "an unrecorded actor"
+        row_n = newest.get("n")
+        over = age_days >= threshold_days
+        # THE POPULATION IS NAMED ON EVERY ROUND, past-threshold or not (#625 criterion 6).
+        # A count alone would make "13 standing claims" a figure the reader cannot act on,
+        # and the class this leg exists for is invisible precisely because nobody could see
+        # WHICH units were in it.
+        population_lines.append(
+            f"#{unit} — claimed by {actor} at {newest.get('ts')} (row n={row_n}), standing "
+            f"{age_days:.2f} d: {'PAST' if over else 'WITHIN'} the declared threshold of "
+            f"{threshold_days:.1f} d"
+        )
+        if not over:
+            continue
+        past += 1
+        problems.append(
+            f"STANDING #{unit}: claimed by {actor} at {newest.get('ts')} (row n={row_n}), "
+            f"still OPEN on the board with NO close row — standing {age_days:.2f} d, past "
+            f"the declared threshold of {threshold_days:.1f} d. This leg DETECTS and "
+            f"PRINTS: a standing claim may be legitimate work in progress, so nothing here "
+            f"re-arms the claimer (#133) — the act is the claimer's, to close the unit or to "
+            f"record in a row why it still stands."
+        )
+
+    return {
+        "name": "claim-standing",
+        "status": "ASSERTED",
+        "problems": problems,
+        "excused": excused,
+        "coverage": {
+            "claim_rows_examined": claim_rows_examined,
+            "claim_rows_not_naming_a_unit": non_unit_rows,
+            "units_claimed": len(claims),
+            "units_with_close_row": closed_off,
+            "units_off_board": off_board,
+            "units_in_population": in_population,
+            "units_past_threshold": past,
+            "instants_unparsed": unparsed,
+            "threshold_days": threshold_days,
+            "threshold_basis": CLAIM_STANDING_THRESHOLD_BASIS,
+            "board_read_at": read_at,
+            "population": population_lines,
+        },
+    }
+
+
 def _newest_goal_row(goal_rows: list[dict]) -> dict | None:
     """The row that decides a session's current state, or None for no rows.
 
@@ -16287,6 +16461,37 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
             lines.append(f"  threshold basis: {cov['threshold_basis']}")
             lines.append(f"  read at {cov['read_at']}")
+        elif leg["name"] == "claim-standing":
+            lines.append(
+                f"  claim rows examined: {cov['claim_rows_examined']} "
+                f"({cov['claim_rows_not_naming_a_unit']} naming no work unit; "
+                f"{cov['units_with_close_row']} unit(s) excluded because a close row "
+                f"exists; {cov['units_off_board']} claimed unit(s) not OPEN on this board)"
+            )
+            lines.append(
+                f"  population: {cov['units_in_population']} claimed unit(s) still OPEN with "
+                f"NO close row — {cov['units_past_threshold']} past the declared threshold of "
+                f"{cov['threshold_days']:.1f} d"
+            )
+            # THE DECLARATION PRINTS ON EVERY RUN (#625 criterion 4): a threshold without
+            # its basis is a number a reader has to take on trust, and the basis is what
+            # says whether the number is a policy or a measurement.
+            lines.append(f"  threshold declared: {cov['threshold_basis']}")
+            # THE POPULATION IS NAMED, NOT COUNTED (#625 criterion 6): the class existed
+            # unread because nothing could see WHICH units stood in it, so a count alone
+            # would rebuild that gap in a smaller font.
+            lines.append(
+                f"  population named ({cov['units_in_population']} of "
+                f"{cov['units_claimed']} claimed unit(s); printed on every round, #116):"
+            )
+            for entry in cov.get("population", []):
+                lines.append(f"    {entry}")
+            if cov["instants_unparsed"]:
+                lines.append(
+                    f"  {cov['instants_unparsed']} claim instant(s) unreadable — NOT "
+                    f"JUDGED, never read as a short standing (#271)"
+                )
+            lines.append(f"  board read at {cov['board_read_at']}")
         elif leg["name"] == "driverless-lane":
             # A leg that did NOT RUN says WHY, and never renders as a clean population
             # (#133): an unasked question and a lane with nothing on it must not read alike.
@@ -17682,6 +17887,13 @@ def main(
         ), read_at),
         leg_guard("workspace-blocked", lambda: workspace_blocked_leg(rows, read_at=read_at, dirty_paths_fn=dirty_paths_fn), read_at),
         leg_guard("stall-census", _census, read_at),
+        # #625: the class the three legs around it each exclude BY CONSTRUCTION. Its
+        # population is read from the same `issues` and `rows` the other board legs are
+        # handed -- no store of its own, and no injection owed, because the only facts it
+        # needs are the board and the ledger the runner already holds.
+        leg_guard("claim-standing", lambda: claim_standing_leg(
+            issues, rows, read_at=read_at, predicate=predicate
+        ), read_at),
         # #133: the LANE STATE behind the census's units. Its population is the census's own
         # grouping, and the goal store is injected so no probe's verdict is decided by this
         # box's live `goal_state` rows.

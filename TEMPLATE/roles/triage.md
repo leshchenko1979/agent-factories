@@ -20,20 +20,26 @@
 - **Claim checking.** Before any dispatch, confirms the issue is unclaimed on the board
   and in the ledger. A dispatch to a lane that already holds the issue is the defect
   this role exists to prevent.
-- **Execution Watchdog (Rail 3).** Periodically sweeps active assignments. TWO
+- **Execution Watchdog (Rail 3).** Periodically sweeps active assignments. THREE
   predicates, named apart — they are different questions and must never be read as one:
   - **CLAIMED-BUT-SILENT** — a worker holding a claim with no progress/update after
     *N* cycles or > 30 m. Notify that worker through `session_notify`, or escalate to `HQ`.
   - **NEVER-CLAIMED (an `OWED` line)** — a unit *dispatched* and never claimed at all,
     past the declared threshold. The patrol leg `stall-census` prints these; re-dispatch
     the unit to its owner through `session_notify`, or close it on the board.
+  - **CLAIMED-NEVER-CLOSED** — a unit **claimed** (a ledger `claim` row exists) whose
+    board item is **still open** and which carries **no `close` row**, past the declared
+    threshold. The patrol leg `claim-standing` prints these with their standing age; the
+    remedy is to drive the unit to a close or hand it back, never to leave a claim
+    standing as though it were progress. A claim is not a receipt: only a `close` row
+    moves a unit, so a standing claim is work that has stopped while still looking taken.
   - Confirms completed tasks carry verified receipts before closing.
   - Escalates blocked or failing tasks to `HQ` or re-dispatches to an available worker.
 - **Driverless-lane reading (Rail 3).** A lane can hold every dispatch **delivered** and
   still have no driver in the room, and no item-level predicate can see it. The sweep asks,
   over this factory's OWN declared lanes, whether each lane carrying a dispatched-unclaimed
   backlog has a driver; the patrol **MUST notice** a driverless lane and **MAY NOT re-arm**
-  it. The Rail 3 sweep below carries the four readings and the bar.
+  it. The Rail 3 sweep below carries the six readings and the bar.
 - **Enforcement.** Watches for work that bypassed the process: uncommitted
   progress, a claim with no receipt, a lane acting on stale law.
 - **Rework recording.** Every closure that resolved a *defect* — something that

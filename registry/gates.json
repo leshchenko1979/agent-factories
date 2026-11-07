@@ -69,6 +69,9 @@
     "tests/test_citation_published.py": {
       "class": "always-satisfiable"
     },
+    "tests/test_claim_standing.py": {
+      "class": "always-satisfiable"
+    },
     "tests/test_close_board_recorded.py": {
       "class": "exemption-table",
       "refuser": "tools/ledger.py",
@@ -961,6 +964,7 @@
     "tests/test_brain_metrics.py": "script",
     "tests/test_citation_clause_titles.py": "script",
     "tests/test_citation_published.py": "script",
+    "tests/test_claim_standing.py": "pytest",
     "tests/test_close_board_recorded.py": "pytest",
     "tests/test_close_row_revision.py": "pytest",
     "tests/test_close_telemetry_provenance.py": "pytest",

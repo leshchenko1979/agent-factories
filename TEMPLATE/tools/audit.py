@@ -1807,6 +1807,7 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_cron_duty.py"])
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_render.py"])
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_census.py"])
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_claim_standing.py"])
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_board.py"])
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_patrol_preamble.py"])
 

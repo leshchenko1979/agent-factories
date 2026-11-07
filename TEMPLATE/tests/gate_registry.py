@@ -803,6 +803,20 @@ REQUIRED_GATES: tuple[str, ...] = (
     "test_patrol_cron_duty.py",
     "test_patrol_render.py",
     "test_patrol_census.py",
+    # Added with its registration (board #625). REQUIRED is the correct grain: the gate
+    # drives the leg over SYNTHETIC board items and ledger rows — a claim row, a close row,
+    # a threshold — so it reads no live board, no ledger and no box-local fixture, and it
+    # passes in a bootstrapped factory exactly as it does here. It is byte-paired with a
+    # TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the runner
+    # and keeping the file. THE MECHANISM IT GUARDS is the class no adjacent leg could see:
+    # a unit CLAIMED, still OPEN, and never CLOSED. Every neighbouring leg excludes it by
+    # its own definition (stall-census wants UNCLAIMED, driverless-lane wants an unclaimed
+    # backlog, board-closed reads CLOSED items), so a green over all three was
+    # indistinguishable from a leg that examined the class — and 13 units stood in it, the
+    # oldest 37.04 d. The gate's MUTANT ARM disarms the age comparison over an otherwise
+    # identical fixture and requires the reddening to stop while the population stays
+    # populated, which is what proves the comparison is what bites.
+    "test_claim_standing.py",
     "test_patrol_board.py",
     "test_patrol_preamble.py",
     "test_citation_clause_titles.py",

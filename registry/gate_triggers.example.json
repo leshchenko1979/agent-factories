@@ -607,6 +607,13 @@
       "evidence/rework.md",
       "skills/**"
     ],
+    "tests/test_claim_standing.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "registry/kit.json",
+      "tools/patrol_host_state.py",
+      "tests/gate_registry.py",
+      "tests/patrol_fixtures.py"
+    ],
     "tests/test_patrol_board.py": [
       "TEMPLATE/tools/patrol_host_state.py",
       "registry/kit.json",

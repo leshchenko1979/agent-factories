@@ -193,7 +193,15 @@ def _swept(*pairs) -> list[dict]:
         # acts are one story: the ruling decides, the dispatch routes, the claim takes.
         out.append({"n": next_n + 1, "ts": _CLOSE_TS, "event": "claim",
                     "actor": "worker", "subject": subject, "detail": "probe"})
-        next_n += 2
+        # ...and a CLOSE, because a claim nobody closed is its own defect (a claim
+        # standing past the declared threshold, #625). The four acts are one story:
+        # the ruling decides, the dispatch routes, the claim takes, the close delivers.
+        # Without it this helper modelled a board that is clean under every leg but the
+        # one that asks how long a claim has stood -- and a fixture that is clean only
+        # because the leg is young is the stale-fixture shape this docstring names.
+        out.append({"n": next_n + 2, "ts": _CLOSE_TS2, "event": "close",
+                    "actor": "worker", "subject": subject, "detail": "probe"})
+        next_n += 3
     return out
 
 def _comment_url(number: int, index: int = 1) -> str:
