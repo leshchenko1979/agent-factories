@@ -709,6 +709,14 @@
       "tools/registry*.py",
       "tests/patrol_fixtures.py"
     ],
+    "tests/test_patrol_write_boundary.py": [
+      "TEMPLATE/tools/patrol_host_state.py",
+      "registry/factories/*.json",
+      "registry/kit.json",
+      "tools/patrol_host_state.py",
+      "tools/registry*.py",
+      "tests/patrol_fixtures.py"
+    ],
     "tests/test_publish.py": [
       "TEMPLATE/tools/publish.py",
       "tools/publish.py"
