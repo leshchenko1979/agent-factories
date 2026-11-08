@@ -15962,7 +15962,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 )
             for row in cov.get("unattributed_logs", []):
                 lines.append(
-                    f"    unattributed: {row['job']} ({row['path']}) — nobody here declares it"
+                    f"    not attributed here: {row['job']} ({row['path']}) — nobody here declares it"
                 )
             if leg.get("reason"):
                 lines.append(f"  {leg['reason']}")

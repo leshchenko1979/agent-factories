@@ -264,6 +264,40 @@ def test_no_print_site_renders_the_bare_word() -> None:
     )
 
 
+def test_the_two_per_row_prefixes_carry_ONE_vocabulary() -> None:
+    """The per-row lines are the surface a reader greps; two vocabularies split it.
+
+    The three SUMMARY sites are swept above, but each leg also prints one line per residual
+    row, and those are what a reader searching for a job actually finds. One said
+    `not attributed here:` and the other still said `unattributed:` -- the very word this
+    issue removes -- so the same defect survived one layer down, in the lines nobody
+    counted as print sites.
+    """
+    source = (REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
+
+    def _prefixes(text: str) -> list[str]:
+        return sorted(
+            {
+                line.strip().split('f"')[1].split("{")[0].strip()
+                for line in text.splitlines()
+                if 'f"    ' in line
+                and ("not attributed here:" in line or "unattributed:" in line)
+            }
+        )
+
+    prefixes = _prefixes(source)
+    assert prefixes == ["not attributed here:"], (
+        f"the per-row prefixes carry {prefixes}, so a reader greps two vocabularies for one "
+        "bucket; they must all read `not attributed here:`"
+    )
+    # THE CONTROL: the pre-fix pair, run through THIS extractor, yields two vocabularies --
+    # so the arm above can fail, and the split it forbids is one the tree actually carried.
+    old = (
+        '                    f"    not attributed here: {row[\'name\']} "\n'
+        '                    f"    unattributed: {row[\'job\']} ({row[\'path\']}) "\n'
+    )
+    assert _prefixes(old) == ["not attributed here:", "unattributed:"], _prefixes(old)
+
 def test_the_source_sweep_catches_the_three_old_sites() -> None:
     """THE CONTROL FOR THE SWEEP. All THREE shapes the tree used to print must be caught.
 
