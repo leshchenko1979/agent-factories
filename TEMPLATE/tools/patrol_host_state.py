@@ -2725,9 +2725,15 @@ def cron_run_fires(root: Path | None = None) -> list[dict]:
     return fires
 
 def attribute_rows(rows: list[dict], prefixes: list[str]) -> tuple[list[dict], list[dict]]:
-    """(rows attributed to this factory, rows attributed to NOBODY) — by declaration.
+    """(rows attributed to this factory, rows NOT attributed to it) — by declaration.
 
-    The unattributed rows are RETURNED, not counted. A bare count is not a report: a
+    THE SECOND HALF IS NOT "ATTRIBUTED TO NOBODY" (#563). This function tests a name
+    against the prefixes THIS factory declares and against nothing else, so a row it
+    leaves over is a row whose owner is UNMEASURED here — not one nobody declares. A
+    peer's prefix is commonly what it carries, and `unattributed_split` is what measures
+    that second question.
+
+    The residual rows are RETURNED, not counted. A bare count is not a report: a
     reader who must act on one has to be able to name it and find the home it came from,
     and a number that resolves to no object cannot be resolved by anyone (#126). Nothing
     here JUDGES them — attribution only separates the two populations.
@@ -2741,6 +2747,86 @@ def attribute_rows(rows: list[dict], prefixes: list[str]) -> tuple[list[dict], l
         else:
             unattributed.append(row)
     return attributed, unattributed
+
+def unattributed_split(rows: list[dict], *, factory_slug: str = "",
+                       owner_fn=None) -> dict[str, list[str]]:
+    """Split a residual bucket by WHAT WAS MEASURED — never by "nobody owns it" (#563).
+
+    `attribute_rows` answers ONE question: does this name match a prefix THIS factory
+    declares? A row it leaves over has NOT been measured against any other factory's
+    declaration, so calling that bucket "attributed to nobody" asserts a box-wide fact
+    from a single-factory test. Measured on this box 2026-11-08: of 31 residual rows, 23
+    carry a PEER's declared prefix and 8 carry none — 74 % of the bucket is attributed,
+    so the global reading was a 3.9x overstatement, and at three print sites.
+
+    The discrimination is `registry_render.job_owner` — the SAME function the render and
+    `job_naming_problems` attribute with, imported lazily because the renderer imports
+    this module's siblings at its top. It is called with EMPTY identity maps ON PURPOSE:
+    the sentence this feeds claims what the NAME carries, and `deliver_to` is a different
+    basis that would make it assert something it never measured.
+
+    `owner_fn` is injectable for the gate's sake, and that is a hermeticity requirement
+    rather than a convenience: the discrimination reads the LIVE fleet manifest, so a probe
+    whose fixture names assume THIS box's declared prefixes resolves to nothing in the
+    shipped tree (whose manifest declares no factories) and the peer bucket reads empty.
+    A gate that only passes on the box that wrote it is not a gate. The DEFAULT stays the
+    real reader, so no production path can be driven by a fixture.
+
+    THREE buckets, because the third is a DISAGREEMENT rather than a population: a row
+    `job_owner` resolves to THIS factory while `attribute_rows` left it over means the two
+    readers used different prefix sets, and folding it silently into either side would
+    hide that. Measured 0 on this box, so it is reported when non-zero, never assumed away.
+    """
+    if owner_fn is None:
+        import registry_render  # lazy: the renderer imports this module's siblings at top
+        owner_fn = registry_render.job_owner
+    slug = factory_slug or declared_slug()
+    peer: list[str] = []
+    none: list[str] = []
+    self_resolved: list[str] = []
+    for row in rows:
+        name = str(row.get("name") or "")
+        owner, _basis = owner_fn(row, {}, {})
+        if owner is None:
+            none.append(name)
+        elif slug and owner == slug:
+            self_resolved.append(name)
+        else:
+            peer.append(name)
+    return {"peer_prefix": peer, "no_prefix": none, "self_resolved": self_resolved}
+
+def unattributed_sentence(split: dict[str, list[str]] | None, *,
+                          count: int | None = None) -> str:
+    """The residual's sentence, stating the split and nothing wider.
+
+    The scope word is load-bearing: "not attributed to THIS FACTORY" is a fact the leg
+    measured, while a bare "unattributed" reads as a claim about the whole box that no
+    single-factory prefix test can support (#563).
+
+    A MISSING split is stated, never defaulted to zeroes: a leg that returns a count but
+    no split has not measured the discrimination, and printing "(0 carry a peer's declared
+    prefix, 0 carry none)" for it would report a measurement nobody took (#242's class,
+    one surface over).
+    """
+    if split is None:
+        return (
+            f"{count if count is not None else 'N'} not attributed to this factory "
+            f"(the peer/none split was NOT MEASURED — the leg returned no split, which is "
+            f"a defect in it)"
+        )
+    peer = split.get("peer_prefix") or []
+    none = split.get("no_prefix") or []
+    self_resolved = split.get("self_resolved") or []
+    text = (
+        f"{len(peer) + len(none) + len(self_resolved)} not attributed to this factory "
+        f"({len(peer)} carry a peer's declared prefix, {len(none)} carry none"
+    )
+    if self_resolved:
+        text += (
+            f", {len(self_resolved)} resolve to THIS factory by prefix — the two "
+            f"attribution readers disagree, which is a defect in one of them"
+        )
+    return text + ")"
 
 
 def _citation_clause(text: str, start: int) -> str:
@@ -2794,7 +2880,9 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
     """The cron-thinness leg: THIS factory's rows, judged by the PURE predicate.
 
     A row the manifest cannot attribute is COUNTED, NAMED and REPORTED, never judged — the
-    runner judges its own factory's rows, and an unattributable row belongs to nobody here.
+    runner judges its own factory's rows, and a row it cannot attribute is a row THIS
+    factory does not declare, which is not the same claim as a row nobody declares (#563:
+    most of the residual carries a peer's prefix, and `unattributed_split` measures which).
     It is reported rather than gated: a box-wide RED over unattributable rows would fire on
     the household rows another home legitimately carries (#101, ruling n=610 PART 3b), so
     the reader gets the population instead of a verdict, and non-vacuity rides the probe
@@ -2904,6 +2992,11 @@ def cron_thinness_leg(rows: list[dict], homes_read: list[str], unreached: list[s
             "homes_unreached": unreached,
             "rows_attributed": len(attributed),
             "rows_unattributed": len(unattributed),
+            # #563: the residual split by WHAT WAS MEASURED. A bare count invites the
+            # reading that nobody declares these rows, while a single-factory prefix test
+            # measured only that THIS factory does not — and most of the bucket usually
+            # carries a peer's prefix. Derived from the declaration, never hardcoded.
+            "rows_unattributed_split": unattributed_split(unattributed),
             "unattributed_rows": [
                 {"name": str(r.get("name") or ""), "home": str(r.get("home") or "")}
                 for r in unattributed
@@ -3073,6 +3166,8 @@ def pacemaker_presence_leg(rows: list[dict], bindings: list[dict],
                 "owners_declared": len(owners),
                 "owners": [],
                 "unattributed_rows": len(unattributed),
+                # #563: measured, not implied — the same split as the two sibling legs.
+                "unattributed_rows_split": unattributed_split(unattributed, factory_slug=slug),
                 "unreached_homes": list(unreached or []),
                 "read_at": read_at,
             },
@@ -3089,6 +3184,8 @@ def pacemaker_presence_leg(rows: list[dict], bindings: list[dict],
             "owners_declared": len(owners),
             "rows_judged": len(judged),
             "unattributed_rows": len(unattributed),
+            # #563: measured, not implied — the same split as the two sibling legs.
+            "unattributed_rows_split": unattributed_split(unattributed, factory_slug=slug),
             "homes_read": len(homes_read or []),
             "unreached_homes": list(unreached or []),
             "owners": population,
@@ -7488,6 +7585,9 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
             "jobs_stale_exempt": len(stale_exemptions),
             "stale_exempt_jobs": stale_exemptions,
             "jobs_unattributed": len(foreign),
+            # #563: the same split as the other two legs, from the SAME declaration, so
+            # the three prints cannot drift into three different scopes.
+            "jobs_unattributed_split": unattributed_split(foreign),
             "duties_judged": judged,
             "bound": bound_text,
             "bound_refusal": bound_refusal,
@@ -7548,8 +7648,10 @@ def duty_receipt_leg(rows: list[dict], homes_read: list[str], unreached: list[st
 #
 # `duty-receipt` CANNOT SEE THAT ROW, and this is the gap this leg exists for. Its population
 # is the rows THIS factory declares -- `attribute_rows` on this factory's prefixes -- judged
-# against THIS factory's ledger; every other row is printed as `jobs_unattributed` and never
-# judged. Measured on this box 2026-11-05: 31 of 43 enabled rows are unattributed. A thin wake
+# against THIS factory's ledger; every other row is counted as `jobs_unattributed` -- rows this
+# factory does not declare, which is NOT the same as rows nobody declares (#563) -- and never
+# judged. Measured on this box 2026-11-08: 31 of 43 enabled rows are not attributed here, 23 of
+# them carrying a PEER's declared prefix. A thin wake
 # that wakes a MEMBER factory leaves its receipt in THAT factory's ledger, so "did the woken
 # lane reach its duty" is unasked for every one of them.
 #
@@ -15703,11 +15805,11 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  rows: {cov['rows_read']} enabled read across {cov['homes_read']} "
                 f"home(s), {cov['rows_attributed']} attributed to this factory "
                 f"({', '.join(cov['prefixes']) or 'no declared prefix'}), "
-                f"{cov['rows_unattributed']} unattributed"
+                f"{unattributed_sentence(cov.get('rows_unattributed_split'), count=cov['rows_unattributed'])}"
             )
             for row in cov.get("unattributed_rows", []):
                 lines.append(
-                    f"    unattributed: {row['name'] or '(unnamed row)'} "
+                    f"    not attributed here: {row['name'] or '(unnamed row)'} "
                     f"(home {row['home'] or 'unknown'})"
                 )
             lines.append(
@@ -15876,7 +15978,7 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  duties: {cov['jobs_declaring_receipt']} row(s) declare a receipt, "
                 f"{cov['jobs_owing_none']} declare they OWE NONE, "
                 f"{cov['jobs_undeclared']} declare NOTHING and are NOT JUDGED, "
-                f"{cov['jobs_unattributed']} unattributed"
+                f"{unattributed_sentence(cov.get('jobs_unattributed_split'), count=cov['jobs_unattributed'])}"
             )
             for name in cov.get("owes_none_jobs", []):
                 lines.append(
@@ -16424,8 +16526,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             )
             lines.append(
                 f"  rows judged: {cov['rows_judged']} of this factory's enabled row(s) "
-                f"({cov['unattributed_rows']} unattributed), across "
-                f"{cov['homes_read']} home(s) read"
+                f"— {unattributed_sentence(cov.get('unattributed_rows_split'), count=cov['unattributed_rows'])}, "
+                f"across {cov['homes_read']} home(s) read"
             )
             lines.append("  population (owner — resolved session — the wake that satisfies it):")
             for entry in cov.get("owners", []):

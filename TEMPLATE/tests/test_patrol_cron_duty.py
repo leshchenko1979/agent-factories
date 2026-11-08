@@ -68,8 +68,15 @@ def test_the_cron_leg_RUNS_and_states_the_population_it_examined() -> None:
     )
     assert "3 enabled read across 2 home(s)" in out, out
     assert "2 attributed to this factory (factory-)" in out, out
-    assert "1 unattributed" in out, (
-        f"a row nobody declares is COUNTED, and the count must be printed\n{out}"
+    # #563: the count is SCOPED, and the split it rests on is printed beside it. The old
+    # sentence said "1 unattributed", which asserts a box-wide fact from a single-factory
+    # prefix test — the row carries no prefix THIS factory declares, and that is all.
+    assert "1 not attributed to this factory" in out, (
+        f"a row this factory does not declare is COUNTED, and the count must be printed "
+        f"with its SCOPE (#563)\n{out}"
+    )
+    assert "carry a peer's declared prefix" in out and "carry none" in out, (
+        f"the residual must print the split it MEASURED, not a bare count\n{out}"
     )
     assert "homes unreached: 1" in out, out
     assert "gone-home" in out, (
@@ -111,8 +118,8 @@ def test_an_unattributable_row_is_COUNTED_NAMED_and_never_judged() -> None:
     rc, out, _ = _run([], [], cron_rows=rows, homes=["probe-home", "other-home"],
                       prefixes=["factory-"])
     assert rc == 0, f"an unattributable row must not fail this factory's run\n{out}"
-    assert "1 unattributed" in out, out
-    assert "    unattributed: sibling-some-other-factory-job (home other-home)" in out, (
+    assert "1 not attributed to this factory" in out, out
+    assert "    not attributed here: sibling-some-other-factory-job (home other-home)" in out, (
         f"the population read must NAME every row it could not attribute, with the home "
         f"it was read from — a count alone resolves to no object and cannot be checked "
         f"by the reader it is reported to (#126)\n{out}"

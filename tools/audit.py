@@ -3678,6 +3678,18 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "-q", "tests/test_patrol_write_boundary.py"]
         )
 
+    # Mechanical gate: board #563 -- a residual bucket one factory cannot attribute was
+    # printed as "unattributed", a BOX-WIDE claim, at three sites. The arms drive the
+    # split and the sentence, and a control REDS on the old sentence at each site, so a
+    # factory carrying the print sites cannot silently regain the claim.
+    #     PYTEST form, not script form: module-level `test_*` arms, so `python3 <file>`
+    #     would exit 0 having asserted NOTHING. Hermetic -- the owner resolver is injected,
+    #     so no arm is decided by this box's live cron rows or registry manifest.
+    if (repo_root / "tests/test_patrol_unattributed_scope.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "-q", "tests/test_patrol_unattributed_scope.py"]
+        )
+
     return gates_to_run
 
 

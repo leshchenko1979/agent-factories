@@ -330,6 +330,9 @@
     "tests/test_patrol_write_boundary.py": {
       "class": "always-satisfiable"
     },
+    "tests/test_patrol_unattributed_scope.py": {
+      "class": "always-satisfiable"
+    },
     "tests/test_publish.py": {
       "class": "always-satisfiable"
     },
@@ -1206,6 +1209,7 @@
     "tests/test_patrol_workspace.py": "pytest",
     "tests/test_patrol_worktree.py": "pytest",
     "tests/test_patrol_write_boundary.py": "pytest",
+    "tests/test_patrol_unattributed_scope.py": "pytest",
     "tests/test_publish.py": "script",
     "tests/test_question_intake.py": "pytest",
     "tests/test_questions.py": "script",

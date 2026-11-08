@@ -561,6 +561,11 @@ PAIRS = [
     # carrying the gate without the leg would probe a function that does not exist.
     ("tests/test_patrol_write_boundary.py", "TEMPLATE/tests/test_patrol_write_boundary.py"),
     ("tests/test_patrol_round_receipts.py", "TEMPLATE/tests/test_patrol_round_receipts.py"),
+    # Added with its registration (board #563, ruled n=4314): the gate drives the three
+    # print sites of `tools/patrol_host_state.py`'s unattributed sentence, which are
+    # SHIPPED — a factory carrying the sites without the gate would print the box-wide
+    # claim again, and one carrying the gate without the sites would probe nothing.
+    ("tests/test_patrol_unattributed_scope.py", "TEMPLATE/tests/test_patrol_unattributed_scope.py"),
     ("tests/test_patrol_cron_duty.py", "TEMPLATE/tests/test_patrol_cron_duty.py"),
     ("tests/test_patrol_render.py", "TEMPLATE/tests/test_patrol_render.py"),
     ("tests/test_patrol_census.py", "TEMPLATE/tests/test_patrol_census.py"),

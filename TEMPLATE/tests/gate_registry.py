@@ -840,6 +840,16 @@ REQUIRED_GATES: tuple[str, ...] = (
     # otherwise identical fixture and requires the peer arm to go clean, which is what
     # proves the lane check is what bites.
     "test_patrol_write_boundary.py",
+    # Added with its registration (board #563). REQUIRED is the correct grain: the gate
+    # drives the split through `unattributed_split`'s INJECTED owner reader and the leg's
+    # own predicate stub, so it reads no live cron table and passes in a bootstrapped
+    # factory exactly as it does here (the shipped tree's fleet manifest declares no
+    # prefixes, which is why the fixture injects the table rather than assuming this box's).
+    # THE MECHANISM IT GUARDS is the class no count can see: a single-factory prefix test
+    # printed as a box-wide claim at three sites, where 23 of 31 residual rows carried a
+    # PEER's declared prefix. Its CONTROL runs the OLD sentence through the same predicate
+    # and requires it to be rejected.
+    "test_patrol_unattributed_scope.py",
     "test_patrol_board.py",
     "test_patrol_preamble.py",
     "test_citation_clause_titles.py",
