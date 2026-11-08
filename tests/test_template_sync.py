@@ -555,6 +555,11 @@ PAIRS = [
     ("tests/test_patrol_worktree.py", "TEMPLATE/tests/test_patrol_worktree.py"),
     ("tests/test_patrol_publish.py", "TEMPLATE/tests/test_patrol_publish.py"),
     ("tests/test_patrol_workspace.py", "TEMPLATE/tests/test_patrol_workspace.py"),
+    # Added with its registration (board #561, ruled n=4279): the gate drives
+    # `tools/patrol_host_state.py`'s `write_boundary_leg`, which is SHIPPED, so a factory
+    # carrying the leg without the gate would ship an unguarded reader — and a factory
+    # carrying the gate without the leg would probe a function that does not exist.
+    ("tests/test_patrol_write_boundary.py", "TEMPLATE/tests/test_patrol_write_boundary.py"),
     ("tests/test_patrol_round_receipts.py", "TEMPLATE/tests/test_patrol_round_receipts.py"),
     ("tests/test_patrol_cron_duty.py", "TEMPLATE/tests/test_patrol_cron_duty.py"),
     ("tests/test_patrol_render.py", "TEMPLATE/tests/test_patrol_render.py"),

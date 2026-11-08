@@ -827,6 +827,19 @@ REQUIRED_GATES: tuple[str, ...] = (
     # identical fixture and requires the reddening to stop while the population stays
     # populated, which is what proves the comparison is what bites.
     "test_claim_standing.py",
+    # Added with its registration (board #561, ruled n=4279). REQUIRED is the correct grain:
+    # the gate drives the leg over SYNTHETIC daemon log lines and INJECTED readers — the
+    # event reader, the binding reader and the fragment reader are all passed in — so it
+    # reads no live daemon log, no live session store and no box-local fixture, and it
+    # passes in a bootstrapped factory exactly as it does here. It is byte-paired with a
+    # TEMPLATE copy, so the manifest grain is what keeps a factory from dropping the leg and
+    # keeping the file. THE MECHANISM IT GUARDS is the class no adjacent leg could see: ONE
+    # LANE, ONE REPO. Every other leg asks whether a declared unit is moving; none asked
+    # WHO was writing this tree, so a peer factory's lane edited our tool for our own board
+    # item and every leg stayed green. The gate's MUTANT ARM removes the lane check over an
+    # otherwise identical fixture and requires the peer arm to go clean, which is what
+    # proves the lane check is what bites.
+    "test_patrol_write_boundary.py",
     "test_patrol_board.py",
     "test_patrol_preamble.py",
     "test_citation_clause_titles.py",

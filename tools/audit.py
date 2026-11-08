@@ -3657,6 +3657,27 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_audit_scope.py").is_file():
         gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_audit_scope.py"])
 
+    # 103. the WRITE-BOUNDARY gate (#561, ruled n=4279). THE MECHANISM IT GUARDS: ONE LANE,
+    # ONE REPO. Every leg before it asked whether a DECLARED unit was moving -- claimed,
+    # closed, stalled, woken -- and none asked WHO was writing this tree. Measured
+    # 2026-10-26T01:15-01:22Z: a member factory's lane (InferHub Watch HQ, chat
+    # -1004379632866 thread 2) issued `edit_file` against THIS repo's
+    # `tools/patrol_host_state.py` and its test pair, for this factory's board item #550 --
+    # which this factory had already dispatched to its own Worker lane. The only gate that
+    # fired was a SKILL-LOADING check, and that check is satisfied by loading the skill: it
+    # is blind to `bash`, which that session ran 177 times. The missing artifact was
+    # OWNERSHIP, and the new leg reads it from the declaration that already exists (the
+    # `lanes` block plus the fleet chat) rather than adding a second one.
+    #     PYTEST form, not script form: the file is written as module-level `test_*` arms, so
+    #     `python3 <file>` would exit 0 having asserted NOTHING. It is hermetic -- the event
+    #     reader, the binding reader and the fragment reader are all INJECTED, so it reads no
+    #     live daemon log, no live session store and no box-local fixture, and it passes in a
+    #     bootstrapped factory exactly as it does here. Ships with its TEMPLATE pair.
+    if (repo_root / "tests/test_patrol_write_boundary.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "-q", "tests/test_patrol_write_boundary.py"]
+        )
+
     return gates_to_run
 
 

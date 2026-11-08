@@ -17282,6 +17282,47 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  stores read: {', '.join(cov['stores_read']) or 'none'} — read at "
                 f"{cov['read_at'] or 'unstated'}"
             )
+        elif leg["name"] == "write-boundary":
+            # #561. The population and its coverage are printed on EVERY run, so "examined 0"
+            # is never indistinguishable from "found 0" (#242), and the blind spot travels
+            # BESIDE the count it qualifies rather than living in a docstring the reader has
+            # to go find. A NOT RUN prints its reason and nothing that looks like a sweep.
+            if "reason" in cov:
+                lines.append(f"  NOT RUN: {cov['reason']}")
+            else:
+                lines.append(
+                    f"  sessions writing under the repo in the last "
+                    f"{cov.get('window_hours', 0):g}h: {cov.get('sessions_seen', 0)} — "
+                    f"{cov.get('sessions_lane', 0)} lane(s) of this factory, "
+                    f"{cov.get('sessions_foreign', 0)} foreign, "
+                    f"{cov.get('sessions_unbound', 0)} unbound"
+                )
+                lines.append(
+                    f"  writes attributed: {cov.get('events_under_repo', 0)} event(s) — "
+                    f"{cov.get('events_tracked', 0)} landed, "
+                    f"{cov.get('events_blocked', 0)} refused by the skill gate; read over "
+                    f"{cov.get('log_files', 0)} log file(s), "
+                    f"{cov.get('log_lines', 0)} line(s)"
+                )
+                lines.append(
+                    f"  ownership read against {cov.get('lanes_declared', 0)} declared "
+                    f"lane(s) of chat {cov.get('factory_chat')} in {cov.get('fragment')}"
+                )
+                lines.append(f"  BLIND SPOT: {cov.get('blind_spot', '')}")
+                if cov.get("unreadable_logs"):
+                    lines.append(
+                        f"  UNREADABLE LOG(S): {', '.join(cov['unreadable_logs'])} — their "
+                        f"writes are NOT in the count above"
+                    )
+                if cov.get("lines_outside_repo") or cov.get("lines_undated") \
+                        or cov.get("lines_no_session"):
+                    lines.append(
+                        f"  excluded before judging: {cov.get('lines_outside_repo', 0)} "
+                        f"write line(s) naming a path outside the repo, "
+                        f"{cov.get('lines_undated', 0)} carrying no readable instant, "
+                        f"{cov.get('lines_no_session', 0)} carrying no session span"
+                    )
+            lines.append(f"  read at {cov.get('read_at') or 'unstated'}")
         else:
             lines.append(
                 f"  forward  (open issue with no intake row): "
@@ -17618,6 +17659,375 @@ def questions_homes_leg(
             "excused": [], "coverage": coverage}
 
 
+# ---------------------------------------------------------------------------
+# The WRITE-BOUNDARY leg (#561) — WHO may write this repo
+# ---------------------------------------------------------------------------
+# Ruling n=4279. Measured 2026-10-26T01:15-01:22Z: a member factory's lane (session
+# 359fe71b, InferHub Watch HQ, chat -1004379632866 thread 2) issued `edit_file` against
+# this repo's `tools/patrol_host_state.py` and its test pair for THIS factory's board item
+# #550 — which this factory had already dispatched to its own Worker lane. The only gate
+# that fired was a SKILL-LOADING check, which is satisfied by loading the skill and is
+# invisible to `bash` (that session ran 177 bash calls). So the missing artifact is
+# OWNERSHIP, not skill-loading.
+#
+# This factory already declares ownership: the fragment's `lanes` block plus the fleet
+# manifest's chat id. A session is a lane of this factory when one of its own
+# `session_bindings` rows carries this factory's chat AND a declared thread. Both halves
+# are resolved LIVE — a declared session uuid is stale on arrival, and a hardcoded lane
+# list is a second copy of a fact the tree already holds.
+#
+# WRITES, not reads. Member factories read this repo legitimately — the kit exists so they
+# can copy from it — so a leg that flagged reads would red on the designed relationship and
+# teach readers to ignore red.
+#
+# REPORTED, never clamped: the leg appends problems and refuses, reverts and gates nothing.
+# And it states what it MEASURED — a write that LANDED and an attempt the skill gate
+# REFUSED are different facts, and the sentence says which (#563's class, one surface over).
+
+WRITE_BOUNDARY_WINDOW_HOURS = 24.0
+WRITE_BOUNDARY_BLIND_SPOT = (
+    "a write that leaves no log line is invisible here: shell redirections, heredocs and "
+    "`bash` writes are not attributed by the daemon log, and a file tool's SUCCESSFUL write "
+    "prints a path only on that session's FIRST touch of it (`Tracked new file`), so a "
+    "repeat edit to an already-tracked path leaves no event"
+)
+
+# The two event shapes that carry BOTH a session and a path. Both are writes: the first
+# landed, the second was refused by the skill gate. The `[TOOL_EXEC] ❌ … [SKILL GATE]` line
+# is the same refusal echoed once into the tool result, and it is deliberately NOT a third
+# pattern — counting it would report one event twice.
+WRITE_BOUNDARY_EVENTS = (
+    ("tracked", re.compile(
+        r'Tracked new file: "(?P<path>[^"]+)" in session (?P<session>[0-9a-fA-F-]{36})')),
+    ("blocked", re.compile(
+        r"skill_gate: blocked '(?P<tool>[^']+)' — path '(?P<path>[^']+)'")),
+)
+_LOG_SESSION = re.compile(r"run_tool_loop\{session_id=(?P<session>[0-9a-fA-F-]{36})\}")
+_LOG_INSTANT = re.compile(
+    r"^(?P<stamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2}))")
+
+
+def _log_instant(text: str) -> dt.datetime | None:
+    """The instant a daemon log line carries, or None — never an assumed one."""
+    found = _LOG_INSTANT.match(text)
+    if not found:
+        return None
+    stamp = found.group("stamp")
+    if stamp.endswith("Z"):
+        stamp = stamp[:-1] + "+00:00"
+    try:
+        return dt.datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+
+
+def daemon_log_paths(profile_root: Path) -> tuple[list[Path], list[str]]:
+    """Every profile's daemon log, sorted, plus the homes that could not be listed.
+
+    A profile with no `logs/` directory is not an error — a profile that has never run has
+    written no log — but a `profile_root` that is not a directory IS one, and it is
+    returned as an unreadable home rather than as an empty list, because "no profile was
+    readable" must never render as "no lane wrote" (#242).
+    """
+    paths: list[Path] = []
+    unreadable: list[str] = []
+    if not profile_root.is_dir():
+        return [], [f"{profile_root} is not a directory"]
+    for home in sorted(profile_root.iterdir()):
+        if not home.is_dir():
+            continue
+        log_dir = home / "logs"
+        if not log_dir.is_dir():
+            continue
+        try:
+            paths.extend(sorted(log_dir.glob("opencrabs.*")))
+        except OSError as exc:
+            unreadable.append(f"{log_dir}: {exc}")
+    return paths, unreadable
+
+
+def daemon_write_events(paths: list[Path], *, repo: Path, since: dt.datetime
+                        ) -> tuple[list[dict], dict]:
+    """The write events the daemon log attributes to a session, under `repo`, since `since`.
+
+    Coverage travels with the events so "examined 0" is distinguishable from "found 0": the
+    caller prints lines and bytes scanned beside the event count, and every line the reader
+    could not use is counted in its own bucket rather than dropped.
+    """
+    root = str(repo)
+    needle = repo.name
+    events: list[dict] = []
+    scanned = {"files": 0, "lines": 0, "bytes": 0, "outside_repo": 0, "undated": 0,
+               "no_session": 0, "unreadable": []}
+    for path in paths:
+        try:
+            handle = path.open("r", encoding="utf-8", errors="replace")
+        except OSError as exc:
+            scanned["unreadable"].append(f"{path}: {exc}")
+            continue
+        scanned["files"] += 1
+        try:
+            with handle:
+                for line in handle:
+                    scanned["lines"] += 1
+                    scanned["bytes"] += len(line)
+                    # Cheap prefilter, measured over nine days of logs: a line about this
+                    # repo carries its own basename, and the three regexes below are an
+                    # order of magnitude more expensive per line. The two EVENT shapes are
+                    # admitted regardless, because a write to a DIFFERENT repository is
+                    # exactly what the `outside_repo` bucket counts — a prefilter keyed on
+                    # our own name would make that bucket structurally always zero, which is
+                    # a coverage claim the reader could not keep.
+                    if needle not in line and "Tracked new file:" not in line \
+                            and "skill_gate: blocked" not in line:
+                        continue
+                    for kind, pattern in WRITE_BOUNDARY_EVENTS:
+                        found = pattern.search(line)
+                        if not found:
+                            continue
+                        # THE EVENT IS FOUND FIRST, THEN its two required facts. Ordered
+                        # the other way round, a line carrying an event but no session span
+                        # was dropped before any bucket saw it — an exclusion a reader could
+                        # not see, which is the one thing this reader must never do.
+                        session = _LOG_SESSION.search(line)
+                        if not session:
+                            scanned["no_session"] += 1
+                            break
+                        target = found.group("path")
+                        if not (target == root or target.startswith(root + os.sep)):
+                            scanned["outside_repo"] += 1
+                            break
+                        when = _log_instant(line)
+                        if when is None:
+                            scanned["undated"] += 1
+                            break
+                        if when < since:
+                            break
+                        events.append({
+                            "session": session.group("session"),
+                            "kind": kind,
+                            "path": target,
+                            "instant": when.isoformat(),
+                            "log": path.name,
+                        })
+                        break
+        except OSError as exc:
+            scanned["unreadable"].append(f"{path}: {exc}")
+    return events, scanned
+
+
+def write_boundary_problems(events: list[dict], *, bindings: list[dict], lanes: list[dict],
+                            factory_chat, repo: Path, window_hours: float,
+                            fragment_path: Path) -> tuple[list[str], dict]:
+    """Which writing sessions are NOT lanes of this factory — pure, no I/O, no clock.
+
+    One problem per SESSION, never one per event: a lane that pokes the repo forty times is
+    one boundary fact, and a report a reader cannot scan is a report that gets skipped. The
+    paths travel in the sentence, and the counts say which KIND of event each was.
+    """
+    thread_ids: set[int] = set()
+    for lane in lanes or []:
+        try:
+            thread_ids.add(int(lane.get("thread_id")))
+        except (TypeError, ValueError):
+            continue
+    rows_by_session: dict[str, list[dict]] = {}
+    for row in bindings or []:
+        rows_by_session.setdefault(str(row.get("session_id") or ""), []).append(row)
+
+    def is_lane(session: str) -> bool:
+        for row in rows_by_session.get(session, []):
+            if str(row.get("chat_id")) != str(factory_chat):
+                continue
+            try:
+                thread = int(row.get("thread_id"))
+            except (TypeError, ValueError):
+                continue
+            if thread in thread_ids:
+                return True
+        return False
+
+    by_session: dict[str, list[dict]] = {}
+    for event in events:
+        by_session.setdefault(event["session"], []).append(event)
+
+    problems: list[str] = []
+    foreign: list[str] = []
+    unbound: list[str] = []
+    lanes_ok = 0
+    for session in sorted(by_session):
+        found = by_session[session]
+        if is_lane(session):
+            lanes_ok += 1
+            continue
+        tracked = sum(1 for event in found if event["kind"] == "tracked")
+        blocked = sum(1 for event in found if event["kind"] == "blocked")
+        paths = sorted({event["path"] for event in found})
+        shown = ", ".join((p[len(str(repo)):] or "/") for p in paths[:3])
+        more = f" (+{len(paths) - 3} more)" if len(paths) > 3 else ""
+        counts = (f"{tracked} write(s) that LANDED and {blocked} attempt(s) the skill gate "
+                  f"refused")
+        rows = rows_by_session.get(session) or []
+        if rows:
+            title = rows[0].get("session_title")
+            who = (f"chat {rows[0].get('chat_id')} thread {rows[0].get('thread_id')}"
+                   + (f', "{title}"' if title else ""))
+            foreign.append(session)
+            problems.append(
+                f"session {session} ({who}) is not a lane of this factory, yet the daemon log "
+                f"records it writing under {repo} in the last {window_hours:g}h: {counts} — "
+                f"paths: {shown}{more}. Ownership read from session_bindings against the "
+                f"{len(thread_ids)} declared thread(s) of chat {factory_chat} in "
+                f"{fragment_path}"
+            )
+        else:
+            unbound.append(session)
+            problems.append(
+                f"session {session} resolves to NO session_bindings row at all, yet the "
+                f"daemon log records it writing under {repo} in the last {window_hours:g}h: "
+                f"{counts} — paths: {shown}{more}. With no binding there is no chat/thread to "
+                f"match against the {len(thread_ids)} declared thread(s) of chat "
+                f"{factory_chat} in {fragment_path}, so this session's ownership is UNKNOWN"
+            )
+    coverage = {
+        "sessions_seen": len(by_session),
+        "sessions_lane": lanes_ok,
+        "sessions_foreign": len(foreign),
+        "sessions_unbound": len(unbound),
+        "foreign_sessions": foreign,
+        "unbound_sessions": unbound,
+        "lanes_declared": len(thread_ids),
+        "factory_chat": str(factory_chat),
+        "fragment": str(fragment_path),
+    }
+    return problems, coverage
+
+
+def write_boundary_leg(*, read_at: str, slug: str = "", repo: Path = REPO,
+                       profile_root: Path | None = None,
+                       window_hours: float = WRITE_BOUNDARY_WINDOW_HOURS,
+                       now: dt.datetime | None = None,
+                       events_fn=None, bindings_fn=None, fragment_fn=None,
+                       registry=None, fragment_path: Path | None = None,
+                       factory_chat=None) -> dict:
+    """The write-boundary leg: a session that writes this repo must be a lane of it.
+
+    NOT RUN — never clean — when the DECLARATION is unreadable. The predicate needs two
+    independent facts (who is a lane, who wrote), and a leg that could not read either has
+    verified nothing (#242). The reason names which half was missing.
+    """
+    leg_name = "write-boundary"
+    registry = registry or load_module("oc_registry", REGISTRY)
+    now = now or dt.datetime.now(dt.timezone.utc)
+    # ONE resolution, used by BOTH halves of the declaration read. The fragment is named for
+    # the FACTORY slug and so is the chat: resolving them from two different sources is how
+    # this leg first shipped dark — the fragment came from the caller's BOARD slug
+    # (`owner/repo`, no such file) and, once that was fixed, the chat still came from the
+    # caller's slug and read `<no slug>`. Both halves must speak about the same factory.
+    factory_slug = slug or declared_slug()
+    fragment_path = fragment_path or FACTORY_FRAGMENT_DIR / f"{factory_slug}.json"
+    base = {"name": leg_name, "problems": [], "excused": []}
+
+    def not_run(reason: str, **extra) -> dict:
+        coverage = {"reason": reason, "read_at": read_at, "blind_spot":
+                    WRITE_BOUNDARY_BLIND_SPOT, "window_hours": window_hours}
+        coverage.update(extra)
+        return {**base, "status": "NOT RUN", "coverage": coverage}
+
+    try:
+        if bindings_fn is not None:
+            # Same pair shape the live read returns — (rows, errors) — so a probe drives the
+            # error arm as well as the happy one, and neither can drift from the other.
+            produced = bindings_fn()
+            if isinstance(produced, tuple):
+                bindings, berrors = list(produced[0]), list(produced[1])
+            else:
+                bindings, berrors = list(produced), []
+        else:
+            bindings, berrors = registry.all_bindings()
+    except Exception as exc:  # noqa: BLE001 — an unreadable binding set is NOT RUN
+        return not_run(f"the session_bindings read raised {type(exc).__name__}: {exc}")
+    if berrors:
+        return not_run(
+            "the binding read reported errors, so who is a lane of this factory is UNKNOWN "
+            f"and no writing session can be placed: {'; '.join(berrors[:3])}"
+        )
+    if fragment_fn is not None:
+        fragment, ferr = fragment_fn(), ""
+    else:
+        fragment, ferr = registry.load_fragment(fragment_path)
+    if ferr or not isinstance(fragment, dict):
+        return not_run(
+            f"this factory's own lane declaration {fragment_path} could not be read "
+            f"({ferr or 'not an object'}), so there is no independent declaration of who may "
+            f"write here — a check that cannot read its declaration verifies nothing"
+        )
+    lanes = fragment.get("lanes") or []
+    if factory_chat is None:
+        factory_chat = registry.FACTORY_CHATS.get(factory_slug) if factory_slug else None
+    if factory_chat is None:
+        return not_run(
+            f"the fleet manifest declares no chat for factory {factory_slug or '<no slug>'}, so no "
+            f"binding can be matched against the {len(lanes)} declared lane(s)"
+        )
+    if not lanes:
+        return not_run(
+            f"{fragment_path} declares NO lanes, so every writing session would read as "
+            f"foreign — an empty declaration is a NOT RUN, never a clean sweep"
+        )
+    if events_fn is not None:
+        # The injected read returns the SAME pair the live one does — (events, scanned) — so
+        # a probe's coverage travels beside its events exactly as the log reader's does.
+        produced = events_fn()
+        if isinstance(produced, tuple):
+            events, scanned = list(produced[0]), dict(produced[1])
+        else:
+            events, scanned = list(produced), {
+                "files": 0, "lines": 0, "bytes": 0, "outside_repo": 0, "undated": 0,
+                "no_session": 0, "unreadable": [],
+            }
+    else:
+        if profile_root is None:
+            profile_root = getattr(registry, "PROFILE_ROOT", None)
+        if profile_root is None:
+            return not_run(
+                "the fleet manifest declares no `profile_root`, so no profile's daemon log "
+                "can be located and the write population is unknown"
+            )
+        paths, unreadable = daemon_log_paths(profile_root)
+        if not paths:
+            return not_run(
+                f"no daemon log was found under {profile_root} "
+                f"({'; '.join(unreadable) or 'no profile home carries a logs/ directory'}), so "
+                f"the write population was never read"
+            )
+        since = now - dt.timedelta(hours=window_hours)
+        events, scanned = daemon_write_events(paths, repo=repo, since=since)
+        scanned["unreadable"] = list(scanned["unreadable"]) + list(unreadable)
+    problems, cov = write_boundary_problems(
+        events, bindings=bindings, lanes=lanes, factory_chat=factory_chat, repo=repo,
+        window_hours=window_hours, fragment_path=fragment_path,
+    )
+    coverage = dict(cov)
+    coverage.update({
+        "events_under_repo": len(events),
+        "events_tracked": sum(1 for e in events if e["kind"] == "tracked"),
+        "events_blocked": sum(1 for e in events if e["kind"] == "blocked"),
+        "log_files": scanned.get("files", 0),
+        "log_lines": scanned.get("lines", 0),
+        "log_bytes": scanned.get("bytes", 0),
+        "lines_outside_repo": scanned.get("outside_repo", 0),
+        "lines_undated": scanned.get("undated", 0),
+        "lines_no_session": scanned.get("no_session", 0),
+        "unreadable_logs": scanned.get("unreadable", []),
+        "window_hours": window_hours,
+        "blind_spot": WRITE_BOUNDARY_BLIND_SPOT,
+        "read_at": read_at,
+    })
+    return {"name": leg_name, "status": "ASSERTED", "problems": problems, "excused": [],
+            "coverage": coverage}
+
+
 def leg_guard(name: str, build, read_at: str) -> dict:
     """Build ONE leg, and CONTAIN a raise so it cannot take the round down (#501).
 
@@ -17746,6 +18156,18 @@ def main(
     # home would be measuring whichever adoption happened to have been made, and could not
     # prove the STALE arm fires at all.
     questions_homes_fn=None,
+    # #561: the write-boundary leg's three reads, injected for the eleventh time and the same
+    # reason -- the leg decides WHO may write this repo by joining the daemon log against
+    # `session_bindings` against the factory's own lane declaration, and a probe whose verdict
+    # came from this box's live log would be asserting which sessions happened to run here.
+    # Injected separately because they are three different facts with three different failure
+    # modes: the events are the population, the bindings are the identity, the fragment is the
+    # DECLARATION, and a leg that cannot read the declaration verifies nothing.
+    write_boundary_events_fn=None,
+    write_boundary_bindings_fn=None,
+    write_boundary_fragment_fn=None,
+    write_boundary_profile_root: Path | None = None,
+    write_boundary_chat=None,
     out=print,
     err=print,
 ) -> int:
@@ -18085,6 +18507,29 @@ def main(
             **(questions_homes_fn or (lambda: {}))(),
         ), read_at),
         leg_guard("publish-freshness", lambda: (publish_fn or publish_freshness_leg)(read_at=read_at), read_at),
+        # A REPORT, deliberately (#561, ruling n=4279): the leg appends problems and refuses,
+        # reverts and gates nothing. It answers a question no other leg asks -- a session that
+        # WRITES this repo must be a lane of it -- and the incident that produced it was a
+        # member factory's lane editing this repo's own tools for a board item this factory had
+        # already dispatched to its own Worker lane. A leg that could not read its own lane
+        # declaration returns NOT RUN, never clean (#242).
+        leg_guard("write-boundary", lambda: write_boundary_leg(
+            read_at=read_at,
+            # NO `slug=` here, deliberately. `main()`'s `slug` is the BOARD slug
+            # (`owner/repo`, from `remote_slug`), which names no fragment: passing it made
+            # the leg look for `registry/factories/leshchenko1979/agent-factories.json` and
+            # report NOT RUN on a tree whose declaration was sitting right there at
+            # `registry/factories/meta-factory.json`. The FRAGMENT slug is a different
+            # resolution — `declared_slug()`, matched by git common dir against the fleet
+            # manifest — and the leg calls it itself, exactly as `pacemaker_presence_leg`
+            # does. A reader who "fixes" this by passing the board slug back in gets the
+            # same NOT RUN, and the reason names a path that does not exist.
+            events_fn=write_boundary_events_fn,
+            bindings_fn=write_boundary_bindings_fn,
+            fragment_fn=write_boundary_fragment_fn,
+            profile_root=write_boundary_profile_root,
+            factory_chat=write_boundary_chat,
+        ), read_at),
         leg_guard("worktree", lambda: (worktree_fn or worktree_leg)(read_at=read_at), read_at),
         # A REPORT, for the reason the leg's own block comment measures: the defect's shape
         # and a lane's uncommitted append are indistinguishable, and the second is constant
