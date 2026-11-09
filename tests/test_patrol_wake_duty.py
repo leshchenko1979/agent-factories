@@ -73,18 +73,20 @@ def _ledger_reader(*entries: tuple[str, str]):
 
     return read
 
-def _leg(rows, *, stores=None, ledger_fn=None, fires=None, window_secs=86400.0):
+def _leg(rows, *, stores=None, ledger_fn=None, fires=None, window_secs=86400.0,
+         read_at=_READ_AT, now=_NOW, clock_fn=None):
     return RUNNER.wake_duty_leg(
         rows,
         ["probe-home"],
         [],
         prefixes=["factory-"],
-        read_at=_READ_AT,
+        read_at=read_at,
         fires=[_fire()] if fires is None else fires,
         factory_fn=lambda: (stores if stores is not None else _stores(), []),
         ledger_fn=ledger_fn or _ledger_reader(),
         window_secs=window_secs,
-        now=_NOW,
+        now=now,
+        clock_fn=clock_fn,
     )
 
 # --- the pair that carries the verdict --------------------------------------
@@ -317,6 +319,170 @@ def test_MUTANT_reading_none_as_a_stem_reports_a_false_MISSING() -> None:
             [_wake("probe-daily-trigger")],
             ledger_fn=_ledger_reader(("unrelated-123-work", "2026-11-03T10:00:00Z")),
         )
+        assert leg["coverage"]["missing"] == 1, leg["coverage"]
+        assert "NO VERDICT" in leg["problems"][0]
+    finally:
+        for key, value in saved.items():
+            namespace[key] = value
+
+# --- #635: a wake that POSTDATES the round's own read ------------------------
+#
+# MEASURED 2026-11-09, this box: the leg printed `stores read: … — read at 12:24:59Z` and
+# three lines later reddened the ai-antispam lane over a wake stamped 12:25:23.938306324Z —
+# 24.938 s AFTER that read. The lane had done its duty 2 m 09 s later (its own rows n=379
+# claim 12:27:16Z, n=380 close / n=381 run 12:27:32Z). The old guard read
+# `0 <= age < window_secs`, so a NEGATIVE age fell straight through to judging, and the leg
+# demanded a receipt from a store it had read BEFORE the wake existed.
+#
+# The pair below differs in ONE field — the wake's instant — so the verdict is a function of
+# the postdating rather than of the fixture.
+_POSTDATED_WAKE = "2026-11-05T14:30:24.938306324Z"   # 24.938 s AFTER _READ_AT
+_POSTDATED_RECEIPT = "2026-11-05T14:32:16Z"          # the lane's real receipt, 2 m 09 s later
+
+def test_a_wake_POSTDATING_the_read_is_IN_FLIGHT_never_judged() -> None:
+    """#635, THE INCIDENT. `now` is left to derive from `read_at` (as the round does), so the
+    wake sits in the future of the leg's own clock and the age is negative.
+
+    It must be EXCUSED with its own count, and — the whole point — it must NOT be judged: a
+    receipt the lane wrote after the read cannot exist in bytes already read.
+    """
+    leg = _leg(
+        [_wake("probe-daily-trigger")],
+        fires=[_fire(started=_POSTDATED_WAKE)],
+        now=None,
+        ledger_fn=_ledger_reader(("daily-self-audit-2026-11-05", _POSTDATED_RECEIPT)),
+    )
+    assert leg["coverage"]["postdated_read"] == 1, leg["coverage"]
+    assert leg["coverage"]["judged"] == 0, leg["coverage"]
+    assert leg["coverage"]["missing"] == 0, leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+    note = " ".join(leg["excused"])
+    assert "POSTDATES" in note, note
+    assert "IN FLIGHT BY CONSTRUCTION" in note, note
+    # It must name the instant it postdates, and say WHY that instant is the wrong ruler.
+    assert _READ_AT in note, note
+    assert "ENTRYPOINT" in note, note
+
+def test_the_SAME_wake_a_full_window_old_still_REDS() -> None:
+    """THE CONTROL, and the arm that makes the one above mean something.
+
+    Identical fixture, identical store, identical receipt — only the wake's instant moves
+    from the future to 2 days back. It must still be judged and still red, otherwise the fix
+    would have excused the #612 class wholesale instead of the postdating subclass.
+    """
+    leg = _leg([_wake("probe-daily-trigger")], now=_NOW)
+    assert leg["coverage"]["postdated_read"] == 0, leg["coverage"]
+    assert leg["coverage"]["judged"] == 1, leg["coverage"]
+    assert leg["coverage"]["missing"] == 1, leg["coverage"]
+    assert "NO VERDICT" in leg["problems"][0]
+
+def test_a_wake_exactly_at_the_read_instant_is_NOT_postdated() -> None:
+    """THE BOUNDARY, and it is the window that decides it, not the postdating branch.
+
+    `age == 0` means the wake exists AT the read instant: it is not postdating (that needs
+    `age < 0`), and it is 0 seconds old, so the ordinary window calls it IN FLIGHT. The
+    distinction matters in both directions — an off-by-one that swept `age == 0` into the
+    postdating bucket would file a real round under an instrument defect, and one that let
+    `age < 0` into this bucket is the original #635 bug.
+    """
+    leg = _leg(
+        [_wake("probe-daily-trigger")],
+        fires=[_fire(started=_READ_AT)],
+        now=None,
+    )
+    cov = leg["coverage"]
+    assert cov["postdated_read"] == 0, cov
+    assert cov["in_flight"] == 1, cov
+    assert cov["judged"] == 0, cov
+    assert any("IN FLIGHT" in note for note in leg["excused"]), leg["excused"]
+
+def test_each_store_carries_the_instant_IT_was_read() -> None:
+    """#635 CRITERION 1. The printed instant beside a store name must be the instant THAT
+    store was read — never the round's single entrypoint stamp, which predates every store
+    read inside the round and is what made the 24.9 s gap invisible.
+
+    The clock is injected so this arm is decided by the leg and not by wall time.
+    """
+    later = dt.datetime(2026, 11, 5, 14, 41, 7, tzinfo=dt.timezone.utc)
+    leg = _leg(
+        [_wake("probe-daily-trigger")],
+        ledger_fn=_ledger_reader(("daily-self-audit-2026-11-03", "2026-11-03T09:11:41Z")),
+        clock_fn=lambda: later,
+    )
+    at_by_store = leg["coverage"]["stores_read_at"]
+    assert at_by_store == {"miidas": "2026-11-05T14:41:07Z"}, at_by_store
+    # And it must be LATER than the round's stamp, which is the whole defect: an instant
+    # equal to `read_at` would mean the store was read at the entrypoint, which it was not.
+    assert at_by_store["miidas"] != leg["coverage"]["read_at"]
+
+def test_the_render_pairs_each_store_with_ITS_OWN_instant() -> None:
+    """#635 CRITERION 1, at the surface a reader actually reads.
+
+    The render is inline in `main()`, so this arm reads the source rather than calling it —
+    and it asserts the SHAPE, which is what regressed: the old line was
+    `stores read: <names> — read at <round stamp>`, attributing ONE instant to stores read at
+    different times. The instant must come from `stores_read_at`, keyed by the store's name.
+    """
+    source = (REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
+    assert 'at_by_store = cov.get("stores_read_at") or {}' in source, (
+        "the render no longer reads the per-store instants"
+    )
+    assert "{name} (read at {at_by_store.get(name) or 'unstated'})" in source, (
+        "the render must pair each store NAME with its OWN instant"
+    )
+    # THE OLD SHAPE MUST BE GONE: one stamp attributed to every store. Quoted from
+    # `git show HEAD:tools/patrol_host_state.py`, so the absence assertion names real bytes.
+    old_one_instant = (
+        "stores read: " + "{', '.join(cov['stores_read']) or 'none'} " + "\u2014 read at "
+    )
+    assert old_one_instant not in source, (
+        "the old one-instant-for-all-stores line is still present"
+    )
+
+def test_the_render_states_a_postdating_count_when_there_is_one() -> None:
+    """A count a reader cannot see is a count that did not happen: the postdating bucket gets
+    its own rendered line, never a silent increment inside `in_flight`."""
+    source = (REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
+    assert 'if cov.get("postdated_read"):' in source, (
+        "the render never checks the postdating count"
+    )
+    assert "POSTDATING THIS READ: {cov['postdated_read']} wake(s)" in source, (
+        "the postdating count is not rendered"
+    )
+    assert "IN FLIGHT BY CONSTRUCTION" in source
+
+def test_MUTANT_restoring_the_old_guard_reds_the_postdated_wake() -> None:
+    """THE MUTANT. Put `0 <= age < window_secs` back and the postdated wake must be JUDGED
+    and RED — the exact incident. Without this arm the gate proves only that the current code
+    excuses something, not that the guard was the thing excusing it."""
+    source = (REPO / "tools" / "patrol_host_state.py").read_text(encoding="utf-8")
+    # BOTH halves of the old guard are restored, because the defect was the PAIR: the old
+    # code was a single `if 0 <= age < window_secs:` whose left bound silently dropped a
+    # negative age through to judging. Disabling only the new branch would still leave the
+    # window branch to catch `age < 0` and the mutant would prove nothing.
+    postdating = "        if age < 0:\n"
+    window = "        if age < window_secs:\n"
+    assert source.count(postdating) == 1, "the postdating branch moved; re-point this mutant"
+    assert source.count(window) == 1, "the window branch moved; re-point this mutant"
+    mutant_source = source.replace(postdating, "        if False:\n").replace(
+        window, "        if 0 <= age < window_secs:\n"
+    )
+    assert mutant_source != source, "the mutant did not apply"
+    namespace = RUNNER.__dict__
+    saved = {key: namespace[key] for key in ("wake_duty_leg",)}
+    try:
+        exec(compile(mutant_source, "mutant", "exec"), namespace)  # noqa: S102
+        leg = _leg(
+            [_wake("probe-daily-trigger")],
+            fires=[_fire(started=_POSTDATED_WAKE)],
+            now=None,
+            # THE STORE AS IT ACTUALLY WAS: read at 14:30:00Z, so the receipt the lane went
+            # on to write at 14:32:16Z is NOT in it. That is the incident in one fixture —
+            # the old guard judged a round against bytes read before the round existed.
+            ledger_fn=_ledger_reader(),
+        )
+        assert leg["coverage"]["postdated_read"] == 0, leg["coverage"]
+        assert leg["coverage"]["judged"] == 1, leg["coverage"]
         assert leg["coverage"]["missing"] == 1, leg["coverage"]
         assert "NO VERDICT" in leg["problems"][0]
     finally:

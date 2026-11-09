@@ -7761,7 +7761,7 @@ def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
                   prefixes: list[str], read_at: str = "",
                   fires: list[dict] | None = None, factory_fn=None, ledger_fn=None,
                   window_secs: float = WAKE_DUTY_WINDOW_SECS,
-                  now: dt.datetime | None = None) -> dict:
+                  now: dt.datetime | None = None, clock_fn=None) -> dict:
     """Did the lane a delivered wake woke leave ANY work receipt in ITS OWN store? (#612)
 
     The verdict is about the WAKE, never about the lane's industry: this leg cannot see what
@@ -7786,8 +7786,17 @@ def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
             self_executing += 1
     judged = passed = missing = unreadable_store = delivery_failed = 0
     in_flight = suppressed = no_fire = unresolved = 0
+    # #635: a wake that POSTDATES this leg's read is counted apart from a round that is
+    # merely younger than its window. They are different facts, and a reader must be able to
+    # tell "the lane may still be working" from "this leg could not have seen the round at
+    # all" — the second is a statement about the INSTRUMENT, and folding it into `in_flight`
+    # would hide an instrument defect inside a lane statistic.
+    postdated = 0
     stores_read: set[str] = set()
+    # #635: EACH STORE'S OWN READ INSTANT, recorded when that store was read.
+    stores_read_at: dict[str, str] = {}
     stores_unreached: dict[str, str] = {}
+    clock = clock_fn or (lambda: dt.datetime.now(dt.timezone.utc))
     now_instant = now
     if now_instant is None:
         try:
@@ -7871,7 +7880,28 @@ def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
             )
             continue
         age = (now_instant - woke_at).total_seconds()
-        if 0 <= age < window_secs:
+        if age < 0:
+            # #635: THE WAKE POSTDATES THIS LEG'S READ. The guard used to read
+            # `0 <= age < window_secs`, so a NEGATIVE age fell straight through to judging —
+            # and it judged a round that did not exist yet at the instant the store was read.
+            # Measured 2026-11-09: the leg printed `stores read: … — read at 12:24:59Z` and
+            # three lines later reddened a lane over a wake stamped 12:25:23.938306324Z,
+            # 24.938 s AFTER its own read, whose receipt (n=379/380/381, 12:27:16Z-12:27:32Z)
+            # the lane had written 2 m 09 s after its wake. A printed instant must never
+            # precede the data it covers, and a wake later than the read cannot have left a
+            # receipt in bytes that were already read: IN FLIGHT BY CONSTRUCTION, not judged.
+            in_flight += 1
+            postdated += 1
+            excused.append(
+                f"{name} (cron id {job_id}, {slug}): the wake {started} POSTDATES this "
+                f"round's read_at stamp ({read_at or 'unstated'}) by {duty_age_text(-age)} — "
+                f"and that stamp is taken at the round's ENTRYPOINT, BEFORE the run records "
+                f"are read, so a wake that landed in the gap is newer than the instant this "
+                f"leg measures from. No receipt it produced could be in bytes read before it "
+                f"existed: IN FLIGHT BY CONSTRUCTION, never judged (#635)"
+            )
+            continue
+        if age < window_secs:
             in_flight += 1
             excused.append(
                 f"{name} (cron id {job_id}, {slug}): the wake {started} is IN FLIGHT — "
@@ -7881,6 +7911,9 @@ def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
             )
             continue
         entries, why = ledger_fn(ledger_path)
+        # #635: WHEN THIS STORE WAS ACTUALLY READ, stamped AFTER the call returns so the
+        # printed instant can never precede the bytes it describes.
+        store_read_at = clock().strftime("%Y-%m-%dT%H:%M:%SZ")
         if entries is None:
             unreadable_store += 1
             stores_unreached[slug] = why
@@ -7892,6 +7925,8 @@ def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
             )
             continue
         stores_read.add(slug)
+        # #635: the instant THIS store was read, stamped after the read returned.
+        stores_read_at[slug] = store_read_at
         # THE THREE BUCKETS, not one regex (#612). `receipt_subject: none` is a DECLARATION
         # that the row owes no NAMED receipt, and reading it with `declared_receipt_stem`
         # alone turns the literal word `none` into a stem: the hunt then asks every ledger in
@@ -7956,9 +7991,16 @@ def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
             "unreadable_store": unreadable_store,
             "delivery_failed": delivery_failed,
             "in_flight": in_flight,
+            # #635: a wake that postdates the read is counted SEPARATELY from `in_flight`.
+            # It is a statement about this leg's own reach, never about the lane.
+            "postdated_read": postdated,
             "suppressed": suppressed,
             "no_fire": no_fire,
             "stores_read": sorted(stores_read),
+            # #635: EACH STORE'S OWN read instant, so the printed instant beside a store name
+            # is the instant THAT store was read. The round's single `read_at` is the round's
+            # entrypoint stamp and predates every store read inside it.
+            "stores_read_at": stores_read_at,
             "stores_unreached": stores_unreached,
             "window_secs": window_secs,
             "window_basis": WAKE_DUTY_WINDOW_BASIS,
@@ -17377,13 +17419,33 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"by their own gate, {cov['no_fire']} with no run record, "
                 f"{cov['unresolved_factory']} owned by no declared factory"
             )
+            # #635: the postdating count gets its OWN line. Folded into "in flight" it would
+            # read as a lane statistic; it is a statement about how far this leg's read
+            # reached, and a reader must be able to see it without reading a docstring.
+            if cov.get("postdated_read"):
+                lines.append(
+                    f"  POSTDATING THIS READ: {cov['postdated_read']} wake(s) stamped AFTER "
+                    f"the store they should appear in was read — IN FLIGHT BY CONSTRUCTION, "
+                    f"never judged (their receipts could not exist in bytes already read)"
+                )
             lines.append(
                 f"  window: {duty_age_text(cov['window_secs'])} — {cov['window_basis']}"
             )
-            lines.append(
-                f"  stores read: {', '.join(cov['stores_read']) or 'none'} — read at "
-                f"{cov['read_at'] or 'unstated'}"
-            )
+            # #635: EACH STORE'S OWN INSTANT beside its own name. The round's single `read_at`
+            # is stamped at the entrypoint and predates every store read inside it, so
+            # printing it as THE read instant for stores read minutes later is what let a
+            # wake 24.9 s AFTER the round's stamp be judged against data read before it.
+            at_by_store = cov.get("stores_read_at") or {}
+            stores_read_text = ", ".join(
+                f"{name} (read at {at_by_store.get(name) or 'unstated'})"
+                for name in cov["stores_read"]
+            ) or "none"
+            lines.append(f"  stores read: {stores_read_text}")
+            if at_by_store and not cov.get("read_at"):
+                lines.append(
+                    "  round read_at: unstated — the per-store instants above are the ones "
+                    "each store was actually read at"
+                )
         elif leg["name"] == "write-boundary":
             # #561. The population and its coverage are printed on EVERY run, so "examined 0"
             # is never indistinguishable from "found 0" (#242), and the blind spot travels
