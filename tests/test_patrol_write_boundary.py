@@ -156,6 +156,42 @@ def test_one_problem_per_SESSION_not_per_event() -> None:
     assert leg["coverage"]["events_blocked"] == 1, leg["coverage"]
 
 
+def test_a_REFUSED_attempt_alone_does_NOT_make_a_session_a_writer() -> None:
+    """A refused write changed nothing, so it cannot breach a boundary it never crossed.
+
+    Measured live: the leg's only hit in its FIRST audit round was THIS factory's own Infra
+    Factory HQ lane, refused by the skill gate for poking `registry/factories` — the gate
+    WORKING, reported as a boundary breach, and it reddened ten unrelated patrol GATES. A leg
+    that reds when the gate succeeds teaches readers to ignore red, so classification reads
+    `tracked` only.
+
+    The refusal is still COUNTED, and that is the other half of this gate: a session that was
+    refused appears in `sessions_blocked_only` / `blocked_only_sessions`, and `events_blocked`
+    keeps its own count, so "no landed write" can never be confused with "never looked".
+    """
+    leg = _leg([_event(_PEER_SESSION, _TOOL, kind="blocked")])
+    assert leg["status"] == "ASSERTED", leg
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["sessions_blocked_only"] == 1, leg["coverage"]
+    assert leg["coverage"]["blocked_only_sessions"] == [_PEER_SESSION], leg["coverage"]
+    assert leg["coverage"]["events_blocked"] == 1, leg["coverage"]
+    assert leg["coverage"]["sessions_foreign"] == 0, leg["coverage"]
+    assert leg["coverage"]["sessions_unbound"] == 0, leg["coverage"]
+
+
+def test_a_REFUSED_attempt_from_an_UNBOUND_session_is_also_not_reported() -> None:
+    """The same law on the UNKNOWN arm: no binding row AND no landed write is still nothing.
+
+    Without this arm the fix could be half-applied — the `foreign` branch skipped while the
+    `unbound` branch still reported a session that never wrote a byte — and the gate would not
+    notice, because the two branches are separate sentences.
+    """
+    leg = _leg([_event(_PEER_SESSION, _TOOL, kind="blocked")], bindings=[])
+    assert leg["problems"] == [], leg["problems"]
+    assert leg["coverage"]["sessions_blocked_only"] == 1, leg["coverage"]
+    assert leg["coverage"]["sessions_unbound"] == 0, leg["coverage"]
+
+
 def test_the_window_is_applied_by_the_READER_so_an_old_write_never_reaches_the_leg() -> None:
     """End to end through the real log reader: a write outside the window is not population.
 

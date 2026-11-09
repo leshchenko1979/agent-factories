@@ -91,6 +91,21 @@ _EMPTY_LOG_DIR = Path(tempfile.mkdtemp(prefix="patrol-empty-log-"))
 
 _EMPTY_SCORES_DIR = Path(tempfile.mkdtemp(prefix="patrol-empty-scores-"))
 
+# #561: the write-boundary leg's three reads, made INERT by default. An empty profile root
+# holds no daemon log, an empty event list is a population of 0 that was STATED, and the stub
+# fragment declares one lane under a stub chat -- so a probe that injects nothing reads a leg
+# that examined 0 events and judged nobody, never whichever sessions THIS box happened to run.
+_PROBE_WRITE_BOUNDARY_ROOT = Path(tempfile.mkdtemp(prefix="patrol-wb-root-"))
+
+_PROBE_WRITE_BOUNDARY_CHAT = -1009999999999
+
+_PROBE_WRITE_BOUNDARY_LANES = [{"thread_id": 1, "lane": "probe"}]
+
+_PROBE_WRITE_BOUNDARY_SCANNED = {
+    "files": 0, "lines": 0, "bytes": 0, "outside_repo": 0, "undated": 0,
+    "no_session": 0, "unreadable": [],
+}
+
 _IN_STEP_HOMES_REPO = Path(tempfile.mkdtemp(prefix="patrol-in-step-homes-"))
 
 (_IN_STEP_HOMES_REPO / "tests").mkdir(parents=True, exist_ok=True)
@@ -254,7 +269,9 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          duty_exemptions=None, ref_role_exemptions_path=None,
          criterion_exemptions_path=None, driverless_goals=None,
          driverless_turn_open=None, dispatch_batches=None, questions_homes=None,
-         standing_items=None):
+         standing_items=None, write_boundary_events=None, write_boundary_bindings=None,
+         write_boundary_fragment=None, write_boundary_profile_root=None,
+         write_boundary_chat=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -460,6 +477,36 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # probes that DO assert the rider drive `render_shared_tree_rider` directly, or
         # pass a rider of their own here so the RENDER path is exercised, not assumed.
         shared_tree_fn=shared_tree_fn or _stub_shared_tree_rider,
+        # #561: the write-boundary leg's three reads are made INERT by default, for the reason
+        # the log surface is (#122) and with a sharper edge: this leg reads the LIVE daemon log
+        # and the LIVE `session_bindings`, so a probe that injected nothing was asserting
+        # whichever sessions this box happened to have run -- measured, a real lane of THIS
+        # factory reddened ten patrol probes for a skill-gate refusal it had already been
+        # stopped from making. The default here states a population of 0 over a profile root
+        # that holds no log, so "examined nothing" is printed rather than confused with
+        # "found nothing". A probe that asserts the leg passes its own events, bindings,
+        # fragment, root and chat.
+        write_boundary_events_fn=(
+            (lambda: write_boundary_events) if write_boundary_events is not None
+            else (lambda: ([], dict(_PROBE_WRITE_BOUNDARY_SCANNED)))
+        ),
+        write_boundary_bindings_fn=(
+            (lambda: (write_boundary_bindings, []))
+            if write_boundary_bindings is not None else (lambda: ([], []))
+        ),
+        # A fragment_fn returns the FRAGMENT itself, not a pair -- the leg pairs it with "".
+        write_boundary_fragment_fn=(
+            (lambda: write_boundary_fragment) if write_boundary_fragment is not None
+            else (lambda: {"lanes": list(_PROBE_WRITE_BOUNDARY_LANES)})
+        ),
+        write_boundary_profile_root=(
+            _PROBE_WRITE_BOUNDARY_ROOT if write_boundary_profile_root is None
+            else write_boundary_profile_root
+        ),
+        write_boundary_chat=(
+            _PROBE_WRITE_BOUNDARY_CHAT if write_boundary_chat is None
+            else write_boundary_chat
+        ),
     )
     return rc, out.getvalue(), err.getvalue()
 

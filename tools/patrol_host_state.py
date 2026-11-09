@@ -17397,7 +17397,9 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{cov.get('window_hours', 0):g}h: {cov.get('sessions_seen', 0)} — "
                     f"{cov.get('sessions_lane', 0)} lane(s) of this factory, "
                     f"{cov.get('sessions_foreign', 0)} foreign, "
-                    f"{cov.get('sessions_unbound', 0)} unbound"
+                    f"{cov.get('sessions_unbound', 0)} unbound, "
+                    f"{cov.get('sessions_blocked_only', 0)} refused-only (not judged: a "
+                    f"refused write changed nothing)"
                 )
                 lines.append(
                     f"  writes attributed: {cov.get('events_under_repo', 0)} event(s) — "
@@ -17785,6 +17787,16 @@ def questions_homes_leg(
 # REPORTED, never clamped: the leg appends problems and refuses, reverts and gates nothing.
 # And it states what it MEASURED — a write that LANDED and an attempt the skill gate
 # REFUSED are different facts, and the sentence says which (#563's class, one surface over).
+#
+# ONLY A WRITE THAT LANDED MAKES A SESSION A WRITER OF THIS REPO. A REFUSED attempt changed
+# nothing: the skill gate stopped it and the file on disk is untouched, so the predicate this
+# leg enforces — "who WROTE here" — has not been met. Classifying on the refusal would make
+# the leg red exactly when the gate WORKS, which inverts its purpose; measured live, the only
+# hit it ever produced was this factory's own Infra Factory HQ lane, refused for poking
+# `registry/factories`, i.e. a breach the gate had already prevented. The refusal is still
+# REPORTED — it rides in the sentence of any session that did land something, and its own
+# count stays in the coverage — because "no landed write" is a fact about a population and
+# must never be indistinguishable from "never looked".
 
 WRITE_BOUNDARY_WINDOW_HOURS = 24.0
 WRITE_BOUNDARY_BLIND_SPOT = (
@@ -17926,6 +17938,13 @@ def write_boundary_problems(events: list[dict], *, bindings: list[dict], lanes: 
     One problem per SESSION, never one per event: a lane that pokes the repo forty times is
     one boundary fact, and a report a reader cannot scan is a report that gets skipped. The
     paths travel in the sentence, and the counts say which KIND of event each was.
+
+    ONLY A LANDED WRITE MAKES A SESSION A WRITER. A session whose every event was REFUSED by
+    the skill gate is counted in `sessions_blocked_only` and judged NOTHING: it changed no
+    byte, so the predicate — who wrote this repo — is unmet, and flagging it would red the leg
+    exactly when the gate succeeded. The blocked count still travels in the sentence of a
+    session that DID land something, and `events_blocked` stays in the coverage, so the
+    refusal population is always printed and never silently zero.
     """
     thread_ids: set[int] = set()
     for lane in lanes or []:
@@ -17956,11 +17975,17 @@ def write_boundary_problems(events: list[dict], *, bindings: list[dict], lanes: 
     problems: list[str] = []
     foreign: list[str] = []
     unbound: list[str] = []
+    blocked_only: list[str] = []
     lanes_ok = 0
     for session in sorted(by_session):
         found = by_session[session]
         if is_lane(session):
             lanes_ok += 1
+            continue
+        # NOT A WRITER: every event this session produced was REFUSED, so nothing was written
+        # and the predicate is unmet. Counted, never dropped — see the docstring.
+        if not any(event["kind"] == "tracked" for event in found):
+            blocked_only.append(session)
             continue
         tracked = sum(1 for event in found if event["kind"] == "tracked")
         blocked = sum(1 for event in found if event["kind"] == "blocked")
@@ -17996,8 +18021,10 @@ def write_boundary_problems(events: list[dict], *, bindings: list[dict], lanes: 
         "sessions_lane": lanes_ok,
         "sessions_foreign": len(foreign),
         "sessions_unbound": len(unbound),
+        "sessions_blocked_only": len(blocked_only),
         "foreign_sessions": foreign,
         "unbound_sessions": unbound,
+        "blocked_only_sessions": blocked_only,
         "lanes_declared": len(thread_ids),
         "factory_chat": str(factory_chat),
         "fragment": str(fragment_path),
