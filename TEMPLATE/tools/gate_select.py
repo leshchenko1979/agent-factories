@@ -34,8 +34,10 @@ import ast
 import fnmatch
 import importlib.util
 import json
+import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -368,6 +370,146 @@ def run_summary_line(selected: int, run: GateRun, rc: int) -> str:
         f"{len(run.no_verdicts)} no-verdict — rc={rc}"
     )
 
+KILL_DRAIN_SEC = 5.0
+
+class RunProgress:
+    """How far a `--run` had got, so a run KILLED from outside is not silent (#637).
+
+    A run killed by a signal has no verdict to report -- and until #637 it had no LINE
+    either. `timeout 1800 python3 tools/gate_select.py ... --run` is the documented way to
+    run a set that exceeds the inline ceiling, and SIGTERM is exactly what `timeout` sends:
+    the process died between two gates, the log ended on a gate path, and
+    `grep -c FAILED` over it returned **0** -- the same number a clean run returns. So the
+    only way to tell a killed run from a green one was to notice the summary line was
+    MISSING, which is precisely the check nobody performs.
+
+    This object is what the signal handler can still read once the run has stopped: how many
+    gates were adjudicated, how many of those failed or took no verdict, and which gate was
+    in flight. A count a reader cannot see is a count that did not happen, so the killed line
+    states all of it rather than saying only "killed" -- "died, and here is where" is
+    re-checkable by a reader; "died" is not.
+    """
+    __slots__ = ("total", "completed", "failed", "no_verdict", "current", "child_pid")
+
+    def __init__(self, gates: list[str]) -> None:
+        self.total = len(gates)
+        self.completed = 0
+        self.failed = 0
+        self.no_verdict = 0
+        self.current: str | None = None
+        self.child_pid: int | None = None
+
+def killed_summary_line(progress: RunProgress, signame: str, reaped: str = "") -> str:
+    """The terminal line a KILLED run prints -- and it deliberately does NOT match the
+    completed-run marker (#637).
+
+    The header states that a finished run ends with one marker line, so that its ABSENCE is
+    the crash signal. This line must therefore stay OUTSIDE that marker's pattern: a killed
+    run that matched it would hand a reader `grep -c ... == 1` and let a death pass for a
+    verdict -- the same laundering this unit removes, one layer up. So the wording avoids the
+    marker on purpose (`RUN KILLED`, never the completed-run phrase), and the count is stated
+    as `N of M`, which is the truthful shape for a run that never finished.
+
+    The rc follows the precedence the completed path already uses (`run_exit_code`): a
+    failure outranks an absent verdict, and an absent verdict is 124 -- the fleet's kill code
+    (#206). A killed run always HAS absent verdicts, namely the gates it never reached, so
+    this code is never 0.
+    """
+    rc = 1 if progress.failed else TIMEOUT_EXIT_CODE
+    where = f" while running {progress.current}" if progress.current else " between gates"
+    unreached = progress.total - progress.completed
+    line = (
+        f"gate-select: RUN KILLED by {signame}{where} — {progress.completed} of "
+        f"{progress.total} gate(s) adjudicated ({progress.failed} failed, "
+        f"{progress.no_verdict} no-verdict), {unreached} NOT REACHED; NO VERDICT was taken "
+        f"on this run — rc={rc}"
+    )
+    return f"{line} — {reaped}" if reaped else line
+
+def reap_gate_group(pid: int) -> str:
+    """SIGKILL a gate's whole PROCESS GROUP, and say in words what was signalled (#629).
+
+    The SUBTREE, not the child. `Popen.kill()` signals the direct child only, so a gate that
+    spawns anything of its own leaves that subtree running -- measured on this box at 6 m 39 s
+    and 4 m 39 s of survival after the parent had exited, still holding their pipes. For the
+    selector that matters twice over: a killed run that says "NO VERDICT was taken" while the
+    gate it was running grinds on for another sixteen minutes is a false account of its own
+    death, and the leak deposits load on the box whose load every wall in `registry/gates.json`
+    was measured under.
+
+    The child is started with `start_new_session=True`, so it is a session and group leader
+    and everything it forks inherits the group. `os.getpgid` is READ rather than assumed,
+    because the guarantee is the child's, not ours: a platform that ignored the flag would
+    leave the child in OUR group, and signalling that group would kill the selector itself.
+    Fail-open throughout -- losing the reap must never turn a wall into a crash.
+    """
+    try:
+        pgid = os.getpgid(pid)
+    except OSError:
+        return f"no process group resolved for pid {pid} — nothing was reaped"
+    try:
+        own = os.getpgid(0)
+    except OSError:
+        own = None
+    if own is not None and pgid == own:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError as exc:
+            return f"pid {pid} shares this process group and could not be killed ({exc})"
+        return (
+            f"pid {pid} shares this process's own group, so only the DIRECT CHILD was "
+            f"killed — its subtree may survive"
+        )
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        return f"process group {pgid} had already exited — nothing to reap"
+    except OSError as exc:
+        return f"process group {pgid} could not be killed ({exc})"
+    return f"process group {pgid} SIGKILLed, subtree included"
+
+def install_kill_handlers(progress: RunProgress, stream) -> dict[int, object]:
+    """Catch SIGTERM/SIGINT so a killed `--run` still states its own outcome (#637).
+
+    `timeout <secs> python3 tools/gate_select.py ... --run` is how a set that exceeds the
+    inline ceiling gets run, and SIGTERM is what `timeout` sends on expiry. With no handler
+    the process dies mid-gate and the log keeps only its selection, so the run's last word is
+    a gate path. This handler prints the killed line, reaps the gate it was running, and exits
+    124 -- the fleet's kill code, not 1, because nothing here FAILED; it never finished.
+
+    Returns the handlers it replaced so the caller can restore them: a signal arriving AFTER
+    the run has finished must not overwrite the verdict already printed.
+    """
+    previous: dict[int, object] = {}
+
+    def handler(signum: int, frame) -> None:
+        try:
+            signame = signal.Signals(signum).name
+        except ValueError:  # pragma: no cover - a signal outside the enum
+            signame = f"signal {signum}"
+        reaped = ""
+        pid = progress.child_pid
+        if pid is not None:
+            reaped = reap_gate_group(pid)
+            progress.child_pid = None
+        print(killed_summary_line(progress, signame, reaped), file=stream, flush=True)
+        raise SystemExit(1 if progress.failed else TIMEOUT_EXIT_CODE)
+
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        try:
+            previous[signum] = signal.signal(signum, handler)
+        except (ValueError, OSError):  # pragma: no cover - not the main thread
+            pass
+    return previous
+
+def restore_kill_handlers(previous: dict[int, object]) -> None:
+    """Put the previous handlers back, so a late signal cannot reprint the verdict (#637)."""
+    for signum, old in previous.items():
+        try:
+            signal.signal(signum, old)
+        except (ValueError, OSError, TypeError):  # pragma: no cover
+            pass
+
 def registered_commands(root: Path) -> dict[str, list[str]]:
     """`{gate key: argv}` read from the audit's OWN registration — the live list (#436).
 
@@ -488,7 +630,82 @@ def first_stderr_diagnosis(text: str | None, limit: int = DIAGNOSIS_LIMIT) -> st
         lines = lines[1:]
     return lines[0][:limit] if lines else ""
 
-def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> GateRun:
+class _Finished:
+    """What this module reads off a finished child: its code and its two streams (#637).
+
+    `subprocess.CompletedProcess` carried the same three fields, but `subprocess.run` HIDES
+    the pid, and the pid is the whole point of #637: a SIGTERM arriving while a gate is in
+    flight has to reach that gate's process group, and a handle without a pid cannot name
+    the group it needs to kill. So the child is spawned as a session leader and its result
+    is carried here instead.
+    """
+
+    __slots__ = ("returncode", "stdout", "stderr")
+
+    def __init__(self, returncode: int, stdout: str, stderr: str) -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _spawn_and_wait(
+    argv: tuple[str, ...] | list[str],
+    root: Path,
+    timeout: float | None,
+    progress: "RunProgress | None" = None,
+) -> _Finished:
+    """Run ONE gate as its own session leader and return its result; raise on a wall kill.
+
+    `start_new_session=True` is what makes the reap possible at all (#637, and the #629
+    pattern one layer down in `audit.py`). Without it the child sits in the SELECTOR's
+    process group, so the only signal that reaches the gate's own forks also reaches this
+    process — which is why the pre-#637 code, built on `subprocess.run`, had no way to kill
+    a gate's subtree without killing itself, and left orphans behind instead.
+
+    A wall kill reaps the group BEFORE the drain, and the drain is bounded by
+    `KILL_DRAIN_SEC`: a child that ignores SIGKILL's arrival ordering cannot be allowed to
+    hang the selector on a pipe that will never close. The reap string travels out on the
+    `TimeoutExpired.output` field so the caller can print WHAT was killed beside the fact
+    that a kill happened — the #629 condition-2 rule, applied here rather than re-invented.
+
+    `progress.child_pid` is set for exactly as long as the child is live, and cleared on
+    every exit path, so a handler firing between two gates cannot reap a pid that has been
+    recycled by the kernel for an unrelated process.
+    """
+    proc = subprocess.Popen(
+        list(argv),
+        cwd=str(root),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    if progress is not None:
+        progress.child_pid = proc.pid
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        reaped = reap_gate_group(proc.pid)
+        try:
+            proc.communicate(timeout=KILL_DRAIN_SEC)
+        except subprocess.TimeoutExpired:
+            pass
+        if progress is not None:
+            progress.child_pid = None
+        raise subprocess.TimeoutExpired(
+            cmd=list(argv), timeout=timeout, output=reaped
+        ) from None
+    if progress is not None:
+        progress.child_pid = None
+    return _Finished(proc.returncode, out or "", err or "")
+
+
+def run_gates(
+    root: Path,
+    gates: list[str],
+    tree_label: str = "worktree",
+    progress: "RunProgress | None" = None,
+) -> GateRun:
     """Run each gate's registered argv; return the failures, each naming the gate.
 
     The argv is the audit's own, interpreter included (#436), so it is executed VERBATIM —
@@ -564,7 +781,15 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
     no_verdicts: list[str] = []
     exemptions: list[str] = []
     retried: list[str] = []
-    for gate in gates:
+    for index, gate in enumerate(gates, 1):
+        if progress is not None:
+            # Counted BEFORE the gate runs, so the numbers a killed run prints are the ones
+            # it had ADJUDICATED: gates 1..index-1 are settled, `gate` is in flight, and
+            # everything after it was never reached (#637).
+            progress.completed = index - 1
+            progress.failed = len(failures)
+            progress.no_verdict = len(no_verdicts)
+            progress.current = gate
         if tree_label != "worktree" and not (root / gate).is_file():
             failures.append(f"{gate} — selected, but not present in the {tree_label}")
             continue
@@ -581,23 +806,28 @@ def run_gates(root: Path, gates: list[str], tree_label: str = "worktree") -> Gat
             timeout = budgets.resolve(gate)[0]
         attempts = 0
         first_attempt_sec: float | None = None
-        proc: subprocess.CompletedProcess[str] | None = None
+        reaped = ""
+        proc: _Finished | None = None
         while True:
             attempts += 1
             started = time.monotonic()
             try:
-                proc = subprocess.run(
-                    list(argv), cwd=str(root), capture_output=True, text=True, timeout=timeout
-                )
-            except subprocess.TimeoutExpired:
+                proc = _spawn_and_wait(argv, root, timeout, progress)
+            except subprocess.TimeoutExpired as exc:
                 elapsed = time.monotonic() - started
+                # WHAT WAS KILLED travels with the fact that a kill happened (#629
+                # condition 2): the reap string is built by `_spawn_and_wait` and carried
+                # on the exception, so the reader is told the process group was reaped
+                # rather than left to infer it from a bare `exit 124`.
+                reaped = str(exc.output or "")
                 if attempts == 1:
                     first_attempt_sec = round(elapsed, 2)
                     continue
                 no_verdicts.append(
                     f"{gate} — killed at its declared budget ({timeout:.2f}s) after "
                     f"running {elapsed:.2f}s, and killed AGAIN on the one bounded retry "
-                    f"(first attempt {first_attempt_sec}s); it neither passed nor failed"
+                    f"(first attempt {first_attempt_sec}s); it neither passed nor failed. "
+                    f"Reap: {reaped or 'no reap string was returned'}"
                 )
                 proc = None
             except OSError as exc:
@@ -731,6 +961,15 @@ def main(argv: list[str] | None = None) -> int:
         header = (
             f"gate-select: {len(result['gates'])} gate(s), mode={result['mode']}"
             + (f", tree={tree_label}" if args.run else "")
+            # THE HEADER STATES THE TERMINAL CONTRACT (#637 clause 2). A reader greps for
+            # the completed-run marker, and until now nothing told them the run was
+            # SUPPOSED to end with one — so `grep -c` returning 0 was a number with no
+            # expectation attached, and a killed run printed exactly that number. The
+            # header names the contract, in words that deliberately do not themselves match
+            # the marker (no `N gate(s) ran` phrase here), so a log whose marker count is 0
+            # is red BY THE HEADER'S OWN DECLARATION rather than by a reader's memory.
+            + (", ends with ONE summary line — a log that stops anywhere else was KILLED"
+               if args.run else "")
             + (f", default-deny on {len(result['uncovered'])} uncovered path(s)"
                if result["default_deny"] else "")
         )
@@ -753,9 +992,22 @@ def main(argv: list[str] | None = None) -> int:
     sys.stdout.flush()
 
     if args.run:
+        # A KILLED RUN MUST NOT READ AS A GREEN ONE (#637). Measured 2026-11-09: a
+        # `timeout 1800 ... --run` sent SIGTERM mid-gate, the log's last line was a gate
+        # PATH, no summary line was ever printed, and `grep -c FAILED` returned 0 -- the
+        # same number a clean run prints. The defect is that the completed-run marker was
+        # the ONLY terminal shape, so its ABSENCE (the crash state, #553 clause 3) and
+        # silence were indistinguishable to any reader who greps rather than diffs.
+        # `RunProgress` carries what had been ADJUDICATED so far; the handler prints a
+        # line whose wording deliberately does NOT match the completed-run marker, and
+        # reaps the in-flight gate's process group so the kill does not orphan a subtree
+        # (#629 condition 3).
+        progress = RunProgress(result["gates"])
+        previous_handlers = install_kill_handlers(progress, sys.stderr)
         try:
-            run = run_gates(judged_root, result["gates"], tree_label)
+            run = run_gates(judged_root, result["gates"], tree_label, progress)
         finally:
+            restore_kill_handlers(previous_handlers)
             if checkout is not None:
                 remove_clean_checkout(root, checkout)
         for failure in run.failures:

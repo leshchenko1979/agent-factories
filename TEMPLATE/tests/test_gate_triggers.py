@@ -23,8 +23,10 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import io
 import json
 import os
+import signal
 import shutil
 import subprocess
 import sys
@@ -1605,26 +1607,6 @@ def probe_a_killed_gate_gets_one_bounded_retry_and_says_so() -> None:
         sel.registered_commands, sel.declared_budget_table = saved_commands, saved_table
         shutil.rmtree(root, ignore_errors=True)
 
-PROBES = (
-    probe_every_registered_gate_is_covered,
-    probe_every_map_key_is_registered,
-    probe_the_map_is_well_formed,
-    probe_every_read_a_gate_opens_is_declared,
-    probe_the_example_carries_the_same_shape,
-    probe_globs_over_include_deliberately,
-    probe_a_covered_change_selects_a_subset,
-    probe_the_default_deny_cannot_be_neutered,
-    probe_an_unreadable_map_is_none_not_empty,
-    probe_the_cli_reports_the_mode,
-    probe_the_run_mode_executes_gates_with_the_interpreter,
-    probe_the_range_judges_the_range_not_the_worktree,
-    probe_the_range_fails_a_gate_the_clean_checkout_cannot_materialise,
-    probe_a_kill_is_not_a_failure,
-    probe_a_failed_receipt_carries_the_childs_word,
-    probe_the_wall_is_read_from_the_judged_tree,
-    probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared,
-    probe_a_killed_gate_gets_one_bounded_retry_and_says_so,
-)
 
 
 # --- #553: a run STATES its own outcome, so a pass and a crash differ -----------------
@@ -1784,6 +1766,475 @@ def probe_a_run_STATES_its_own_outcome() -> None:
             f"rc={rc} summary={summary} (a line here means the crash was reported as a run)",
         )
 
+# --- #637: a KILLED run STATES its own outcome, and a kill never reads green ----------
+#
+# THE DEFECT, measured 2026-11-09. `timeout 1800 python3 tools/gate_select.py ... --run` is
+# the documented way to run a set that exceeds the inline ceiling, and SIGTERM is exactly what
+# `timeout` sends. With no handler the process died mid-gate: the log's last line was a gate
+# PATH, and `grep -c FAILED` returned 0 -- the same number a clean run returns. The ONLY thing
+# separating a death from a verdict was that the #553 summary line was missing, which is
+# precisely the check nobody performs. A reader who greps rather than diffs read a kill as a
+# pass, and the run that was supposed to judge a change judged nothing.
+#
+# No stated skip: every arm builds its OWN fixture tree, and the end-to-end arms run the real
+# CLI as a SUBPROCESS and send it a real signal -- a handler cannot be exercised from inside
+# the process it would kill.
+
+COMPLETED_RUN_RE = re.compile(r"gate-select: \d+ gate\(s\) ran")
+KILLED_RUN_RE = re.compile(r"gate-select: RUN KILLED by (\w+)")
+
+
+def _progress_637(sel, total=4, completed=1, failed=0, no_verdict=0,
+                  current="tests/fixture_x.py", child_pid=None):
+    progress = sel.RunProgress(["gate"] * total)
+    progress.completed = completed
+    progress.failed = failed
+    progress.no_verdict = no_verdict
+    progress.current = current
+    progress.child_pid = child_pid
+    return progress
+
+
+def probe_the_killed_line_cannot_pass_for_a_completed_run() -> None:
+    """The killed line stays OUTSIDE the completed-run marker, and its rc is never 0.
+
+    The control is the point: the marker regex is run over the CLEAN run's own line and must
+    MATCH it, or every arm below would pass just as well against a regex that matches nothing.
+    """
+    sel = _selector()
+    line = sel.killed_summary_line(_progress_637(sel), "SIGTERM")
+    completed = sel.run_summary_line(4, sel.GateRun([], [], (), ()), 0)
+
+    check(
+        "CONTROL: the completed-run marker matches the CLEAN run's own line",
+        bool(COMPLETED_RUN_RE.search(completed)),
+        completed,
+    )
+    check(
+        "the killed line does NOT match the completed-run marker",
+        not COMPLETED_RUN_RE.search(line),
+        line,
+    )
+    check(
+        "the killed line names the signal and the gate it died in",
+        "RUN KILLED by SIGTERM while running tests/fixture_x.py" in line,
+        line,
+    )
+    check(
+        "the killed line states what it reached, out of how many",
+        "1 of 4 gate(s) adjudicated (0 failed, 0 no-verdict), 3 NOT REACHED" in line,
+        line,
+    )
+    check(
+        "the killed line says no verdict was taken",
+        "NO VERDICT was taken on this run" in line,
+        line,
+    )
+    check("a kill with no failure exits 124, never 0", line.endswith("rc=124"), line)
+    check(
+        "a kill AFTER a failure exits 1, never 0",
+        sel.killed_summary_line(_progress_637(sel, failed=2), "SIGINT").endswith("rc=1"),
+        sel.killed_summary_line(_progress_637(sel, failed=2), "SIGINT"),
+    )
+    tail = sel.killed_summary_line(_progress_637(sel, completed=4), "SIGTERM")
+    check(
+        "a kill in the TAIL, with every gate adjudicated, still cannot read green",
+        not COMPLETED_RUN_RE.search(tail) and tail.endswith("rc=124"),
+        tail,
+    )
+    check(
+        "a kill BETWEEN two gates is stated, not left blank",
+        "RUN KILLED by SIGTERM between gates"
+        in sel.killed_summary_line(_progress_637(sel, current=None), "SIGTERM"),
+        sel.killed_summary_line(_progress_637(sel, current=None), "SIGTERM"),
+    )
+    reaped = sel.killed_summary_line(
+        _progress_637(sel), "SIGTERM", "process group 42 SIGKILLed, subtree included"
+    )
+    check(
+        "the reap travels on the SAME line, so the reader is told what was killed",
+        reaped.endswith("\u2014 process group 42 SIGKILLed, subtree included"),
+        reaped,
+    )
+
+
+def probe_the_handler_states_the_outcome_without_killing_the_process() -> None:
+    """The handler is exercised by CALLING it: no signal is delivered to this process."""
+    sel = _selector()
+    before = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
+    stream = io.StringIO()
+    previous = sel.install_kill_handlers(_progress_637(sel), stream)
+    try:
+        installed = {sig: signal.getsignal(sig) for sig in before}
+        check(
+            "both signals are taken, and the handlers they replaced are RETURNED",
+            set(previous) == set(before)
+            and installed[signal.SIGTERM] is not before[signal.SIGTERM]
+            and installed[signal.SIGINT] is not before[signal.SIGINT],
+            str(previous),
+        )
+        code = None
+        try:
+            installed[signal.SIGTERM](signal.SIGTERM, None)
+        except SystemExit as exc:
+            code = exc.code
+        check(
+            "the handler prints the killed line and exits 124",
+            code == 124 and KILLED_RUN_RE.search(stream.getvalue()) is not None,
+            f"code={code} out={stream.getvalue()!r}",
+        )
+        failed_stream = io.StringIO()
+        sel.install_kill_handlers(_progress_637(sel, failed=1), failed_stream)
+        failed_code = None
+        try:
+            signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+        except SystemExit as exc:
+            failed_code = exc.code
+        check(
+            "a kill after a gate had FAILED exits 1, and the line says so",
+            failed_code == 1 and failed_stream.getvalue().strip().endswith("rc=1"),
+            f"code={failed_code} out={failed_stream.getvalue()!r}",
+        )
+    finally:
+        sel.restore_kill_handlers(previous)
+    after = {sig: signal.getsignal(sig) for sig in before}
+    check(
+        "the previous handlers are RESTORED, so a late signal cannot reprint a verdict",
+        all(after[sig] is before[sig] for sig in before),
+        str(after),
+    )
+
+
+def _pid_alive(pid: int, within: float = 10.0) -> bool:
+    """True if `pid` still answers. Polls, because a kill is not instantaneous."""
+    if pid <= 0:
+        return False
+    deadline = time.monotonic() + within
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        time.sleep(0.05)
+    return True
+
+
+def _spawn_two_levels(*, own_group: bool) -> tuple[subprocess.Popen, int]:
+    """A child that forks a GRANDCHILD and reports its pid -- the subtree a reap is about."""
+    code = (
+        "import subprocess, sys, time\n"
+        "g = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+        "print(g.pid, flush=True)\n"
+        "time.sleep(120)\n"
+    )
+    proc = subprocess.Popen(
+        [sys.executable, "-c", code],
+        stdout=subprocess.PIPE,
+        text=True,
+        start_new_session=not own_group,
+    )
+    return proc, int((proc.stdout.readline() or "0").strip())
+
+
+def probe_the_reap_kills_the_subtree_and_says_what_it_signalled() -> None:
+    """Three arms: the normal reap, the self-group guard, and a pid that no longer resolves."""
+    sel = _selector()
+    proc, grandchild = _spawn_two_levels(own_group=False)
+    try:
+        words = sel.reap_gate_group(proc.pid)
+        proc.wait(timeout=10)
+        check(
+            "a gate started as its own session leader is reaped WITH its subtree",
+            "SIGKILLed, subtree included" in words and not _pid_alive(grandchild),
+            f"{words} grandchild_alive={_pid_alive(grandchild)}",
+        )
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        try:
+            os.kill(grandchild, signal.SIGKILL)
+        except OSError:
+            pass
+
+    shared, shared_grandchild = _spawn_two_levels(own_group=True)
+    try:
+        words = sel.reap_gate_group(shared.pid)
+        shared.wait(timeout=10)
+        check(
+            "a child that landed in THIS process's group is killed DIRECTLY, and the line "
+            "says the subtree may survive",
+            "shares this process's own group" in words
+            and "only the DIRECT CHILD was killed" in words
+            and shared.poll() is not None,
+            words,
+        )
+        check(
+            "...and that limitation is REAL, which is why it is stated rather than hidden",
+            _pid_alive(shared_grandchild, within=1.0),
+            "the grandchild was expected to survive and did not",
+        )
+    finally:
+        try:
+            os.kill(shared_grandchild, signal.SIGKILL)
+        except OSError:
+            pass
+
+    gone = subprocess.Popen([sys.executable, "-c", "pass"])
+    gone.wait()
+    words = sel.reap_gate_group(gone.pid)
+    check(
+        "a pid that no longer resolves is STATED, never raised -- losing the reap must not "
+        "turn a wall into a crash",
+        "no process group resolved for pid" in words,
+        words,
+    )
+
+
+def probe_a_wall_kill_reaps_before_the_drain_and_clears_the_pid() -> None:
+    """`_spawn_and_wait` reaps the group, drains under a BOUND, and never leaks the pid."""
+    sel = _selector()
+    progress = _progress_637(sel, total=1, completed=0)
+    raised = None
+    started = time.monotonic()
+    try:
+        sel._spawn_and_wait(
+            [sys.executable, "-c", "import time; time.sleep(120)"], REPO, 0.5, progress
+        )
+    except subprocess.TimeoutExpired as exc:
+        raised = exc
+    elapsed = time.monotonic() - started
+    check(
+        "a gate past its wall raises, carrying the reap string",
+        raised is not None and "SIGKILLed" in str(raised.output or ""),
+        f"raised={raised!r}",
+    )
+    check(
+        "the drain is BOUNDED, so a stubborn child cannot hang the selector",
+        elapsed < 0.5 + sel.KILL_DRAIN_SEC + 5.0,
+        f"elapsed={elapsed:.2f}s drain={sel.KILL_DRAIN_SEC}",
+    )
+    check(
+        "the child pid is CLEARED on the kill path, so a handler cannot reap a recycled pid",
+        progress.child_pid is None,
+        str(progress.child_pid),
+    )
+    ok_progress = _progress_637(sel, total=1)
+    sel._spawn_and_wait([sys.executable, "-c", "pass"], REPO, 5.0, ok_progress)
+    check(
+        "the child pid is cleared on the SUCCESS path too",
+        ok_progress.child_pid is None,
+        str(ok_progress.child_pid),
+    )
+
+
+FIXTURE_637_AUDIT = (
+    "from __future__ import annotations\n"
+    "import sys\n"
+    "from pathlib import Path\n"
+    "\n"
+    "sys.path.insert(0, str(Path(__file__).resolve().parent))\n"
+    "from gate_budget import gate_key_for_cmd  # noqa: E402\n"
+    "\n"
+    # THE FIXTURE MUST SATISFY THE RUNNER'S WHOLE VOCABULARY (#637). `gate_select` reads
+    # `LOCK_HELD_EXIT_CODE` out of ITS OWN directory's audit and exits 1 if it is absent, so
+    # a fixture audit without it makes every fixture run die on the constant instead of on
+    # the thing under test -- which is exactly how the MUTANT arm passed VACUOUSLY on its
+    # first run: rc=1, no killed line, no marker, and a check that only looked for the
+    # absence of lines it wanted to be absent.
+    "LOCK_HELD_EXIT_CODE = 75\n"
+    "\n"
+    "gates_to_run = []\n"
+    'gates_to_run.append([sys.executable, "tests/fixture_637_a.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/fixture_637_hang.py"])\n'
+    'gates_to_run.append([sys.executable, "tests/fixture_637_c.py"])\n'
+    "\n"
+    "def registered_gates(repo_root):\n"
+    "    return [cmd for cmd in gates_to_run if gate_key_for_cmd(cmd, repo_root)]\n"
+)
+
+FIXTURE_637_GATES = {
+    "tests/fixture_637_a.py": "raise SystemExit(0)\n",
+    "tests/fixture_637_hang.py": (
+        "import os, pathlib, time\n"
+        "pathlib.Path(os.environ['OC_637_MARKER']).write_text(str(os.getpid()))\n"
+        "time.sleep(120)\n"
+    ),
+    "tests/fixture_637_c.py": "raise SystemExit(0)\n",
+}
+
+
+def _fixture_637(root: Path, *, hang: bool) -> None:
+    """Three gates, one of which blocks, so a SIGTERM lands with a gate IN FLIGHT."""
+    for part in ("tools", "tests", "registry"):
+        (root / part).mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(GATE_BUDGET, root / "tools" / "gate_budget.py")
+    (root / "tools" / "audit.py").write_text(FIXTURE_637_AUDIT, encoding="utf-8")
+    for relative, body in FIXTURE_637_GATES.items():
+        if not hang and relative.endswith("fixture_637_hang.py"):
+            body = "raise SystemExit(0)\n"
+        (root / relative).write_text(body, encoding="utf-8")
+    (root / "registry" / "gate_triggers.json").write_text(
+        json.dumps(
+            {"gates": {gate: ["*.txt"] for gate in FIXTURE_637_GATES}, "floor": [],
+             "default": "full"}
+        ),
+        encoding="utf-8",
+    )
+
+
+def _run_637(root: Path, log: Path, marker: Path, *, kill: bool,
+             selector: Path | None = None) -> tuple[int, list[str]]:
+    """Run the real CLI with both streams on one file, and SIGTERM it once a gate is live."""
+    env = dict(os.environ, OC_637_MARKER=str(marker))
+    with log.open("wb") as handle:
+        proc = subprocess.Popen(
+            [sys.executable, str(selector or GATE_SELECT), "--paths", "x.txt", "--run",
+             "--repo-root", str(root)],
+            stdout=handle,
+            stderr=subprocess.STDOUT,
+            cwd=str(root),
+            env=env,
+        )
+        try:
+            if kill:
+                deadline = time.monotonic() + 30
+                while not marker.exists() and time.monotonic() < deadline:
+                    if proc.poll() is not None:
+                        break
+                    time.sleep(0.05)
+                proc.send_signal(signal.SIGTERM)
+            rc = proc.wait(timeout=60)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=10)
+    return rc, log.read_text(encoding="utf-8").splitlines()
+
+
+def probe_a_killed_cli_run_STATES_its_own_outcome() -> None:
+    """End to end: a real SIGTERM mid-gate, a real control, and a MUTANT that must bite."""
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+
+        root = base / "killed"
+        _fixture_637(root, hang=True)
+        marker = base / "hang.marker"
+        rc, lines = _run_637(root, base / "killed.log", marker, kill=True)
+        killed = [line for line in lines if KILLED_RUN_RE.search(line)]
+        completed = [line for line in lines if COMPLETED_RUN_RE.search(line)]
+        header = [line for line in lines if "gate(s), mode=" in line]
+
+        check("a SIGTERM'd --run exits 124, never 0", rc == 124, f"rc={rc}")
+        check("...and prints EXACTLY ONE killed line", len(killed) == 1, str(killed))
+        check(
+            "...naming the signal and the gate it was running",
+            bool(killed)
+            and "RUN KILLED by SIGTERM while running" in killed[0]
+            and "fixture_637_hang.py" in killed[0],
+            str(killed),
+        )
+        reached = re.search(r"(\d+) of (\d+) gate\(s\) adjudicated", killed[0]) if killed else None
+        unreached = re.search(r"(\d+) NOT REACHED", killed[0]) if killed else None
+        check(
+            "...and its accounting CLOSES: adjudicated + NOT REACHED == the total",
+            bool(reached) and bool(unreached)
+            and int(reached.group(2)) == 3
+            and int(reached.group(1)) + int(unreached.group(1)) == 3
+            and int(unreached.group(1)) >= 1,
+            str(killed),
+        )
+        check(
+            "...so the completed-run marker count is 0, BY THE HEADER'S OWN DECLARATION",
+            completed == [] and any("ends with ONE summary line" in line for line in header),
+            f"completed={completed} header={header}",
+        )
+        recorded = marker.read_text(encoding="utf-8").strip() if marker.exists() else ""
+        check(
+            "...and the gate it was running is GONE, not orphaned on the box",
+            recorded.isdigit() and not _pid_alive(int(recorded)),
+            f"recorded={recorded!r} alive={_pid_alive(int(recorded)) if recorded.isdigit() else 'n/a'}",
+        )
+
+        clean_root = base / "clean"
+        _fixture_637(clean_root, hang=False)
+        clean_rc, clean_lines = _run_637(
+            clean_root, base / "clean.log", base / "clean.marker", kill=False
+        )
+        clean_completed = [line for line in clean_lines if COMPLETED_RUN_RE.search(line)]
+        check(
+            "CONTROL: the same fixture with a gate that RETURNS still reads green both ways",
+            clean_rc == 0
+            and len(clean_completed) == 1
+            and not any(KILLED_RUN_RE.search(line) for line in clean_lines),
+            f"rc={clean_rc} completed={clean_completed}",
+        )
+
+        mutant_root = base / "mutant"
+        _fixture_637(mutant_root, hang=True)
+        mutant = mutant_root / "tools" / "gate_select.py"
+        source = GATE_SELECT.read_text(encoding="utf-8")
+        needle = "previous_handlers = install_kill_handlers(progress, sys.stderr)"
+        check(
+            "the mutant names a line the tree still carries, so the arm cannot no-op",
+            source.count(needle) == 1,
+            f"occurrences={source.count(needle)}",
+        )
+        mutant.write_text(source.replace(needle, "previous_handlers = {}"), encoding="utf-8")
+        mutant_rc, mutant_lines = _run_637(
+            mutant_root, base / "mutant.log", base / "mutant.marker", kill=True,
+            selector=mutant,
+        )
+        # THE MUTANT MUST REACH THE RUN. An arm that only asserts the ABSENCE of lines
+        # passes vacuously when the mutant dies before it starts -- measured on this file's
+        # own first version, where a fixture audit missing `LOCK_HELD_EXIT_CODE` made the
+        # mutated copy exit 1 with no output at all. So the arm also requires the SELECTION
+        # to be there: the mutant ran, printed what it was going to run, and then said
+        # nothing about how it ended.
+        check(
+            "MUTANT: with the handler removed the run dies SILENT -- it printed its "
+            "selection and no terminal line at all",
+            mutant_rc != 0
+            and mutant_rc != 124
+            and any("gate(s), mode=" in line for line in mutant_lines)
+            and not [line for line in mutant_lines if KILLED_RUN_RE.search(line)]
+            and not [line for line in mutant_lines if COMPLETED_RUN_RE.search(line)],
+            f"rc={mutant_rc} lines={mutant_lines}",
+        )
+
+
+# THE REGISTER IS DECLARED AFTER EVERY PROBE IT NAMES. It sat beside the first dozen
+# probes until #637, and the five probes appended below it then read as `NameError` --
+# a register that can only name what precedes it is a register that breaks the moment a
+# unit is added at the end, which is where every new unit is added.
+
+PROBES = (
+    probe_every_registered_gate_is_covered,
+    probe_every_map_key_is_registered,
+    probe_the_map_is_well_formed,
+    probe_every_read_a_gate_opens_is_declared,
+    probe_the_example_carries_the_same_shape,
+    probe_globs_over_include_deliberately,
+    probe_a_covered_change_selects_a_subset,
+    probe_the_default_deny_cannot_be_neutered,
+    probe_an_unreadable_map_is_none_not_empty,
+    probe_the_cli_reports_the_mode,
+    probe_the_run_mode_executes_gates_with_the_interpreter,
+    probe_the_range_judges_the_range_not_the_worktree,
+    probe_the_range_fails_a_gate_the_clean_checkout_cannot_materialise,
+    probe_a_kill_is_not_a_failure,
+    probe_a_failed_receipt_carries_the_childs_word,
+    probe_the_wall_is_read_from_the_judged_tree,
+    probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared,
+    probe_a_killed_gate_gets_one_bounded_retry_and_says_so,
+    probe_the_killed_line_cannot_pass_for_a_completed_run,
+    probe_the_handler_states_the_outcome_without_killing_the_process,
+    probe_the_reap_kills_the_subtree_and_says_what_it_signalled,
+    probe_a_wall_kill_reaps_before_the_drain_and_clears_the_pid,
+    probe_a_killed_cli_run_STATES_its_own_outcome,
+)
+
 def main() -> int:
     for relative in (GATE_SELECT, AUDIT, GATE_REGISTRY, REWORK_TABLE, GATE_BUDGET):
         if not relative.is_file():
@@ -1867,6 +2318,21 @@ def test_probe_a_gate_past_its_wall_is_no_verdict_and_an_absent_wall_is_declared
 
 def test_probe_a_killed_gate_gets_one_bounded_retry_and_says_so() -> None:
     _assert_probe(probe_a_killed_gate_gets_one_bounded_retry_and_says_so)
+
+def test_the_killed_line_cannot_pass_for_a_completed_run() -> None:
+    _assert_probe(probe_the_killed_line_cannot_pass_for_a_completed_run)
+
+def test_the_handler_states_the_outcome_without_killing_the_process() -> None:
+    _assert_probe(probe_the_handler_states_the_outcome_without_killing_the_process)
+
+def test_the_reap_kills_the_subtree_and_says_what_it_signalled() -> None:
+    _assert_probe(probe_the_reap_kills_the_subtree_and_says_what_it_signalled)
+
+def test_a_wall_kill_reaps_before_the_drain_and_clears_the_pid() -> None:
+    _assert_probe(probe_a_wall_kill_reaps_before_the_drain_and_clears_the_pid)
+
+def test_a_killed_cli_run_STATES_its_own_outcome() -> None:
+    _assert_probe(probe_a_killed_cli_run_STATES_its_own_outcome)
 
 if __name__ == "__main__":
     sys.exit(main())
