@@ -630,6 +630,72 @@ def first_stderr_diagnosis(text: str | None, limit: int = DIAGNOSIS_LIMIT) -> st
         lines = lines[1:]
     return lines[0][:limit] if lines else ""
 
+_STDOUT_CAUSE = re.compile(
+    r"(?:\bFAILED\b|\bFAILURE\b|\bFAIL\b|\bERROR\b|\bAssertionError\b|\bTraceback\b|"
+    r"\bnot ok\b|"
+    r"\b\d+\s+(?:problem|error|failure|issue|warning)(?:s|\(s\))?\s*:?)"
+)
+"""What a stdout line must SAY before it is allowed into a receipt as a cause (#636).
+
+A bare "last line of stdout" rule is not usable here: a gate that chatters through forty
+progress lines and then exits 1 has told us nothing about WHY, and quoting its final `done.`
+would put a guess in the receipt wearing a diagnosis's shape. So a line qualifies only by
+naming a failure class, and the population of unqualified output yields no cause at all --
+which the receipt then states outright."""
+
+def first_stdout_diagnosis(text: str | None, limit: int = DIAGNOSIS_LIMIT) -> str:
+    """The LAST stdout line of a failing child that STATES a cause, collapsed and BOUNDED.
+
+    #552 gave the receipt the child's stderr and stopped there, which is a blind half. This
+    tree's own `tests/test_ledger.py` prints `ledger gate FAILED: N check(s)` and every check
+    name to STDOUT and writes ZERO bytes to stderr, so the stderr fallback yielded `""`, the
+    separator was dropped, and the receipt collapsed back into the bare `rc=1` that #552
+    exists to abolish. Measured by the Surveys lane across six runs: `wc -c` on that gate's
+    stderr was 0 every time, and the same gate then passed 6/6 at the same commit in clean
+    checkouts -- a transient whose cause is invisible cannot be told from a real regression.
+
+    LAST, not first, and that is the whole difference from the stderr rule. A gate's VERDICT
+    sits at the END of its output, because that is where its exit code comes from, while
+    stdout's first line is a banner, a progress note, or this tree's own `N problem(s):`
+    header. The stderr rule reads the first line because a child that fails on stderr writes
+    its complaint and stops; a child that passes through forty lines of chatter first does
+    not. `_BARE_COUNT_HEADER` is skipped on both paths for the same reason it was added to
+    the stderr one: a line that is only a count and a noun names no cause.
+    """
+    lines = [" ".join(line.split()) for line in (text or "").splitlines()]
+    lines = [line for line in lines if line]
+    for line in reversed(lines):
+        if _BARE_COUNT_HEADER.match(line):
+            continue
+        if _STDOUT_CAUSE.search(line):
+            return line[:limit]
+    return ""
+
+def failure_receipt(
+    gate: str, returncode: int, stdout: str | None, stderr: str | None
+) -> str:
+    """One line for a gate that exited non-zero, naming the STREAM its cause came from (#636).
+
+    stderr first and byte-for-byte unchanged (#552, ruling `n=4167`), stdout as the fallback
+    and LABELLED, and an explicit statement when neither stream carried one. The label is not
+    decoration: `rc=1: ledger gate FAILED` and `rc=1 (stdout): ledger gate FAILED` are the
+    same words, but only the second tells the next reader which stream to re-read when the
+    line is truncated -- and the reader's next move differs, because stderr is where a gate
+    complains and stdout is where it reports.
+
+    The no-cause form carries NO trailing separator. #552 established that an absent cause is
+    never rendered as a dangling `rc=1:` , and #636 adds the other half: `rc=1` alone is not
+    an absence STATED, it is an absence that reads as if nothing were owed. A reader cannot
+    tell "this gate is wordless" from "the selector lost the word".
+    """
+    cause = first_stderr_diagnosis(stderr)
+    if cause:
+        return f"{gate} — rc={returncode}: {cause}"
+    cause = first_stdout_diagnosis(stdout)
+    if cause:
+        return f"{gate} — rc={returncode} (stdout): {cause}"
+    return f"{gate} — rc={returncode} (no diagnosis on either stream)"
+
 class _Finished:
     """What this module reads off a finished child: its code and its two streams (#637).
 
@@ -743,6 +809,13 @@ def run_gates(
     discard it -- so "a peer was running the audit" and "your change broke this gate"
     arrived as the same string, which is the whole of the filing.
 
+    AND WHEN STDERR IS EMPTY, STDOUT IS ASKED (#636). #552's remedy had a blind half:
+    `tests/test_ledger.py` prints its diagnosis to STDOUT and writes zero bytes to stderr, so
+    the same gate that #552 was built to make diagnosable arrived as a bare `rc=1`. The
+    fallback is LABELLED `(stdout)` and, when neither stream carries a cause, the receipt
+    says so in words rather than trailing a separator into nothing. `failure_receipt` holds
+    the three arms; this function only calls it.
+
     EVERY GATE RUNS UNDER ITS DECLARED WALL (#583). The audit resolves `budget_sec` per gate
     and passes it to `run_gate`, so a hung gate dies there. This function called
     `subprocess.run` with no `timeout` at all, so the SAME gate ran unbounded here while the
@@ -855,9 +928,8 @@ def run_gates(
                 f"it neither passed nor failed"
             )
         elif proc.returncode != 0:
-            cause = first_stderr_diagnosis(proc.stderr)
             failures.append(
-                f"{gate} — rc={proc.returncode}" + (f": {cause}" if cause else "")
+                failure_receipt(gate, proc.returncode, proc.stdout, proc.stderr)
             )
         if attempts == 2 and proc.returncode != TIMEOUT_EXIT_CODE:
             # A GATE THAT NEEDED ITS RETRY STILL PASSES -- AND MUST SAY SO (#590). Without

@@ -903,6 +903,17 @@ def probe_a_failed_receipt_carries_the_childs_word() -> None:
     this tree's own `2 problem(s):` header -- a line that names no cause while looking like
     one -- so the skip is asserted rather than assumed; without that arm the receipt would
     look fixed while telling the reader nothing.
+
+    #636 IS THE BLIND HALF OF THAT REMEDY, and arms 3b-8b are its legs. #552 read stderr and
+    stopped, so a gate that writes its diagnosis to STDOUT -- which `tests/test_ledger.py`
+    does, `ledger gate FAILED: N check(s)` plus every check name, at 0 bytes of stderr across
+    six measured runs -- still arrived as a bare `rc=1`. Arms 5-7 are the three stream cases
+    (stdout-only, last-qualifying-line, chatter-with-no-cause) and arms 8/8b are the mutants:
+    under the PRE-#636 receipt arm 5 reads the bare `rc=1` the item was filed about, and with
+    only the stdout read removed the cause disappears into the stated absence. Arm 4 is
+    clause 2 -- a child that wrote nothing must SAY so rather than trail a separator into
+    nothing, because a reader cannot otherwise tell a wordless gate from a selector that lost
+    the word.
     """
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -918,6 +929,26 @@ def probe_a_failed_receipt_carries_the_childs_word() -> None:
         (root / "tests" / "silent_gate.py").write_text(
             "raise SystemExit(1)\n", encoding="utf-8"
         )
+        # #636: the gate that started this item. Its diagnosis is on STDOUT and its stderr
+        # is empty -- the shape `tests/test_ledger.py` actually has, measured at 0 bytes of
+        # stderr across six runs.
+        (root / "tests" / "stdout_gate.py").write_text(
+            "print('ledger check 1: ok')\n"
+            "print('ledger check 2: ok')\n"
+            "print('ledger gate FAILED: 2 check(s)')\n"
+            "print('  - open claim: n=1813 #252 claimed by worker')\n"
+            "raise SystemExit(1)\n",
+            encoding="utf-8",
+        )
+        # ... and a gate that chatters and fails without ever naming a failure class, so the
+        # fallback cannot quietly turn its last progress line into a "cause".
+        (root / "tests" / "chatter_gate.py").write_text(
+            "print('ledger check 1: ok')\n"
+            "print('ledger check 2: ok')\n"
+            "print('done.')\n"
+            "raise SystemExit(1)\n",
+            encoding="utf-8",
+        )
         (root / "registry" / "gate_triggers.json").write_text(
             json.dumps(
                 {
@@ -926,6 +957,8 @@ def probe_a_failed_receipt_carries_the_childs_word() -> None:
                     "gates": {
                         "tests/diag_gate.py": ["t-diag"],
                         "tests/silent_gate.py": ["t-silent"],
+                        "tests/stdout_gate.py": ["t-stdout"],
+                        "tests/chatter_gate.py": ["t-chatter"],
                     },
                 }
             ),
@@ -938,6 +971,8 @@ def probe_a_failed_receipt_carries_the_childs_word() -> None:
             handle.write(
                 'gates_to_run.append([sys.executable, "tests/diag_gate.py"])\n'
                 'gates_to_run.append([sys.executable, "tests/silent_gate.py"])\n'
+                'gates_to_run.append([sys.executable, "tests/stdout_gate.py"])\n'
+                'gates_to_run.append([sys.executable, "tests/chatter_gate.py"])\n'
             )
         module = _load("oc_gate_select_552", GATE_SELECT)
 
@@ -963,12 +998,77 @@ def probe_a_failed_receipt_carries_the_childs_word() -> None:
             diag.no_verdicts == [],
             f"no_verdicts={diag.no_verdicts}",
         )
+        check(
+            "ARM 3b (#636 clause 3): a stderr-only cause is diagnosed EXACTLY as before -- "
+            "no stream label, because nothing fell back",
+            diag.failures[0].startswith("tests/diag_gate.py — rc=1: ")
+            and "(stdout)" not in diag.failures[0]
+            and "(no diagnosis" not in diag.failures[0],
+            f"failures={diag.failures}",
+        )
 
         silent = module.run_gates(root, ["tests/silent_gate.py"])
         check(
-            "ARM 3: a child that wrote nothing yields the bare receipt, no dangling separator",
-            silent.failures == ["tests/silent_gate.py — rc=1"],
+            "ARM 4 (#636 clause 2): a child that wrote NOTHING states the absence in words "
+            "-- no dangling separator, and not a bare rc either",
+            silent.failures
+            == ["tests/silent_gate.py — rc=1 (no diagnosis on either stream)"],
             f"failures={silent.failures}",
+        )
+
+        stdout_only = module.run_gates(root, ["tests/stdout_gate.py"])
+        check(
+            "ARM 5 (positive control, #636 clause 1): a stdout-only diagnosis REACHES the "
+            "receipt and is labelled with the stream it came from",
+            len(stdout_only.failures) == 1
+            and stdout_only.failures[0]
+            == "tests/stdout_gate.py — rc=1 (stdout): ledger gate FAILED: 2 check(s)",
+            f"failures={stdout_only.failures}",
+        )
+        check(
+            "ARM 6: the LAST qualifying line wins, and a check name is a cause too",
+            len(stdout_only.failures) == 1
+            and "ledger check 1: ok" not in stdout_only.failures[0],
+            f"failures={stdout_only.failures}",
+        )
+
+        chatter = module.run_gates(root, ["tests/chatter_gate.py"])
+        check(
+            "ARM 7: stdout that never names a failure class yields NO cause -- the last "
+            "progress line is not promoted into a diagnosis",
+            chatter.failures
+            == ["tests/chatter_gate.py — rc=1 (no diagnosis on either stream)"],
+            f"failures={chatter.failures}",
+        )
+
+        # MUTANT: the PRE-#636 receipt, reconstructed verbatim -- stderr only, bare rc when it
+        # is empty. Arm 5 must collapse to exactly that bare line, or it was never testing
+        # the fallback at all and #636's positive control does not fail on the old code.
+        mutant = _load("oc_gate_select_636_mutant", GATE_SELECT)
+        def legacy_receipt(gate, returncode, stdout, stderr):
+            cause = mutant.first_stderr_diagnosis(stderr)
+            return f"{gate} — rc={returncode}" + (f": {cause}" if cause else "")
+        mutant.failure_receipt = legacy_receipt
+        neutered = mutant.run_gates(root, ["tests/stdout_gate.py"])
+        check(
+            "ARM 8 (MUTANT): under the PRE-#636 receipt the same gate reads the bare `rc=1` "
+            "this item was filed about -- so arm 5 measures the fallback, not a string",
+            neutered.failures == ["tests/stdout_gate.py — rc=1"],
+            f"failures={neutered.failures}",
+        )
+
+        # ... and a second mutant that removes ONLY the stdout read, proving arm 5's cause
+        # came from stdout: the receipt must fall to the stated-absence form, never to a
+        # blank, and never keep a cause it no longer has.
+        fallback_off = _load("oc_gate_select_636_no_stdout", GATE_SELECT)
+        fallback_off.first_stdout_diagnosis = lambda text, limit=module.DIAGNOSIS_LIMIT: ""
+        starved = fallback_off.run_gates(root, ["tests/stdout_gate.py"])
+        check(
+            "ARM 8b (MUTANT): with only the stdout read removed the cause is GONE and the "
+            "receipt says the absence in words",
+            starved.failures
+            == ["tests/stdout_gate.py — rc=1 (no diagnosis on either stream)"],
+            f"failures={starved.failures}",
         )
 
 # --- #568: the DECLARED-vs-OPENED census ---------------------------------------------
