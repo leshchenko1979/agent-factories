@@ -64,6 +64,7 @@ from ledger_boundary import (  # noqa: E402
     SkipGate,
     declared_boundary,
     population_skip_reason,
+    read_rows,
 )
 
 REPO = Path(__file__).resolve().parent.parent
@@ -219,6 +220,101 @@ def artifacts() -> list[tuple[dt.date, Path]]:
         year, month, day = (int(g) for g in match.groups())
         out.append((dt.date(year, month, day), path))
     return out
+
+# --- the DECLARED-ROUND population (#634) ---------------------------------------
+#
+# The population used to be `SCORES.glob("*.md")` and nothing else, so a round whose
+# artifact had not landed yet was simply ABSENT from it and the gate returned a clean
+# verdict over the artifacts that happened to exist. Measured 2026-11-09: the audit
+# reached this gate at 06:04:41Z (index 35 of 131, 236.39 s into the round) and the
+# artifact landed at 06:27:08Z -- 22 minutes LATER -- so the gate judged a directory
+# that did not yet contain the file it exists to judge and passed. "There is nothing
+# to judge" and "everything I judged is complete" printed identically, which is the
+# defect: a completeness gate whose population is derived from the artifacts it is
+# meant to police can only ever see the artifacts that already arrived.
+#
+# The population is now the JOIN of the two declarations that live on different
+# surfaces: the LEDGER says a round landed (its `score` row, subject `survey-<date>`),
+# and the filesystem must hold the artifact that round owes. A declared round with no
+# artifact is a PROBLEM naming it, never a row that quietly leaves the population --
+# so the verdict no longer depends on the artifact having been written before the gate
+# ran.
+#
+# The reverse direction -- an artifact on disk that no `score` row declares -- is
+# COUNTED and printed, not judged. The artifact is written first and its row follows,
+# so a round caught mid-flight would red here for a state that resolves itself; the
+# half that cannot resolve itself is a declared round with no artifact, and that is
+# the half this leg bites on.
+
+SCORE_SUBJECT = re.compile(r"survey-(\d{4}-\d{2}-\d{2})")
+
+def declared_rounds(rows: list[dict]) -> list[tuple[int, dt.date]]:
+    """`(score row n, round date)` for every round the ledger declares, oldest first.
+
+    Pure: no file system, no clock. A subject that is not the canonical
+    `survey-<date>` form is SKIPPED, never guessed at: the pre-convention subjects
+    (`fleet-measurement-2026-09-14`, `survey-2026-09-18-correction`) name a round in a
+    form this leg cannot resolve to a date, and inventing one would be the #164
+    collapse of "unparseable" into "absent".
+    """
+    out: list[tuple[int, dt.date]] = []
+    for row in rows:
+        if row.get("event") != "score":
+            continue
+        match = SCORE_SUBJECT.fullmatch(str(row.get("subject") or ""))
+        if match is None:
+            continue
+        try:
+            day = dt.date.fromisoformat(match.group(1))
+        except ValueError:
+            continue
+        out.append((int(row.get("n") or 0), day))
+    out.sort(key=lambda pair: pair[1])
+    return out
+
+def declared_round_problems(
+    rounds: list[tuple[int, dt.date]],
+    found: list[tuple[dt.date, Path]],
+    *,
+    boundary: dt.date,
+) -> list[str]:
+    """Declared rounds, strictly after `boundary`, whose artifact is not on disk.
+
+    Pure. This is the arm that makes the two states print differently: a round the
+    ledger declares and the tree cannot show is a problem NAMING the file, where the
+    old glob simply did not carry it in the population at all.
+    """
+    present = {path.name for _day, path in found}
+    problems: list[str] = []
+    for number, day in rounds:
+        if day <= boundary:
+            continue
+        name = f"{day.isoformat()}.md"
+        if name not in present:
+            problems.append(
+                f"{name}: the ledger declares this round (score row n={number}) but the "
+                f"artifact is not in evidence/scores/ — the round landed its record and "
+                f"not its artifact"
+            )
+    return problems
+
+def declared_round_leg(
+    repo: Path, boundary: dt.date
+) -> tuple[list[tuple[int, dt.date]], list[str], str]:
+    """`(rounds, problems, not_judged_reason)` -- the ledger half of the population.
+
+    A tree with no ledger is the SHIPPED one (`TEMPLATE/` carries no `evidence/` by
+    design), so its absence is a stated NOT JUDGED and never a clean zero. A ledger
+    that exists and cannot be read is a PROBLEM: a broken declaration must not hide
+    behind the same output as no declaration at all.
+    """
+    try:
+        rows = read_rows(repo)
+    except SkipGate as exc:
+        return [], [], str(exc)
+    except GateError as exc:
+        return [], [f"ledger: {problem}" for problem in exc.problems], ""
+    return declared_rounds(rows), [], ""
 
 
 # --- the maturity band, computed from the rubric rather than typed -----------
@@ -818,13 +914,123 @@ def test_post_boundary_artifacts_carry_every_required_section() -> None:
         return
     section_landed = _declared_day_or_skip(REPO, INVARIANT_KEY)
     problems: list[str] = []
+    checked = 0
     for day, path in artifacts():
         if day <= section_landed:
             continue
+        checked += 1
         missing = missing_sections(path.read_text(encoding="utf-8"))
         if missing:
             problems.append(f"{path.name}: missing {', '.join(missing)}")
     assert problems == [], "\n".join(problems)
+    # A clean verdict over a population that was never named is the #634 defect: this arm
+    # used to `return` an empty `problems` list over an empty population and read as a pass.
+    # It now says how many it examined, and a tree that examined none must say so instead.
+    assert checked > 0, (
+        f"no artifact after the boundary {section_landed.isoformat()} — this arm examined "
+        f"NOTHING, so its silence is not a clean verdict (#634)"
+    )
+
+# --- probes: the DECLARED-ROUND population (#634) ---------------------------------
+#
+# The defect these probe: every leg above takes its population from `artifacts()`, i.e.
+# from `SCORES.glob("*.md")`. An artifact that has not landed yet is not in that
+# population, so the gate returned a clean verdict over a directory that did not contain
+# the file it exists to judge — measured 2026-11-09, when the audit reached this gate 22
+# minutes before the round's artifact landed. The positive control below builds exactly
+# that state (a ledger row declaring the round, no artifact) and asserts the problem NAMES
+# the file, which is what makes "nothing to judge" print differently from "all complete".
+
+def test_probe_a_declared_round_with_no_artifact_is_a_problem(tmp_path: Path) -> None:
+    """#634 criterion 1: the state that was invisible now names the missing artifact."""
+    (tmp_path / "evidence").mkdir()
+    (tmp_path / "evidence" / "ledger.jsonl").write_text(
+        json.dumps(
+            {
+                "n": 7,
+                "event": "score",
+                "subject": "survey-2026-11-09",
+                "actor": "surveys",
+                "ts": "2026-11-09T06:27:08Z",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    rounds, ledger_problems, not_judged = declared_round_leg(tmp_path, dt.date(2026, 9, 19))
+    assert not not_judged, not_judged
+    assert ledger_problems == [], ledger_problems
+    assert rounds == [(7, dt.date(2026, 11, 9))], rounds
+    problems = declared_round_problems(rounds, [], boundary=dt.date(2026, 9, 19))
+    assert len(problems) == 1, problems
+    assert "2026-11-09.md" in problems[0], problems[0]
+    assert "n=7" in problems[0], problems[0]
+
+def test_probe_a_declared_round_whose_artifact_landed_is_clean(tmp_path: Path) -> None:
+    """#634 criterion 2: the control. The same round WITH its artifact reports nothing."""
+    (tmp_path / "evidence" / "scores").mkdir(parents=True)
+    artifact = tmp_path / "evidence" / "scores" / "2026-11-09.md"
+    artifact.write_text("# a score artifact\n", encoding="utf-8")
+    rounds = [(7, dt.date(2026, 11, 9))]
+    found = [(dt.date(2026, 11, 9), artifact)]
+    assert declared_round_problems(rounds, found, boundary=dt.date(2026, 9, 19)) == []
+
+def test_probe_a_pre_boundary_declared_round_is_not_judged() -> None:
+    """Forward-only, the same law the section legs follow: the boundary is EXCLUSIVE."""
+    rounds = [(3, dt.date(2026, 9, 1)), (4, dt.date(2026, 9, 19))]
+    assert declared_round_problems(rounds, [], boundary=dt.date(2026, 9, 19)) == []
+
+def test_probe_a_non_canonical_score_subject_is_skipped_not_guessed() -> None:
+    """Six historical subjects name a round in a form this leg cannot resolve to a date.
+
+    Inventing one would be the #164 collapse of "unparseable" into "absent", so they are
+    SKIPPED deliberately — and this arm pins that they are, so a later widening of the
+    pattern cannot quietly start guessing.
+    """
+    rows = [
+        {"n": 1, "event": "score", "subject": "fleet-measurement-2026-09-14"},
+        {"n": 2, "event": "score", "subject": "survey-2026-09-18-correction"},
+        {"n": 3, "event": "score", "subject": "survey-2026-09-19"},
+        {"n": 4, "event": "close", "subject": "survey-2026-09-20"},
+        {"n": 5, "event": "score", "subject": "survey-2026-13-45"},
+    ]
+    assert declared_rounds(rows) == [(3, dt.date(2026, 9, 19))]
+
+def test_probe_a_tree_with_no_ledger_states_not_judged(tmp_path: Path) -> None:
+    """`TEMPLATE/` ships no `evidence/`, so its absence is a STATED skip — never a zero."""
+    _rounds, problems, not_judged = declared_round_leg(tmp_path, dt.date(2026, 9, 19))
+    assert problems == [], problems
+    assert "no evidence/ledger.jsonl" in not_judged, not_judged
+
+def test_probe_a_corrupt_ledger_is_a_problem_not_a_skip(tmp_path: Path) -> None:
+    """A broken declaration must not hide behind the same output as no declaration."""
+    (tmp_path / "evidence").mkdir()
+    (tmp_path / "evidence" / "ledger.jsonl").write_text("{not json}\n", encoding="utf-8")
+    _rounds, problems, not_judged = declared_round_leg(tmp_path, dt.date(2026, 9, 19))
+    assert not not_judged, not_judged
+    assert problems and "ledger" in problems[0], problems
+
+def test_the_live_declared_round_population_is_clean() -> None:
+    """Every round this factory's ledger declares after the boundary has its artifact."""
+    if not (REPO / "evidence" / "ledger.jsonl").is_file():
+        pytest.skip("no ledger in this tree — the shipped one carries none")
+    boundary = _declared_day_or_skip(REPO, INVARIANT_KEY)
+    rounds, _problems, not_judged = declared_round_leg(REPO, boundary)
+    assert not not_judged, not_judged
+    assert rounds, "the ledger declares no `survey-<date>` score row at all"
+    assert declared_round_problems(rounds, artifacts(), boundary=boundary) == []
+
+def test_the_declared_round_population_is_printed(capsys) -> None:
+    """#634 criterion 3: the population is named, so a zero is never a clean verdict."""
+    rc = main()
+    captured = capsys.readouterr()
+    text = captured.out + captured.err
+    assert rc == 0, text
+    # Bound: on the SHIPPED tree the run stops before any population (no procedure, or no
+    # declared boundary), so the assertion is scoped to a run that reached a verdict.
+    if "score artifact sections ok:" in text:
+        assert "declared-round leg:" in text, text
+        assert "declared round(s) checked" in text, text
 
 
 # --- probes: the DECLARATION the boundaries are read from (#428) ------------------
@@ -1136,6 +1342,39 @@ def main() -> int:
                 "population is EMPTY, so no harness-binding section was verified"
             )
         problems.extend(f"harness-binding: {problem}" for problem in hb_found)
+
+    # --- the declared-round leg (#634) -----------------------------------------------
+    # Every leg above takes its population from `artifacts()`, i.e. from `SCORES.glob`. An
+    # artifact that has not LANDED yet is therefore not in the population, and a clean
+    # verdict is returned over whatever happens to exist — "there is nothing to judge" and
+    # "everything I judged is complete" printed identically. Measured 2026-11-09: the audit
+    # reached this gate 22 minutes BEFORE the round's artifact landed, examined 46 files,
+    # found every one complete, and read rc=0 over a directory that did not yet hold the
+    # file it exists to judge. This leg joins the ledger's `score` rows to the files, so a
+    # round the ledger DECLARES and the tree cannot show is a problem naming the file.
+    # Its population is printed in both directions: a zero reads as "examined 0" (#634
+    # criterion 3), never as a clean verdict.
+    found_artifacts = artifacts()
+    rounds, round_ledger_problems, rounds_not_judged = declared_round_leg(
+        REPO, section_landed
+    )
+    if round_ledger_problems:
+        problems.extend(round_ledger_problems)
+    elif rounds_not_judged:
+        print(f"declared-round leg: NOT JUDGED — {rounds_not_judged}")
+    else:
+        declared_names = {f"{day.isoformat()}.md" for _number, day in rounds}
+        undeclared = [
+            path.name for _day, path in found_artifacts if path.name not in declared_names
+        ]
+        problems.extend(
+            declared_round_problems(rounds, found_artifacts, boundary=section_landed)
+        )
+        print(
+            f"declared-round leg: {len(rounds)} declared round(s) checked, "
+            f"{sum(1 for _n, day in rounds if day > section_landed)} after the boundary, "
+            f"{len(undeclared)} artifact(s) with no declared round (printed, not judged)"
+        )
 
     if problems:
         print("score artifact problems:", file=sys.stderr)
