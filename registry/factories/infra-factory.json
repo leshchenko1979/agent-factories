@@ -12,7 +12,8 @@
       "The fleet infrastructure source repo /root/vds-servers - fleet configs, host scripts, the process register and the factory ledger",
       "Host and workspace hygiene: the single reap policy (tools/hygiene.py), its derived gate line, and disk-threshold remediation",
       "The Mac access path as fleet infrastructure - the CDP tunnel to the Mac and the route pin on its physical NIC",
-      "Infra Factory process law and its own lanes (HQ, Triage, Surveys)"
+      "Infra Factory process law and its own lanes (HQ, Triage, Surveys)",
+      "A SECOND VPN host (it-garage Frankfurt, created 2026-10-30) carrying the AmneziaWG endpoint the owner's clients use, after Russian ISPs began dropping inbound traffic to vpn's own public address - host-level operations only; its peer/key configuration is the owner's"
     ],
     "does_not_own": [
       "OpenCrabs daemon and harness source, and its development process (/root/opencrabs) - that is opencrabs-dev",
@@ -91,7 +92,8 @@
     "/root/vds-servers - the fleet infrastructure source repo (single-writer: its ledger and evidence are appended by tools/ledger.py alone)",
     "The fleet hosts vpn, apps, agents and agents-old - host-level state: systemd units, containers, disk, /usr/local/bin scripts",
     "Gatus monitoring configuration and alert routing on vpn",
-    "The Mac access path (vpn/mac-access: CDP tunnel and route pin)"
+    "The Mac access path (vpn/mac-access: CDP tunnel and route pin)",
+    "The second VPN host (it-garage Frankfurt) - container amnezia-awg2 on UDP 30494, the live AmneziaWG endpoint for the owner's phone and Mac. Its public address is MID-CHANGE: the address it was created with (31.77.175.86) no longer answers on port 22 as of 2026-11-09T06:05Z, and the provider hostname vm345692.it-garage.network resolves to Cloudflare (188.114.96.1 / 2a06:98c1::), not to the box"
   ],
   "announcements": [
     {
@@ -132,7 +134,7 @@
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "scope": "profile",
       "severity": "warning",
-      "text": "The forwarder's supervision is NOT closed, and the entry's 'NOW CLOSED AND PROVEN ACROSS A REBOOT' clause is WITHDRAWN as falsified. Read 2026-11-02T06:18Z: agents' `mac-cdp-tunnel.service` is `activating/auto-restart` with `NRestarts=26590`, restarting every 5 s \u2014 journal repeating `channel 0: open failed: connect failed: Connection refused` then `status=255/EXCEPTION` \u2014 and NEITHER `:4444` on vpn NOR `:9222` on agents has a listener. `Restart=always` did exactly what it was configured to do and looped forever; nothing pages about the loop itself, only about the endpoint. THE ROOT CAUSE IS UPSTREAM OF THE TUNNEL AND WAS NAMED ON 2026-10-31: the Mac's home ISP (Suntel, AS31430, Moscow) drops inbound traffic to `2.27.120.75`. A `tcp port 22` capture on vpn while the Mac fired a SYN saw 22 SYNs from 9 sources and ZERO from the Mac's `87.249.25.155`, while `2.27.120.1` \u2014 the SAME /24 \u2014 answers the Mac at 0 % loss in 56 ms. vpn\u2192Mac pings SUCCEED (`87.249.25.155` 0 % loss) because the box's own nft rule drops every inbound ICMP echo-request; the asymmetry is that rule, not a route. THE DOCUMENTED REMEDIATION IS ALSO GONE: the 10-31 plan was to re-point the wrapper at vpn's Tailscale IP, and as of 2026-11-02 `ssh root@100.66.112.75` from vpn times out and `ping 100.66.112.75` is 100 % loss \u2014 the Mac is off the tailnet, so no path to it exists today from any host in the fleet. Evidence: evidence/mac-tunnel-isp-block-20261031.md, vds-servers commit 2b737396 (pushed, remote tip verified).",
+      "text": "The tunnel is UP again, and the 2026-11-02 clause 'no path to it exists today from any host in the fleet' is WITHDRAWN as falsified \u2014 but the FLAP class is NOT closed. Read 2026-11-09T06:05Z: agents' mac-cdp-tunnel.service is active (running) since 2026-11-07T07:05:44Z, enabled, 1 d 22 h; :9222 listens on 127.0.0.1 and [::1] on agents; vpn holds :4444 via sshd with an ESTABLISHED ssh from the Mac's 87.249.25.155; Gatus ep13 mac-tunnel HEALTHY since 2026-11-06T15:02:08Z. The Suntel inbound block that caused the 2026-10-31 outage is no longer in effect \u2014 the Mac reaches 2.27.120.75:22 \u2014 and the recovery is attributable to NO act in the record. WHAT REMAINS: ep15 mac-cdp-tunnel flaps (22 state events on 2026-11-09 alone, latest HEALTHY 03:34:10Z), and ep21 mac-backup is UNHEALTHY since 2026-11-08T01:13:32Z. The 10-31 root cause stands as history (evidence/mac-tunnel-isp-block-20261031.md, vds-servers 2b737396); do not read this entry as a live outage.",
       "affects": [
         "profile"
       ],
@@ -142,7 +144,7 @@
     },
     {
       "id": "ops-daemon-dies-at-cgroup-cap",
-      "text": "The kill count is now FOUR since 2026-10-24, not two, and the cap has been RAISED \u2014 so the earlier 'cap is unchanged: MemoryMax 2,147,483,648' clause is withdrawn. Kills 3\u20136, each with the journal's own `A process of this unit has been killed by the OOM killer` followed by `status=9/KILL`: 2026-10-28T15:52:42Z, 2026-10-29T14:27:17Z, 2026-10-29T20:37:26Z, 2026-10-30T06:24:44Z. `NRestarts=3`, current `ExecMainStartTimestamp` 2026-10-30T06:24:50Z, `ActiveState=active`. THE CAP: `MemoryHigh` 2,952,790,016 (2816 MiB), `MemoryMax` 3,221,225,472 (3072 MiB), `MemorySwapMax` 2,684,354,560 (2560 MiB) \u2014 set across `20-memory.conf` (2026-10-31T06:37) plus `user.control/50-MemoryHigh.conf` and `50-MemoryMax.conf`, and the effective values agree with the files. Live at 2026-11-02T06:45Z: `MemoryCurrent` 2,871,922,688 = **89.16 %** of max (headroom 333.1 MiB), `MemoryPeak` 3,023,396,864 = **93.86 %**, i.e. 70,606,848 B OVER MemoryHigh and 197,685,760 B under max. `memory.events` high 2,027,337 / max 118,753 / oom 0 / oom_kill 0 \u2014 and those zeros are PER-INCARNATION (incarnation began 10-30T06:24:50Z), so a fresh zero beside four kills is not a clean life. Raising the cap from 2 GiB to 3 GiB bought 36 hours, not a fix: peak is already at 93.86 % of the NEW ceiling.",
+      "text": "Kill count is now FIVE since 2026-10-24, not four: the fifth is 2026-11-05T13:24:00Z ('A process of this unit has been killed by the OOM killer'), status=9/KILL at 13:24:03Z. Current incarnation began 2026-11-06T08:43:21Z, NRestarts=0. THE CAP IS UNCHANGED and still exceeded: MemoryHigh 2,952,790,016 / MemoryMax 3,221,225,472 / MemorySwapMax 2,684,354,560. Live 2026-11-09T06:04Z: MemoryCurrent 2,301,022,208 = 71.43 % of max (877.6 MiB headroom); MemoryPeak 2,953,863,168 = 91.70 % of max and 1,073,152 B (1.0 MiB) OVER MemoryHigh. memory.events high 56,073 / max 0 / oom 0 / oom_kill 0 \u2014 PER-INCARNATION zeros beside five kills, so they are not a clean life. Raising 2 GiB \u2192 3 GiB did not stop the class: the fifth kill arrived five days later, and peak sits at 91.70 % of the new ceiling.",
       "severity": "warning",
       "affects": [
         "profile"
@@ -201,7 +203,7 @@
     },
     {
       "id": "opencrabs-home-unmanaged-growth",
-      "text": "Still growing, and the disk is now the binding constraint. On agents at 2026-11-02T06:45Z: `/root/.opencrabs` = **20G** and `profiles/ops` = **14G**, up from 16G / 11G at the 2026-10-27T06:07:47Z read \u2014 **+4G and +3G in six days**, and `/` is `50G of 58G = 86.2 % used with 7.5G free`. Nothing in this factory prunes it. At the measured rate (~0.67 G/day on the home) the free space is a **~11-day** horizon before the disk threshold fires \u2014 and that figure assumes the rate holds and that nothing else on `/` grows, so treat it as a bound, not a forecast.",
+      "text": "THE TREND HAS REVERSED and the 2026-11-02 projection is WITHDRAWN. Measured on agents 2026-11-09T06:04Z: /root/.opencrabs = 12G and profiles/ops = 6.3G, DOWN from 20G / 14G on 2026-11-02; / is 45G of 58G = 79 % used with 13G free, against 86.2 % then. So the '~11-day horizon before the disk threshold fires' is falsified in direction and must not be quoted. Largest components now: profiles 7.0G (ops 6.3G, of which opencrabs.db 3.7G and memory 1.3G), projects 2.7G, opencrabs.db 466M, tmp 474M, backups 360M, logs 79M. WHAT IS NOT ATTRIBUTED: the ~8G drop has no producer in the record \u2014 the weekly cleanup ran 2026-11-08T03:00:01Z and logged 'hygiene cleanup complete: 0 item(s) reaped', freeing 0B of journals, so this factory's own instrument did not do it. Treat 12G as a measurement with an unattributed cause; carry neither the rate nor the horizon.",
       "severity": "info",
       "since": "2026-10-09",
       "affects": [
@@ -213,7 +215,7 @@
       "id": "agents-cpu-uncapped-under-factory-load",
       "scope": "profile",
       "severity": "warning",
-      "text": "The cpu controller's delegation to this cgroup is INTERMITTENT, not settled, and a previous version of this entry wrongly recorded it as arrived \u2014 read it live, never carry it from a prior round. Measured: ABSENT 2026-10-23T07:23Z (cgroup.controllers 'memory pids', no cpu.max); PRESENT 2026-10-25T18:22:56Z (controllers 'cpu memory pids', cpu.max 'max 100000'); ABSENT AGAIN 2026-10-26T06:05:51Z and re-read 06:10:00Z (controllers 'memory pids', cpu.max -> No such file or directory, app.slice/cgroup.subtree_control 'memory pids'). cpu IS available one level up \u2014 app.slice/cgroup.controllers reads 'cpu memory pids' and user@0's subtree_control reads 'cpu memory pids' \u2014 so it exists and was simply not delegated down; no app.slice.d drop-in exists in either scope and the journal since 10-25 carries ZERO mentions of the cpu controller or delegation, so the transitions are attributed to no act. WHAT SURVIVES, and is the fact a peer needs: THERE IS NO CEILING IN EFFECT EITHER WAY. When cpu.max exists it reads 'max 100000' (an unlimited quota) with cpu.stat nr_periods 0 / nr_throttled 0 / throttled_usec 0 / nr_bursts 0; CPUQuotaPerSecUSec is infinity; and when cpu.max is absent there is no quota object at all. systemd's stop line for a prior incarnation reads 'Consumed 5h 32min 14.340s CPU time', uncapped. THE LOAD FINDING STANDS and is why this entry exists: host-diag's calibration is a ldavg-15 series, so a load1 peak is NOT comparable with its 12.99 max; on 2026-10-23 load15 sat between p99 8.63 and max 12.99 with disk 87% and MemAvailable 1315 MB both inside their thresholds, making the load leg the SOLE trigger \u2014 and the load is the factory's own concurrent gate runs, registry renders and test suites, not a host fault. Steal is a DISTRIBUTION: 11.35% and 23.54% in adjacent windows against a 6.83% lifetime average, sar at native 600 s reading 6.20 / 8.53 / 10.25%, so it rises and falls with our own load \u2014 a second cause alongside our work, never a substitute for it. Two /proc/stat windows read busy 98.38% / 99.01%.",
+      "text": "Re-read 2026-11-09T06:04Z: the delegation is ABSENT AGAIN \u2014 the opencrabs-ops.service cgroup's cgroup.controllers reads 'memory pids' and cpu.max does not exist. That is the THIRD absent window (2026-10-23, 2026-10-26, now) against one present window (2026-10-25T18:22:56Z), so the intermittent reading stands: read it live, never carry it from a prior round. THE FACT THAT SURVIVES: there is no CPU ceiling in effect either way \u2014 where cpu.max exists it reads 'max 100000' (an unlimited quota), and where it is absent there is no quota object at all. The load finding stands unchanged: host-diag calibrates on ldavg-15, so a load1 peak is not comparable with its 12.99 max.",
       "affects": [
         "profile"
       ],
@@ -255,7 +257,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-11-02T06:03:18Z",
+  "attested_at": "2026-11-09T06:12:54Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

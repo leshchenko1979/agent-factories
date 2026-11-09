@@ -11,7 +11,7 @@
       "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
       "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
       "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-      "this factory's own chat (-1003993000918), its topics and its 17 cron rows (14 enabled, 3 disabled: ai-antispam-118-probe is a spent 2026-10-16 one-shot, disabled at fire; ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots; ai-antispam-62-close-gate was retired 2026-10-02 per q13 and its cron was DELETED 2026-10-04; ai-antispam-43-close-gate and ai-antispam-52-close-gate were RETIRED 2026-10-09 per board #115 and both crons DELETED)",
+      "this factory's own chat (-1003993000918), its topics and its 17 cron rows (14 enabled, 3 disabled: ai-antispam-118-probe is a disabled probe leftover; ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots). The three close gates this fragment used to declare are GONE from the cron table - ai-antispam-43-close-gate, -52-close-gate and -62-close-gate have no row in profiles/ops/opencrabs.db, measured 2026-11-09.",
       "the ai-gateway ai-antispam route write - its steps, step_timeout and route_timeout (q11, owner-answered 2026-10-01T10:41:21Z: HQ is the single writer; the LLM Gateway lane keeps the repo copy and the drift guard)"
     ],
     "does_not_own": [
@@ -163,6 +163,16 @@
         "ai-antispam"
       ],
       "evidence": "Repo SKILL.md first appears at cd2a3f8 (2026-09-17, self-audit kit adoption). Measured cost 2026-09-23: a peer lane's version claim and this lane's contradicted each other and BOTH were right - they named different files. Corrected by ai-antispam HQ in its 2026-09-24 follow-up (Delegate inbox row 460, landed 2026-09-24T23:00:12Z)."
+    },
+    {
+      "id": "kit-commit-msg-guard-reads-the-body",
+      "text": "The kit's commit-msg hook skips EVERY line beginning with '#' as a git comment, but the house commit convention is '#NNN subject' - so on any subject starting with an issue number the guard reads the body and enforces nothing. Fixed in ai-antispam's fork with an is_comment_line() predicate (a '#' line is a comment only when it is not '#<digit>'); TEMPLATE/tools/hooks/commit-msg at agent-factories origin/main still carries the blind spot.",
+      "severity": "warning",
+      "affects": [
+        "profile"
+      ],
+      "evidence": "TEMPLATE/tools/hooks/commit-msg at leshchenko1979/agent-factories origin/main: line 106 `if not stripped or stripped.startswith(\"#\")` and line 168 `... if l.strip() and not l.startswith(\"#\")`. Proven both directions in ai-antispam: subject '#132 ledger: supersedes the row at n=999' PASSED (rc=0) under the old hook while the same subject without the '#132' prefix was REFUSED (rc=1) - the guard bit only on commits that broke the convention. Fixed in ai-antispam commit bd0d7f7, gated by tests/test_ledger_commit_cites_no_rows.py with four end-to-end arms.",
+      "since": "2026-11-09"
     }
   ],
   "lanes": [
@@ -204,7 +214,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-11-02T06:03:18Z",
+  "attested_at": "2026-11-09T06:12:54Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
