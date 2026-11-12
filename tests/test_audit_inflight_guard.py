@@ -393,9 +393,51 @@ def probe_the_guard_is_whole_run() -> str:
         "the run lock must be acquired BEFORE the ledger is parsed — the guard is "
         "whole-run, not per-gate"
     )
-    assert "if not args.no_gates:" in src[acquire_at - 200:acquire_at + 50], (
-        "the acquisition must be conditional on --no-gates alone"
+    # THE CONDITIONALITY IS READ STRUCTURALLY, not from a character window (#639). The
+    # window version asserted `if not args.no_gates:` sat within 200 chars of the
+    # acquisition, so the eight comment lines that document a private lock path made a
+    # TRUE property read FALSE — the check was measuring PROXIMITY, and proximity is a
+    # proxy for "inside the block". The indentation is the block.
+    lines = src.splitlines()
+    acquire_line = next(
+        (i for i, ln in enumerate(lines) if "run_lock = acquire_run_lock(" in ln), None
     )
+    assert acquire_line is not None, "main() must acquire the run lock"
+    guard_line = next(
+        (
+            i
+            for i in range(acquire_line - 1, -1, -1)
+            if lines[i].strip() == "if not args.no_gates:"
+        ),
+        None,
+    )
+    assert guard_line is not None, "the acquisition must be conditional on --no-gates"
+    _indent = lambda ln: len(ln) - len(ln.lstrip())  # noqa: E731
+    guard_indent = _indent(lines[guard_line])
+    assert _indent(lines[acquire_line]) > guard_indent, (
+        "the acquisition must be INSIDE the `if not args.no_gates:` block — an "
+        "acquisition at the guard's own indentation is unconditional"
+    )
+    dedented = [
+        ln for ln in lines[guard_line + 1 : acquire_line]
+        if ln.strip() and _indent(ln) <= guard_indent
+    ]
+    assert not dedented, (
+        "the acquisition must be conditional on --no-gates ALONE; these lines leave the "
+        f"guard block before it: {dedented[:3]}"
+    )
+
+    # THE MUTANT, because a structural read that cannot fail is a comment with a assert in
+    # it: move the acquisition out of the block (dedent it to the guard's own level) and
+    # the SAME read must reject it.
+    mutant = list(lines)
+    mutant[acquire_line] = lines[acquire_line].lstrip()
+    mutant_indent_ok = _indent(mutant[acquire_line]) > guard_indent
+    assert not mutant_indent_ok, (
+        "the structural read is VACUOUS: an acquisition dedented out of the guard block "
+        "was still read as inside it"
+    )
+
     assert "for cmd in gates_to_run" in src, "the gate loop is sequential, which is why the run is the contended unit"
     return "the lock is taken in main() before the ledger read, gated only on --no-gates"
 
