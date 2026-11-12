@@ -2309,6 +2309,227 @@ def probe_a_killed_cli_run_STATES_its_own_outcome() -> None:
 # a register that can only name what precedes it is a register that breaks the moment a
 # unit is added at the end, which is where every new unit is added.
 
+# --- #638: a gate must not be charged to the daemon's cgroup -----------------------
+
+def _cgroup_of(pid: int) -> str:
+    """The unified-hierarchy cgroup a pid belongs to, or "" when it cannot be read."""
+    try:
+        for line in Path(f"/proc/{pid}/cgroup").read_text().splitlines():
+            if line.startswith("0::"):
+                return line[3:]
+    except (FileNotFoundError, ProcessLookupError, PermissionError):
+        return ""
+    return ""
+
+def probe_a_gate_is_charged_to_a_cgroup_of_its_own() -> None:
+    """The positive read, its CONTROL, and the ceiling actually IN FORCE inside it (#638).
+
+    `n=4951` established the defect as a READ rather than an inference from the flag: a child
+    spawned with `start_new_session=True` reported the SAME cgroup as its caller while its
+    session differed. So the fix is proved the same way -- that read must come back DIFFERENT
+    -- and the control is the pre-#638 spawn shape, which must still read SAME. Without the
+    control a probe that can only ever say "different" would pass over a wrapper that did
+    nothing at all.
+    """
+    sel = _selector()
+    reason = sel.gate_scope_unavailable_reason()
+    if reason:
+        print(f"STATED SKIP -- this host cannot scope a gate: {reason}")
+        return
+    parent = _cgroup_of(os.getpid())
+    check("the probe can read its own cgroup at all", bool(parent), repr(parent))
+
+    code = (
+        "import pathlib\n"
+        "cg = pathlib.Path('/proc/self/cgroup').read_text().strip().split('::')[1]\n"
+        "root = pathlib.Path('/sys/fs/cgroup' + cg)\n"
+        "print(cg)\n"
+        "print((root / 'memory.max').read_text().strip())\n"
+        "print((root / 'memory.swap.max').read_text().strip())\n"
+    )
+    run = sel._spawn_and_wait([sys.executable, "-c", code], REPO, 120.0, None)
+    lines = run.stdout.strip().splitlines()
+    child = lines[0] if lines else ""
+    check(
+        "a gate spawned the way the runner spawns gates lands in its OWN cgroup",
+        run.returncode == 0 and bool(child) and child != parent,
+        f"rc={run.returncode} child={child!r} parent={parent!r} "
+        f"stderr={run.stderr.strip()[:200]!r}",
+    )
+    check(
+        "...and the unit is named for the selector, so a reader can find the scope again",
+        child.rsplit("/", 1)[-1].startswith(f"{sel.GATE_SCOPE_PREFIX}-"),
+        child,
+    )
+    if len(lines) >= 3:
+        check(
+            "...and the declared ceiling is IN FORCE inside that cgroup, not merely on the argv",
+            lines[1] == str(sel.GATE_SCOPE_MEMORY_MAX_MIB * 1024 * 1024)
+            and lines[2] == sel.GATE_SCOPE_MEMORY_SWAP_MAX,
+            f"memory.max={lines[1]} memory.swap.max={lines[2]}",
+        )
+    line = sel.gate_scope_status_line()
+    check(
+        "the applied line states the ceiling AND its basis, so the number is re-checkable",
+        f"MemoryMax={sel.GATE_SCOPE_MEMORY_MAX_MIB}M" in line and "Basis:" in line,
+        line,
+    )
+
+    # THE CONTROL: the PRE-#638 spawn shape, which must still land in the CALLER's cgroup.
+    plain = subprocess.Popen(
+        [sys.executable, "-c",
+         "print(open('/proc/self/cgroup').read().strip().split('::')[1])"],
+        start_new_session=True,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    out, _ = plain.communicate(timeout=120)
+    control = out.strip()
+    check(
+        "CONTROL: the pre-#638 spawn shape still reports the CALLER's cgroup, so this "
+        "instrument CAN see sameness and the difference above is the wrapper's",
+        control == parent,
+        f"control={control!r} parent={parent!r}",
+    )
+
+    # THE MUTANT: the wrapper neutered to a pass-through -- the pre-#638 shape wearing the
+    # new code. The SAME read must then come back the CALLER's cgroup, or the arm above is
+    # measuring something ambient (the spawn path, the kernel) rather than the wrapper.
+    mutated = GATE_SELECT.read_text() + (
+        "\n\n_ORIGINAL_GATE_SCOPE_ARGV = gate_scope_argv\n"
+        "def gate_scope_argv(argv, seq):\n"
+        "    return list(argv)\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        # The module resolves its siblings from `Path(__file__).parent` (#544, #583), so the
+        # mutant needs `gate_budget.py` beside it or it dies reading the kill code -- a
+        # vacuous arm that would "pass" by never reaching the spawn at all.
+        tools_dir = Path(tmp) / "tools"
+        shutil.copytree(REPO / "tools", tools_dir)
+        path = tools_dir / "gate_select_638_mutant.py"
+        path.write_text(mutated)
+        mutant = _load("oc_gate_select_638_mutant", path)
+        run2 = mutant._spawn_and_wait([sys.executable, "-c", code], REPO, 120.0, None)
+    lines2 = run2.stdout.strip().splitlines()
+    child2 = lines2[0] if lines2 else ""
+    check(
+        "MUTANT: with the wrapper neutered the SAME read returns the CALLER's cgroup, so "
+        "the arm above measures the wrapper and not something ambient",
+        child2 == parent and run2.returncode == 0,
+        f"mutant child={child2!r} parent={parent!r} rc={run2.returncode}",
+    )
+
+def probe_the_scope_fails_open_and_STATES_the_absence() -> None:
+    """No systemd-run: the gate still runs, and the run says the containment is missing.
+
+    A load bound is never a correctness condition, so losing it must not stop a gate (#638).
+    The failure this probe is aimed at is the SILENT one -- a fallback that runs the gate
+    unscoped while the output reports a ceiling that was never applied makes "no ceiling was
+    applied" and "the ceiling held" the same silence (#271).
+    """
+    sel = _selector()
+    argv = [sys.executable, "-c", "pass"]
+    real_path = os.environ.get("PATH", "")
+    try:
+        os.environ["PATH"] = "/nonexistent-gate-select-probe"
+        reason = sel.gate_scope_unavailable_reason()
+        plain = sel.gate_scope_argv(list(argv), 1)
+        line = sel.gate_scope_status_line()
+    finally:
+        os.environ["PATH"] = real_path
+    check(
+        "with systemd-run off PATH the argv is returned UNCHANGED -- fail-open, never "
+        "fail-stop",
+        plain == argv,
+        str(plain),
+    )
+    check(
+        "...and the reason NAMES what is missing",
+        "systemd-run is not on PATH" in reason,
+        reason,
+    )
+    check(
+        "...and the status line states the absence AND its consequence",
+        "NOT APPLIED" in line and "charged to THIS process's cgroup" in line,
+        line,
+    )
+
+    # MUTANT: the SILENT fallback -- a line that reports the ceiling as applied while nothing
+    # was scoped. The predicate above must go FALSE on it, or that arm is vacuous.
+    silent = (
+        f"gate-select: each gate runs in its own cgroup, "
+        f"MemoryMax={sel.GATE_SCOPE_MEMORY_MAX_MIB}M"
+    )
+    check(
+        "MUTANT: a fallback reporting a ceiling that was never applied FAILS the same "
+        "predicate, so the arm above is not vacuous",
+        not ("NOT APPLIED" in silent and "charged to THIS process's cgroup" in silent),
+        silent,
+    )
+
+def probe_a_scope_that_cannot_start_is_not_a_gate_failure() -> None:
+    """The wrapper's own failure is a NO-VERDICT, never a verdict on the gate (#638).
+
+    A scope that cannot be created exits non-zero with systemd-run's reason on stderr, and
+    #552/#636 read a failed child's first stderr line as its DIAGNOSIS -- so without this
+    class the receipt would blame the author's change for the harness's fault. Both
+    directions are asserted: systemd-run's line IS recognised, and a gate's own diagnosis is
+    NOT mistaken for it.
+    """
+    sel = _selector()
+    started = "Failed to start transient scope unit: Unit already exists"
+    check(
+        "systemd-run's own failure line is recognised as the WRAPPER's",
+        sel.scope_start_failure(started) == started,
+        repr(sel.scope_start_failure(started)),
+    )
+    check(
+        "...and a property systemd refuses is recognised too",
+        bool(sel.scope_start_failure("Failed to parse MemoryMax=notanumber: Invalid argument")),
+        "not recognised",
+    )
+    # THE CONTROL: the exact diagnosis a real gate writes (#636's subject) must pass through.
+    ledger_line = "ledger gate FAILED: 2 check(s)"
+    check(
+        "CONTROL: a gate's own diagnosis is NOT mistaken for the wrapper's failure, so the "
+        "guard cannot swallow real failures",
+        sel.scope_start_failure(ledger_line) == "",
+        repr(sel.scope_start_failure(ledger_line)),
+    )
+
+def probe_the_wrapper_does_not_become_the_receipts_cause() -> None:
+    """`--quiet` is load-bearing, proved BEHAVIOURALLY rather than by grepping the argv.
+
+    systemd-run writes `Running scope as unit: ...` to STDERR, and #552/#636 read a failed
+    child's first stderr line as its diagnosis -- so a chatty wrapper would become the stated
+    cause of every failure and the receipt would name the scope instead of the gate's own
+    words. This arm runs a gate that fails on purpose and reads the receipt.
+    """
+    sel = _selector()
+    reason = sel.gate_scope_unavailable_reason()
+    if reason:
+        print(f"STATED SKIP -- this host cannot scope a gate: {reason}")
+        return
+    run = sel._spawn_and_wait(
+        [sys.executable, "-c",
+         "import sys; print('the gates own diagnosis', file=sys.stderr); sys.exit(3)"],
+        REPO,
+        120.0,
+        None,
+    )
+    receipt = sel.failure_receipt("some/gate.py", run.returncode, run.stdout, run.stderr)
+    check(
+        "a failing gate under the wrapper is diagnosed by ITS OWN line",
+        "the gates own diagnosis" in receipt,
+        receipt,
+    )
+    check(
+        "...and the wrapper's own chatter is absent from it",
+        "scope as unit" not in receipt and "systemd-run" not in receipt,
+        receipt,
+    )
+
 PROBES = (
     probe_every_registered_gate_is_covered,
     probe_every_map_key_is_registered,
@@ -2333,6 +2554,10 @@ PROBES = (
     probe_the_reap_kills_the_subtree_and_says_what_it_signalled,
     probe_a_wall_kill_reaps_before_the_drain_and_clears_the_pid,
     probe_a_killed_cli_run_STATES_its_own_outcome,
+    probe_a_gate_is_charged_to_a_cgroup_of_its_own,
+    probe_the_scope_fails_open_and_STATES_the_absence,
+    probe_a_scope_that_cannot_start_is_not_a_gate_failure,
+    probe_the_wrapper_does_not_become_the_receipts_cause,
 )
 
 def main() -> int:
@@ -2433,6 +2658,18 @@ def test_a_wall_kill_reaps_before_the_drain_and_clears_the_pid() -> None:
 
 def test_a_killed_cli_run_STATES_its_own_outcome() -> None:
     _assert_probe(probe_a_killed_cli_run_STATES_its_own_outcome)
+
+def test_a_gate_is_charged_to_a_cgroup_of_its_own() -> None:
+    _assert_probe(probe_a_gate_is_charged_to_a_cgroup_of_its_own)
+
+def test_the_scope_fails_open_and_states_the_absence() -> None:
+    _assert_probe(probe_the_scope_fails_open_and_STATES_the_absence)
+
+def test_a_scope_that_cannot_start_is_not_a_gate_failure() -> None:
+    _assert_probe(probe_a_scope_that_cannot_start_is_not_a_gate_failure)
+
+def test_the_wrapper_does_not_become_the_receipts_cause() -> None:
+    _assert_probe(probe_the_wrapper_does_not_become_the_receipts_cause)
 
 if __name__ == "__main__":
     sys.exit(main())

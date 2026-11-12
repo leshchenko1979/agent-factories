@@ -33,6 +33,7 @@ import argparse
 import ast
 import fnmatch
 import importlib.util
+import itertools
 import json
 import os
 import re
@@ -371,6 +372,145 @@ def run_summary_line(selected: int, run: GateRun, rc: int) -> str:
     )
 
 KILL_DRAIN_SEC = 5.0
+
+# --- one cgroup per gate (#638) -------------------------------------------------
+#
+# A GATE MUST NOT BE CHARGED TO THE DAEMON'S CGROUP. `start_new_session=True` creates a
+# SESSION, never a CGROUP -- membership is INHERITED -- so every gate this selector spawned
+# ran inside `opencrabs-ops.service`'s own cgroup, and that cgroup's ceiling was shared
+# between the daemon and whatever a gate happened to allocate.
+#
+# MEASURED at the cgroup's own files, 2026-11-12: `memory.max` 3221225472 (3072 MiB),
+# `memory.current` 2689314816 (2564.73 MiB) -- the daemon ALONE holds 83.49 % of the
+# ceiling, leaving 507.27 MiB for every gate combined, and `memory.high` (2816 MiB) leaves
+# 251.27 MiB before throttling starts. A gate's memory budget was therefore whatever the
+# daemon had not yet taken: neither declared nor stable, and the reason a gate and the
+# daemon were killed in the same cgroup event on 2026-11-09.
+#
+# THE CEILING IS NOT A PICKED NUMBER, and it is bounded from BOTH ends:
+#   * ABOVE: the heaviest gate tree's own measured peak is 1265.9 MiB (the audit's
+#     `AUDIT_SCOPE_MEMORY_MAX_BASIS`, read from the kernel over 418 samples at
+#     2026-11-07T13:36:37Z). Doubled for headroom and rounded up to the next 256 MiB.
+#   * BELOW: a gate that runs `tests/test_shipped_audit_runs.py` re-execs an audit that
+#     declares ITS OWN 2560 MiB ceiling. An outer cap under 2560 would OOM that gate from
+#     outside while the inner run was still inside the bound it declares for itself -- a
+#     false failure manufactured by the wrapper.
+# Both bounds land on the same number, and it equals the audit's own ceiling for the same
+# reason: the heaviest gate this selector runs IS an audit tree.
+#
+# NOT RAISED FURTHER, deliberately: the host runs at 107.1 % overcommit, and the daemon's
+# own cap was raised to 3072 MiB on 2026-10-31 with a LARGER cage REJECTED in terms
+# (`20-memory.conf`), so a gate scope above this would license more demand than the host can
+# serve.
+GATE_SCOPE_MEMORY_MAX_MIB = 2560
+GATE_SCOPE_MEMORY_MAX_BASIS = (
+    "the heaviest gate tree's measured peak, 1265.9 MiB (the audit's own basis: 418 kernel "
+    "samples, 2026-11-07T13:36:37Z), doubled for headroom and rounded up to the next 256 MiB "
+    "= 2560; also the FLOOR that contains the 2560 MiB ceiling a nested audit declares for "
+    "itself, below which this wrapper would OOM a gate that is inside its own declared bound"
+)
+GATE_SCOPE_MEMORY_SWAP_MAX = "0"
+GATE_SCOPE_PREFIX = "gate-select"
+_GATE_SCOPE_SEQ = itertools.count(1)
+_GATE_SCOPE_STATUS_PRINTED = False
+
+def gate_scope_unavailable_reason() -> str:
+    """Why a gate cannot be given a cgroup of its own, or "" when it can (#638).
+
+    THE ABSENCE IS STATED, NEVER SILENT (#271): "no scope was applied" and "the scope was
+    applied and held" are the same silence otherwise, and the second is what a reader
+    assumes. The checks mirror `audit.py`'s `audit_scope_unavailable_reason` -- same
+    mechanism, same preconditions -- because one box must not answer this question two ways.
+    """
+    if shutil.which("systemd-run") is None:
+        return "systemd-run is not on PATH"
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    if not runtime:
+        return "XDG_RUNTIME_DIR is unset, so there is no systemd user session to scope into"
+    if not (Path(runtime) / "systemd" / "private").exists():
+        return f"no systemd user session at {runtime}/systemd/private"
+    return ""
+
+def gate_scope_argv(argv: list[str], seq: int) -> list[str]:
+    """The argv to spawn: the gate, wrapped in a transient scope carrying its own ceiling.
+
+    `systemd-run --user --scope` EXECs the command IN PLACE -- measured 2026-11-12, the pid
+    `Popen` returned was the command's own pid and its process-group leader -- so the
+    caller's reap keeps working unchanged: `proc.pid` still names the group to signal, which
+    is why #637's `reap_gate_group` needs no knowledge of this wrapper.
+
+    `--quiet` is NOT cosmetic. Without it systemd-run writes `Running scope as unit: ...` to
+    STDERR, and #552/#636 read a failed child's first stderr line as its DIAGNOSIS -- so the
+    wrapper would have become every receipt's stated cause. `--collect` garbage-collects a
+    failed transient unit instead of leaving it behind.
+
+    FAIL-OPEN: when no scope can be created the argv is returned UNCHANGED, because the
+    containment is a load bound and never a correctness condition -- losing it must not stop
+    a gate from running. `gate_scope_status_line` states which of the two happened.
+    """
+    if gate_scope_unavailable_reason():
+        return list(argv)
+    unit = f"{GATE_SCOPE_PREFIX}-{os.getpid()}-{seq}"
+    return [
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        f"--unit={unit}",
+        "-p",
+        f"MemoryMax={GATE_SCOPE_MEMORY_MAX_MIB}M",
+        "-p",
+        f"MemorySwapMax={GATE_SCOPE_MEMORY_SWAP_MAX}",
+        "--",
+        *argv,
+    ]
+
+def gate_scope_status_line() -> str:
+    """The one line stating WHICH containment this process's gates run under (#638)."""
+    reason = gate_scope_unavailable_reason()
+    if reason:
+        return (
+            f"gate-select: gate scope NOT APPLIED ({reason}) -- every gate is charged to "
+            f"THIS process's cgroup, so a gate that reaches that cgroup's ceiling competes "
+            f"with the daemon for it (#638)"
+        )
+    return (
+        f"gate-select: each gate runs in its own cgroup -- unit "
+        f"{GATE_SCOPE_PREFIX}-<pid>-<n>.scope, MemoryMax={GATE_SCOPE_MEMORY_MAX_MIB}M "
+        f"(MemorySwapMax={GATE_SCOPE_MEMORY_SWAP_MAX}). Basis: "
+        f"{GATE_SCOPE_MEMORY_MAX_BASIS}"
+    )
+
+def announce_gate_scope(stream=None) -> None:
+    """Print the scope line ONCE per process, before the first gate is spawned (#638)."""
+    global _GATE_SCOPE_STATUS_PRINTED
+    if _GATE_SCOPE_STATUS_PRINTED:
+        return
+    _GATE_SCOPE_STATUS_PRINTED = True
+    print(gate_scope_status_line(), file=stream or sys.stderr)
+
+SCOPE_START_FAILURE_PREFIXES = (
+    "Failed to parse ",
+    "Failed to start transient scope unit",
+    "Failed to connect to bus",
+    "Failed to create ",
+)
+
+def scope_start_failure(stderr: str) -> str:
+    """`systemd-run`'s OWN failure line when the gate never started at all (#638).
+
+    A scope that cannot be created exits non-zero with its reason on stderr, and that reason
+    would otherwise be read as the GATE's diagnosis -- blaming an author's change for the
+    wrapper's failure. The prefixes are systemd-run's own, anchored at the line start, and
+    the caller reports the class as a NO-VERDICT rather than a failure: a gate that never
+    started has no verdict to give (#544/#606).
+    """
+    for line in (stderr or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith(SCOPE_START_FAILURE_PREFIXES):
+            return stripped
+    return ""
 
 class RunProgress:
     """How far a `--run` had got, so a run KILLED from outside is not silent (#637).
@@ -737,9 +877,17 @@ def _spawn_and_wait(
     `progress.child_pid` is set for exactly as long as the child is live, and cleared on
     every exit path, so a handler firing between two gates cannot reap a pid that has been
     recycled by the kernel for an unrelated process.
+
+    EACH GATE IS SPAWNED INTO A CGROUP OF ITS OWN (#638), through `gate_scope_argv`. A new
+    SESSION is not a new CGROUP -- membership is inherited -- so before #638 a gate was
+    charged to the DAEMON's cgroup and shared its ceiling with the daemon's own RSS. The
+    wrapper execs in place, so `proc.pid` remains the gate's pid and its group leader and
+    the reap below is unchanged.
     """
+    announce_gate_scope()
+    spawn_argv = gate_scope_argv(list(argv), next(_GATE_SCOPE_SEQ))
     proc = subprocess.Popen(
-        list(argv),
+        spawn_argv,
         cwd=str(root),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -850,6 +998,11 @@ def run_gates(
     """
     commands = registered_commands(root)
     budgets, budget_note = declared_budget_table(root)
+    if gates:
+        # ONE line per process, stating the containment every gate below runs under (#638):
+        # a run that could not scope its gates says so before the first verdict, so a reader
+        # never has to infer from silence which of the two happened.
+        announce_gate_scope()
     failures: list[str] = []
     no_verdicts: list[str] = []
     exemptions: list[str] = []
@@ -928,9 +1081,21 @@ def run_gates(
                 f"it neither passed nor failed"
             )
         elif proc.returncode != 0:
-            failures.append(
-                failure_receipt(gate, proc.returncode, proc.stdout, proc.stderr)
-            )
+            never_started = scope_start_failure(proc.stderr)
+            if never_started:
+                # THE WRAPPER'S FAILURE IS NOT THE GATE'S VERDICT (#638). A scope that could
+                # not be created exits non-zero with systemd-run's own reason on stderr; read
+                # as a gate failure it would blame an author's change for the harness's
+                # fault. The gate never started, so it produced no verdict either way.
+                no_verdicts.append(
+                    f"{gate} — NEVER RAN: its own cgroup could not be created "
+                    f"({never_started}), so this is the wrapper's failure and not a verdict "
+                    f"on the gate"
+                )
+            else:
+                failures.append(
+                    failure_receipt(gate, proc.returncode, proc.stdout, proc.stderr)
+                )
         if attempts == 2 and proc.returncode != TIMEOUT_EXIT_CODE:
             # A GATE THAT NEEDED ITS RETRY STILL PASSES -- AND MUST SAY SO (#590). Without
             # this line the retry is invisible whenever it works, which is exactly the case
