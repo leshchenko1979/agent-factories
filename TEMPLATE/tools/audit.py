@@ -965,7 +965,23 @@ def run_gate(
                 # same reason a kill is: no verdict was taken. The wall-clock below stays a
                 # real measurement -- the gate ended on its own -- which is why
                 # `duration_is_lower_bound` remains False here and only here.
-                "unknown": proc.returncode == TIMEOUT_EXIT_CODE,
+                # A REFUSAL IS ALSO NO VERDICT (#608, ruling `n=4688` clause b). The
+                # shipped-audit gate exits 3 when another run holds the repository's run
+                # lock: it MEASURED nothing, and it chose that code deliberately rather
+                # than crashing. Read as a plain non-zero it lands `passed=False,
+                # unknown=False`, and the partition at `judge_gates` buckets it into
+                # `failed` -- so every round carried a phantom FAIL for a gate that never
+                # opened the tree, the false-red class one layer up from where #606 fixed
+                # it. Exit 3 is in this predicate for the same reason the kill code is:
+                # a code a gate CHOOSES still means no verdict was taken.
+                #
+                # The constant is declared below, in the lock section, and read HERE at
+                # call time -- `run_gate` executes from `main()` after the module is
+                # fully loaded, so the forward reference resolves. Binding (c) of the
+                # same ruling is satisfied without a second change: `all_passed` reads the
+                # RAW `passed` field, which stays False over a refusal, so the run can
+                # never print PASSED for a tree a gate never measured.
+                "unknown": proc.returncode in (TIMEOUT_EXIT_CODE, LOCK_HELD_EXIT_CODE),
                 "duration_sec": round(t_el, 2),
                 # A COMPLETED run's wall-clock is the measurement. Its presence on every
                 # record is what makes its ABSENCE on a kill readable as "this number is not

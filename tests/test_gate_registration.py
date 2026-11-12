@@ -1843,12 +1843,19 @@ def probe_the_retry_is_bounded_and_recorded(timed_out: dict) -> None:
 
 
 def probe_a_genuine_failure_is_never_retried() -> None:
-    """PART 4's bound: a non-zero exit is a VERDICT, and a verdict is not re-rolled."""
+    """PART 4's bound: a non-zero exit is a VERDICT, and a verdict is not re-rolled.
+
+    The fixture exits 1, NOT 3: exit 3 is the run lock's REFUSAL code, and since #608
+    (ruling `n=4688` clause b) a gate choosing it is correctly recorded UNKNOWN. A probe
+    that borrowed 3 for "a genuine failure" would therefore be measuring the refusal class
+    instead of the retry bound — and it did, until this fix; the collision was found by
+    the gate going red, not by reading the constant list.
+    """
     audit = _audit_module()
-    failed = audit.run_gate(["/bin/sh", "-c", "exit 3"], REPO, 30.0)
+    failed = audit.run_gate(["/bin/sh", "-c", "exit 1"], REPO, 30.0)
     check(
         "a genuine FAIL keeps its own exit code and is NEVER retried",
-        failed["exit_code"] == 3
+        failed["exit_code"] == 1
         and failed["attempts"] == 1
         and failed["retried"] is False
         and failed["unknown"] is False,

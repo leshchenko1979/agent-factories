@@ -582,6 +582,122 @@ def probe_the_same_worktree_still_excludes_itself() -> str:
             _release(third)
         return f"same-worktree exclusion holds at {path.name}, and release frees it"
 
+def probe_a_refusal_is_unknown_not_a_failure() -> str:
+    """(#608) A gate that exits with the REFUSAL's code takes no verdict.
+
+    Ruling `n=4688` clause (b): a lock-held refusal is UNKNOWN, never a FAIL. Read as a plain
+    non-zero it landed `passed=False, unknown=False`, so `judge_gates` bucketed it into
+    `failed` and every round carried a phantom FAIL for a gate that never opened the tree.
+
+    FOUR ARMS, and the last two are what make the first two mean anything:
+
+      * a child exiting 3 -> `unknown` True, in the unknown population, status UNKNOWN;
+      * CONTROL: a child exiting 1 -> `unknown` False, in `failed`, status DEGRADED — the
+        predicate must DISCRIMINATE, or it has absorbed every failure into the refusal class;
+      * NEUTER: with the new arm disabled (the constant set to a code no child can return)
+        the SAME exit-3 child reproduces the phantom FAIL, so the arm is load-bearing.
+    """
+    mod = _audit_module()
+    refusal = mod.run_gate(
+        [sys.executable, "-c", "import sys; sys.exit(3)"], REPO, 30.0, "probe (#608)"
+    )
+    assert refusal["exit_code"] == 3, f"the fixture must exit 3, got {refusal['exit_code']}"
+    assert refusal["unknown"] is True, (
+        "a gate exiting with the refusal code took no verdict and must be recorded unknown, "
+        f"got unknown={refusal['unknown']} passed={refusal['passed']}"
+    )
+    assert refusal["passed"] is False, "a refusal is never a pass"
+
+    refused_verdict = mod.judge_gates([refusal], cadence_ok=True, gates_ran=True)
+    assert refused_verdict.status == "UNKNOWN", (
+        f"a refusal must be UNKNOWN, got {refused_verdict.status}"
+    )
+    assert list(refused_verdict.failed) == [], (
+        "a refusal must not appear in the failure list — that IS the phantom FAIL (#608)"
+    )
+    assert len(refused_verdict.unknown) == 1, "the refusal must be in the unknown population"
+    assert refused_verdict.healthy is False, "UNKNOWN is never a healthy run"
+    # Binding (c) of the same ruling, driven rather than assumed: the pass total reads the
+    # RAW `passed` field, which stays False over a refusal, so a run can never print PASSED
+    # for a tree one of its gates never measured.
+    assert all(g["passed"] for g in [refusal]) is False, (
+        "all_passed must stay False over a refusal"
+    )
+
+    failure = mod.run_gate(
+        [sys.executable, "-c", "import sys; sys.exit(1)"], REPO, 30.0, "probe (#608)"
+    )
+    assert failure["exit_code"] == 1 and failure["unknown"] is False, (
+        "a genuine gate failure must stay a FAIL, not be absorbed into the refusal class"
+    )
+    failed_verdict = mod.judge_gates([failure], cadence_ok=True, gates_ran=True)
+    assert failed_verdict.status == "DEGRADED", (
+        f"a genuine failure must still read DEGRADED, got {failed_verdict.status}"
+    )
+    assert len(failed_verdict.failed) == 1, "a genuine failure must be in the failure list"
+
+    original = mod.LOCK_HELD_EXIT_CODE
+    try:
+        mod.LOCK_HELD_EXIT_CODE = 999
+        neutered = mod.run_gate(
+            [sys.executable, "-c", "import sys; sys.exit(3)"], REPO, 30.0, "probe (#608)"
+        )
+    finally:
+        mod.LOCK_HELD_EXIT_CODE = original
+    assert neutered["unknown"] is False, (
+        "NEUTERED arm still read the refusal as UNKNOWN — the probe would pass without the "
+        "predicate, so it tests nothing"
+    )
+    neutered_verdict = mod.judge_gates([neutered], cadence_ok=True, gates_ran=True)
+    assert neutered_verdict.status == "DEGRADED" and len(neutered_verdict.failed) == 1, (
+        "with the arm disabled the refusal must reproduce the phantom FAIL (#608)"
+    )
+    return (
+        "exit 3 -> UNKNOWN (control: exit 1 -> DEGRADED); neutering the arm reproduces the "
+        "phantom FAIL"
+    )
+
+def probe_a_lock_held_run_is_read_as_no_verdict() -> str:
+    """(#608) The REAL refusal, end to end — the synthetic child above is not the proof.
+
+    A throwaway repository has its own run lock held, and its `audit.py --json` is spawned
+    the way `run_gate` spawns a gate. The refusal returns exit 3 before any gate runs, and
+    the runner must record it as NO VERDICT. Without the fix this exact run is the phantom
+    FAIL that made the round read DEGRADED.
+
+    The lock is the throwaway repository's, never this repository's: holding the live lock
+    would refuse a PEER lane's audit, which is a live surface this gate has no business
+    mutating (#473).
+    """
+    mod = _audit_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = _throwaway_repo(Path(tmp))
+        handle = _hold_lock(_lock_path(root))
+        try:
+            rec = mod.run_gate(
+                [sys.executable, str(root / "tools" / "audit.py"), "--json"],
+                root,
+                120.0,
+                "probe (#608)",
+            )
+        finally:
+            _release(handle)
+    assert rec["exit_code"] == mod.LOCK_HELD_EXIT_CODE, (
+        f"the held lock must make the nested run refuse with {mod.LOCK_HELD_EXIT_CODE}, got "
+        f"exit {rec['exit_code']} (stderr tail: {(rec.get('stderr') or '')[-300:]})"
+    )
+    assert rec["unknown"] is True, (
+        "the real lock-held refusal must be recorded as no verdict, not as a failure"
+    )
+    verdict = mod.judge_gates([rec], cadence_ok=True, gates_ran=True)
+    assert verdict.status == "UNKNOWN", (
+        f"the real refusal must read UNKNOWN, got {verdict.status}"
+    )
+    return (
+        f"a held lock refuses at exit {mod.LOCK_HELD_EXIT_CODE} and reads UNKNOWN, never a "
+        f"phantom FAIL"
+    )
+
 PROBES = (
     ("(a) whole-run scope", probe_the_guard_is_whole_run),
     ("(a) recursion case — exempt under --no-gates", probe_the_guard_is_exempt_under_no_gates),
@@ -594,6 +710,8 @@ PROBES = (
     ("(f) two worktrees contend for ONE lock (#597)", probe_two_worktrees_of_one_repository_CONTEND_for_ONE_lock),
     ("(f) positive control — one worktree excludes itself (#597)", probe_the_same_worktree_still_excludes_itself),
     ("registration and pairing", probe_the_gate_is_registered_and_paired),
+    ("(b) a refusal is NO VERDICT, not a FAIL (#608)", probe_a_refusal_is_unknown_not_a_failure),
+    ("(b) the REAL lock-held refusal reads no verdict (#608)", probe_a_lock_held_run_is_read_as_no_verdict),
 )
 
 def main() -> int:
