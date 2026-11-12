@@ -120,6 +120,15 @@ def inner_wall(manifest: Path | None = None) -> tuple[float, str]:
 # and a drain with no ceiling would turn a budget kill into a second hang.
 KILL_DRAIN_SEC = 5.0
 
+# HOW LONG THE PRIVATE-LOCK ARM IS GIVEN BEFORE ITS WALL FIRES (#639).
+#
+# A REFUSED run costs ~2 s and returns, so any wall above a few seconds discriminates the
+# two arms: the live arm must still be WORKING at this wall, which it can only be if it
+# acquired its own lock. The number is deliberately far above a refusal and far below the
+# gate suite's own runtime -- it is a DISCRIMINATOR, not a budget, and the run it kills is
+# reaped as a group (below) rather than left behind.
+PRIVATE_LOCK_WALL_SEC = 45.0
+
 def _reap_inner_tree(proc: subprocess.Popen | None) -> str:
     """SIGKILL the inner audit's whole PROCESS GROUP, and say in words what was signalled.
 
@@ -754,6 +763,18 @@ def main() -> int:
     inner_manifest = gates_manifest_path().resolve()
     inner_env = dict(os.environ, OC_GATES_MANIFEST=str(inner_manifest))
     print(f"  inner audit: OC_GATES_MANIFEST={inner_manifest}")
+    # ITS OWN LOCK, BECAUSE IT IS NOT CONTENDING WITH THE REPOSITORY (#639). This gate is
+    # itself executed BY a gate run, so the outer run already holds the repository-wide lock
+    # and the nested audit refused with exit 3 every time -- a gate that measured nothing,
+    # reported as no-verdict (and, before #608, as a phantom FAIL). A nested run is not
+    # contending with another RUNNER; it is serializing against its own parent, which bounds
+    # nothing. So it takes a private lock in a temp dir, and the repo-wide serialization that
+    # guards real runs is untouched: `--lock-path` is absent from every other caller and the
+    # default is still `run_lock_path()`, which `probe_the_private_lock_does_not_weaken_the_guard`
+    # asserts by taking the repo lock itself and watching an ordinary nested run still refuse.
+    inner_lock_dir = tempfile.mkdtemp(prefix="shipped-audit-lock-")
+    inner_lock = Path(inner_lock_dir) / ".audit.lock"
+    print(f"  inner audit: private run lock at {inner_lock}")
     inner_proc: subprocess.Popen | None = None
     try:
         # ITS OWN SESSION (#629 condition 3), which is what lets the wall kill below reap
@@ -761,7 +782,7 @@ def main() -> int:
         # inherits this group, so one signal reaches all of them. A `subprocess.run` cannot
         # be asked for that and its own timeout kill signals the child alone.
         inner_proc = subprocess.Popen(
-            [sys.executable, "tools/audit.py", "--json"],
+            [sys.executable, "tools/audit.py", "--json", "--lock-path", str(inner_lock)],
             cwd=str(SHIPPED), stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             env=inner_env,
             start_new_session=True,
@@ -902,6 +923,149 @@ def main() -> int:
           f"{len(got['STATED SKIP'])} stated skip, {len(got['NAMED ABSENCE'])} named absence, "
           f"{len(got['NO VERDICT'])} no verdict, {len(got['REFUSED'])} refused")
     return 0
+
+
+_AUDIT_MODULE = None
+
+
+def _audit_module():
+    """`tools/audit.py` as a module, for the ONE path resolution this gate must not copy.
+
+    The repo lock's location is `run_lock_path()`'s answer — the git COMMON dir, with its
+    own documented fallback (#597). Retyping that resolution here would be a second copy of
+    a rule the tool owns, so the probe imports the tool. Safe to import: `audit.py`'s
+    `__main__` body is guarded.
+    """
+    global _AUDIT_MODULE
+    if _AUDIT_MODULE is None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "_audit_under_test", REPO / "tools" / "audit.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        # REGISTERED BEFORE EXEC (#639). A dataclass in the tool resolves its own module
+        # through `sys.modules` while the class body executes, so an unregistered module
+        # dies with `AttributeError: 'NoneType' object has no attribute '__dict__'`.
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        _AUDIT_MODULE = module
+    return _AUDIT_MODULE
+
+
+def probe_the_private_lock_does_not_weaken_the_guard() -> None:
+    """#639 — the private lock serves the NESTED run and leaves the guard intact.
+
+    Three arms, and all three are needed or the fix is a hole rather than a seam. The first
+    two run with the repository-wide lock held BY THIS PROCESS, so the control's refusal is
+    caused by that lock and nothing else.
+
+    CONTROL — an ordinary run (no `--lock-path`) REFUSES with exit 3, immediately. That is
+    the guard #597 anchored in the git common dir, and it must be unmoved: if this arm ever
+    sees a run proceed, the flag has become a general escape from the guard.
+
+    LIVE — the same run with `--lock-path` at a temp file gets PAST the lock and starts
+    working, while the repo lock is STILL held. It is cut off by this arm's own wall rather
+    than being allowed to run the whole gate suite, so the discriminator is that it is STILL
+    RUNNING where the control had already refused: `--no-gates` is deliberately NOT used,
+    because it is exempt from the lock and would make both arms prove nothing. The wall
+    reaps the PROCESS GROUP, not the child (#629 condition 3): measured on the pre-reap
+    version of this arm, a run that got into the gate loop left an `audit.py` alive after
+    the arm returned.
+
+    MUTANT — with the repo lock FREE, an unusable `--lock-path` still exits 3 and NAMES that
+    path. Held-lock arms cannot discriminate this: an `audit.py` that ignored the flag would
+    refuse for the repo lock's own reason. Run free, an exit 3 can only come from the private
+    path, so this arm is what separates "the flag is read" from "the flag is tolerated".
+    """
+    repo_lock = _audit_module().run_lock_path(REPO)
+    held = open(repo_lock, "w")
+    try:
+        import fcntl
+
+        fcntl.flock(held.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        # THE CONTROL. `check` prints its detail on PASS as well as FAIL, so a detail here
+        # is a SENTENCE ABOUT THE OUTCOME, not a failure note: a failure-shaped string on a
+        # green line asserts the opposite of what was measured. Every detail in this probe
+        # is therefore either a neutral reading or explicitly conditional on `not ok`.
+        control = subprocess.run(
+            [sys.executable, "tools/audit.py", "--json"],
+            cwd=str(REPO), capture_output=True, text=True, timeout=120,
+        )
+        refused = control.returncode == LOCK_HELD_EXIT_CODE
+        check(
+            "CONTROL an ordinary run still REFUSES while the repo lock is held",
+            refused,
+            "" if refused else
+            f"exit={control.returncode} stderr={control.stderr.strip()[:160]}",
+        )
+
+        private_dir = tempfile.mkdtemp(prefix="lockpath-arm-")
+        private_lock = Path(private_dir) / ".audit.lock"
+        proceeded = False
+        # ITS OWN SESSION, and reaped as a GROUP (#629 condition 3). A private-lock run that
+        # gets past the guard enters the gate loop and spawns a gate per registration;
+        # `subprocess.run`'s timeout kill signals the DIRECT CHILD only and would leave that
+        # suite running, which is the orphan class this file's own `_reap_inner_tree`
+        # documents. Reusing it here keeps the wall honest in both directions.
+        private_proc = subprocess.Popen(
+            [sys.executable, "tools/audit.py", "--json", "--lock-path", str(private_lock)],
+            cwd=str(REPO), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        try:
+            private_proc.wait(timeout=PRIVATE_LOCK_WALL_SEC)
+        except subprocess.TimeoutExpired:
+            # THE DISCRIMINATOR: a refused run costs ~2 s and returns; this one was still
+            # working at the wall, which it can only be if it acquired its own lock.
+            proceeded = True
+        reaped = _reap_inner_tree(private_proc)
+        try:
+            private_proc.wait(timeout=KILL_DRAIN_SEC)
+        except subprocess.TimeoutExpired:  # pragma: no cover - a group member escaped
+            pass
+        if proceeded:
+            print(f"      private-lock run still working at {PRIVATE_LOCK_WALL_SEC}s — "
+                  f"reap: {reaped}")
+        check(
+            "...and the same run with --lock-path gets PAST the lock and starts working",
+            proceeded,
+            "" if proceeded else
+            (f"it returned inside the {PRIVATE_LOCK_WALL_SEC}s wall "
+             f"(exit={private_proc.returncode}), so it never started"),
+        )
+        wrote = private_lock.exists()
+        check(
+            "...and it wrote its private lock, so the path was honoured",
+            wrote,
+            "" if wrote else f"no lock file at {private_lock}",
+        )
+    finally:
+        held.close()
+
+    # THE MUTANT, and it MUST run with the repo lock FREE or it proves nothing: with the
+    # lock held, an `audit.py` that IGNORED the flag would refuse for exactly the same
+    # reason and the two causes would be indistinguishable. Here nothing holds the repo
+    # lock, so an exit 3 can only come from the PRIVATE path -- and the refusal NAMES that
+    # path, which is the flag being READ rather than tolerated. Measured: the tool fails
+    # CLOSED on an unusable path instead of silently falling back to the repo lock, which
+    # is the difference between a seam and a hole.
+    bad_lock = Path(tempfile.mkdtemp(prefix="lockpath-bad-")) / "absent" / ".audit.lock"
+    bad = subprocess.run(
+        [sys.executable, "tools/audit.py", "--json", "--lock-path", str(bad_lock)],
+        cwd=str(REPO), capture_output=True, text=True, timeout=120,
+    )
+    named = str(bad_lock) in (bad.stderr or "")
+    fail_closed = bad.returncode == LOCK_HELD_EXIT_CODE and named
+    check(
+        "MUTANT an unusable --lock-path FAILS CLOSED and names that path, so the flag is "
+        "read rather than ignored",
+        fail_closed,
+        "" if fail_closed else
+        (f"exit={bad.returncode} named_the_path={named} "
+         f"stderr={(bad.stderr or '').strip()[-200:]}"),
+    )
 
 
 if __name__ == "__main__":

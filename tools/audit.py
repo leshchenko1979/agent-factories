@@ -4006,6 +4006,19 @@ def main() -> int:
         action="store_true",
         help="Do NOT re-exec this run under the host-wide memory ceiling (#600). Diagnostic use only: the run is then UNBOUNDED and states that on stderr rather than running silently unbounded.",
     )
+    parser.add_argument(
+        "--lock-path",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Take the whole-run lock at PATH instead of the repository-wide one "
+            "(#639). PRIVATE, for a NESTED run that is legitimately not contending: "
+            "tests/test_shipped_audit_runs.py drives this tool from inside a gate run, "
+            "so the outer run already holds the repo lock and the nested run would "
+            "refuse forever, measuring nothing. Default is unchanged: run_lock_path(), "
+            "the git COMMON dir, shared by every worktree (#597)."
+        ),
+    )
     args = parser.parse_args()
 
     # THE HOST-WIDE CEILING (#600, owner ruling n=4645 shape (2)). Ordered AFTER
@@ -4039,7 +4052,14 @@ def main() -> int:
     # scope, and it is deliberately NOT a global that could outlive the run.
     run_lock = None
     if not args.no_gates:
-        run_lock = acquire_run_lock(wait=args.wait)
+        # A PRIVATE LOCK PATH IS FOR A NESTED RUN, NOT AN ESCAPE FROM THE GUARD (#639).
+        # The guard's unit is the RUN and its boundary is the REPOSITORY, so the default
+        # stays `run_lock_path()`. But a run spawned BY a gate is not contending with the
+        # repository — it is contending with its own parent, which is a serialization of
+        # one run against itself. Such a caller passes its own path and measures instead
+        # of refusing; every other caller is unchanged, which is what keeps the guard.
+        lock_path = Path(args.lock_path) if args.lock_path else None
+        run_lock = acquire_run_lock(wait=args.wait, lock_path=lock_path)
         if run_lock is None:
             # Exit 3 is DISTINCT from the 1 a gate failure returns, in the same namespace
             # as the budget-manifest refusal's 2: "the audit did not run" is not "the
