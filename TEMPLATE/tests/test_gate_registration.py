@@ -2059,6 +2059,82 @@ def probe_the_three_states_are_distinct_and_a_failure_outranks_unknown() -> None
     )
 
 
+def probe_the_no_verdict_line_names_the_CAUSE_it_read() -> None:
+    """The headline's cause is READ per record, never asserted for the population (#608).
+
+    The measured defect: `render_status_line` told every reader that all no-verdict gates
+    had "exhausted their budget", while the shipped-audit gate exited 3 in 1.70 s without
+    ever opening the tree -- eight rounds running. Three causes, three distinct facts, and
+    the two fields on the record are the whole discriminator: `exit_code` says which way
+    the gate ended, `duration_is_lower_bound` says whether its wall-clock is a measurement
+    or the budget talking.
+
+    NON-VACUITY: the kill record is the shape `run_gate`'s timeout arm writes and the
+    refusal is the shape its normal-exit arm writes for exit 3 -- so the discriminator is
+    the LOWER-BOUND field, not the exit code alone. The chosen-kill-code arm exists to
+    prove that: same 124, opposite bound, different cause.
+    """
+    audit = _audit_module()
+    killed = {
+        "cmd": "sleep", "passed": False, "unknown": True, "exit_code": 124,
+        "duration_is_lower_bound": True, "duration_sec": 600.0,
+    }
+    chosen = {
+        "cmd": "chose", "passed": False, "unknown": True, "exit_code": 124,
+        "duration_is_lower_bound": False, "duration_sec": 3.2,
+    }
+    refused = {
+        "cmd": "shipped-audit", "passed": False, "unknown": True, "exit_code": 3,
+        "duration_is_lower_bound": False, "duration_sec": 1.70,
+    }
+    causes = [audit.no_verdict_cause(g) for g in (killed, chosen, refused)]
+    check(
+        "the three no-verdict causes are classified DISTINCTLY from the record alone",
+        causes == ["budget", "kill_code_chosen", "refused"],
+        f"causes={causes}",
+    )
+    check(
+        "the LOWER-BOUND field, not the exit code alone, separates a kill from a choice",
+        audit.no_verdict_cause(killed) != audit.no_verdict_cause(chosen),
+        f"both exit 124 -> {audit.no_verdict_cause(killed)} / {audit.no_verdict_cause(chosen)}",
+    )
+    line = audit.render_status_line(audit.judge_gates([killed, chosen, refused]))
+    check(
+        "a run carrying all three names all three",
+        all(
+            token in line
+            for token in ("killed at its declared budget", "by its own choice", "REFUSED")
+        ),
+        line[:200],
+    )
+    check(
+        "a REFUSAL never renders as a budget exhaustion -- the #608 false account",
+        "exhausted" not in line,
+        line[:200],
+    )
+    refused_only = audit.render_status_line(audit.judge_gates([refused]))
+    check(
+        "a refusal-only run states the REFUSAL and not the budget",
+        "REFUSED" in refused_only and "declared budget" not in refused_only,
+        refused_only[:200],
+    )
+    counts = audit.no_verdict_cause_counts([killed, chosen, refused])
+    check(
+        "every record is counted exactly once -- the classes partition the population",
+        sum(counts.values()) == 3,
+        f"counts={counts}",
+    )
+    unclassified = {
+        "cmd": "bare", "passed": False, "unknown": True, "duration_sec": 1.0,
+    }
+    bare = audit.render_status_line(audit.judge_gates([unclassified]))
+    check(
+        "a record carrying no declared class is NAMED, never dropped or assumed",
+        "carries no declared class" in bare and "1 of 1" in bare,
+        bare[:200],
+    )
+
+
 def probe_a_skipped_suite_is_still_no_verdict() -> None:
     """The #28 law survives the third state: no gates run means NO verdict, not a green."""
     audit = _audit_module()
@@ -4445,6 +4521,7 @@ def main() -> int:
     probe_a_killed_gate_is_never_rendered_as_a_measurement(timed_out)
     probe_the_staleness_join_reaches_the_verdict_line(timed_out)
     probe_the_three_states_are_distinct_and_a_failure_outranks_unknown()
+    probe_the_no_verdict_line_names_the_CAUSE_it_read()
     probe_a_skipped_suite_is_still_no_verdict()
     probe_the_fail_line_cause_is_read_by_one_predicate()
     probe_a_script_shaped_failure_records_its_count()

@@ -2530,8 +2530,114 @@ def probe_the_wrapper_does_not_become_the_receipts_cause() -> None:
         receipt,
     )
 
+def probe_the_no_verdict_causes_are_read_and_never_assumed() -> None:
+    """The closing sentence names the causes the run ACTUALLY carries (#608).
+
+    Three producers write three DIFFERENT no-verdict lines, and the run's last word said
+    "a budget fired" for all of them -- a false account of a refusal and of a cgroup that
+    never started, in the one line a reader cites as the run's verdict. Measured live on
+    2026-11-12: a 59-gate run whose only no-verdict was a lock REFUSAL still closed with
+    "a budget fired", while no wall was reached and no gate was measured.
+
+    So the causes are COUNTED from the lines. The CONTROL is the class the old wording got
+    right -- a budget kill alone must still say so, which is what stops this being a
+    blanket rewrite that erases the budget class. The live arm is a refusal alone, which
+    must NOT claim a budget. The NEUTER zeroes the classifier and the sentence must then
+    declare it read no cause rather than invent one, and the source is read for the retired
+    phrase because a CONSTANT sentence would pass every arm above.
+    """
+    sel = _selector()
+    budget = (
+        "tests/x.py — killed at its declared budget (12.00s) after running 12.00s, and "
+        "killed AGAIN on the one bounded retry (first attempt 6.00s); it neither passed "
+        "nor failed. Reap: reaped"
+    )
+    budget_once = (
+        "tests/x.py — killed at its declared budget (exit 124); it neither passed nor "
+        "failed"
+    )
+    refused = (
+        "tests/x.py — REFUSED, the run never started (exit 3): another audit run held the "
+        "repository's run lock, so no gate was measured and this one neither passed nor "
+        "failed. This is not a budget kill: no wall was reached, the run was declined "
+        "before it opened the tree"
+    )
+    never_ran = (
+        "tests/x.py — NEVER RAN: its own cgroup could not be created (Failed to parse "
+        "MemoryMax=notanumber), so this is the wrapper's failure and not a verdict on the "
+        "gate"
+    )
+
+    control = sel.no_verdict_cause_sentence([budget, budget_once])
+    check(
+        "CONTROL a budget kill is still named as a budget kill",
+        "2 reached its declared budget" in control,
+        control,
+    )
+    check(
+        "CONTROL ...and a budget-only run is not said to be refused",
+        "REFUSED" not in control,
+        control,
+    )
+
+    live = sel.no_verdict_cause_sentence([refused])
+    check(
+        "a refusal alone is named as a REFUSAL",
+        "REFUSED before it opened the tree" in live,
+        live,
+    )
+    check(
+        "...and it does NOT claim a budget was reached",
+        "reached its declared budget" not in live and "a budget fired" not in live,
+        live,
+    )
+
+    third = sel.no_verdict_cause_sentence([never_ran])
+    check("a scope that never started is named as such", "never started" in third, third)
+
+    mixed = sel.no_verdict_cause_sentence([budget, refused, never_ran])
+    check(
+        "a mixed run names all three classes",
+        all(
+            part in mixed
+            for part in ("reached its declared budget", "REFUSED", "never started")
+        ),
+        mixed,
+    )
+    stray = sel.no_verdict_cause_sentence(["something new and unclassified"])
+    check("an unclassifiable line is COUNTED, never silently dropped",
+          "no declared class" in stray, stray)
+
+    original = sel.no_verdict_causes
+    try:
+        sel.no_verdict_causes = lambda _lines: {
+            "budget": 0, "refused": 0, "never_ran": 0, "unclassified": 0
+        }
+        neutered = sel.no_verdict_cause_sentence([refused])
+    finally:
+        sel.no_verdict_causes = original
+    check(
+        "NEUTER with the classifier zeroed the sentence declares it read no cause",
+        neutered == "no cause was recorded",
+        neutered,
+    )
+
+    source = GATE_SELECT.read_text()
+    check(
+        "the retired clause is gone from the source",
+        "nothing failed here, a budget fired." not in source,
+        "found 'nothing failed here, a budget fired.' in tools/gate_select.py",
+    )
+    check(
+        "the closing sentence reads the classifier instead",
+        "no_verdict_cause_sentence(run.no_verdicts)" in source,
+        "the summary print does not call no_verdict_cause_sentence",
+    )
+
+
 PROBES = (
     probe_every_registered_gate_is_covered,
+    probe_the_no_verdict_causes_are_read_and_never_assumed,
     probe_every_map_key_is_registered,
     probe_the_map_is_well_formed,
     probe_every_read_a_gate_opens_is_declared,
@@ -2670,6 +2776,10 @@ def test_a_scope_that_cannot_start_is_not_a_gate_failure() -> None:
 
 def test_the_wrapper_does_not_become_the_receipts_cause() -> None:
     _assert_probe(probe_the_wrapper_does_not_become_the_receipts_cause)
+
+
+def test_the_no_verdict_causes_are_read_and_never_assumed() -> None:
+    _assert_probe(probe_the_no_verdict_causes_are_read_and_never_assumed)
 
 if __name__ == "__main__":
     sys.exit(main())

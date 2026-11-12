@@ -1376,6 +1376,69 @@ def render_tree_line(tree: dict[str, Any]) -> str:
             f"\u2014 the verdict describes HEAD")
 
 
+# THE CAUSES OF AN ABSENT VERDICT ARE THREE, AND THEY ARE NOT THE SAME FACT (#608,
+# ruling `n=4688`). The headline used to say every no-verdict gate had "exhausted its
+# budget", which was a false account of the other two: the shipped-audit gate exited 3 in
+# 1.70 s, eight rounds running, having never opened the tree -- and the line told the
+# reader it had been measured and could not finish. The vocabulary is `gate_select.py`'s
+# (`NO_VERDICT_CLASSES`, #608): ONE law at two layers -- that module classifies the
+# RUNNER's text lines, this one classifies the RECORDS the runner wrote, and both name
+# only the classes a run actually carries. `never_ran` is absent here on purpose: a gate
+# whose own cgroup could not be created is a failure of `gate_select`'s scope launch, and
+# `run_gate` has no such path, so a record in this population cannot carry it.
+NO_VERDICT_CAUSE_PHRASES = (
+    ("budget", "killed at its declared budget"),
+    ("kill_code_chosen", "exited with the kill code by its own choice"),
+    ("refused", "REFUSED before it opened the tree \u2014 another audit held the run lock"),
+)
+
+
+def no_verdict_cause(gate: dict[str, Any]) -> str:
+    """WHY this gate returned no verdict, read from the record it wrote.
+
+    The two fields are the whole discriminator and neither is inferred: `exit_code` says
+    which way the gate ended, and `duration_is_lower_bound` says whether the wall-clock is
+    a MEASUREMENT or the budget talking. A KILL sets the bound (`run_gate`'s timeout arm);
+    a gate that CHOSE the kill code exited normally, so its clock is real and the bound is
+    False (#552, ruling `n=4167`); a REFUSAL exits before any wall applies (#608 clause b).
+    A record matching no class is returned as `unclassified` rather than dropped: the
+    headline must never claim a cause it did not read, and must never hide a record it
+    could not classify either.
+
+    `LOCK_HELD_EXIT_CODE` is declared below, in the lock section, and read HERE at call
+    time -- `render_status_line` runs from `main()` after the module is fully loaded, the
+    same forward reference the `unknown` predicate at `run_gate` already documents.
+    """
+    code = gate.get("exit_code")
+    if code == TIMEOUT_EXIT_CODE:
+        return "budget" if gate.get("duration_is_lower_bound") else "kill_code_chosen"
+    if code == LOCK_HELD_EXIT_CODE:
+        return "refused"
+    return "unclassified"
+
+
+def no_verdict_cause_counts(gates: list[dict[str, Any]]) -> dict[str, int]:
+    """Count each no-verdict CLASS present in `gates`, in a stable order."""
+    counts = {name: 0 for name, _ in NO_VERDICT_CAUSE_PHRASES}
+    counts["unclassified"] = 0
+    for gate in gates:
+        counts[no_verdict_cause(gate)] += 1
+    return counts
+
+
+def no_verdict_cause_phrase(gates: list[dict[str, Any]]) -> str:
+    """The causes this run's no-verdict gates actually carry, and nothing else."""
+    counts = no_verdict_cause_counts(gates)
+    parts = [
+        f"{counts[name]} {phrase}"
+        for name, phrase in NO_VERDICT_CAUSE_PHRASES
+        if counts[name]
+    ]
+    if counts["unclassified"]:
+        parts.append(f"{counts['unclassified']} carries no declared class")
+    return "; ".join(parts) if parts else "no cause was recorded"
+
+
 def render_status_line(verdict: GateVerdict) -> str:
     """The headline. THREE states, and UNKNOWN is never rendered as a green (#93 PART 2).
 
@@ -1398,14 +1461,14 @@ def render_status_line(verdict: GateVerdict) -> str:
     if verdict.status == "UNKNOWN":
         return (
             f"Status: UNKNOWN — {len(verdict.unknown)} of {verdict.total} gate(s) "
-            f"exhausted their budget and returned NO verdict; they are counted in no "
-            f"pass total, and this is NOT a green"
+            f"returned NO verdict ({no_verdict_cause_phrase(verdict.unknown)}); they are "
+            f"counted in no pass total, and this is NOT a green"
         )
     line = f"Status: DEGRADED (FAIL) — {len(verdict.failed)} gate(s) failed"
     if verdict.unknown:
         line += (
-            f", and {len(verdict.unknown)} more exhausted their budget "
-            f"(UNKNOWN, no verdict taken)"
+            f", and {len(verdict.unknown)} more returned NO verdict "
+            f"({no_verdict_cause_phrase(verdict.unknown)})"
         )
     return line
 

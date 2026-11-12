@@ -371,6 +371,60 @@ def run_summary_line(selected: int, run: GateRun, rc: int) -> str:
         f"{len(run.no_verdicts)} no-verdict — rc={rc}"
     )
 
+# THE NO-VERDICT CLASSES, each named by the phrase its own producer writes into the line
+# (#608). Three different things produce an absent verdict and they are NOT the same fact:
+# a gate that reached its budget was MEASURED and could not finish; a gate that was
+# REFUSED never opened the tree; a gate whose own cgroup could not be created never ran at
+# all. The run's closing sentence asserted "a budget fired" for every one of them, which is
+# a false account of the other two -- and that sentence is a receipt a reader cites, so the
+# classes are COUNTED FROM THE LINES and the sentence names only the ones this run carries.
+NO_VERDICT_CLASSES = (
+    ("budget", "killed at its declared budget"),
+    ("refused", "REFUSED, the run never started"),
+    ("never_ran", "NEVER RAN: its own cgroup could not be created"),
+)
+
+
+def no_verdict_causes(no_verdicts):
+    """Count each no-verdict CLASS present in `no_verdicts`, in a stable order.
+
+    A line matching no declared class is counted under `unclassified` rather than dropped:
+    the closing sentence must never claim a cause it did not read, and must never hide a
+    line it could not classify either.
+    """
+    counts = {name: 0 for name, _ in NO_VERDICT_CLASSES}
+    counts["unclassified"] = 0
+    for line in no_verdicts:
+        for name, phrase in NO_VERDICT_CLASSES:
+            if phrase in line:
+                counts[name] += 1
+                break
+        else:
+            counts["unclassified"] += 1
+    return counts
+
+
+def no_verdict_cause_sentence(no_verdicts):
+    """The causes this run's no-verdicts actually carry, and nothing else."""
+    counts = no_verdict_causes(no_verdicts)
+    parts = []
+    if counts["budget"]:
+        parts.append(f"{counts['budget']} reached its declared budget")
+    if counts["refused"]:
+        parts.append(
+            f"{counts['refused']} was REFUSED before it opened the tree "
+            f"(another audit held the run lock)"
+        )
+    if counts["never_ran"]:
+        parts.append(
+            f"{counts['never_ran']} never started "
+            f"(its own cgroup could not be created)"
+        )
+    if counts["unclassified"]:
+        parts.append(f"{counts['unclassified']} carries no declared class")
+    return "; ".join(parts) if parts else "no cause was recorded"
+
+
 KILL_DRAIN_SEC = 5.0
 
 # --- one cgroup per gate (#638) -------------------------------------------------
@@ -1290,8 +1344,9 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"gate-select: NO VERDICT on {len(run.no_verdicts)} gate(s) — no verdict "
                 f"was taken on them, so this run is NOT a pass and must not be read as "
-                f"one. Exit {TIMEOUT_EXIT_CODE}, the fleet's kill code (#206), not 1: "
-                f"nothing failed here, a budget fired.",
+                f"one. Exit {TIMEOUT_EXIT_CODE}, the fleet's no-verdict code (#206), not 1: "
+                f"nothing failed here. Causes, counted from the lines above: "
+                f"{no_verdict_cause_sentence(run.no_verdicts)}.",
                 file=sys.stderr,
             )
         # THE RUN'S LAST WORD, ON EVERY EXIT PATH (#553 clause 1). Printed after the detail
