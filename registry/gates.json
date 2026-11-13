@@ -559,11 +559,11 @@
       "measured_sec": 21.28
     },
     "tests/test_gate_registration.py": {
-      "budget_sec": 62.47,
-      "load_at_measure": 6.24,
-      "margin_x": 4.049,
-      "measured_at": "902ba1b8ce4c10fb3aeddd636e74efe4cb805976",
-      "measured_sec": 15.43
+      "budget_sec": 65.79,
+      "load_at_measure": 0.58,
+      "margin_x": 4.046,
+      "measured_at": "36c37c33834fbc4db06062327aced5e41fc99536",
+      "measured_sec": 16.26
     },
     "tests/test_hq_delegation.py": {
       "budget_sec": 17.87,
@@ -839,23 +839,11 @@
       "measured_sec": 2.81
     },
     "tests/test_score_artifact_sections.py": {
-      "budget_sec": 13.23,
-      "load_at_measure": 8.31,
-      "margin_x": 4.24,
-      "measured_at": "8c2102620803750349d8775088b0be642d53db51",
-      "measured_sec": 3.12,
-      "growth_breach": {
-        "sample_sec": 3.88,
-        "sample_revision": "902ba1b8ce4c10fb3aeddd636e74efe4cb805976",
-        "basis_sec": 3.12,
-        "basis_revision": "8c2102620803750349d8775088b0be642d53db51",
-        "declared_sec": 13.23,
-        "derived_sec": 16.27,
-        "growth_x": 1.2436,
-        "derived_over_declared": 1.2298,
-        "round_id": "2026-11-12:902ba1b8ce4c10fb3aeddd636e74efe4cb805976",
-        "reported_at": "2026-11-12T06:46:02Z"
-      }
+      "budget_sec": 14.19,
+      "load_at_measure": 0.58,
+      "margin_x": 4.223,
+      "measured_at": "36c37c33834fbc4db06062327aced5e41fc99536",
+      "measured_sec": 3.36
     },
     "tests/test_score_gate_recorded.py": {
       "budget_sec": 38.67,
@@ -871,11 +859,11 @@
       "measured_sec": 8.32
     },
     "tests/test_shipped_audit_runs.py": {
-      "budget_sec": 3289.07,
-      "load_at_measure": 4.13,
+      "budget_sec": 3440.23,
+      "load_at_measure": 0.58,
       "margin_x": 4.001,
-      "measured_at": "5059fa68311f968e07ced06f4415d725672e0af8",
-      "measured_sec": 822.08
+      "measured_at": "36c37c33834fbc4db06062327aced5e41fc99536",
+      "measured_sec": 859.87
     },
     "tests/test_shipped_mechanism_law.py": {
       "budget_sec": 3.19,
@@ -923,19 +911,7 @@
       "load_at_measure": 4.5,
       "margin_x": 4.032,
       "measured_at": "f513ab0bde44da2f1eda3711164a74c041783d95",
-      "measured_sec": 23.09,
-      "growth_breach": {
-        "sample_sec": 23.87,
-        "sample_revision": "902ba1b8ce4c10fb3aeddd636e74efe4cb805976",
-        "basis_sec": 23.09,
-        "basis_revision": "f513ab0bde44da2f1eda3711164a74c041783d95",
-        "declared_sec": 93.11,
-        "derived_sec": 96.23,
-        "growth_x": 1.0338,
-        "derived_over_declared": 1.0335,
-        "round_id": "2026-11-12:902ba1b8ce4c10fb3aeddd636e74efe4cb805976",
-        "reported_at": "2026-11-12T06:46:02Z"
-      }
+      "measured_sec": 23.09
     },
     "tests/test_template_integrity.py": {
       "budget_sec": 15.03,
@@ -963,7 +939,19 @@
       "load_at_measure": 6.24,
       "margin_x": 4.198,
       "measured_at": "902ba1b8ce4c10fb3aeddd636e74efe4cb805976",
-      "measured_sec": 3.78
+      "measured_sec": 3.78,
+      "growth_breach": {
+        "sample_sec": 4.42,
+        "sample_revision": "36c37c33834fbc4db06062327aced5e41fc99536",
+        "basis_sec": 3.78,
+        "basis_revision": "902ba1b8ce4c10fb3aeddd636e74efe4cb805976",
+        "declared_sec": 15.87,
+        "derived_sec": 18.43,
+        "growth_x": 1.1693,
+        "derived_over_declared": 1.1613,
+        "round_id": "2026-11-13:36c37c33834fbc4db06062327aced5e41fc99536",
+        "reported_at": "2026-11-13T06:50:47Z"
+      }
     },
     "tools/roadmap.py": {
       "budget_sec": 2.47,
@@ -983,7 +971,19 @@
       "load_at_measure": 5.83,
       "margin_x": 4.75,
       "measured_at": "9312bd259f7adde408d65cf510a75479769e9456",
-      "measured_sec": 1.0
+      "measured_sec": 1.0,
+      "growth_breach": {
+        "sample_sec": 1.07,
+        "sample_revision": "36c37c33834fbc4db06062327aced5e41fc99536",
+        "basis_sec": 1.0,
+        "basis_revision": "9312bd259f7adde408d65cf510a75479769e9456",
+        "declared_sec": 4.75,
+        "derived_sec": 5.03,
+        "growth_x": 1.07,
+        "derived_over_declared": 1.0589,
+        "round_id": "2026-11-13:36c37c33834fbc4db06062327aced5e41fc99536",
+        "reported_at": "2026-11-13T06:50:47Z"
+      }
     }
   },
   "modes": {
