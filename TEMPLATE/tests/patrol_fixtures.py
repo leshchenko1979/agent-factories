@@ -372,7 +372,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
     homes = ["probe-home"] if homes is None else homes
     unreached = [] if unreached is None else unreached
     prefixes = [] if prefixes is None else prefixes
-    log_dir = _EMPTY_LOG_DIR if log_dir is None else log_dir
+    log_dir = _lazy_dir("_EMPTY_LOG_DIR") if log_dir is None else log_dir
     if kit_manifest is None or fleet_manifest is None:
         default_manifest, default_fleet = _probe_kit_pair()
         kit_manifest = default_manifest if kit_manifest is None else kit_manifest
@@ -415,7 +415,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # ... and a path that does not exist, so no probe's verdict is decided by the live
         # factory's own exemption table.
         ruling_exemptions_path=(
-            _NO_RULING_EXEMPTIONS if ruling_exemptions_path is None
+            _lazy_dir("_NO_RULING_EXEMPTIONS") if ruling_exemptions_path is None
             else ruling_exemptions_path
         ),
         # The delivery leg (#49) is made INERT by default: an absent bound renders it
@@ -445,7 +445,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # reason, and no probe's verdict is decided by this factory's own latest scorecard.
         scores_dir_fn=(
             (lambda: scores_dir) if scores_dir is not None
-            else (lambda: _EMPTY_SCORES_DIR)
+            else (lambda: _lazy_dir("_EMPTY_SCORES_DIR"))
         ),
         # The three BOARD legs' bounds (#428) are injected for the same reason the ruling
         # bound is: each judges a HISTORICAL population against a bound this tree declares,
@@ -473,7 +473,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # donor half, so a probe must never have its verdict decided by the adjudications this
         # factory happens to hold. A probe that asserts the store passes its own path.
         ref_role_exemptions_path=(
-            _NO_REF_ROLE_EXEMPTIONS if ref_role_exemptions_path is None
+            _lazy_dir("_NO_REF_ROLE_EXEMPTIONS") if ref_role_exemptions_path is None
             else ref_role_exemptions_path
         ),
         # The criterion-path leg's declared-exemption store (#507) is injected for the same
@@ -482,7 +482,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # reading the LIVE store would red against its own synthetic board. A probe that
         # asserts the store passes a path of its own.
         criterion_exemptions_fn=(
-            (lambda: _NO_CRITERION_EXEMPTIONS) if criterion_exemptions_path is None
+            (lambda: _lazy_dir("_NO_CRITERION_EXEMPTIONS")) if criterion_exemptions_path is None
             else (lambda: criterion_exemptions_path)
         ),
         # The stall-census leg's ONE read (#331 clause 2) is injected for the same reason as
@@ -535,7 +535,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # leaves every pre-#530 probe with the meaning it was written with.
         questions_homes_fn=lambda: (
             questions_homes if questions_homes is not None
-            else {"repo": _IN_STEP_HOMES_REPO}
+            else {"repo": _lazy_dir("_IN_STEP_HOMES_REPO")}
         ),
         # The shared-tree rider (#241) shells out three times against the tree the patrol
         # is running in, so it is stubbed by default for the same reason the publish and
@@ -566,7 +566,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
             else (lambda: {"lanes": list(_PROBE_WRITE_BOUNDARY_LANES)})
         ),
         write_boundary_profile_root=(
-            _PROBE_WRITE_BOUNDARY_ROOT if write_boundary_profile_root is None
+            _lazy_dir("_PROBE_WRITE_BOUNDARY_ROOT") if write_boundary_profile_root is None
             else write_boundary_profile_root
         ),
         write_boundary_chat=(
@@ -871,7 +871,7 @@ def _duty_leg(cron_rows, ledger_rows, *, store=None, repo=None,
         cron_rows, ["probe-home"], [], ["factory-"], ledger_rows,
         read_at=read_at if read_at is not None else _DUTY_READ_AT,
         store=store if store is not None else Path(tempfile.mkdtemp()),
-        repo=repo if repo is not None else _DUTY_TREE,
+        repo=repo if repo is not None else _lazy_dir("_DUTY_TREE"),
         fires=fires, margin_for=margin_for, predicate=predicate,
         exemptions_fn=exemptions_fn,
     )

@@ -405,6 +405,10 @@ PAIRS = [
     ("tools/reconstruction.py", "TEMPLATE/tools/reconstruction.py"),
     ("tests/gate_fixtures.py", "TEMPLATE/tests/gate_fixtures.py"),
     ("tests/gate_registry.py", "TEMPLATE/tests/gate_registry.py"),
+    # Added with its registration (board #640): the lifetime gate is SHIPPED so a factory's
+    # fixtures carry the same import-leaks-nothing property; test_template_integrity refuses
+    # a TEMPLATE copy with no pair here.
+    ("tests/test_fixture_lifetime.py", "TEMPLATE/tests/test_fixture_lifetime.py"),
     ("tests/test_gate_registration.py", "TEMPLATE/tests/test_gate_registration.py"),
     ("tests/test_gate_invocation_mode.py", "TEMPLATE/tests/test_gate_invocation_mode.py"),
     # The direct-invocation gate (#542, ruling n=4071). Paired because its POPULATION is the

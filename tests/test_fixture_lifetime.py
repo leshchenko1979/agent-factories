@@ -211,6 +211,98 @@ def test_a_reintroduced_module_level_mkdtemp_is_caught() -> None:
         assert not any(d.startswith("patrol-") for d in os.listdir(tmp)), os.listdir(tmp)
 
 
+def test_a_consumer_call_reaches_the_internal_reads_and_completes() -> None:
+    # n=5024 criterion 4b: the module's OWN functions read the lazy names as bare
+    # globals, and PEP 562 __getattr__ never fires for a module-internal read -- the
+    # exact class the #640 fix broke and 8ea84c5f shipped red. This arm drives a REAL
+    # consumer: `_run([], [], log_dir=...)` reaches past the first lazy read at :375
+    # (log_dir supplied) into the :418/:448/:476/:485/:538/:569 reads, and `_duty_leg`
+    # covers the :874 read. The assertion is NOT rc==0 -- a leg may fail on empty
+    # populations by design -- what must not happen is an interpreter-level NameError,
+    # because that is the shape a bare internal read produces and no leg verdict can.
+    repo_literal = repr(str(REPO))
+    with tempfile.TemporaryDirectory(prefix="lifetime-consumer-") as tmp:
+        rc, out, err = _child(
+            "import os\n"
+            "from pathlib import Path\n"
+            f"repo = Path({repo_literal})\n"
+            "import patrol_fixtures as pf\n"
+            "run_rc, _, run_err = pf._run([], [], log_dir=os.environ['TMPDIR'])\n"
+            "assert 'NameError' not in run_err, run_err[-2000:]\n"
+            "assert run_rc in (0, 1), (run_rc, run_err[-500:])\n"
+            "leg = pf._duty_leg([], [], store=repo / 'registry' / 'factories')\n"
+            "assert isinstance(leg, dict), type(leg)\n"
+            "print('consumers-clean')\n",
+            tmp,
+            # n=5024 arms' wall sized against MEASURED IO thrash, not CPU: a bare
+            # `_run` probe sat in folio_wait_bit_common (D state) with <1s of CPU
+            # after 36s of wall at load 5.7 (2026-11-14) — swap churn makes every
+            # cold read glacial, so the wall covers starvation, and a REAL hang
+            # still dies inside it.
+            timeout=600.0,
+        )
+        assert rc == 0, (rc, err[-2000:])
+        assert out.strip().endswith("consumers-clean"), (out, err[-500:])
+
+
+def test_a_restored_bare_internal_read_is_caught_by_the_consumer_call() -> None:
+    # n=5024 criterion 4a: the consumer-call arm must BITE on the pre-#640 shape. A copy
+    # of the real source carries ONE restored bare internal read (the :418 site, exactly
+    # as committed at 8ea84c5f^), the SAME consumer call is driven against BOTH copies,
+    # and the mutated one must die with NameError while the unmutated control completes
+    # clean. That control is what makes arm 4b able to catch this class rather than pass
+    # on any module: same call, same machinery, one mutation, opposite outcomes.
+    src_literal = repr(str(REPO / "tests" / "patrol_fixtures.py"))
+    repo_literal = repr(str(REPO))
+    with tempfile.TemporaryDirectory(prefix="lifetime-baremut-") as tmp:
+        rc, out, err = _child(
+            "import os, sys\n"
+            "from pathlib import Path\n"
+            f"repo = Path({repo_literal})\n"
+            "pseudo = Path(os.environ['TMPDIR'])\n"
+            "tests = pseudo / 'tests'\n"
+            "tests.mkdir()\n"
+            f"src = Path({src_literal}).read_text(encoding='utf-8')\n"
+            "old = '_lazy_dir(\"_NO_RULING_EXEMPTIONS\")'\n"
+            "assert src.count(old) == 1, src.count(old)\n"
+            "mutated = src.replace(old, '_NO_RULING_EXEMPTIONS', 1)\n"
+            "(tests / 'patrol_fixtures_baremut.py').write_text(mutated, encoding='utf-8')\n"
+            "(tests / 'patrol_fixtures_ctrl.py').write_text(src, encoding='utf-8')\n"
+            "for name in ('tools', 'TEMPLATE', 'docs', 'evidence'):\n"
+            "    target = pseudo / name\n"
+            "    if not target.exists():\n"
+            "        target.symlink_to(repo / name)\n"
+            "sys.path.insert(0, str(tests))\n"
+            "import patrol_fixtures_ctrl as ctrl\n"
+            "rc_c, _, err_c = ctrl._run([], [], log_dir=os.environ['TMPDIR'])\n"
+            "assert 'NameError' not in err_c, err_c[-800:]\n"
+            # The bite must be accepted in BOTH carriers, and this is NOT a softening:
+            # `_run` does not catch an interpreter-level NameError, so a restored bare
+            # read surfaces as a RAISED exception, never as a returned error string --
+            # measured 2026-11-14, first run of this arm: the mutant died at
+            # `NameError: name '_NO_RULING_EXEMPTIONS' is not defined` propagating out of
+            # `mut._run(...)`, and the `err_m` assertion never got to run. Whichever
+            # carrier it arrives in the NAME is pinned, so a mutant that raised some
+            # unrelated NameError still fails -- and the control half above proves the
+            # same call is clean on the unmutated source.
+            "import patrol_fixtures_baremut as mut\n"
+            "try:\n"
+            "    rc_m, _, err_m = mut._run([], [], log_dir=os.environ['TMPDIR'])\n"
+            "except NameError as exc:\n"
+            "    assert '_NO_RULING_EXEMPTIONS' in str(exc), exc\n"
+            "else:\n"
+            "    assert 'NameError' in err_m, (rc_m, err_m[-800:])\n"
+            "    assert '_NO_RULING_EXEMPTIONS' in err_m, err_m[-800:]\n"
+            "print('mutant-bites')\n",
+            tmp,
+            # Same measured-IO basis, doubled: this ONE child drives TWO full
+            # `_run` calls (control then mutant) back to back.
+            timeout=900.0,
+        )
+        assert rc == 0, (rc, err[-2000:])
+        assert out.strip().endswith("mutant-bites"), (out, err[-500:])
+
+
 def test_the_duty_tree_is_lazy_and_carries_the_p35_shape() -> None:
     # The seventh leak had no prefix, so it is pinned by NAME here, not by a count that
     # could be fooled by an unrelated prefixed entry: import first (nothing alive), then
