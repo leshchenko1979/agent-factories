@@ -1125,6 +1125,62 @@ def record_wall_kills(
     pop.extras[WALL_KILLS_SOURCE] = KILL_SOURCE_ROUND
     return pop
 
+# ---- #641: derived-run kills — OBSERVABILITY, never streak rounds ----
+# The streak above is fed ONLY from the audit's own unknown flag, and that boundary is
+# deliberate (HQ ruling n=5018): a contention spike in a derived run must never accumulate a
+# "round" toward probe eligibility, because the streak's >=2-round meaning depends on the
+# audit being the standardized instrument. The derived runner's own kills are still facts, so
+# they are READ here from the subprocess ledger the runner now writes at kill time and
+# printed BESIDE the streak — never INTO it. THIS TOOL CARRIES NO WRITER for that store: the
+# function below is its only path to the surface, and tests/test_gate_select_kill_rows.py
+# asserts that absence behaviourally (the store's bytes are compared before and after a read).
+
+DERIVED_KILLS_STORE = REPO_ROOT / "evidence" / "subprocesses" / "gate-select.jsonl"
+
+@dataclass(frozen=True)
+class DerivedKill:
+    key: str
+    cause: str
+    detail: str
+    ts: str
+
+def read_derived_kills(store_path: Path | None = None) -> tuple | None:
+    """Every kill row in the derived runner's subprocess ledger — READ-ONLY.
+
+    Returns None when the store cannot be read, and a tuple (possibly EMPTY) when it was
+    read: the two are different facts with the same shape (#595's own class), so the renderer
+    may never claim "no derived gate was killed" off a store it never saw. The cause is read
+    from the row's own `cause=` field prefix, the countable form the runner writes — never
+    re-derived from the prose behind it.
+    """
+    path = store_path or DERIVED_KILLS_STORE
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    kills = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        detail = row.get("detail") or ""
+        cause = detail.split(";", 1)[0][len("cause="):] if detail.startswith("cause=") else ""
+        kills.append(
+            DerivedKill(
+                key=row.get("subject") or "",
+                cause=cause,
+                detail=detail,
+                ts=row.get("ts") or "",
+            )
+        )
+    return tuple(kills)
+
 def _load_avg() -> float | None:
     """The box's own load, as the regime field records it. None when it cannot be read."""
     try:
@@ -1838,6 +1894,28 @@ def render(pop: Population) -> str:
         lines.append(
             "  wall kills: unstated (not read) — the kill record could not be read, so an "
             "empty record here is an INABILITY, not a clean result"
+        )
+    # ---- #641: derived-run kills — printed BESIDE the streak, never INTO it ----
+    # SEE THE BLOCK AT read_derived_kills for why this is observability only. The empty /
+    # unread distinction is the same one the streak block above carries: an unread store is
+    # an INABILITY, a read-and-empty store is a READING, and neither is a clean bill.
+    derived = read_derived_kills()
+    if derived is None:
+        lines.append(
+            "  derived-run kills: unstated (the subprocess ledger could not be read) — an "
+            "INABILITY, not a clean result"
+        )
+    elif derived:
+        lines.append(
+            f"  derived-run kills: {len(derived)} row(s) in the subprocess ledger — "
+            f"observability only: they are NOT streak rounds and never feed the probe"
+        )
+        for row in derived:
+            lines.append(f"    [DERIVED KILL] {row.key} — {row.detail}")
+    else:
+        lines.append(
+            "  derived-run kills: the subprocess ledger was READ and holds no row — no "
+            "derived gate was OBSERVED killed, which is a READING, not a clean bill"
         )
     eligible = [k for k in pop.kills if k.eligible]
     probe_applied = set(pop.extras.get("probe_applied") or ())

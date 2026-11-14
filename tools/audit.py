@@ -3786,6 +3786,21 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "-q", "tests/test_patrol_unattributed_scope.py"]
         )
 
+    # Mechanical gate: board #641 (ruling n=5018) -- a derived runner's no-verdict KILL
+    # died in a /tmp log: no durable row, so a killed gate could never accumulate the
+    # two-round streak --probe needs, and a kill was indistinguishable from silence. The
+    # runner now records one subprocess-ledger row per KILL (cause as a countable field
+    # from the runner's own vocabulary; refusals are not kills and record nothing), and
+    # tools/gate_budget_rederive.py reads that store STRICTLY read-only -- a test-asserted
+    # property, because the streak must stay fed only by the audit's own payload (n=5018).
+    #     REPO-SIDE by construction: gate_budget_rederive.py is not kit-shipped, so the
+    #     test has no TEMPLATE pair and this guard is what states the skip in a
+    #     bootstrapped tree. PYTEST form -- module-level test_* arms.
+    if (repo_root / "tests/test_gate_select_kill_rows.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "-q", "tests/test_gate_select_kill_rows.py"]
+        )
+
     return gates_to_run
 
 

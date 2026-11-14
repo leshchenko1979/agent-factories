@@ -395,13 +395,103 @@ def no_verdict_causes(no_verdicts):
     counts = {name: 0 for name, _ in NO_VERDICT_CLASSES}
     counts["unclassified"] = 0
     for line in no_verdicts:
-        for name, phrase in NO_VERDICT_CLASSES:
-            if phrase in line:
-                counts[name] += 1
-                break
-        else:
-            counts["unclassified"] += 1
+        counts[no_verdict_class_of(line)] += 1
     return counts
+
+
+def no_verdict_class_of(line):
+    """The class ONE no-verdict line carries, or `unclassified`.
+
+    ONE PREDICATE, TWO CALL SITES (#608 ruling n=4688's own law, n=405 PART 5): the summary
+    counter and the durable-kill-row recorder below must never be able to disagree about
+    which class a line belongs to, so both read this one function.
+    """
+    for name, phrase in NO_VERDICT_CLASSES:
+        if phrase in line:
+            return name
+    return "unclassified"
+
+
+# THE SUBPROCESS LEDGER THIS RUNNER WRITES ITS KILLS INTO (#641). One name, declared here
+# so the writer and the rederive tool's reader cannot drift apart on the file's identity.
+KILL_ROW_STORE_NAME = "gate-select"
+
+# A bounded wait on the append: a peer lane holding the ledger's own lock must never be able
+# to stall a gate run on an OBSERVABILITY write. On timeout the row is lost and the loss is
+# NAMED on stderr — the kill itself is unaffected either way (#638's fail-open, one surface over).
+KILL_ROW_APPEND_TIMEOUT_SEC = 10.0
+
+
+def record_kill_rows(no_verdicts):
+    """DURABLY record this run's no-verdict lines as subprocess-ledger rows (#641).
+
+    ONE ROW PER LINE PASSED IN, written AT KILL TIME through the ledger's one writer
+    (`tools/ledger.py append --subprocess`), never by touching the store directly: the
+    single-writer law owns that surface, and a runner that opened the file itself would be
+    a second writer. The cause is a FIELD (`cause=<class>;`) drawn from the same
+    vocabulary the run summary counts — countable, not prose — and the verbatim no-verdict
+    line rides behind it, so the row can be read without re-deriving what the run said.
+
+    FAIL-OPEN BY CONSTRUCTION (#638's class, one surface over): this is observability. A
+    store that is missing, unwritable, locked, or refusing the row costs the run NOTHING
+    except a stderr note naming what was lost — a kill must never become a crash, and a
+    record-keeping failure must never be able to change a verdict that was already absent.
+    The recorder skips the two NON-kill classes BY NAME — a REFUSAL killed nothing, and a
+    gate that NEVER RAN killed nothing (ruling n=5018: one row per no-verdict KILL) — and
+    records everything else: a line the classifier cannot name lands as cause=unclassified
+    rather than being dropped, so a wording drift in the kill phrase makes itself VISIBLE
+    in the store instead of silently losing the kill; the dropped kill is the defect #641
+    exists to close. The subject is the gate path, read from the line's own leading token.
+    """
+    recorded, lost = 0, []
+    for line in no_verdicts:
+        cls = no_verdict_class_of(line)
+        if cls in ("refused", "never_ran"):
+            # A REFUSAL IS NOT A KILL (ruling n=5018's own noun): the row exists for
+            # kills, and a gate that never started killed nothing. UNCLASSIFIED lines are
+            # still recorded — see the docstring: a drifted kill phrase stays visible.
+            continue
+        gate = line.split(" — ", 1)[0].strip()
+        detail = f"cause={cls}; {line}"
+        cmd = [
+            sys.executable,
+            str(Path(__file__).resolve().parent / "ledger.py"),
+            "append",
+            "--subprocess",
+            KILL_ROW_STORE_NAME,
+            "--event",
+            "run",
+            "--subject",
+            gate,
+            "--detail",
+            detail,
+            "--ref",
+            "board:641",
+        ]
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=KILL_ROW_APPEND_TIMEOUT_SEC,
+            )
+            if proc.returncode != 0:
+                lost.append(
+                    (gate, (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}")
+                )
+            else:
+                recorded += 1
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            lost.append((gate, str(exc)))
+    if lost:
+        for gate, reason in lost:
+            print(
+                f"gate-select: kill row for {gate} could NOT be recorded "
+                f"({reason}) — the kill itself is unaffected, but this run leaves no "
+                f"durable trace of it",
+                file=sys.stderr,
+            )
+    return recorded, lost
 
 
 def no_verdict_cause_sentence(no_verdicts):
@@ -1103,12 +1193,17 @@ def run_gates(
                 if attempts == 1:
                     first_attempt_sec = round(elapsed, 2)
                     continue
-                no_verdicts.append(
+                kill_line = (
                     f"{gate} — killed at its declared budget ({timeout:.2f}s) after "
                     f"running {elapsed:.2f}s, and killed AGAIN on the one bounded retry "
                     f"(first attempt {first_attempt_sec}s); it neither passed nor failed. "
                     f"Reap: {reaped or 'no reap string was returned'}"
                 )
+                no_verdicts.append(kill_line)
+                # THE KILL BECOMES DURABLE AT THE INSTANT IT HAPPENS (#641), not at the
+                # summary: a run the harness restarts two gates later still leaves THIS
+                # kill's row behind. Fail-open — see record_kill_rows.
+                record_kill_rows([kill_line])
                 proc = None
             except OSError as exc:
                 failures.append(f"{gate} — could not execute: {exc}")
@@ -1130,10 +1225,13 @@ def run_gates(
                 f"wall was reached, the run was declined before it opened the tree"
             )
         elif proc.returncode == TIMEOUT_EXIT_CODE:
-            no_verdicts.append(
+            kill_line = (
                 f"{gate} — killed at its declared budget (exit {proc.returncode}); "
                 f"it neither passed nor failed"
             )
+            no_verdicts.append(kill_line)
+            # DURABLE AT THE KILL (#641), same fail-open contract as the retry arm above.
+            record_kill_rows([kill_line])
         elif proc.returncode != 0:
             never_started = scope_start_failure(proc.stderr)
             if never_started:

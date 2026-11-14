@@ -463,6 +463,9 @@
     },
     "tests/test_duty_fire_pairing.py": {
       "class": "always-satisfiable"
+    },
+    "tests/test_gate_select_kill_rows.py": {
+      "class": "always-satisfiable"
     }
   },
   "gates": {
@@ -1349,6 +1352,7 @@
     "tests/test_patrol_wake_duty.py": "pytest",
     "tests/test_duty_residual_recovery.py": "pytest",
     "tests/test_duty_goal_stem.py": "pytest",
-    "tests/test_duty_fire_pairing.py": "pytest"
+    "tests/test_duty_fire_pairing.py": "pytest",
+    "tests/test_gate_select_kill_rows.py": "pytest"
   }
 }

@@ -1192,6 +1192,15 @@ OPTIONAL_GATES: dict[str, str] = {
         "TEMPLATE/tools/audit.py that nothing executed, five of which were found red by hand "
         "in a single day."
     ),
+    "test_gate_select_kill_rows.py": (
+        "REPO-SIDE BY CONSTRUCTION (board #641, ruling n=5018). It drives the derived "
+        "runner's kill rows end to end: a real budget kill, the durable subprocess-ledger "
+        "row it must leave, and tools/gate_budget_rederive.py's READ-ONLY contract over "
+        "that store. gate_budget_rederive.py is deliberately NOT kit-shipped (it reads the "
+        "factory's own evidence/subprocesses/ store), so the test has no TEMPLATE twin and "
+        "is NOT REQUIRED — a member tree has neither the tool nor the store, and the audit "
+        "is_file-guard states that skip rather than reding."
+    ),
     "test_law_coverage.py": (
         "PARAMETERIZE FIRST (n=432 Part 5) — hardcodes skills/meta-factory/SKILL.md and "
         "would RED in a bootstrapped factory."
