@@ -24,6 +24,10 @@
     {
       "row": 2313,
       "reason": "n=2313 (run) names #319 in the bare form; the strict form is `#319`. CORRECTING ROW for n=2307. Its subject repeats the bare form `319` of the row it corrects, for the same traceability reason as n=2312. Published, post-boundary, identity immutable."
+    },
+    {
+      "row": 5003,
+      "reason": "n=5003 (intake, 2026-11-13T15:49:51Z) names #641 in the NEAR-MISS form `#641 gate_select kills leave no durable record` -- the hash, the digits, then the item's own title. It named board item #641 and nothing else. The row is PUBLISHED and post-boundary, so its identity is immutable (ledger.md 9.2) and the subject cannot be repaired in place; the repair is a NEW row, n=5005, whose subject is the bare `#641` that issue_reference() reads, so the board-intake leg sees the intake. The original still fires forever, which is why it is excused here rather than backfilled. The row's own detail carries the same diagnosis: the subject was written as the number plus the filing's title, and the predicate reads `^#([0-9]+)$`."
     }
   ]
 }
