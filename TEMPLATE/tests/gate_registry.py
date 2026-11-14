@@ -840,6 +840,15 @@ REQUIRED_GATES: tuple[str, ...] = (
     # otherwise identical fixture and requires the peer arm to go clean, which is what
     # proves the lane check is what bites.
     "test_patrol_write_boundary.py",
+    # Added with its registration (board #640). REQUIRED is the correct grain: the gate
+    # is hermetic -- it measures the fixture module's own lifetime contract in a private
+    # TMPDIR, ALIVE counts inside the child, DEAD counts in the parent -- so it passes in
+    # a bootstrapped factory exactly as it does here. THE MECHANISM IT GUARDS is the
+    # silent-absence class: a module-level mkdtemp() leaks one directory per importing
+    # process FOREVER, and no other gate imports-and-counts, so its absence reads as a
+    # clean tree while /tmp fills. The bare-prefixed seventh leak (_DUTY_TREE) is why the
+    # gate counts UNPREFIXED entries too, not just its own family's prefixes.
+    "test_fixture_lifetime.py",
     # Added with its registration (board #563). REQUIRED is the correct grain: the gate
     # drives the split through `unattributed_split`'s INJECTED owner reader and the leg's
     # own predicate stub, so it reads no live cron table and passes in a bootstrapped

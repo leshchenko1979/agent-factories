@@ -87,15 +87,108 @@ def load_runner():
 
 RUNNER = load_runner()
 
-_EMPTY_LOG_DIR = Path(tempfile.mkdtemp(prefix="patrol-empty-log-"))
+# --- lazy, process-owned fixture directories (#640) --------------------------
+#
+# These names were module-level `tempfile.mkdtemp()` calls until #640. `mkdtemp` NEVER
+# removes what it creates, so every import of this module left SEVEN directories on the box
+# for the life of the machine, and nineteen test files import it. Measured 2026-11-14:
+# `/tmp` held 10,312 entries carrying this module's prefixes and one
+# `import patrol_fixtures` took it to 10,319 -- seven leaked, permanently, per import.
+# `/tmp` at depth 1 read 36,398 entries that day; the reaper clears but does not keep up.
+#
+# TWO properties, and `tests/test_fixture_lifetime.py` asserts both:
+#
+#   1. LAZY. Importing this module creates NO directory. A module that does
+#      `import patrol_fixtures` and never touches a fixture pays nothing, and one that
+#      imports two names creates two rather than seven.
+#   2. OWNED. A directory that IS created is a `TemporaryDirectory`, so it is removed when
+#      the process exits instead of outliving it.
+#
+# The names stay importable through PEP 562 module `__getattr__`, which `from module import
+# name` consults when the name is absent from the module dict. That is the load-bearing
+# detail: nineteen files do `from patrol_fixtures import _EMPTY_LOG_DIR` at module scope, so
+# a FUNCTION-shaped accessor would have rewritten all nineteen (and their TEMPLATE twins) to
+# change a LIFETIME. The import still materialises the directory it names -- a
+# `from ... import` IS a read -- but it no longer leaks it.
 
-_EMPTY_SCORES_DIR = Path(tempfile.mkdtemp(prefix="patrol-empty-scores-"))
+_LAZY_DIRS: dict = {}
+# Held for the life of the process ON PURPOSE: dropping the reference would let the
+# TemporaryDirectory finalizer delete a directory out from under a running probe.
+_LAZY_TEMPS: list = []
 
-# #561: the write-boundary leg's three reads, made INERT by default. An empty profile root
-# holds no daemon log, an empty event list is a population of 0 that was STATED, and the stub
-# fragment declares one lane under a stub chat -- so a probe that injects nothing reads a leg
-# that examined 0 events and judged nobody, never whichever sessions THIS box happened to run.
-_PROBE_WRITE_BOUNDARY_ROOT = Path(tempfile.mkdtemp(prefix="patrol-wb-root-"))
+
+def _seed_in_step_homes(base: Path) -> None:
+    """Write the stub gate `_IN_STEP_HOMES_REPO` carries (#530)."""
+    (base / "tests").mkdir(parents=True, exist_ok=True)
+    (base / "tests" / "test_kit_questions_homes.py").write_text(
+        'print("template home : TEMPLATE/tools/questions (100 B)")\n'
+        'print("executing home: /tmp/probe-exec-questions (120 B)")\n'
+        'print("population    : 0 differing line(s) examined")\n'
+        'print("OK: the difference is confined to the declared layer '
+        '(0 parameter entries + 0 named local fix + 0 declared block(s))")\n'
+        'raise SystemExit(0)\n',
+        encoding="utf-8",
+    )
+
+
+def _seed_duty_tree(base: Path) -> None:
+    """Build the P35 duty tree into a base the lazy machinery already owns (#640).
+
+    Late-binds `_duty_tree_into`, defined beside `_duty_tree` below, so the seed and the
+    direct builder resolve the boundary reader by ONE path: a second loader would be a
+    second predicate for one field.
+    """
+    _duty_tree_into(base)
+
+
+# name -> (prefix, file inside it, seed). The three exemption names point at a file that is
+# NEVER created: a probe's verdict must not be decided by whatever exemptions this factory
+# happens to hold, so the default is a path that does not exist.
+_LAZY_DIR_SPECS: dict = {
+    "_EMPTY_LOG_DIR": ("patrol-empty-log-", "", None),
+    "_EMPTY_SCORES_DIR": ("patrol-empty-scores-", "", None),
+    # #561: the write-boundary leg's three reads, made INERT by default. An empty profile
+    # root holds no daemon log, an empty event list is a population of 0 that was STATED,
+    # and the stub fragment declares one lane under a stub chat -- so a probe that injects
+    # nothing reads a leg that examined 0 events and judged nobody, never whichever
+    # sessions THIS box happened to run.
+    "_PROBE_WRITE_BOUNDARY_ROOT": ("patrol-wb-root-", "", None),
+    "_IN_STEP_HOMES_REPO": ("patrol-in-step-homes-", "", _seed_in_step_homes),
+    "_NO_RULING_EXEMPTIONS": (
+        "patrol-no-exempt-", "ruling-board-exemptions.json", None),
+    "_NO_REF_ROLE_EXEMPTIONS": (
+        "patrol-no-ref-roles-", "ledger-ref-roles-exemptions.json", None),
+    "_NO_CRITERION_EXEMPTIONS": (
+        "patrol-no-criterion-", "criterion-path-exemptions.json", None),
+    # #640: the P35 duty tree. Was `_DUTY_TREE = _duty_tree()` at module level with a
+    # BARE mkdtemp (no prefix), so every import leaked one unowned `tmpXXXXXXXX` holding
+    # docs/ledger-invariants.json + evidence/ledger.jsonl -- and a prefix-keyed leak count
+    # never saw it. The seed delegates to `_duty_tree_into`, the same path the direct
+    # builder takes.
+    "_DUTY_TREE": ("patrol-duty-tree-", "", _seed_duty_tree),
+}
+
+
+def _lazy_dir(name: str) -> Path:
+    """Create once, then return the directory a lazy fixture name denotes."""
+    path = _LAZY_DIRS.get(name)
+    if path is not None:
+        return path
+    prefix, inner, seed = _LAZY_DIR_SPECS[name]
+    temp = tempfile.TemporaryDirectory(prefix=prefix)
+    _LAZY_TEMPS.append(temp)
+    base = Path(temp.name)
+    if seed is not None:
+        seed(base)
+    path = (base / inner) if inner else base
+    _LAZY_DIRS[name] = path
+    return path
+
+
+def __getattr__(name: str) -> Path:
+    if name in _LAZY_DIR_SPECS:
+        return _lazy_dir(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 _PROBE_WRITE_BOUNDARY_CHAT = -1009999999999
 
@@ -105,33 +198,6 @@ _PROBE_WRITE_BOUNDARY_SCANNED = {
     "files": 0, "lines": 0, "bytes": 0, "outside_repo": 0, "undated": 0,
     "no_session": 0, "unreadable": [],
 }
-
-_IN_STEP_HOMES_REPO = Path(tempfile.mkdtemp(prefix="patrol-in-step-homes-"))
-
-(_IN_STEP_HOMES_REPO / "tests").mkdir(parents=True, exist_ok=True)
-
-(_IN_STEP_HOMES_REPO / "tests" / "test_kit_questions_homes.py").write_text(
-    'print("template home : TEMPLATE/tools/questions (100 B)")\n'
-    'print("executing home: /tmp/probe-exec-questions (120 B)")\n'
-    'print("population    : 0 differing line(s) examined")\n'
-    'print("OK: the difference is confined to the declared layer '
-    '(0 parameter entries + 0 named local fix + 0 declared block(s))")\n'
-    'raise SystemExit(0)\n',
-    encoding="utf-8",
-)
-
-_NO_RULING_EXEMPTIONS = (
-    Path(tempfile.mkdtemp(prefix="patrol-no-exempt-")) / "ruling-board-exemptions.json"
-)
-
-_NO_REF_ROLE_EXEMPTIONS = (
-    Path(tempfile.mkdtemp(prefix="patrol-no-ref-roles-")) / "ledger-ref-roles-exemptions.json"
-)
-
-_NO_CRITERION_EXEMPTIONS = (
-    Path(tempfile.mkdtemp(prefix="patrol-no-criterion-"))
-    / "criterion-path-exemptions.json"
-)
 
 _EMPTY_GOAL_STORE = {
     "rows": [],
@@ -773,8 +839,8 @@ def _fires(hours: tuple[float, ...], *, name: str = "factory-registry-attest",
         for h in hours
     ]
 
-def _duty_tree(*, invariants=None, declaration=None) -> Path:
-    """A factory tree carrying exactly the bound the caller names — the P35 fixture.
+def _duty_tree_into(base: Path, *, invariants=None, declaration=None) -> Path:
+    """The P35 tree built into a base the CALLER owns — one path to the reader.
 
     Reached through the RUNNER's own loader, so the probe and the leg resolve the boundary
     reader by ONE path: a second loader here would be a second predicate for one field.
@@ -782,10 +848,21 @@ def _duty_tree(*, invariants=None, declaration=None) -> Path:
     reader = RUNNER.load_module("ledger_boundary", RUNNER.LEDGER_BOUNDARY)
     if declaration is None and invariants is None:
         invariants = {"duty_receipt_declared": _DUTY_BOUND}
-    return reader.synthetic_tree(Path(tempfile.mkdtemp()), rows=[],
+    return reader.synthetic_tree(base, rows=[],
                                  invariants=invariants, declaration=declaration)
 
-_DUTY_TREE = _duty_tree()
+def _duty_tree(*, invariants=None, declaration=None) -> Path:
+    """A factory tree carrying exactly the bound the caller names — the P35 fixture.
+
+    The base is OWNED (#640): a TemporaryDirectory held in `_LAZY_TEMPS`, so a caller that
+    takes a tree with custom `invariants` or a malformed `declaration` still leaves nothing
+    behind when its process exits. The module-level default `_DUTY_TREE` is lazy instead --
+    see `_LAZY_DIR_SPECS`.
+    """
+    temp = tempfile.TemporaryDirectory(prefix="patrol-duty-tree-")
+    _LAZY_TEMPS.append(temp)
+    return _duty_tree_into(Path(temp.name), invariants=invariants,
+                           declaration=declaration)
 
 def _duty_leg(cron_rows, ledger_rows, *, store=None, repo=None,
               read_at=None, fires=None, margin_for=None, predicate=None,

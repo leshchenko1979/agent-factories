@@ -709,6 +709,9 @@
       "tools/registry*.py",
       "tests/patrol_fixtures.py"
     ],
+    "tests/test_fixture_lifetime.py": [
+      "tests/patrol_fixtures.py"
+    ],
     "tests/test_patrol_write_boundary.py": [
       "TEMPLATE/tools/patrol_host_state.py",
       "registry/factories/*.json",

@@ -327,6 +327,9 @@
     "tests/test_patrol_worktree.py": {
       "class": "always-satisfiable"
     },
+    "tests/test_fixture_lifetime.py": {
+      "class": "always-satisfiable"
+    },
     "tests/test_patrol_write_boundary.py": {
       "class": "always-satisfiable"
     },
@@ -1297,6 +1300,7 @@
     "tests/test_patrol_criterion.py": "pytest",
     "tests/test_patrol_cron_duty.py": "pytest",
     "tests/test_patrol_preamble.py": "pytest",
+    "tests/test_fixture_lifetime.py": "pytest",
     "tests/test_patrol_publish.py": "pytest",
     "tests/test_patrol_render.py": "pytest",
     "tests/test_patrol_round_receipts.py": "pytest",

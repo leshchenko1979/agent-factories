@@ -3757,6 +3757,23 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "-q", "tests/test_patrol_write_boundary.py"]
         )
 
+    # Mechanical gate: board #640 -- the patrol fixture module built SEVEN directories at
+    # import time with module-level mkdtemp() calls, one leaked copy per importing process,
+    # permanent; the seventh used a BARE mkdtemp() with no prefix, so a prefix-keyed sweep
+    # counted it as clean. The fixture module is now lazy (dirs are created on first
+    # attribute read) and owned by TemporaryDirectory, and THIS gate is the contract: in a
+    # private TMPDIR a child imports the module and counts what it created ALIVE, and the
+    # parent counts what survives exit DEAD -- each half carried by a control or mutant that
+    # can see its own failure class (a neutered cache, a no-op-cleanup temp). Counts are
+    # taken while the child lives because its own finalizers clean at shutdown: an
+    # after-exit-only count reads a clean module as leaking and a leaking one as clean.
+    # Hermetic: no live log, no session store, no box-local fixture. Ships with its
+    # TEMPLATE pair.
+    if (repo_root / "tests/test_fixture_lifetime.py").is_file():
+        gates_to_run.append(
+            [sys.executable, "-m", "pytest", "-q", "tests/test_fixture_lifetime.py"]
+        )
+
     # Mechanical gate: board #563 -- a residual bucket one factory cannot attribute was
     # printed as "unattributed", a BOX-WIDE claim, at three sites. The arms drive the
     # split and the sentence, and a control REDS on the old sentence at each site, so a
