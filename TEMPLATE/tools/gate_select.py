@@ -43,6 +43,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
 
@@ -416,11 +417,94 @@ def no_verdict_class_of(line):
 # so the writer and the rederive tool's reader cannot drift apart on the file's identity.
 KILL_ROW_STORE_NAME = "gate-select"
 
-# A bounded wait on the append: a peer lane holding the ledger's own lock must never be able
-# to stall a gate run on an OBSERVABILITY write. On timeout the row is lost and the loss is
-# NAMED on stderr — the kill itself is unaffected either way (#638's fail-open, one surface over).
-KILL_ROW_APPEND_TIMEOUT_SEC = 10.0
+# THE ACTOR IS DECLARED, NOT DERIVED (#641's test-authority defect, measured by HQ 2026-11-15).
+# `ledger.py` derives a default actor from ambient `OPENCRABS_SESSION_ID`, which made these rows
+# depend on WHO RAN THE SUITE: the same gate set produced `actor: worker` under one session and
+# `actor: hq` under another, and under no session at all (a cron-launched run) the append was
+# REFUSED outright — so the primary store stayed absent and every kill row fell to the fallback.
+# A test whose expected value is read from a mutable live surface is not a gate, and a row that
+# only exists for a lane that happens to be awake is not durable.
+#
+# Derivation bought no traceability either, and that is what settles it: `--subprocess` marks the
+# target a FIXTURE, and ledger.py's own law drops the `session` key for fixture writes — so these
+# rows could never name their runner, and a derived actor was a PARTIAL identity that varied by
+# runner rather than a pointer to one. `tools/audit.py` already sets this repo's convention for
+# tool-generated telemetry rows: declare the actor, do not derive it.
+#
+# `worker` is the capacity that runs gate sets, and it is in `ledger.py`'s core `ACTORS` tuple, so
+# the append accepts it without a lane being awake. The FALLBACK row stamps the same value, so a
+# reader unioning both stores sees ONE actor for one kill class instead of two.
+KILL_ROW_ACTOR = "worker"
 
+# THE APPEND IS RETRIED, and the retry is the point (#641's residual, measured by HQ on a
+# clean worktree 2026-11-15 17:33-17:54Z: four gates hit no-verdict, THREE rows landed and the
+# fourth was dropped). `ledger.py append` takes an exclusive flock and holds it from its first
+# row read to its fsync, so an append queued behind a peer's is NORMAL on this box — peers run
+# their gate sets concurrently. ONE bounded attempt against a contended lock is a bet the lock
+# is free, and the bet lost: that run's own stderr carried `timed out after 10.0 seconds` for
+# the missing kill, which is the same traceless place the kills died before the store existed.
+#
+# Per-attempt bounds GROW and their sum is the wall; the sleep between attempts lets the peer's
+# append finish instead of re-queuing behind it. Retrying is for CONTENTION only: an OSError
+# means the writer cannot be EXECUTED at all, which no amount of waiting fixes, so that case
+# goes straight to the fallback below.
+KILL_ROW_APPEND_TIMEOUT_SEC = 10.0
+KILL_ROW_APPEND_TIMEOUTS = (KILL_ROW_APPEND_TIMEOUT_SEC, 20.0, 30.0)
+KILL_ROW_APPEND_BACKOFF_SEC = (0.5, 2.0)
+
+# A BOUNDED RETRY CANNOT PROMISE "NO KILL IS TRACELESS"; A SECOND STORE CAN (#641). When every
+# attempt is spent the row is written HERE instead of to a log, because a stderr line in a
+# /tmp log is exactly where this defect's kills died before. This file has ONE writer — this
+# module — so it does not disturb the single-writer law that governs `gate-select.jsonl`:
+# `tests/test_single_writer.py` matches every `evidence/subprocesses/**.jsonl` as a declared
+# surface, and `tools/gate_budget_rederive.py` READS both stores and writes neither.
+KILL_ROW_FALLBACK_STORE_NAME = "gate-select.pending.jsonl"
+
+
+def _kill_row_fallback_path() -> Path:
+    """Where the fallback store lives — resolved by the SAME law `ledger.py` resolves.
+
+    `OC_SUBPROCESS_DIR` is the declared override (`docs/methodology/04-harness-binding.md`,
+    read by `tools/ledger.py` when it picks its subprocess store), so a test that points the
+    writer at a temp directory points the fallback at the same directory and the two can
+    never drift apart. No env, no override: `<repo>/evidence/subprocesses/`.
+    """
+    override = os.environ.get("OC_SUBPROCESS_DIR")
+    if override:
+        base = Path(override)
+    else:
+        base = Path(__file__).resolve().parent.parent / "evidence" / "subprocesses"
+    return base / KILL_ROW_FALLBACK_STORE_NAME
+
+def _append_kill_row_to_fallback(gate: str, detail: str, reason: str) -> Path | None:
+    """Write ONE fsynced row to the fallback store. Returns its path, or None if unwritable.
+
+    The row carries the SAME `cause=` field and subject a ledger-minted row carries, plus
+    `store` and `unwritten_reason`, so a reader can tell a fallback row from a minted one
+    without guessing (a minted row has an `n`) AND can see why the primary refused it. The
+    reason travels WITH the row rather than dying with the process that hit it.
+    """
+    path = _kill_row_fallback_path()
+    row = {
+        "n": None,
+        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "event": "run",
+        "actor": KILL_ROW_ACTOR,
+        "subject": gate,
+        "detail": detail,
+        "refs": [{"board": "641"}],
+        "store": "fallback",
+        "unwritten_reason": reason,
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row, sort_keys=True) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+    except OSError:
+        return None
+    return path
 
 def record_kill_rows(no_verdicts):
     """DURABLY record this run's no-verdict lines as subprocess-ledger rows (#641).
@@ -433,17 +517,29 @@ def record_kill_rows(no_verdicts):
     line rides behind it, so the row can be read without re-deriving what the run said.
 
     FAIL-OPEN BY CONSTRUCTION (#638's class, one surface over): this is observability. A
-    store that is missing, unwritable, locked, or refusing the row costs the run NOTHING
-    except a stderr note naming what was lost — a kill must never become a crash, and a
-    record-keeping failure must never be able to change a verdict that was already absent.
+    store that is missing, unwritable, locked, or refusing the row costs the run NOTHING —
+    a kill must never become a crash, and a record-keeping failure must never be able to
+    change a verdict that was already absent. But "costs the run nothing" is not "the row
+    is dropped": a CONTENDED lock is retried on a growing wall, and an exhausted retry
+    writes the row to a FALLBACK STORE rather than to a log. Only when both stores refuse
+    it is the kill traceless, and then the loss is STATED on stderr naming the gate.
     The recorder skips the two NON-kill classes BY NAME — a REFUSAL killed nothing, and a
     gate that NEVER RAN killed nothing (ruling n=5018: one row per no-verdict KILL) — and
     records everything else: a line the classifier cannot name lands as cause=unclassified
     rather than being dropped, so a wording drift in the kill phrase makes itself VISIBLE
     in the store instead of silently losing the kill; the dropped kill is the defect #641
     exists to close. The subject is the gate path, read from the line's own leading token.
+
+    THE ROW'S ACTOR IS DECLARED (`KILL_ROW_ACTOR`), never derived from the writing session.
+    That is a ruling, not a detail, and it answers the question a lane-bound derivation left
+    open: "durable row in the subprocess ledger" is TRUE FOR EVERY RUN, not only for runs
+    started from a lane with a session id. A cron-launched gate set has no session, so a
+    derived actor made the append refuse and pushed every kill into the fallback store; with
+    the actor declared, such a run writes the PRIMARY store like any other. The fallback
+    therefore means what its name says — the lock or the filesystem refused — instead of also
+    meaning "nobody was logged in".
     """
-    recorded, lost = 0, []
+    recorded, lost, rescued = 0, [], []
     for line in no_verdicts:
         cls = no_verdict_class_of(line)
         if cls in ("refused", "never_ran"):
@@ -461,6 +557,8 @@ def record_kill_rows(no_verdicts):
             KILL_ROW_STORE_NAME,
             "--event",
             "run",
+            "--actor",
+            KILL_ROW_ACTOR,
             "--subject",
             gate,
             "--detail",
@@ -468,21 +566,52 @@ def record_kill_rows(no_verdicts):
             "--ref",
             "board:641",
         ]
-        try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=KILL_ROW_APPEND_TIMEOUT_SEC,
-            )
-            if proc.returncode != 0:
-                lost.append(
-                    (gate, (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}")
+        reason = ""
+        written = False
+        for attempt, timeout in enumerate(KILL_ROW_APPEND_TIMEOUTS):
+            if attempt:
+                # Let the peer's append finish rather than re-queuing behind it immediately.
+                time.sleep(
+                    KILL_ROW_APPEND_BACKOFF_SEC[
+                        min(attempt - 1, len(KILL_ROW_APPEND_BACKOFF_SEC) - 1)
+                    ]
                 )
-            else:
-                recorded += 1
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            lost.append((gate, str(exc)))
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=timeout,
+                )
+            except subprocess.TimeoutExpired as exc:
+                reason = str(exc)
+                continue          # CONTENTION: the lock may free, so wait and try again
+            except OSError as exc:
+                reason = str(exc)
+                break             # the writer cannot be EXECUTED; waiting cannot fix that
+            if proc.returncode != 0:
+                reason = (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}"
+                continue
+            recorded += 1
+            written = True
+            break
+        if written:
+            continue
+        # EVERY ATTEMPT SPENT. A stderr line is not a durable trace (#641), so the row goes to
+        # the fallback store; only if THAT refuses it is the kill traceless, and then the loss
+        # is stated exactly as before.
+        fallback = _append_kill_row_to_fallback(gate, detail, reason)
+        if fallback is None:
+            lost.append((gate, reason))
+        else:
+            rescued.append((gate, str(fallback)))
+    for gate, path in rescued:
+        print(
+            f"gate-select: kill row for {gate} could NOT be appended to the ledger "
+            f"(every attempt spent) — written to the FALLBACK store {path} instead, so "
+            f"the kill is still durable",
+            file=sys.stderr,
+        )
     if lost:
         for gate, reason in lost:
             print(

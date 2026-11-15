@@ -1137,6 +1137,16 @@ def record_wall_kills(
 
 DERIVED_KILLS_STORE = REPO_ROOT / "evidence" / "subprocesses" / "gate-select.jsonl"
 
+# THE FALLBACK IS A READ SOURCE TOO (#641's residual). When the ledger's append lock is held
+# past every retry, the runner writes its kill row HERE instead of to a log — so a reader that
+# looked only at the primary store would report a durable kill as absent, which is the defect
+# this whole surface exists to close, one layer up. Read, never written: this module carries
+# no writer for either path, and `tests/test_gate_select_kill_rows.py` asserts that absence
+# behaviourally (bytes compared before and after) and structurally (no write call names it).
+DERIVED_KILLS_FALLBACK_STORE = (
+    REPO_ROOT / "evidence" / "subprocesses" / "gate-select.pending.jsonl"
+)
+
 @dataclass(frozen=True)
 class DerivedKill:
     key: str
@@ -1144,41 +1154,56 @@ class DerivedKill:
     detail: str
     ts: str
 
-def read_derived_kills(store_path: Path | None = None) -> tuple | None:
-    """Every kill row in the derived runner's subprocess ledger — READ-ONLY.
+def read_derived_kills(
+    store_path: Path | None = None, fallback_path: Path | None = None
+) -> tuple | None:
+    """Every kill row the derived runner made durable — READ-ONLY, across BOTH stores.
 
-    Returns None when the store cannot be read, and a tuple (possibly EMPTY) when it was
-    read: the two are different facts with the same shape (#595's own class), so the renderer
-    may never claim "no derived gate was killed" off a store it never saw. The cause is read
-    from the row's own `cause=` field prefix, the countable form the runner writes — never
-    re-derived from the prose behind it.
+    Returns None when NO store could be read, and a tuple (possibly EMPTY) when at least one
+    was: the two are different facts with the same shape (#595's own class), so the renderer
+    may never claim "no derived gate was killed" off a surface it never saw. A row the primary
+    ledger refused is written to the fallback store (#641), so both are read and their rows
+    are returned together — a reader that saw only the primary would report a durable kill as
+    absent. The cause is read from the row's own `cause=` field prefix, the countable form the
+    runner writes — never re-derived from the prose behind it.
+
+    AN EXPLICIT `store_path` IS HERMETIC: with no `fallback_path` given, exactly that one path
+    is read, so a test that hands in a fixture never picks up this box's live store.
     """
-    path = store_path or DERIVED_KILLS_STORE
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except OSError:
-        return None
+    if store_path is not None:
+        paths = [store_path] if fallback_path is None else [store_path, fallback_path]
+    else:
+        paths = [DERIVED_KILLS_STORE, fallback_path or DERIVED_KILLS_FALLBACK_STORE]
     kills = []
-    for line in raw.splitlines():
-        line = line.strip()
-        if not line:
-            continue
+    read_any = False
+    for path in paths:
         try:
-            row = json.loads(line)
-        except ValueError:
+            raw = path.read_text(encoding="utf-8")
+        except OSError:
             continue
-        if not isinstance(row, dict):
-            continue
-        detail = row.get("detail") or ""
-        cause = detail.split(";", 1)[0][len("cause="):] if detail.startswith("cause=") else ""
-        kills.append(
-            DerivedKill(
-                key=row.get("subject") or "",
-                cause=cause,
-                detail=detail,
-                ts=row.get("ts") or "",
+        read_any = True
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            detail = row.get("detail") or ""
+            cause = detail.split(";", 1)[0][len("cause="):] if detail.startswith("cause=") else ""
+            kills.append(
+                DerivedKill(
+                    key=row.get("subject") or "",
+                    cause=cause,
+                    detail=detail,
+                    ts=row.get("ts") or "",
+                )
             )
-        )
+    if not read_any:
+        return None
     return tuple(kills)
 
 def _load_avg() -> float | None:

@@ -15,8 +15,10 @@ and to compare hashes.
 from __future__ import annotations
 
 import ast
+import contextlib
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import shutil
@@ -134,11 +136,18 @@ def _fixture_641(root: Path, *, with_hang: bool) -> None:
 
 
 def _run_641(root: Path, log: Path, hang_marker: Path, *, kill: bool,
-             store: Path) -> tuple[int, list[str]]:
-    """Run the real CLI over the fixture; SIGTERM it once the hang gate is live."""
+             store: Path, unbound: bool = False) -> tuple[int, list[str]]:
+    """Run the real CLI over the fixture; SIGTERM it once the hang gate is live.
+
+    `unbound=True` removes `OPENCRABS_SESSION_ID` from the child's environment, which is what a
+    CRON-LAUNCHED run looks like: no lane is awake. The actor is declared by the writer
+    (`KILL_ROW_ACTOR`), so such a run must still write the primary store — see the arm below.
+    """
     env = dict(os.environ,
                OC_641_HANG_MARKER=str(hang_marker),
                OC_SUBPROCESS_DIR=str(store))
+    if unbound:
+        env.pop("OPENCRABS_SESSION_ID", None)
     with log.open("wb") as handle:
         proc = subprocess.Popen(
             [sys.executable, str(GATE_SELECT), "--paths", "x.txt", "--run",
@@ -186,8 +195,9 @@ def probe_a_budget_killed_gate_leaves_a_durable_row() -> None:
               f"rc={rc} summary={summary}")
         check("the store carries ONE ROW — the retry arm folds both kills into one line",
               len(kills) == 1, f"{len(kills)} row(s): {[r['subject'] for r in rows]}")
-        check("every row is a run event by the worker actor, citing the board",
-              all(r["event"] == "run" and r["actor"] == "worker" and
+        check("every row is a run event by the DECLARED worker actor, citing the board",
+              all(r["event"] == "run" and r["actor"] == _gate_select_module().KILL_ROW_ACTOR
+                  and
                   any(ref.get("board") == "641" for ref in r.get("refs", []))
                   for r in kills), str(kills[:1]))
         check("the detail carries the cause FIELD and the VERBATIM no-verdict line",
@@ -219,6 +229,40 @@ def probe_a_killed_run_still_leaves_its_rows() -> None:
               f"{len(kills)} kill row(s) in {store}")
 
 
+def probe_an_unbound_run_still_writes_the_PRIMARY_store() -> None:
+    """#641's test-authority arm: a cron-like run has no session, and still leaves a row.
+
+    The defect this pins, measured by HQ 2026-11-15: the actor was DERIVED from ambient
+    `OPENCRABS_SESSION_ID`, so with no session the append was REFUSED, the primary store was
+    never created, and every kill fell to the fallback store — "a durable row in the subprocess
+    ledger" was therefore true only for session-bound runs, which is not what criterion 1 says.
+    HQ's cron-like arm died `FileNotFoundError: .../store/gate-select.jsonl` for exactly that
+    reason. The actor is now DECLARED (`KILL_ROW_ACTOR`), so a run nobody is awake for writes
+    the primary store like any other, and the fallback goes back to meaning one thing only:
+    the lock or the filesystem refused.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        root = base / "repo"
+        store = base / "store"
+        _fixture_641(root, with_hang=False)
+        rc, lines = _run_641(root, base / "run.log", base / "unused.marker",
+                             kill=False, store=store, unbound=True)
+        summary = [line for line in lines if "gate(s) ran" in line]
+        primary = store / "gate-select.jsonl"
+        rows = _store_rows(store) if primary.exists() else []
+        kills = [r for r in rows if r["subject"].endswith("fixture_641_a_kill.py")]
+        fallback = store / "gate-select.pending.jsonl"
+
+        check("an UNBOUND run still completes with its kill counted, never silently green",
+              rc == 124 and summary and "1 no-verdict" in summary[0],
+              f"rc={rc} summary={summary}")
+        check("the PRIMARY store exists and carries the row — no session was needed",
+              len(kills) == 1 and kills[0]["actor"] == _gate_select_module().KILL_ROW_ACTOR,
+              f"primary exists={primary.exists()} rows={[r['subject'] for r in rows]}")
+        check("the FALLBACK was never needed — it means a refusal, not an absent lane",
+              not fallback.exists(), f"fallback exists: {fallback}")
+
 # ---- fail-open: a store that cannot take the row never turns a kill into a crash ----
 
 def probe_a_store_that_cannot_take_the_row_is_fail_open() -> None:
@@ -241,6 +285,69 @@ def probe_a_store_that_cannot_take_the_row_is_fail_open() -> None:
                   for line in lines), str([line for line in lines if "NOT be recorded"
                                            in line][:2]))
 
+
+# ---- the RETRY is the fix for the MEASURED defect, so it is probed, not assumed ----
+
+def probe_a_CONTENDED_lock_is_retried_and_the_primary_row_still_lands() -> None:
+    """#641's residual: ONE bounded attempt against a contended lock DROPPED the row.
+
+    Measured by HQ on a clean worktree 2026-11-15 17:33-17:54Z: four gates hit no-verdict,
+    THREE rows landed and the fourth was dropped, its only trace the run's own stderr
+    `timed out after 10.0 seconds` in a /tmp log — the same traceless place this defect's
+    kills died before the store existed. The contention is not an edge: peers run their gate
+    sets concurrently on this box, so an append queuing behind another lane's IS the normal
+    case.
+
+    This probe HOLDS the store's own lock (`.<store>.lock`, the file `ledger.py` flocks) in a
+    child process and releases it mid-retry, so the recorder's FIRST attempt genuinely times
+    out. The row must still land in the PRIMARY store. If it lands in the fallback, the retry
+    is decoration and the measured defect is still open.
+    """
+    mod = _gate_select_module()
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Path(tmp) / "store"
+        store.mkdir(parents=True, exist_ok=True)
+        os.environ["OC_SUBPROCESS_DIR"] = str(store)
+        saved_timeouts = mod.KILL_ROW_APPEND_TIMEOUTS
+        saved_backoff = mod.KILL_ROW_APPEND_BACKOFF_SEC
+        holder = None
+        try:
+            # Short walls so the probe is fast: the SHAPE is under test, not the production
+            # seconds (10/20/30), which are sized for a real peer's append.
+            mod.KILL_ROW_APPEND_TIMEOUTS = (0.4, 20.0)
+            mod.KILL_ROW_APPEND_BACKOFF_SEC = (0.2,)
+            lock_path = store / f".{mod.KILL_ROW_STORE_NAME}.lock"
+            holder = subprocess.Popen(
+                [sys.executable, "-c", (
+                    "import fcntl, sys, time\n"
+                    "fh = open(sys.argv[1], 'a')\n"
+                    "fcntl.flock(fh, fcntl.LOCK_EX)\n"
+                    "print('held', flush=True)\n"
+                    "time.sleep(2.0)\n"
+                ), str(lock_path)],
+                stdout=subprocess.PIPE, text=True,
+            )
+            assert holder.stdout is not None
+            holder.stdout.readline()      # the lock is HELD until the child exits
+            killed = ("tests/fixture_contended.py — killed at its declared budget "
+                      "(1.00s) after running 1.01s; it neither passed nor failed")
+            recorded, lost = mod.record_kill_rows([killed])
+            primary = store / "gate-select.jsonl"
+            fallback = store / mod.KILL_ROW_FALLBACK_STORE_NAME
+            rows = _store_rows(store) if primary.exists() else []
+            check("a CONTENDED lock is RETRIED and the kill lands in the PRIMARY store",
+                  recorded == 1 and not lost and len(rows) == 1,
+                  f"recorded={recorded} lost={lost} primary={primary.exists()} "
+                  f"rows={len(rows)}")
+            check("the FALLBACK is NOT used — the retry won, so it still means refusal",
+                  not fallback.exists(), f"fallback exists: {fallback}")
+        finally:
+            if holder is not None:
+                holder.kill()
+                holder.wait(timeout=10)
+            mod.KILL_ROW_APPEND_TIMEOUTS = saved_timeouts
+            mod.KILL_ROW_APPEND_BACKOFF_SEC = saved_backoff
+            os.environ.pop("OC_SUBPROCESS_DIR", None)
 
 # ---- criterion 1's boundary: refusals and never-ran lines are NOT kills ----
 
@@ -424,7 +531,10 @@ def probe_the_render_names_all_three_states() -> None:
 PROBES = (
     probe_a_budget_killed_gate_leaves_a_durable_row,
     probe_a_killed_run_still_leaves_its_rows,
+    probe_an_unbound_run_still_writes_the_PRIMARY_store,
     probe_a_store_that_cannot_take_the_row_is_fail_open,
+    probe_a_CONTENDED_lock_is_retried_and_the_primary_row_still_lands,
+
     probe_only_kill_lines_get_rows,
     probe_an_impossible_store_costs_the_run_nothing,
     probe_the_cause_is_a_countable_field,
