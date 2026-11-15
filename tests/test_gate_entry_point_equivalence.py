@@ -127,6 +127,25 @@ WORKERS = 6
 CONTENTION_FACTOR = WORKERS
 EXECUTABLE_PLACEHOLDER = "<sys.executable>"
 
+def _arm_ceiling(repo: Path = REPO) -> float:
+    """The wall for a CONTROL arm, derived by the rule `evaluate()` applies to a module the
+    registry does not budget -- because that is exactly what an arm runs.
+
+    An arm writes a synthetic module to a tempdir and invokes BOTH forms on it, so each child
+    imports this repo's own conftest and pays the same pool contention a measured pair does. A
+    literal ceiling makes the arm's verdict a function of ambient load instead of the bytes:
+    measured 2026-11-15 at load 17.05 on 4 cores, arm 2 timed out at its hardcoded 120 s and
+    reported `script=1, registered=124` -- a DISAGREE verdict, rc 1, over a tree whose two forms
+    agree. That is the false red this gate exists to prevent, arriving from inside the gate.
+
+    The ceiling is the registry's default budget scaled by CONTENTION_FACTOR: the same value
+    `evaluate()` already trusts for a registered module carrying no budget of its own, which is
+    the exact status of an arm's tempdir fixture.
+    """
+    registry = json.loads((repo / "registry" / "gates.json").read_text(encoding="utf-8"))
+    default_budget = float(registry.get("default", {}).get("budget_sec", 120.0))
+    return default_budget * CONTENTION_FACTOR
+
 
 def _module_defs(tree: ast.Module) -> dict[str, ast.AST]:
     """Every module-level function, by name."""
@@ -396,9 +415,20 @@ def verdict_exit_code(problems: list[str], unmeasured: list[str]) -> int:
         return TIMEOUT_EXIT_CODE
     return 0
 
-def controls() -> list[str]:
-    """Five arms, each building the shape it judges rather than asserting around a constant."""
+def controls(repo: Path = REPO) -> tuple[list[str], list[str]]:
+    """Seven arms, each building the shape it judges rather than asserting around a constant.
+
+    Returns `(problems, unmeasured)` -- the same split `evaluate()` keeps, for the same reason
+    (#552, ruling n=4167): a starved pair is not a failed one. Arms 1 and 2 RUN both forms on a
+    tempdir fixture, so they can be starved exactly like a measured pair. Without the split a
+    timeout inside an arm becomes a verdict: arm 2 read `script=1, registered=124` at load 17.05
+    and called a tree whose two forms agree a DISAGREE. Arm 1's hazard is the mirror image and it
+    is worse, because a starved registered form lands on rc 124, which satisfies arm 1's expected
+    `registered != 0` shape -- that is a false PASS, not merely a false red.
+    """
     problems: list[str] = []
+    unmeasured: list[str] = []
+    ceiling = _arm_ceiling(repo)
     # The fixture is DATA, so its source is written INDENTED and dedented at use: this file
     # must carry no column-0 `def test_*`, because `tests/gate_registry.py`'s `target_form()`
     # reads a module-level test function as a PYTEST-style target and a gate registered as a
@@ -439,19 +469,29 @@ def controls() -> list[str]:
         pair = _compare(
             str(broken),
             {"argv": f"{EXECUTABLE_PLACEHOLDER} -m pytest {broken}", "runner": "pytest"},
-            120.0,
+            ceiling,
         )
-        if pair["agree"]:
-            problems.append(
-                "arm 1 (the #475 shape): the two invocations agreed on rc over a module whose "
-                f"entry point skips a failing leg (both {pair['registered_rc']}) -- the rc "
-                "comparison does not bite"
+        if TIMEOUT_EXIT_CODE in (pair["script_rc"], pair["registered_rc"]):
+            # A starved form cannot testify about the shape, and here the accident runs the
+            # DANGEROUS way: rc 124 satisfies the expected `registered != 0` below, so reading
+            # it as a bite would report a PASS over a shape nothing measured.
+            unmeasured.append(
+                "arm 1 (the #475 shape): a form exceeded its "
+                f"{ceiling:.0f}s ceiling (script={pair['script_rc']}, "
+                f"registered={pair['registered_rc']}), so the shape was never measured"
             )
-        if pair["script_rc"] != 0 or pair["registered_rc"] == 0:
-            problems.append(
-                "arm 1 (the #475 shape): expected script=0 against registered!=0, read "
-                f"script={pair['script_rc']} registered={pair['registered_rc']}"
-            )
+        else:
+            if pair["agree"]:
+                problems.append(
+                    "arm 1 (the #475 shape): the two invocations agreed on rc over a module "
+                    f"whose entry point skips a failing leg (both {pair['registered_rc']}) -- "
+                    "the rc comparison does not bite"
+                )
+            if pair["script_rc"] != 0 or pair["registered_rc"] == 0:
+                problems.append(
+                    "arm 1 (the #475 shape): expected script=0 against registered!=0, read "
+                    f"script={pair['script_rc']} registered={pair['registered_rc']}"
+                )
 
     # ARM 2 -- the same module WIRED. Both forms must read 0, so arm 1 is not satisfied by a
     # comparison that reports disagreement unconditionally.
@@ -467,9 +507,15 @@ def controls() -> list[str]:
         pair = _compare(
             str(good),
             {"argv": f"{EXECUTABLE_PLACEHOLDER} -m pytest {good}", "runner": "pytest"},
-            120.0,
+            ceiling,
         )
-        if not pair["agree"]:
+        if TIMEOUT_EXIT_CODE in (pair["script_rc"], pair["registered_rc"]):
+            unmeasured.append(
+                "arm 2 (wired): a form exceeded its "
+                f"{ceiling:.0f}s ceiling (script={pair['script_rc']}, "
+                f"registered={pair['registered_rc']}), so agreement was never measured"
+            )
+        elif not pair["agree"]:
             problems.append(
                 "arm 2 (wired): the two invocations disagreed over a wired module "
                 f"(script={pair['script_rc']}, registered={pair['registered_rc']})"
@@ -537,14 +583,64 @@ if __name__ == "__main__":
             "for a vacuous pass"
         )
 
-    return problems
+    # ARM 7 -- a STARVED ARM is UNMEASURED, never a verdict. Arms 1 and 2 run both forms, so
+    # they can be starved exactly like a measured pair, and arm 2 read `script=1,
+    # registered=124` at load 17.05 on 2026-11-15 -- a DISAGREE verdict, rc 1, over a tree whose
+    # two forms agree. Arm 1 is the mirror image and the more dangerous one: rc 124 satisfies its
+    # expected `registered != 0`, so a starved pair would read as a BITE.
+    #
+    # The shape is BUILT, never described: the pair below is the return `_compare` produces for a
+    # starved form, and the assertion is that its kill code is what the split keys on.
+    starved_pair = {
+        "registered_rc": TIMEOUT_EXIT_CODE,
+        "script_rc": 0,
+        "agree": False,
+    }
+    if TIMEOUT_EXIT_CODE not in (starved_pair["script_rc"], starved_pair["registered_rc"]):
+        problems.append(
+            "arm 7 (starved arm): the built starved pair carries no kill code, so this arm "
+            "tests nothing"
+        )
+    # The predicate under test is read from the source rather than re-implemented here: an arm
+    # that asserts its shape without consulting the kill code reports a verdict it never took.
+    # Both arms must carry the guard, so a repair to one that drops it from the other reds.
+    source = (repo / "tests" / "test_gate_entry_point_equivalence.py").read_text(
+        encoding="utf-8"
+    )
+    # Built by concatenation for the same reason as `literal_wall` below: written whole, the
+    # needle would match ITS OWN definition line, so the count would be 3 over a correct tree
+    # and 2 over one whose arm 2 had lost its guard -- `< 2` could never fire, and the arm would
+    # report a bite it never took. Measured 2026-11-15: with the needle written whole, a mutant
+    # that deleted arm 2's guard still read `count == 2` and the gate exited 0.
+    guard = (
+        'if TIMEOUT_EXIT_CODE in (pair["script_rc"], '
+        'pair["registered_rc"]):'
+    )
+    if source.count(guard) < 2:
+        problems.append(
+            "arm 7 (starved arm): only "
+            f"{source.count(guard)} of the two measuring arms consult the kill code before "
+            "asserting their shape, so a starved pair reports as a verdict"
+        )
+    # Built by concatenation: the literal would otherwise match THIS line and red itself.
+    literal_wall = "120" + ".0,"
+    if literal_wall in source:
+        problems.append(
+            "arm 7 (starved arm): an arm still carries a LITERAL wall, so its verdict is a "
+            "function of ambient load instead of the bytes"
+        )
+
+    return problems, unmeasured
 
 
 def main() -> int:
     result = evaluate(REPO)
     kinds = result["kinds"]
-    problems = result["problems"] + controls()
-    unmeasured = result["unmeasured"]
+    arm_problems, arm_unmeasured = controls(REPO)
+    problems = result["problems"] + arm_problems
+    # An arm's starvation is the SAME class as a measured pair's (#552): it reports no verdict,
+    # so it joins `unmeasured` and the exit code stays the fleet's kill code, never 1.
+    unmeasured = result["unmeasured"] + arm_unmeasured
 
     print(
         f"entry-point equivalence: examined {result['modules']} registered gate module(s) -- "
@@ -588,7 +684,7 @@ def main() -> int:
 
     print(
         f"entry-point equivalence: clean -- {result['modules']} module(s) examined, "
-        f"{len(result['measured'])} rc pair(s) compared, 0 disagreement(s), 6 control arm(s) bit"
+        f"{len(result['measured'])} rc pair(s) compared, 0 disagreement(s), 7 control arm(s) bit"
     )
     return 0
 
