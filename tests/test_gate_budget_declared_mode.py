@@ -295,12 +295,91 @@ def probe_the_MUTANT_that_drops_the_hold_goes_RED() -> None:
             f"held={sorted(dict(after_pop.held))}",
         )
 
+def probe_a_HELD_entry_never_consumes_a_probe() -> None:
+    """#615 binds the PROBE too, not only the derivation.
+
+    The defect this holds shut (measured 2026-11-15): `run_probes` filtered on `pop.kills`,
+    which reads EVERY entry carrying a kill streak, while the derivation iterates `pop.keys`
+    — already narrowed AGAINST the held entries. A held entry was therefore probed at the
+    gate's own cost and its sample silently discarded; and on this box the sample could only
+    ever be the WARM half, because an exclusive box IS the warm regime. On
+    `tests/test_ledger_commit_cites_no_rows.py` that is 0.49 s licensing 2.71 s
+    (margin_for(0.49) = 5.530612) against a measured 2.16 s cold path — 79.70% of its own
+    wall, one slow run from NO VERDICT.
+
+    BOTH DIRECTIONS, because a leg that refuses everything is not a leg: the held entry is
+    refused BY NAME, and the unheld eligible entry beside it in the same manifest still
+    reaches its own refusal (here: no registered invocation), so the hold is scoped to the
+    entry that declared it.
+    """
+    import gate_budget_rederive as leg
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        manifest = root / "gates.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "gates": {
+                        "tests/held.py": {
+                            "budget_sec": 4.91,
+                            "measured_sec": 1.04,
+                            "margin_x": 4.721,
+                            "basis_modes": ["cold", "warm"],
+                            "wall_kills": {"rounds": ["r1", "r2"]},
+                        },
+                        "tests/unheld.py": {
+                            "budget_sec": 9.0,
+                            "measured_sec": 2.0,
+                            "margin_x": 4.5,
+                            "wall_kills": {"rounds": ["r1", "r2"]},
+                        },
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        pop = leg.Population(
+            declared=2,
+            examined=2,
+            exhausted=("tests/held.py", "tests/unheld.py"),
+            kills=leg.read_wall_kills(manifest),
+            extras={"declared_hold": (("tests/held.py", "HELD — declared BIMODAL"),)},
+        )
+        probed = leg.run_probes(pop, manifest, root, peer_count_check=lambda: 0)
+        by_key = {p.key: p for p in probed.probes}
+        held = by_key.get("tests/held.py")
+        check(
+            "a HELD entry is NEVER probed",
+            held is not None and held.taken is False,
+            str(held),
+        )
+        check(
+            "and the refusal NAMES the hold, never a silent skip",
+            held is not None and "HELD by declaration" in held.why,
+            (held.why if held else "absent")[:120],
+        )
+        check(
+            "the held entry contributes NO sample",
+            "tests/held.py" not in (probed.extras.get("samples") or {}),
+            str(sorted(probed.extras.get("samples") or {})),
+        )
+        other = by_key.get("tests/unheld.py")
+        check(
+            "CONTROL: the unheld eligible entry still reaches its OWN refusal",
+            other is not None
+            and other.taken is False
+            and "HELD by declaration" not in other.why,
+            (other.why if other else "absent")[:120],
+        )
+
 def main() -> int:
     print("#615 — a declared-mode entry is never re-derived from a single sample")
     probe_a_bimodal_entry_is_HELD_and_its_wall_does_not_move()
     probe_a_UNIMODAL_entry_beside_it_STILL_derives()
     probe_an_UNPARSEABLE_declaration_is_HELD()
     probe_the_LIVE_manifest_declares_the_bimodal_entry()
+    probe_a_HELD_entry_never_consumes_a_probe()
     probe_the_MUTANT_that_drops_the_hold_goes_RED()
     print()
     if failures:

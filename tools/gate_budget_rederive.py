@@ -1321,8 +1321,38 @@ def run_probes(
     the same margin law the derivation uses, so the number a reader sees here is the number
     the wall would move to.
     """
-    eligible = [k for k in pop.kills if k.eligible]
-    if not eligible:
+    # THE DECLARED HOLD (#615) BINDS THE PROBE TOO — and this is the half that was missing.
+    # A held entry can never consume a probe, because the derivation loop iterates `pop.keys`,
+    # which the population has already narrowed AGAINST the held entries: a sample taken here
+    # would be discarded while still costing an exclusive-box run of the gate's own length.
+    # Measured 2026-11-15 on `tests/test_ledger_commit_cites_no_rows.py`: five audit rounds
+    # read 0.49-1.27 s, its cold-cache control read 2.16 s (6.8x), and its two kills read
+    # exactly `budget_sec + 0.01` — the WALL, not a measurement. A clean probe sample would
+    # therefore derive 2.71 s against the 4.91 s wall (margin_for(0.49) = 5.530612) and leave
+    # the 2.16 s cold path at 79.70% of it, arming the exact collapse #615 exists to prevent,
+    # because the probe's own precondition (an EXCLUSIVE box) guarantees it can only ever
+    # sample the mode that is not the problem. The refusal is NAMED, never a silent
+    # skip: "no sample" and "never tried" are different facts with the same shape.
+    held_keys = set(dict(pop.extras.get("declared_hold") or ()))
+    probes: list = []
+    eligible: list = []
+    for kill in pop.kills:
+        if not kill.eligible:
+            continue
+        if kill.key in held_keys:
+            probes.append(
+                ProbeSample(
+                    key=kill.key,
+                    taken=False,
+                    why="HELD by declaration (#615) — this entry names more than one "
+                        "measurement mode, so no single sample can license its wall; the "
+                        "derivation already excludes it, so a probe would measure one mode "
+                        "and consume nothing",
+                )
+            )
+            continue
+        eligible.append(kill)
+    if not eligible and not probes:
         return pop
     try:
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -1334,7 +1364,6 @@ def run_probes(
 
     samples = dict(pop.extras.get("samples") or {})
     probe_samples: dict = dict(pop.extras.get("probe_samples") or {})
-    probes: list = []
     for kill in eligible:
         entry = entries.get(kill.key)
         declared = entry.get("budget_sec") if isinstance(entry, dict) else None
