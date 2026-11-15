@@ -43,7 +43,7 @@
       ],
       "cadence": "Bi-Weekly (1st & 15th)",
       "pacemaker_job": "factory-growth-map-biweekly",
-      "last_receipt": "docs/growth-stages.md calibrated 2026-09-16 against 6 fleet factories (Stages 0–4 verified)"
+      "last_receipt": "docs/growth-stages.md §8 calibrated 2026-11-15 against 6 fleet factories (Stages 0–4 verified; 131 gates, fleet 350/456)"
     },
     {
       "id": "insights",

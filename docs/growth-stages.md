@@ -409,3 +409,183 @@ Read from `tools/audit.py --json --no-gates`; the gate verdict fields read `null
 - **Both gate reds red inside the audit and pass standalone** — `tests/test_gate_entry_point_equivalence.py` (264.69 s against a declared 501.11 s budget) and `tests/test_score_artifact_citations.py` (4.83 s against 69.27 s). Run together on this tree they are **13 passed in 4.26 s**. Neither is the #589 residual: that was closed by `f0129c07` and is in the tree. The failures are batch-only, the same class as the shipped-audit red that also passes alone — and a batch-only red is a statement about the instrument's regime, not about any change in the batch.
 - **The board grew by 3 with its open set flat:** **592 total / 77 open / 515 closed** at `2026-11-01T06:1xZ`, against §6's 589 / 77 / 512 — closed **+3**, open **unchanged**.
 - **Box-wide cron attribution:** 83 rows across 3 homes; **20 carry no factory prefix** (unchanged in count as the table grew 79 → 83), and the other 63 split across the six declared prefixes. Reported in this factory's registry attestation, **never touched**.
+
+---
+
+## 8. Bi-Weekly Fleet Calibration & Maturity Verification (2026-11-15)
+
+> **Pacemaker Cadence:** Bi-Weekly (1st & 15th) · `factory-growth-map-biweekly` — `0 9 1,15 * *`
+> Europe/Moscow, fired `2026-11-15T06:00:47Z` (47 s past the 06:00:00Z slot), next
+> `2026-12-01T06:00:00Z`
+> **Evaluation Rubric:** Quality Criteria v0.5 (19 criteria across 6 families, max 76)
+> **Telemetry Source:** the fleet survey `evidence/scores/2026-11-14.md` (35 721 B, its own read
+> instants, against tree `be07a4c5`), plus this factory's own live read at `2026-11-15T06:34:41Z`
+> against HEAD `1fd2a727`.
+
+### The survey this run reads, and what it may be read as saying
+
+The survey is **one day old**, so this round owes no gap disclosure — `evidence/scores/` holds a
+run for every day since §7's round, through `2026-11-14.md`. That freshness is a property of the
+*store*, not of this run's diligence.
+
+It is **not** a statement that the scores were measured yesterday. The 11-14 artifact carries the
+scorecard and records the total as the **36th consecutive flat round**, stating the mechanism
+itself: no criterion has a rung between "3" and "4" that any observed evidence reaches, so the
+scale saturates and the total reads flat by construction. The census below is therefore a
+**carried reading**, and the flatness it shows is a fact about the method before it is a fact
+about any factory.
+
+**This round's own measurement is in flight at this read.** `/tmp/audit-2026-11-15.json` was
+created `2026-11-15T06:03Z` (pid 3687131) and stands at **0 bytes**, so the newest *complete* gate
+read remains 11-14's, and is reported as such rather than as today's.
+
+### Fleet Maturity Census
+
+**Score column is the 2026-11-14 reading; the stage column is this document's mapping of that
+reading onto the §1 stages** — a mapping, never an identity (see §5's caveat, and §4 itself shows
+a Scalable-band factory at Stage 1).
+
+| Factory | Score (v0.5/76) | Maturity Band | Active Stage | Target Stage | Breakthrough Mechanism Deployed | Primary Health Metric Status |
+|---|:---:|:---:|:---:|:---:|---|---|
+| **Meta-factory** | **67** (88.16%) | **Optimizing** | **Stage 3** | Stage 4 | self-audit kit (**131 gates**, 2 no-verdict), single-writer ledger, automated RCA | cadence **held** (5.5 h); rework share **41.15%**; change-fail **59.82%** |
+| **OpenCrabs dev** | **61** (80.26%) | **Optimizing** | **Stage 3** | Stage 4 | 4-leg smoke rubric, atomic workers-ledger, runtime supply to the fleet | **no pacemaker** (`opencrabs-dev-fork766-verify`, `enabled=0`, never run) and an **ABSENT** ledger — unobserved from both ends |
+| **InferHub Watch** | **58** (76.32%) | **Optimizing** | **Stage 3** | Stage 3 | self-audit kit, hourly pacemaker, model-routing telemetry | subject anchor **2 / 4** — at the gate, not above it |
+| **Miidas** | **58** (76.32%) | **Optimizing** | **Stage 3** | Stage 3 | self-audit gates, `rework.md`, ledger discipline (`L2` 4) | ledger instrument **`deferred`** (`behind_by=6`) |
+| **Infra Factory** | **55** (72.37%) | **Scalable** | **Stage 2** | Stage 3 | single-writer ledger, mechanical audit gates | **`O2` 2** — the fleet's lowest Output cell |
+| **AI AntiSpam** | **51** (67.11%) | **Scalable** | **Stage 1** | Stage 2 | 0-token preflight pacemakers, Postgres single-writer | ledger instrument **`partial`, red, `behind_by=1`** |
+
+**Fleet 350 / 456 = 76.7544%.** Both sums reproduce in `python3` — per-factory
+`67+61+58+58+55+51 = 350`, per-family `71+38+79+64+57+41 = 350`. Band thresholds are
+`docs/quality-criteria.md`'s own and are read, not composed: **Scalable 51–75% (39–57) ·
+Optimizing 76–100% (58–76)**.
+
+### Stage-by-Stage Verification Summary
+
+1. **Stage 0 (Interactive Prototype): 0 / 6 active.** No factory relies on prompt-by-prompt
+   operator guidance; all six intake from persistent surfaces. **Unchanged.**
+
+2. **Stage 1 (Autonomous Intake & the Pacemaker Law): 6 / 6 conformance.** All six factories are
+   enrolled in `registry/fleet.json` with a declared `job_prefixes` entry — `ai-antispam-`,
+   `infra-`, `inferhub-`, `factory-`, `miidas-`, `oc-` — and each prefix is claimed by exactly one
+   factory. **Live cron census, `2026-11-15T06:34:41Z`:** **86 rows** across the three homes that
+   hold a `cron_jobs` table — default **12**, family **2**, ops **72** — of which **43 are
+   enabled** (7 / 1 / 35). The delivery split is read from `cron_jobs.prompt`, which is the column
+   that carries it, keyed on the **literal `--mode turn-end` / `--mode quiet` token** because that
+   token is the declaration. **The split is reported at two scopes, because §7's figure was
+   ops-only and a box-wide number would silently change the denominator:** the **ops profile, 72
+   rows — 9 turn-end / 16 quiet / 47 carrying neither**, against §7's 9/16/45 of 70, so both
+   declaring populations are **unchanged** and the two new rows declare nothing; **box-wide, 86
+   rows — 9 / 16 / 61**. The quiet population reads **16 at both scopes**, which corroborates the
+   registry's own note that it is "unchanged across SEVEN readings". **The predicate is stated
+   because a looser read gives a different number:** keying on *any mention* of either phrase
+   rather than on the literal `--mode` token returns **34 rows box-wide** where the declaration
+   gives **25** — nine rows name a mode in prose without carrying the flag. Two readings, both
+   reproducible, one declaring and one mentioning — the declared one is reported, and the
+   difference is stated rather than left as a gap a reader has to guess at.
+   A read of `trigger_cmd` returns zero `--mode` tokens on all 86 rows — that is a **wrong-column
+   artefact, not an absence**, and it is stated because §7's first pass made exactly that read.
+   **Attribution:** 65 rows split across the six declared prefixes (18 / 6 / 5 / 12 / 1 / 23) and
+   **21 carry no factory prefix** (§7: 20 of 83). Reported in this factory's registry attestation,
+   **never touched**.
+
+3. **Stage 2 (Single-Writer & Concurrency Locking): NOT fleet-wide — 1 of 6 `adopted`.** The
+   mechanical signal is each registry fragment's own `instruments.ledger.state`, now **attested
+   `2026-11-09T06:12:54Z`** (§7 read `2026-10-27`, so the attestation is fresher while every state
+   is unchanged):
+
+   | Factory | ledger state | green | `behind_by` |
+   |---|:---:|:---:|:---:|
+   | Meta-factory | **`adopted`** | true | 0 |
+   | InferHub Watch | `partial` | true | 5 |
+   | AI AntiSpam | `partial` | **false** | 1 |
+   | Infra Factory | `deferred` | true | 13 |
+   | Miidas | `deferred` | true | 6 |
+   | OpenCrabs dev | `not-applicable` | false | — |
+
+   **Adoption is a different predicate from "has an append-only ledger"** — the two are named
+   apart here so a reader does not read one as the other.
+
+4. **Stage 3 (Self-Auditing Quality Loops): 4 / 6 active.** Meta-factory runs the loop live at
+   this read: cadence **held** (`last_run_ts 2026-11-15T01:02:26Z`, 5.5 h), **5 032 ledger rows**,
+   a rework instrument at **395 entries / 53 unprevented**, and a self-audit of **131 gates**
+   (verdict `DEGRADED`, 128 PASS / 1 FAIL / **2 no-verdict** — the 11-14 survey's read at
+   `be07a4c5`, **4 443.47 s** of gate time). OpenCrabs dev, InferHub Watch and Miidas carry their
+   own loops; **InferHub Watch's `D2` 2 sits at the subject-matter gate rather than above it**,
+   which withholds substantive consulting work on it. Infra Factory holds initial loops.
+
+5. **Stage 4 (Fleet Ecosystem & Value Optimization): 2 / 6 pioneering.** Meta-factory and
+   OpenCrabs dev hold active supplier-client loops — the registry names the relationship in its
+   own `does_not_own` clause ("the OpenCrabs runtime, daemon and core tools — a client-supplier
+   loop, not ownership"). Value-weighted routing remains the open milestone. **Unchanged.**
+
+### Live self-metrics (2026-11-15T06:34:41Z, HEAD `1fd2a727`)
+
+Read from `tools/audit.py --json --no-gates`; the gate verdict fields read `null` because the
+suite was deliberately skipped, **never as a green**. Each ratio is printed with the predicate
+`tools/audit.py` actually computes:
+
+| Metric | Value | Predicate / denominator |
+|---|---|---|
+| Ledger events | **5 032** | — |
+| Closed subjects | **565** | 572 close rows |
+| Rework entries | **395** | 53 unprevented |
+| Rework share | **41.15%** | entries ÷ (closed subjects + entries) = 395 ÷ 960 |
+| Rework per close | **69.91%** | entries ÷ closed subjects = 395 ÷ 565 |
+| Change-fail rate | **59.82%** | change-failures ÷ closed subjects = 338 ÷ 565 |
+| Rework subject coverage | **95.19%** | determinate ÷ entries |
+| Cadence | **held** | last run `2026-11-15T01:02:26Z`, 5.5 h |
+
+**Every ratio moved in the healthy direction again, and the movement is now mostly denominator.**
+Against §7's read: closed subjects **514 → 565** (+51), rework entries **365 → 395** (+30),
+ledger rows **4 562 → 5 032** (+470). Rework share fell **41.52% → 41.15%**, rework per close
+**71.01% → 69.91%**, change-fail **59.92% → 59.82%**, coverage rose **94.79% → 95.19%**. A rising
+denominator with a slower-rising numerator is what a falling share looks like; it is stated as
+arithmetic, not as improvement in the underlying behaviour, which this round did not measure.
+
+**The gate verdict is not this round's reading.** Today's own gate run is still in flight at this
+read, so the newest *complete* read remains the 11-14 survey's: **`DEGRADED`, 128 PASS / 1 FAIL /
+2 no-verdict of 131 gates** at `be07a4c5`. The single failure was `exit_code 1` and a genuine
+verdict; both no-verdicts were `exit_code 124` with `duration_is_lower_bound: true`, i.e. kills at
+their wall, not verdicts.
+
+### What to watch
+
+- **The gate fleet grew 109 → 131 (+22) and the UNKNOWN count went 0 → 2, and the second number is
+  the more interesting one.** §7 reported "109 gates, **0 UNKNOWN**" as the Stage-3 health signal.
+  That signal no longer holds, and it did not break — it was **narrowed by measurement**. Both
+  no-verdicts are hundredths-of-a-second overshoots (`tools/hygiene.py` 8.37 s against 8.35 s;
+  `test_ledger_commit_cites_no_rows.py` 4.92 s against 4.91 s), and both pass by hand under the
+  same load. So "0 UNKNOWN" was never a property of the suite; it was a property of a suite with
+  fewer gates near their walls. **A budget that a gate can miss by 0.02 s is not a wall, it is a
+  coin-flip**, and the honest reading is that two gates now sit on theirs.
+- **§7's two long-standing reds both stayed closed, and the third one opened and closed again.**
+  The ontology gate and the citation gate that §7 recorded as cleared by declaration still pass —
+  `pytest tests/test_ontology.py tests/test_ledger_citation_declared.py` → **46 passed** at this
+  read. In between, the 11-14 audit caught the citation gate **RED** on a published row carrying a
+  bare section number, and it was cleared the same day by two more **declared** exemptions
+  (`01b0b7fa`, rows 5008 and 5015, each naming the document the number belongs to). So the gate
+  is doing its job in both directions: it reds on drift, and it forgives only by declaration that
+  prints what it excluded.
+- **The shipped-audit gate's eight-round refusal streak ended, and two consecutive greens now
+  confirm a fix rather than weather.** `tests/test_shipped_audit_runs.py` reads **`passed=True`,
+  1 160.00 s against a 3 440.23 s budget** — the private lock path ended a class where the gate
+  had refused with exit 3 for eight rounds running. §7 recorded this gate as one of two
+  batch-only reds; it is now neither red nor batch-only.
+- **The fleet total is flat for the thirty-sixth document round, and §7's reading of the flatness
+  has been confirmed by the instrument's own authors.** 350 / 456 again, across a round in which a
+  shipped-audit gate went from eight refusals to two greens, a published row was caught violating
+  the citation law, and twelve wakes were lost. None of it reaches a cell. The movement this round
+  is in the machinery — gate count, boundary declarations, ratios — and a reader who watches only
+  the total would see nothing happen in a round where a two-week refusal streak ended.
+- **The board moved for the first time in this series at a rate worth naming:** **642 total / 75
+  open / 567 closed** at `2026-11-15T06:35:09Z`, against §7's 592 / 77 / 515 — closed **+52**, open
+  **−2**, total **+50**. §7 recorded "+3 closed, open unchanged". The open set has now fallen
+  while closes ran at 52 against the previous round's 3: intake is being outrun by close, which is
+  what a healthy queue looks like, and it is also why the `board-unruled` leg's population is now
+  small enough for one late ruling to be visible as a problem.
+- **This document's own product declaration was two rounds stale, and this round fixed it.**
+  `docs/products.json` carried `growth_map.last_receipt` = "calibrated 2026-09-16" — so §7's round
+  on 2026-11-01 did not update the receipt it produced, and neither did any round between. The
+  field now names this calibration. The same file's `consulting.last_receipt` still reads
+  "evidence/scores/2026-09-16.md scored across 6 member factories" and is **not** this round's
+  product to stamp; it is reported here rather than silently edited.
