@@ -424,7 +424,9 @@ def no_verdict_class_of(line):
 # against 4 naming real gates, because an ad-hoc run that does not pin `OC_SUBPROCESS_DIR`
 # writes a noise row that append-only law then forbids removing. `.gitignore` carries the
 # surface (`evidence/subprocesses/`) and the reasoning; this comment marks the constant whose
-# name a reader arrives by.
+# name a reader arrives by. The precedent for a factory-data surface that never ships is
+# `docs/hygiene-protected.json`: only its skeleton `docs/hygiene-protected.example.json` is in
+# the tree, the live file is absent by design, and `tools/hygiene.py:137` resolves the name.
 #
 # The invariant the issue names — "a row that ships in the tree names a gate that exists in
 # the tree" — is held here BY CONSTRUCTION: nothing ships. The rejected alternative was to

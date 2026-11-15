@@ -25,7 +25,11 @@ __pycache__/
 # gate the invariant post-hoc against a declared baseline) was rejected because its only
 # remedy for a violation is WIDENING the baseline, which is the drift-guard-disarmed-by-the-
 # act-that-silences-it class. Precedent for a factory-data surface that deliberately never
-# ships: docs/hygiene-protected.json.
+# ships: `docs/hygiene-protected.json`, whose SHIPPED form is only the skeleton
+# `docs/hygiene-protected.example.json` — the live file is absent from every tree by design,
+# and its absence is the shipped state (`tools/hygiene.py:137` resolves it; the stated-skip
+# readers are `tests/ledger_boundary.py:164` and the citation legs). So this rule's sibling is
+# not a tracked file a reader can open; it is the example plus the absent live copy.
 #
 # The rows already committed are PRESERVED — on disk byte-for-byte, and in git history at
 # 5ff312d7 and earlier. `git rm --cached` removed them from the INDEX only; nothing was
