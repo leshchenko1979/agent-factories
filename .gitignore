@@ -11,3 +11,23 @@ __pycache__/
 
 # The derived ledger index: disposable, regenerable, ~2.9x the text.
 .ledger-index.sqlite
+
+# THE GATE-SELECT KILL-ROW STORE IS FACTORY DATA, NOT A SHIPPED ARTIFACT (#644, route A).
+# A kill row records a RUN ON A HOST, not a property of the tree: a fresh clone has no runs,
+# so it should report no derived kills, and shipping one host's run records makes the tree
+# assert things about runs that never happened there. It shipped once, and the tree carried
+# 86 rows naming scripts that exist in no tree (95% probe noise from ad-hoc runs that did not
+# pin OC_SUBPROCESS_DIR) against 4 naming real gates — a ratio that worsens with every proof
+# run, because the store is append-only and a noise row can never be removed.
+#
+# The invariant it must hold — "a row that ships in the tree names a gate that exists in the
+# tree" — is held here BY CONSTRUCTION: nothing ships. The alternative route (keep it tracked,
+# gate the invariant post-hoc against a declared baseline) was rejected because its only
+# remedy for a violation is WIDENING the baseline, which is the drift-guard-disarmed-by-the-
+# act-that-silences-it class. Precedent for a factory-data surface that deliberately never
+# ships: docs/hygiene-protected.json.
+#
+# The rows already committed are PRESERVED — on disk byte-for-byte, and in git history at
+# 5ff312d7 and earlier. `git rm --cached` removed them from the INDEX only; nothing was
+# deleted or rewritten to make this rule true.
+evidence/subprocesses/

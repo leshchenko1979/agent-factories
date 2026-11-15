@@ -415,6 +415,28 @@ def no_verdict_class_of(line):
 
 # THE SUBPROCESS LEDGER THIS RUNNER WRITES ITS KILLS INTO (#641). One name, declared here
 # so the writer and the rederive tool's reader cannot drift apart on the file's identity.
+#
+# IT IS FACTORY DATA AND IT DOES NOT SHIP (#644, route A). A kill row records a RUN ON A HOST,
+# not a property of the tree — a fresh clone has no runs, so a clone should report no derived
+# kills, and `read_derived_kills` already keeps that distinction (None = no store readable,
+# `()` = read and empty). Shipping one host's run records made the tree assert things about
+# runs that never happened there, and it shipped 86 rows naming scripts that exist in no tree
+# against 4 naming real gates, because an ad-hoc run that does not pin `OC_SUBPROCESS_DIR`
+# writes a noise row that append-only law then forbids removing. `.gitignore` carries the
+# surface (`evidence/subprocesses/`) and the reasoning; this comment marks the constant whose
+# name a reader arrives by.
+#
+# The invariant the issue names — "a row that ships in the tree names a gate that exists in
+# the tree" — is held here BY CONSTRUCTION: nothing ships. The rejected alternative was to
+# keep it tracked and gate the invariant post-hoc against a declared baseline; that route's
+# only remedy for a violation is widening the baseline, which is the drift-guard-disarmed-by-
+# the-act-that-silences-it class (AGENTS rule 7). A gate whose expected state can be widened
+# by the very act that violates it is not a guard.
+#
+# THE PRE-CUTOVER ROWS ARE PRESERVED, and that is a ruling rather than a courtesy: nothing was
+# deleted, no row was edited, the file sits on disk byte-for-byte and its rows remain in git
+# history at 5ff312d7 and earlier. `git rm --cached` removed them from the INDEX only, which
+# is exactly #644's criterion A — not a deletion performed to make a check pass.
 KILL_ROW_STORE_NAME = "gate-select"
 
 # THE ACTOR IS DECLARED, NOT DERIVED (#641's test-authority defect, measured by HQ 2026-11-15).

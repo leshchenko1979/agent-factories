@@ -11,6 +11,15 @@ The store is `evidence/subprocesses/gate-select.jsonl`, written ONLY by
 `tools/ledger.py append --subprocess` -- the single-writer law owns that surface, so
 these probes drive the real writer and never touch the file themselves except to READ
 and to compare hashes.
+
+IT IS FACTORY DATA AND DOES NOT SHIP (#644, route A). A kill row records a RUN ON A HOST,
+not a property of the tree, so `.gitignore` keeps the whole surface out of the index and
+`probe_the_store_does_not_ship_and_cannot_be_readded` gates that. It shipped once and the
+tree carried 86 rows naming scripts that exist in no tree against 4 naming real gates --
+noise from ad-hoc runs that did not pin `OC_SUBPROCESS_DIR`, which append-only law then
+forbids removing. The invariant ("a row that ships in the tree names a gate that exists in
+the tree") is held by construction while nothing ships; the rejected alternative gated it
+post-hoc against a baseline whose only remedy for a violation is being widened.
 """
 from __future__ import annotations
 
@@ -528,6 +537,91 @@ def probe_the_render_names_all_three_states() -> None:
           source.count(streak) == 1, "")
 
 
+# ---- #644: the store is FACTORY DATA and nothing about it ships ----
+
+STORE_REL = "evidence/subprocesses/gate-select.jsonl"
+
+def _git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True)
+
+def _rows_of(text: str) -> list[dict]:
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+def _newest_commit_carrying_store() -> tuple[str, list[dict]]:
+    """The newest commit whose tree still contains the store, and its rows.
+
+    Walked rather than assumed: once the untracking commit lands, `git show HEAD:<path>`
+    fails, and `git log --diff-filter=D` names the commit where the file is ABSENT — so the
+    question "which commit still carries it?" is answered by asking each candidate for its
+    bytes, never by guessing HEAD~1.
+    """
+    shas = _git("log", "--all", "--format=%H", "--", STORE_REL).stdout.split()
+    for sha in shas:
+        show = _git("show", f"{sha}:{STORE_REL}")
+        if show.returncode == 0:
+            return sha, _rows_of(show.stdout)
+    return "", []
+
+def probe_the_store_does_not_ship_and_cannot_be_readded() -> None:
+    """#644 route A: the kill-row store is FACTORY DATA, so nothing about it ships.
+
+    THREE CHECKS, each reading a COMMITTED declaration — the git index, the ignore file, and
+    git history — never a live mutable surface. That matters here more than usual: the store
+    is a file that peers' runs append to WHILE this arm reads it, so any check keyed on its
+    row COUNT would be a race. The superset property below is the one that is stable under
+    concurrent appends and still catches a deletion.
+
+    (a) The index holds no file under `evidence/subprocesses/` — #644's own criterion A.
+    (b) The path is IGNORED, so a future lane's `git add` cannot silently re-track it. THIS
+        IS THE DRIFT GUARD: the invariant the issue names — "a row that ships in the tree
+        names a gate that exists in the tree" — is held by construction only while nothing
+        ships, so the rule that keeps it out is the thing worth gating. Deleting the
+        `.gitignore` line reds this arm.
+    (c) The pre-cutover rows are PRESERVED rather than deleted to make (a) true: the newest
+        commit that still carries the store has rows, and when the file exists on disk it is
+        a SUPERSET of them. Stated skip when the file is absent — a fresh clone legitimately
+        has no store, because factory data does not ship, and a check that demanded one would
+        red every clone for being correct.
+    """
+    tracked = [line for line in _git("ls-files", "evidence/subprocesses/").stdout.splitlines() if line.strip()]
+    check("(a) no file under evidence/subprocesses/ is tracked", not tracked, f"tracked: {tracked}")
+
+    ignored = _git("check-ignore", "-q", STORE_REL)
+    check(
+        "(b) the store path is git-ignored, so `git add` cannot re-track it",
+        ignored.returncode == 0,
+        f"git check-ignore rc={ignored.returncode}: the .gitignore rule that keeps the "
+        "store out of the tree is gone, and with it the only thing holding #644's invariant",
+    )
+
+    sha, committed_rows = _newest_commit_carrying_store()
+    check(
+        "(c1) history still carries the pre-cutover rows",
+        bool(committed_rows),
+        f"no commit under --all carries {STORE_REL}: the rows that shipped at 5ff312d7 were "
+        "deleted from history instead of being removed from the INDEX, which is not what "
+        "route A does",
+    )
+
+    on_disk = REPO / STORE_REL
+    if not on_disk.is_file():
+        print(
+            f"STATED SKIP (c2) {STORE_REL} is absent on this host — factory data does not "
+            "ship, so a clone has no store and owes no rows; the history half (c1) is the "
+            "check that binds here"
+        )
+        return
+
+    disk_rows = _rows_of(on_disk.read_text(encoding="utf-8"))
+    key = lambda r: (r.get("n"), r.get("ts"), r.get("subject"))  # noqa: E731
+    missing = {key(r) for r in committed_rows} - {key(r) for r in disk_rows}
+    check(
+        "(c2) every committed row survives on disk (append-only: nothing deleted to pass)",
+        not missing,
+        f"{len(missing)} committed row(s) missing from the on-disk store, e.g. "
+        f"{sorted(m for m in missing if m[0] is not None)[:3]}",
+    )
+
 PROBES = (
     probe_a_budget_killed_gate_leaves_a_durable_row,
     probe_a_killed_run_still_leaves_its_rows,
@@ -541,6 +635,8 @@ PROBES = (
     probe_the_rederive_reader_is_read_only,
     probe_the_rederive_module_carries_no_writer,
     probe_the_render_names_all_three_states,
+
+    probe_the_store_does_not_ship_and_cannot_be_readded,
 )
 
 
