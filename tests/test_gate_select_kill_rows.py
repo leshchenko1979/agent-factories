@@ -319,6 +319,7 @@ def probe_a_CONTENDED_lock_is_retried_and_the_primary_row_still_lands() -> None:
         os.environ["OC_SUBPROCESS_DIR"] = str(store)
         saved_timeouts = mod.KILL_ROW_APPEND_TIMEOUTS
         saved_backoff = mod.KILL_ROW_APPEND_BACKOFF_SEC
+        saved_store = os.environ.get("OC_SUBPROCESS_DIR")
         holder = None
         try:
             # Short walls so the probe is fast: the SHAPE is under test, not the production
@@ -356,7 +357,13 @@ def probe_a_CONTENDED_lock_is_retried_and_the_primary_row_still_lands() -> None:
                 holder.wait(timeout=10)
             mod.KILL_ROW_APPEND_TIMEOUTS = saved_timeouts
             mod.KILL_ROW_APPEND_BACKOFF_SEC = saved_backoff
-            os.environ.pop("OC_SUBPROCESS_DIR", None)
+            # RESTORE, never pop: an ambient OC_SUBPROCESS_DIR belongs to the harness that
+            # set it, and erasing it would silently re-point every probe AFTER this one at
+            # the real store. Absent stays absent; a value stays that value.
+            if saved_store is None:
+                os.environ.pop("OC_SUBPROCESS_DIR", None)
+            else:
+                os.environ["OC_SUBPROCESS_DIR"] = saved_store
 
 # ---- criterion 1's boundary: refusals and never-ran lines are NOT kills ----
 
@@ -544,6 +551,39 @@ STORE_REL = "evidence/subprocesses/gate-select.jsonl"
 def _git(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True)
 
+
+class _GitUnavailable(RuntimeError):
+    """git could not ANSWER — an inability, never a reading.
+
+    `_git` returns the process so a caller can read a non-zero rc that MEANS something
+    (`check-ignore -q` exits 1 for "not ignored": that is the answer). A caller that treats
+    stdout as DATA cannot use that shape, because an empty string is what BOTH "the answer is
+    empty" and "git never spoke" look like, and the two demand opposite verdicts.
+
+    Measured 2026-11-15: a 58-gate sweep reported this arm FAILED at a tree where it passes
+    7/7 standalone (loads 2.7-16.8, CPU and IO stress, cgroup, bare and pytest, real runner).
+    `git log`/`git show` were unchecked, so a transient failure FABRICATED "no commit carries
+    the store" — a tree-defect message for an instrument that never answered.
+    """
+
+
+def _git_checked(*args: str, attempts: int = 3) -> subprocess.CompletedProcess:
+    """A git READ, retried, whose exhaustion is an INABILITY and never an empty answer.
+
+    The retry is the #641 shape applied to the instrument itself: a transient failure is
+    transient, so re-asking is cheap and honest. When every attempt fails the caller is told
+    the truth — it may not report a verdict it could not take.
+    """
+    last = ""
+    for attempt in range(attempts):
+        proc = _git(*args)
+        if proc.returncode == 0:
+            return proc
+        last = f"rc={proc.returncode}: {(proc.stderr or proc.stdout).strip()[:300]}"
+        if attempt + 1 < attempts:
+            time.sleep(0.2 * (attempt + 1))
+    raise _GitUnavailable(f"git {' '.join(args)} — {last}")
+
 def _rows_of(text: str) -> list[dict]:
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
@@ -555,11 +595,21 @@ def _newest_commit_carrying_store() -> tuple[str, list[dict]]:
     question "which commit still carries it?" is answered by asking each candidate for its
     bytes, never by guessing HEAD~1.
     """
-    shas = _git("log", "--all", "--format=%H", "--", STORE_REL).stdout.split()
+    shas = _git_checked("log", "--all", "--format=%H", "--", STORE_REL).stdout.split()
     for sha in shas:
         show = _git("show", f"{sha}:{STORE_REL}")
         if show.returncode == 0:
             return sha, _rows_of(show.stdout)
+        # A non-zero `git show` answers TWO different things: "this commit does not carry the
+        # path" (the ordinary case while walking back past the untracking commit) and "git
+        # could not answer at all". Only the first is a reading.
+        stderr = (show.stderr or "").lower()
+        if "does not exist in" in stderr or "exists on disk, but not in" in stderr:
+            continue
+        raise _GitUnavailable(
+            f"git show {sha}:{STORE_REL} — rc={show.returncode}: "
+            f"{(show.stderr or show.stdout).strip()[:300]}"
+        )
     return "", []
 
 def probe_the_store_does_not_ship_and_cannot_be_readded() -> None:
@@ -582,19 +632,58 @@ def probe_the_store_does_not_ship_and_cannot_be_readded() -> None:
         a SUPERSET of them. Stated skip when the file is absent — a fresh clone legitimately
         has no store, because factory data does not ship, and a check that demanded one would
         red every clone for being correct.
+
+    EVERY arm above reads git, so a repository git cannot answer for has NO verdict here —
+    the whole probe reports a STATED INABILITY rather than a mix of fabricated passes and a
+    traceback. Measured 2026-11-15: a 58-gate sweep reported this arm FAILED at a tree where
+    it passes 7/7 standalone, and the message it printed ("history lost the rows") described a
+    tree defect that had not happened.
     """
-    tracked = [line for line in _git("ls-files", "evidence/subprocesses/").stdout.splitlines() if line.strip()]
+    try:
+        _store_ships_checks()
+    except _GitUnavailable as exc:
+        check(
+            "(git) this probe could READ the repository",
+            False,
+            "INABILITY, not a reading: git could not answer, so no arm of this probe has a "
+            f"verdict on the tree — {exc}",
+        )
+
+
+def _store_ships_checks() -> None:
+    tracked = [line for line in _git_checked("ls-files", "evidence/subprocesses/").stdout.splitlines() if line.strip()]
     check("(a) no file under evidence/subprocesses/ is tracked", not tracked, f"tracked: {tracked}")
 
     ignored = _git("check-ignore", "-q", STORE_REL)
-    check(
-        "(b) the store path is git-ignored, so `git add` cannot re-track it",
-        ignored.returncode == 0,
-        f"git check-ignore rc={ignored.returncode}: the .gitignore rule that keeps the "
-        "store out of the tree is gone, and with it the only thing holding #644's invariant",
-    )
+    # `check-ignore -q` has exactly TWO answers: 0 = ignored, 1 = not ignored. Any OTHER rc is
+    # git failing to answer, and reading that as "the rule is gone" would be the same
+    # fabrication the (c1) sibling was just repaired for.
+    if ignored.returncode not in (0, 1):
+        check(
+            "(b) the store path is git-ignored, so `git add` cannot re-track it",
+            False,
+            "INABILITY, not a reading: `git check-ignore -q` answers 0 (ignored) or 1 (not "
+            f"ignored), so rc={ignored.returncode} means git did not answer — "
+            f"{(ignored.stderr or '').strip()[:300]}",
+        )
+    else:
+        check(
+            "(b) the store path is git-ignored, so `git add` cannot re-track it",
+            ignored.returncode == 0,
+            "git check-ignore answered 1 (not ignored): the .gitignore rule that keeps the "
+            "store out of the tree is gone, and with it the only thing holding #644's invariant",
+        )
 
-    sha, committed_rows = _newest_commit_carrying_store()
+    try:
+        sha, committed_rows = _newest_commit_carrying_store()
+    except _GitUnavailable as exc:
+        check(
+            "(c1) history still carries the pre-cutover rows",
+            False,
+            "INABILITY, not a reading: git could not answer, so this arm reports NO verdict "
+            f"on the tree rather than fabricating one — {exc}",
+        )
+        return
     check(
         "(c1) history still carries the pre-cutover rows",
         bool(committed_rows),
