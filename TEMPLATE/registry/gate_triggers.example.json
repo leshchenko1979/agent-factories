@@ -281,6 +281,7 @@
       "tools/audit.py"
     ],
     "tests/test_gate_select_kill_rows.py": [
+      "tools/gate_budget.py",
       "tools/gate_select.py",
       "tools/gate_budget_rederive.py"
     ],
