@@ -6452,13 +6452,20 @@ def box_deliveries(
     is RETURNED in `unreached`, never dropped — a home that could not be read is not a home
     with nothing in it, and the two must never render the same.
 
-    TWO ALTERNATIVES DELIBERATELY REJECTED, recorded here so the next reader does not
-    re-derive them:
+    WHAT IS STILL REJECTED, stated precisely so this block cannot be read as a rejection of
+    the bound above. The `created_at` window IS used — as a bound on the ROWS READ. What stays
+    rejected is the same window used to decide ABSENCE, which is the #432 defect and a
+    different thing:
 
-      * a `created_at` window, which WOULD use `idx_messages_created_at` — rejected because it
-        manufactures the false absence this leg exists to refuse: the leg takes a match WITHOUT
-        a window first precisely so a delivery outside it reports WINDOW MISMATCH rather than
-        absence (#432).
+      * a `created_at` window used to DECIDE THE VERDICT — "no match inside my window, so no
+        delivery exists". The leg takes a match WITHOUT a window first precisely so a delivery
+        outside it reports WINDOW MISMATCH rather than absence (#432). Bounding which ROWS are
+        read cannot do that, because every verdict-bearing set is already clipped inside the
+        bound: see the paragraph above, and the probe that asserts the horizon CONTAINS the
+        judged window. Narrowing this block to the deciding-window is the repair #642's ruling
+        ordered before close; the earlier text rejected the window outright and contradicted
+        the paragraph above it, so a reader who met the rejection first would have deleted the
+        bound and restored the 508 s leg.
       * a stored/generated `notify_header` column with an index — the cleanest shape, and it is
         a SCHEMA CHANGE on a live 4 GB database, which #642 puts out of scope.
     """
