@@ -261,6 +261,16 @@ DECLARED_ABSENT_NAMESPACES = {
         "(tools/docs/OPEN-QUESTIONS-INSTALL.md), and the citation names that host path so a "
         "reader can find the bridge. It resolves wherever the tool actually runs."
     ),
+    "evidence/subprocesses": (
+        "FACTORY DATA, absent from a shipped tree BY DESIGN (#644, route A): a kill row "
+        "records a RUN ON A HOST, not a property of the tree, so the store lives in the "
+        "factory's own runtime evidence directory and is created there on first write by "
+        "`tools/gate_select.py` (kill rows) and `tools/ledger.py` (subprocess rows). "
+        "`.gitignore` carries the surface and the reasoning; a fresh clone has no runs and "
+        "should report no derived kills, which is why shipping one host's rows made the "
+        "tree assert runs that never happened there. Same class as `tools/state` above: a "
+        "DEPLOYED runtime layout, not a shipped one."
+    ),
     "skills/x": (
         "a SYNTHETIC example inside prose that defines what a citation IS (tools/review.py: "
         "a bare `X.md` is a name, `skills/x/y.md` is a repo citation). The path IS the "
