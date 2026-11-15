@@ -662,6 +662,15 @@ RUN_DELIVERED_STATUSES = ("success",)
 RUN_UNDELIVERED_STATUSES = ("delivery_failed",)
 RUN_COMPLETED_STATUSES = RUN_DELIVERED_STATUSES + RUN_UNDELIVERED_STATUSES
 RUN_NOT_COMPLETED_STATUSES = ("interrupted", "error")
+# #643: the daemon's NON-TERMINAL state. `CronJobRun::new_running()` (src/db/models.rs:703)
+# stamps `running` when the fire STARTS, and `mark_success`/`mark_error`/`mark_delivery_failed`
+# (src/db/repository/cron_job_run.rs:69/:93/:125) UPDATE that row when the run ends — so EVERY
+# fire passes through this value, and any round that samples the store mid-run sees it. It is
+# named here explicitly, and the tuple stays CLOSED, rather than being excused by a catch-all:
+# a status this leg does not know must still be REPORTED (the n=903 class above), and a
+# catch-all would silently swallow the next value the daemon adds. Terminality is decided
+# before any verdict is taken.
+RUN_IN_FLIGHT_STATUSES = ("running",)
 # The redirect a prompt DECLARES, by its stem (#163 half 2). Every pacemaker on this
 # box writes `/tmp/<stem>-$(date ...).log` (one job escapes the `$` as `\$(date`), so
 # the stem is the token between `/tmp/` and the timestamp EXPRESSION. Read from the
@@ -6383,7 +6392,12 @@ def typed_subject_units(row: dict) -> set[str]:
     return out
 
 
-def box_deliveries(root: Path | None = None) -> tuple[list[dict], list[str], list[str]]:
+def box_deliveries(
+    root: Path | None = None,
+    session_refs: "set[str] | None" = None,
+    since: int | None = None,
+    until: int | None = None,
+) -> tuple[list[dict], list[str], list[str]]:
     """(deliveries, homes_read, unreached) for every delivered notify on the box.
 
     TWO SURFACES, because a delivery exists in one of two states and both are receipts: a
@@ -6393,15 +6407,68 @@ def box_deliveries(root: Path | None = None) -> tuple[list[dict], list[str], lis
     `notify_queue` row. Reading only the first would report a legitimate deferral as a
     phantom dispatch — the opposite error to the one this leg exists to catch.
 
+    THE ROW POPULATION IS THE COST, NOT THE PLAN (#642). Both header forms are CONSTANTS, so
+    an UNANCHORED `content like '%<header>%'` cannot use an index: `EXPLAIN QUERY PLAN` reads
+    `SCAN messages`, and on the ops store (4,022,534,144 B / 142,833 rows) ONE call measured
+    **724.58 s**. `session_refs` cuts the population rather than the pattern:
+
+      * `None` — today's read, every row in every home. Kept for callers that want the whole
+        box (and for every existing injection point, which passes no argument).
+      * a NON-EMPTY set — `and session_id in (?, …)`, which `EXPLAIN QUERY PLAN` reports as
+        `SEARCH messages USING INDEX idx_messages_session_id (session_id=?)`.
+      * an EMPTY set — the `messages` query is SKIPPED entirely (never `in ()`, which SQLite
+        accepts and which reads as "matched nothing" when it actually means "asked nothing").
+        `notify_queue` is still read: an accepted-but-undrained notify carries no `messages`
+        row at all, so skipping that read would drop the deferred half of #426.
+
+    AND THE ROW COUNT IS THE REAL COST, NOT THE INDEX (#642, measured). This store's rows are
+    ~28 KB each (`content` is the payload), so the read is DISK-BOUND: a session-restricted
+    but UNBOUNDED read still touched 19,789 rows ≈ 554 MB and measured **508.11 s / 413.54 s**
+    warm on a two-session restriction, against 724.58 s for the original full SCAN — 1.5×, not
+    the orders of magnitude the item asks for. The plan was already an index SEARCH; the bytes
+    were the cost. So `since`/`until` bound `created_at`, which IS indexed
+    (`idx_messages_created_at`), and the call site derives the window from the anchors it will
+    actually judge.
+
+    WHY THE WINDOW IS VERDICT-NEUTRAL AND NOT THE #432 FALSE ABSENCE. Every set the verdict is
+    taken from — `plausible`, `hits`, `near_mentions` — is ALREADY restricted to
+    `anchor ± DELIVERY_MATCH_HORIZON_SECS`; a delivery further away than that was never
+    corroboration and never a WINDOW MISMATCH either. So a read window of the judged anchors
+    plus that same horizon cannot remove a row any verdict was computed from: it only narrows
+    the two `*_anywhere` figures, which are diagnostics and are REPORTED as window-scoped. The
+    window is derived from `to_judge` rather than guessed, so an old anchor widens it and no
+    row is silently excluded. A `created_at` window used to decide ABSENCE would be the #432
+    defect; used as a bound on rows that no verdict can read outside of, it is not.
+
+    WHY THE RESTRICTION IS COMPLETE AND NOT AN APPROXIMATION: the delivery leg's verdict loop
+    compares `d["session"] == session_ref` and nothing else, and a dispatch row carrying no
+    typed `session` ref is already excluded from judgement and COUNTED in `not_judged`
+    (#425 clause 1). So no row the leg would have JUDGED can be lost by naming only the
+    sessions its judged rows carry — and the coverage line reports the narrower population
+    rather than letting a smaller `deliveries_read` imply a cleaner box.
+
     Read IN PLACE through a `mode=ro` URI, for the reason `box_cron_rows` states: copying a
     live WAL-mode database yields stale state and leaks disk. A home that could not be read
     is RETURNED in `unreached`, never dropped — a home that could not be read is not a home
     with nothing in it, and the two must never render the same.
+
+    TWO ALTERNATIVES DELIBERATELY REJECTED, recorded here so the next reader does not
+    re-derive them:
+
+      * a `created_at` window, which WOULD use `idx_messages_created_at` — rejected because it
+        manufactures the false absence this leg exists to refuse: the leg takes a match WITHOUT
+        a window first precisely so a delivery outside it reports WINDOW MISMATCH rather than
+        absence (#432).
+      * a stored/generated `notify_header` column with an index — the cleanest shape, and it is
+        a SCHEMA CHANGE on a live 4 GB database, which #642 puts out of scope.
     """
     registry = load_module("oc_registry", REGISTRY)
     dbs, unreached = registry.opencrabs_home_dbs(root)
     deliveries: list[dict] = []
     homes_read: list[str] = []
+    # An EMPTY set is "ask nothing", never `in ()`: see the docstring.
+    restrict = session_refs is not None
+    refs = sorted({str(r) for r in (session_refs or ()) if str(r)})
     for db in dbs:
         try:
             conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
@@ -6411,13 +6478,52 @@ def box_deliveries(root: Path | None = None) -> tuple[list[dict], list[str], lis
         try:
             # AN OR OVER THE DECLARED TUPLE, never a single form (#426): the harness writes
             # both, and matching one read a drained notify as a phantom dispatch.
-            landed = list(conn.execute(
-                "select session_id, coalesce(content,''), created_at from messages "
-                "where role = 'user' and ("
-                + " or ".join("content like ?" for _ in NOTIFY_DELIVERY_HEADERS)
-                + ")",
-                tuple(f"%{header}%" for header in NOTIFY_DELIVERY_HEADERS),
-            ))
+            # THE WINDOW IS ONLY REAL IF THE PLANNER USES IT (#642, measured). Adding
+            # `created_at between ?` alone changed NOTHING: `explain query plan` still read
+            # `SEARCH messages USING INDEX idx_messages_session_id (session_id=?)`, so SQLite
+            # walked all 19,789 rows of the judged sessions and pulled every payload through
+            # the `content like` filter -- 554 MB, 500 s. Forced, the same query reads
+            # `SEARCH messages USING INDEX idx_messages_created_at (created_at>? AND
+            # created_at<?)`: 640 rows box-wide, 94 for the two judged sessions.
+            #
+            # IT IS FORCED ONLY WHERE THE INDEX IS PROVEN TO EXIST, and that guard is the
+            # point. `INDEXED BY` is a HARD hint: on a home whose `messages` table was built
+            # by a different harness version the name may be absent, and the query would
+            # raise `sqlite3.Error` -- which this loop turns into `unreached`, i.e. a
+            # PERFORMANCE KNOB would silently downgrade the leg to "the store is blind".
+            # So the optimization is opportunistic and the correct read is unconditional.
+            have_window_index = False
+            if since is not None or until is not None:
+                try:
+                    have_window_index = bool(conn.execute(
+                        "select 1 from sqlite_master where type='index' "
+                        "and name='idx_messages_created_at'"
+                    ).fetchone())
+                except sqlite3.Error:
+                    have_window_index = False
+            source = (
+                "messages INDEXED BY idx_messages_created_at"
+                if have_window_index else "messages"
+            )
+            landed = []
+            if not restrict or refs:
+                query = (
+                    f"select session_id, coalesce(content,''), created_at from {source} "
+                    "where role = 'user' and ("
+                    + " or ".join("content like ?" for _ in NOTIFY_DELIVERY_HEADERS)
+                    + ")"
+                )
+                params: list[object] = [f"%{h}%" for h in NOTIFY_DELIVERY_HEADERS]
+                if refs:
+                    query += " and session_id in (" + ",".join("?" for _ in refs) + ")"
+                    params.extend(refs)
+                if since is not None:
+                    query += " and created_at >= ?"
+                    params.append(int(since))
+                if until is not None:
+                    query += " and created_at <= ?"
+                    params.append(int(until))
+                landed = list(conn.execute(query, tuple(params)))
             queued = list(conn.execute(
                 "select session_id, coalesce(display_text,'') || ' ' || "
                 "coalesce(context_text,''), created_at from notify_queue"
@@ -6722,9 +6828,52 @@ def dispatch_delivery_leg(
         })
         return {"name": "dispatch-delivery", "status": "ASSERTED", "reason": None,
                 "problems": [], "excused": [], "coverage": coverage}
-    deliveries, homes_read, unreached = (deliveries_fn or box_deliveries)()
+    read_since: int | None = None
+    read_until: int | None = None
+    if deliveries_fn:
+        deliveries, homes_read, unreached = deliveries_fn()
+    else:
+        # #642: name the sessions the JUDGED rows carry, so the `messages` read is an index
+        # SEARCH over a handful of sessions instead of a 4 GB SCAN. Completeness is argued in
+        # `box_deliveries`'s docstring: the loop below compares only `d["session"] ==
+        # session_ref`, and a row with no ref is already `not_judged`, so nothing judged can
+        # be lost. An empty set is passed through as EMPTY (never widened to `None`): it means
+        # "no session is named", and the store read then yields the deferred half alone.
+        judged_refs = {ref for (_row, _anchor, _lo, _hi, ref, _basis) in to_judge if ref}
+        # AND THE ROW COUNT IS BOUNDED BY THE ANCHORS THE LEG WILL ACTUALLY JUDGE (#642).
+        # The session restriction alone measured 1.5x (508.11 s / 413.54 s warm against
+        # 724.58 s): this store's rows are ~28 KB of `content`, so 19,789 candidate rows is
+        # ~554 MB and the read is DISK-bound. The window is DERIVED from `to_judge` rather
+        # than guessed, so an old anchor widens it automatically and no judged row is lost.
+        #
+        # IT IS VERDICT-NEUTRAL BY CONSTRUCTION, not by hope: every set the verdict is taken
+        # from -- `plausible`, `near_mentions`, `hits` -- is already clipped to
+        # `anchor +/- match_horizon` (and `hits` to the narrower lo/hi, which is 180 s / 5400 s
+        # and therefore strictly inside it), so a row outside this window could never have
+        # changed a problem, an excusal or a corroboration. What it DOES narrow is the two
+        # `*_anywhere` figures and `corroborated`, which are diagnostics -- so the window is
+        # recorded in `coverage` and named in the render, never applied silently (#116).
+        # A window used to decide ABSENCE would be the #432 defect; used as a bound on rows
+        # no verdict can read outside of, it is not.
+        _anchors = [a for (_r, a, _lo, _hi, _ref, _b) in to_judge]
+        _horizon = dt.timedelta(seconds=DELIVERY_MATCH_HORIZON_SECS)
+        read_since = int((min(_anchors) - _horizon).timestamp())
+        read_until = int((max(_anchors) + _horizon).timestamp())
+        deliveries, homes_read, unreached = box_deliveries(
+            session_refs=judged_refs, since=read_since, until=read_until)
     coverage.update({
         "store_read": True,
+        # NAMED, NEVER ASSUMED: an injected reader (`deliveries_fn`) bounded its own read and
+        # this leg cannot see the bound, so it reports None rather than borrowing the window
+        # it would have chosen itself.
+        "store_read_window": (
+            [
+                dt.datetime.fromtimestamp(read_since, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                dt.datetime.fromtimestamp(read_until, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            ]
+            if read_since is not None and read_until is not None
+            else None
+        ),
         "deliveries_read": len(deliveries),
         "homes_read": len(homes_read),
         "homes_read_names": homes_read,
@@ -7868,6 +8017,23 @@ def wake_duty_leg(rows: list[dict], homes_read: list[str], unreached: list[str],
             excused.append(
                 f"{name} (cron id {job_id}): the newest fire's own instant ({started!r}) "
                 f"cannot be dated, so no window can be placed against it -- NOT JUDGED"
+            )
+            continue
+        if status in RUN_IN_FLIGHT_STATUSES:
+            # #643: TERMINALITY BEFORE VERDICT. Measured 2026-11-15 00Z: this leg reddened
+            # `ai-antispam-outreach-watch-poll` off a fire stamped 00:07:31.513363189Z while
+            # its own coverage line read the store at 00:07:58Z — a wake 26.5 s old, still
+            # RUNNING — and the same row read `success` hours later. The #635 negative-age
+            # guard below cannot help here: it sits AFTER this branch and this age is
+            # positive. A non-terminal state supports no verdict in either direction, so the
+            # fire is EXCUSED with its own age and never counted as a failed delivery.
+            in_flight += 1
+            excused.append(
+                f"{name} (cron id {job_id}, {slug}): the newest fire ({started}) carries "
+                f"status={status!r} — the daemon's NON-TERMINAL state, "
+                f"{duty_age_text((now_instant - woke_at).total_seconds())} old at this read. "
+                f"A run that has not finished has not failed to deliver: IN FLIGHT, never "
+                f"judged (#643)"
             )
             continue
         if status not in RUN_DELIVERED_STATUSES:
@@ -17136,11 +17302,21 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
             # the subject and were not counted, which is the difference between a narrow
             # predicate and a blind one (#116).
             if cov.get("store_read"):
+                # THE SCOPE OF THE DENOMINATOR IS NAMED (#642). The unbounded figure this
+                # line used to print was the reason the read could not be bounded: it counted
+                # matches over the WHOLE store, which forced every row's payload off disk. The
+                # read is now windowed to the judged anchors +/- the match horizon, so the
+                # denominator is that window -- and a denominator whose scope is unstated is
+                # the "confident number" this leg exists to refuse (#116), so it is printed.
+                _win = cov.get("store_read_window")
+                _scope = (
+                    f"in the read window [{_win[0]}, {_win[1]}]"
+                    if _win else "anywhere in the store(s), which an injected reader scoped"
+                )
                 lines.append(
                     f"  subject matches: {cov.get('subject_matches_within_horizon', 0)} within "
                     f"the {cov.get('match_horizon_secs')} s horizon of "
-                    f"{cov.get('subject_matches_anywhere', 0)} anywhere in the store(s) "
-                    f"(#432)"
+                    f"{cov.get('subject_matches_anywhere', 0)} {_scope} (#432, #642)"
                 )
                 # A MATCH IS SPLIT BY WHERE THE TOKEN SITS (#433): only a HEADER match
                 # corroborates a dispatch row, so the count a reader needs is not "how many
@@ -17152,8 +17328,8 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                     f"{cov['dispatch_rows_examined']} examined row(s) corroborated by a header "
                     f"match; {cov.get('subject_mentions_body_only_within_horizon', 0)} "
                     f"body-only mention(s) within the horizon of "
-                    f"{cov.get('subject_mentions_body_only', 0)} anywhere — a mention never "
-                    f"corroborates (#433)"
+                    f"{cov.get('subject_mentions_body_only', 0)} {_scope} — a mention never "
+                    f"corroborates (#433, #642)"
                 )
             if cov.get("store_read"):
                 lines.append(
@@ -18236,10 +18412,26 @@ def leg_guard(name: str, build, read_at: str) -> dict:
     would have carried, so the caller states it -- and a probe asserts every name in the
     caller's table against a CLEAN round's own names, which is what keeps the table from
     drifting away from the legs it names.
+
+    AND THE LEG ANNOUNCES ITSELF (#642 criterion 4). `main()` prints its verdict only after
+    every leg has run, so a slow leg emits NOTHING until it returns -- measured 2026-11-15:
+    one `box_deliveries` call took 724.58 s, and two patrol runs were killed that evening
+    because a twelve-minute silence is indistinguishable from a wedged process. A
+    `faulthandler` dump was what proved the instrument was merely slow. A twelve-minute leg
+    is acceptable; a twelve-minute leg that LOOKS DEAD is not. So a start line goes out
+    BEFORE `build()` and a done/raised line after, both on STDERR (stdout carries the JSON
+    verdict) and both FLUSHED, so a leg that never returns has still said it started.
     """
+    started = dt.datetime.now(dt.timezone.utc)
+    _leg_line(f"{name}: starting (read_at {read_at or 'unstated'})")
     try:
-        return build()
+        leg = build()
     except Exception as exc:  # noqa: BLE001 -- containment is the whole point of this guard
+        _leg_line(
+            f"{name}: RAISED after "
+            f"{(dt.datetime.now(dt.timezone.utc) - started).total_seconds():.1f} s -- "
+            f"{type(exc).__name__}: {exc}"
+        )
         return {
             "name": name,
             "status": "FAILED",
@@ -18255,6 +18447,20 @@ def leg_guard(name: str, build, read_at: str) -> dict:
                 "read_at": read_at,
             },
         }
+    _leg_line(
+        f"{name}: done in {(dt.datetime.now(dt.timezone.utc) - started).total_seconds():.1f} s "
+        f"-- status {leg.get('status') if isinstance(leg, dict) else 'UNKNOWN'}"
+    )
+    return leg
+
+def _leg_line(text: str) -> None:
+    """One progress line for a leg, on STDERR and FLUSHED (#642 criterion 4).
+
+    stderr rather than stdout because stdout carries the round's JSON verdict and a progress
+    line would corrupt it. Flushed because an unflushed line is not a signal: the whole point
+    is that it reaches a reader WHILE the leg is still running.
+    """
+    print(f"[leg] {text}", file=sys.stderr, flush=True)
 
 
 def main(

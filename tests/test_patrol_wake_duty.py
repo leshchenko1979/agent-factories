@@ -167,6 +167,50 @@ def test_a_failed_delivery_is_a_DIFFERENT_class_from_a_missing_duty() -> None:
     assert leg["coverage"]["missing"] == 0
     assert "not the #612 class" in leg["problems"][0]
 
+def test_a_RUNNING_fire_is_IN_FLIGHT_and_never_a_delivery_failure() -> None:
+    """#643: TERMINALITY IS DECIDED BEFORE THE VERDICT.
+
+    Measured 2026-11-15 00Z: `ai-antispam-outreach-watch-poll` was judged off a fire stamped
+    00:07:31.513363189Z while the round's own coverage line read the store at 00:07:58Z — a
+    wake 26.5 s old, still RUNNING — and the same row read `success` hours later. The daemon
+    stamps `running` at fire time (`CronJobRun::new_running`, src/db/models.rs:703) and
+    UPDATEs it on completion, so this window exists on EVERY wake, not once. A wake sampled
+    mid-run must never be reported as one that "never arrived": the #635 negative-age guard
+    cannot catch it, because that guard sits below this branch and this age is positive.
+    """
+    leg = _leg(
+        [_wake("probe-daily-trigger")],
+        fires=[_fire(status="running", started="2026-11-05T14:29:33.500Z")],
+    )
+    assert leg["coverage"]["delivery_failed"] == 0, leg["coverage"]
+    assert leg["coverage"]["in_flight"] == 1, leg["coverage"]
+    assert leg["coverage"]["judged"] == 0, leg["coverage"]
+    assert leg["problems"] == [], leg["problems"]
+    note = [n for n in leg["excused"] if "#643" in n]
+    assert len(note) == 1, leg["excused"]
+    # the excuse carries BOTH facts a reader needs: which fire, and how old it was
+    assert "2026-11-05T14:29:33.500Z" in note[0], note[0]
+    assert "old at this read" in note[0], note[0]
+    assert "IN FLIGHT" in note[0], note[0]
+
+def test_an_INTERRUPTED_fire_still_reddens() -> None:
+    """The other half of #643's split: a TERMINAL failure is untouched by the in-flight
+    excuse. If this arm ever goes green-on-nothing, the fix widened into a blanket amnesty."""
+    leg = _leg([_wake("probe-daily-trigger")], fires=[_fire(status="interrupted")])
+    assert leg["coverage"]["delivery_failed"] == 1, leg["coverage"]
+    assert leg["coverage"]["in_flight"] == 0, leg["coverage"]
+    assert leg["problems"], "an interrupted fire must still be a problem row"
+
+def test_an_UNRECOGNISED_status_still_reddens() -> None:
+    """The n=903 lesson must survive #643. The tuple names ONE known non-terminal value and
+    stays closed; a catch-all ("anything not delivered is in flight") would excuse a status
+    this leg has never seen, which is exactly how a green signal stops being able to observe
+    the failure it is named for."""
+    leg = _leg([_wake("probe-daily-trigger")], fires=[_fire(status="warp_speed")])
+    assert leg["coverage"]["delivery_failed"] == 1, leg["coverage"]
+    assert leg["coverage"]["in_flight"] == 0, leg["coverage"]
+    assert leg["problems"], "an unrecognised status must be REPORTED, never excused"
+
 def test_a_suppressed_fire_owed_no_wake_and_is_excused() -> None:
     leg = _leg([_wake("probe-daily-trigger")], fires=[_fire(suppressed=True)])
     assert leg["coverage"]["suppressed"] == 1

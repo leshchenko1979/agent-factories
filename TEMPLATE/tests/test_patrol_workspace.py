@@ -9,6 +9,7 @@ verdict from the whole fleet.
 from __future__ import annotations
 import importlib.util
 import io
+import sys
 import json
 import os
 import sqlite3
@@ -1447,3 +1448,322 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+# --- #642: the restricted read, and a leg that announces itself ---------------
+def _home_with(*, landed: list[tuple[str, str]], queued: list[tuple[str, str]]) -> Path:
+    """A throwaway OpenCrabs home carrying the two delivery surfaces.
+
+    Built as `root.parent/opencrabs.db` because that is the default home
+    `opencrabs_home_dbs` resolves, so the probe exercises the real discovery path rather
+    than a hand-fed list of databases.
+    """
+    base = Path(tempfile.mkdtemp())
+    root = base / "profiles"
+    root.mkdir()
+    conn = sqlite3.connect(str(base / "opencrabs.db"))
+    conn.execute(
+        "create table messages (session_id text, role text, content text, created_at integer)"
+    )
+    conn.execute(
+        "create table notify_queue (session_id text, display_text text, context_text text,"
+        " created_at integer)"
+    )
+    for session, text in landed:
+        conn.execute(
+            "insert into messages values (?, 'user', ?, 1700000000)", (session, text)
+        )
+    for session, text in queued:
+        conn.execute(
+            "insert into notify_queue values (?, ?, '', 1700000000)", (session, text)
+        )
+    conn.commit()
+    conn.close()
+    return root
+
+def test_the_messages_read_is_RESTRICTED_and_the_DEFERRED_half_still_resolves() -> None:
+    """#642 acceptance (3): BOTH surfaces must still contribute under the restriction.
+
+    The defect this guards is the cheap wrong fix: restrict `messages` to the judged
+    sessions and quietly stop reading `notify_queue`, which would report a legitimate
+    deferral as a phantom dispatch — the #426 inversion. So the arm asserts all three
+    facts at once: the named session resolves from `messages`, an UNNAMED session's
+    `messages` row is not read, and a `notify_queue` row for a THIRD, unnamed session
+    still resolves.
+    """
+    root = _home_with(
+        landed=[("session-a", "[session-notify from=x]\nDISPATCH #1 to A"),
+                ("session-b", "[session-notify from=x]\nDISPATCH #2 to B")],
+        queued=[("session-c", "[session-notify from=x]\nDISPATCH #3 deferred to C")],
+    )
+    deliveries, homes, unreached = RUNNER.box_deliveries(root=root, session_refs={"session-a"})
+    assert unreached == [], unreached
+    assert homes, "the home must be read"
+    got = {(d["session"], d["state"]) for d in deliveries}
+    assert ("session-a", "landed") in got, got
+    assert ("session-b", "landed") not in got, f"the restriction did not bite: {got}"
+    assert ("session-c", "queued") in got, f"the deferred half was dropped: {got}"
+
+    # and the UNRESTRICTED read still sees everything, so `None` did not become the new default
+    everything, _homes, _un = RUNNER.box_deliveries(root=root)
+    got_all = {(d["session"], d["state"]) for d in everything}
+    assert ("session-a", "landed") in got_all and ("session-b", "landed") in got_all, got_all
+    assert ("session-c", "queued") in got_all, got_all
+
+def test_an_EMPTY_ref_set_asks_NOTHING_of_messages_but_still_reads_the_queue() -> None:
+    """An empty set means "no session is named", which must NOT become `in ()` — SQLite
+    accepts that and it reads as "matched nothing" when the truth is "asked nothing".
+    `notify_queue` is still read, because a deferred notify carries no `messages` row at
+    all and skipping it would drop the #426 half."""
+    root = _home_with(
+        landed=[("session-a", "[session-notify from=x]\nDISPATCH #1 to A")],
+        queued=[("session-c", "[session-notify from=x]\nDISPATCH #3 deferred to C")],
+    )
+    deliveries, homes, unreached = RUNNER.box_deliveries(root=root, session_refs=set())
+    assert unreached == [], unreached
+    assert homes, "the home must still be opened for the queue read"
+    assert {d["state"] for d in deliveries} == {"queued"}, deliveries
+
+def test_the_delivery_leg_passes_the_JUDGED_refs_to_the_store_read() -> None:
+    """#642 acceptance (1), the WIRING half: with no injection the leg must hand the
+    sessions its judged rows carry to `box_deliveries`, and it must not silently widen an
+    empty set to `None` (which would restore the full 4 GB scan)."""
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    row = _stall_row(51, "dispatch", "#77", 0, now=now - dt.timedelta(hours=1),
+                     actor="triage", refs=[{"session": _PROBE_TARGET}])
+    seen: list[object] = []
+
+    windows: list[tuple[object, object]] = []
+
+    def capture(*, session_refs, since=None, until=None):
+        seen.append(session_refs)
+        windows.append((since, until))
+        return [], ["probe-home"], []
+
+    with mock.patch.object(RUNNER, "box_deliveries", capture):
+        leg = RUNNER.dispatch_delivery_leg([row], read_at=read_at, bound=bound)
+    assert seen == [{_PROBE_TARGET}], f"the leg did not name its judged refs: {seen}"
+    assert leg["coverage"]["store_read"] is True, leg["coverage"]
+    # AND IT NAMES ITS READ WINDOW (#642). The row count is the cost in this store, so the
+    # leg must hand down the bounds it derived -- and derive them from the anchor it judges
+    # (plus the match horizon), never from "now", or an old anchor would be clipped out of
+    # the read and its delivery would read as an absence.
+    assert len(windows) == 1, windows
+    since, until = windows[0]
+    assert isinstance(since, int) and isinstance(until, int), (since, until)
+    assert since < until, (since, until)
+    span = until - since
+    assert span >= 2 * RUNNER.DELIVERY_MATCH_HORIZON_SECS, (
+        f"the read window is narrower than the horizon it must contain: {span} s"
+    )
+    # the window is CENTRED ON THE ANCHOR, not on the clock: a probe run hours later must
+    # still produce the same bounds for the same row.
+    assert leg["coverage"]["store_read_window"], leg["coverage"]
+
+def _home_with_epochs(rows: list[tuple[str, str, int]], *, with_index: bool = False) -> Path:
+    """A throwaway home whose `messages` rows carry EXPLICIT epochs (#642 window probes).
+
+    `with_index` builds the `idx_messages_created_at` the live harness ships; the default
+    builds a home WITHOUT it, which is the schema a different harness version can leave
+    behind and the case the opportunistic `INDEXED BY` guard exists for.
+    """
+    base = Path(tempfile.mkdtemp())
+    root = base / "profiles"
+    root.mkdir()
+    conn = sqlite3.connect(str(base / "opencrabs.db"))
+    conn.execute(
+        "create table messages (session_id text, role text, content text, created_at integer)"
+    )
+    if with_index:
+        conn.execute("create index idx_messages_created_at on messages(created_at)")
+    conn.execute(
+        "create table notify_queue (session_id text, display_text text, context_text text,"
+        " created_at integer)"
+    )
+    for session, text, at in rows:
+        conn.execute("insert into messages values (?, 'user', ?, ?)", (session, text, at))
+    conn.commit()
+    conn.close()
+    return root
+
+def test_the_read_window_BITES_and_drops_only_rows_no_verdict_could_read() -> None:
+    """#642: the window must actually bound the read, and it must bound it at a place where
+    nothing judged can be lost.
+
+    The optimization is only lawful because every set the verdict is taken from is already
+    clipped to `anchor +/- DELIVERY_MATCH_HORIZON_SECS`. So the probe is TWO-SIDED: a row
+    OUTSIDE the window is not read at all (the bound bites -- otherwise the 554 MB read is
+    back), and a row INSIDE it is read (the bound is not so tight that it hides a delivery
+    that would have changed a verdict).
+    """
+    anchor = 1_700_000_000
+    horizon = RUNNER.DELIVERY_MATCH_HORIZON_SECS
+    inside = anchor + 3600                      # well within the horizon
+    outside = anchor + horizon + 3600            # beyond it, so never plausible
+    root = _home_with_epochs([
+        ("session-a", "[session-notify from=x]\nDISPATCH #1 inside", inside),
+        ("session-a", "[session-notify from=x]\nDISPATCH #1 outside", outside),
+    ])
+
+    windowed, _h, _u = RUNNER.box_deliveries(
+        root=root, session_refs={"session-a"},
+        since=anchor - horizon, until=anchor + horizon,
+    )
+    got = sorted(d["epoch"] for d in windowed)
+    assert got == [inside], f"the window did not bite exactly once: {got}"
+
+    # THE POSITIVE CONTROL: the same store WITHOUT the bounds returns both, so the probe is
+    # measuring the window and not an empty or mis-wired read.
+    everything, _h2, _u2 = RUNNER.box_deliveries(root=root, session_refs={"session-a"})
+    assert sorted(d["epoch"] for d in everything) == [inside, outside], everything
+
+def test_the_window_read_is_IDENTICAL_with_and_without_the_created_at_index() -> None:
+    """#642: the forced index is an OPTIMIZATION and must never change an answer.
+
+    `INDEXED BY` is a hard hint, so it is applied only where `idx_messages_created_at` is
+    proven to exist. This probe pins both halves: a home that HAS the index and one that
+    does not must return the SAME rows for the same window, and the index-less home must
+    not raise -- because a raise there becomes `unreached`, which the leg reports as a
+    blind store, i.e. a performance knob silently downgrading a correctness verdict.
+    """
+    anchor = 1_700_000_000
+    horizon = RUNNER.DELIVERY_MATCH_HORIZON_SECS
+    rows = [
+        ("session-a", "[session-notify from=x]\nDISPATCH #1 inside", anchor + 60),
+        ("session-a", "[session-notify from=x]\nDISPATCH #1 late", anchor + horizon + 60),
+        ("session-b", "[session-notify from=x]\nDISPATCH #2 other", anchor + 120),
+    ]
+    results = {}
+    for label, with_index in (("indexed", True), ("plain", False)):
+        root = _home_with_epochs(rows, with_index=with_index)
+        got, homes, unreached = RUNNER.box_deliveries(
+            root=root, session_refs={"session-a"},
+            since=anchor - horizon, until=anchor + horizon,
+        )
+        assert unreached == [], f"{label}: the read raised instead of falling back: {unreached}"
+        assert homes, f"{label}: the home must be read"
+        results[label] = sorted((d["session"], d["epoch"]) for d in got)
+    assert results["indexed"] == results["plain"], (
+        f"the index changed the answer: {results}"
+    )
+    assert results["indexed"] == [("session-a", anchor + 60)], results["indexed"]
+
+def test_the_windowed_read_returns_the_SAME_VERDICT_as_the_unbounded_read() -> None:
+    """#642's load-bearing claim, measured on a REAL store instead of argued.
+
+    Bounding the read is only lawful if it cannot change what the leg concludes. This drives
+    the leg TWICE over one real `messages` home: once through the windowed read it derives
+    itself, and once with the bounds DROPPED so the read is unbounded. The store is built so
+    the two reads return DIFFERENT delivery sets on purpose -- a notify INSIDE the row's
+    horizon (which must clear the row) and a second one far OUTSIDE it (which the unbounded
+    read returns and the windowed read does not, and which was never plausible for any row).
+
+    The assertion is that `problems` and `excused` are IDENTICAL. If a future change lets the
+    window decide an absence, this arm reddens -- which is the only thing standing between a
+    350x speedup and the #432 false absence.
+    """
+    now = dt.datetime.now(dt.timezone.utc)
+    read_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    bound = (now - dt.timedelta(days=1), "probe-bound", "")
+    dispatched = now - dt.timedelta(hours=1)
+    horizon = RUNNER.DELIVERY_MATCH_HORIZON_SECS
+    inside = int((dispatched + dt.timedelta(seconds=60)).timestamp())
+    far_out = int((dispatched - dt.timedelta(seconds=horizon + 7200)).timestamp())
+
+    root = _home_with_epochs([
+        (_PROBE_TARGET, "[session-notify from=abc]\nDISPATCH #77 to the Worker", inside),
+        (_PROBE_TARGET, "[session-notify from=abc]\nDISPATCH #77 to the Worker", far_out),
+    ], with_index=True)
+
+    row = _stall_row(51, "dispatch", "#77", 0, now=dispatched, actor="triage",
+                     refs=[{"session": _PROBE_TARGET}])
+    seen_windows: list[tuple] = []
+    # CAPTURE THE REAL READER FIRST: the patch below replaces the name the wrappers would
+    # otherwise call, which would recurse instead of reading the store.
+    real_read = RUNNER.box_deliveries
+
+    def windowed(*, session_refs, since=None, until=None):
+        # the real path: the leg's own derived bounds are honoured
+        seen_windows.append((since, until))
+        return real_read(root=root, session_refs=session_refs, since=since, until=until)
+
+    def unbounded(*, session_refs, since=None, until=None):
+        # THE BOUNDS DROPPED -- the pre-#642 read, same store, same rows otherwise
+        return real_read(root=root, session_refs=session_refs)
+
+    with mock.patch.object(RUNNER, "box_deliveries", windowed):
+        bounded_leg = RUNNER.dispatch_delivery_leg([row], read_at=read_at, bound=bound)
+    with mock.patch.object(RUNNER, "box_deliveries", unbounded):
+        wide_leg = RUNNER.dispatch_delivery_leg([row], read_at=read_at, bound=bound)
+
+    # THE WINDOW WAS REALLY APPLIED, so this is not comparing two unbounded reads
+    assert seen_windows and seen_windows[0][0] is not None, seen_windows
+    # AND THE TWO READS SAW DIFFERENT POPULATIONS, so equality below is a finding
+    bounded_n = bounded_leg["coverage"]["deliveries_read"]
+    wide_n = wide_leg["coverage"]["deliveries_read"]
+    assert bounded_n < wide_n, (
+        f"the probe did not separate the reads: windowed={bounded_n} unbounded={wide_n}"
+    )
+    # THE VERDICT IS THE SAME ANYWAY -- that is the whole claim
+    assert bounded_leg["problems"] == wide_leg["problems"], (
+        f"the window CHANGED the verdict\n"
+        f"  windowed:   {bounded_leg['problems']}\n"
+        f"  unbounded:  {wide_leg['problems']}"
+    )
+    assert bounded_leg["excused"] == wide_leg["excused"], (
+        f"the window changed the excusals: {bounded_leg['excused']} vs {wide_leg['excused']}"
+    )
+    assert bounded_leg["status"] == wide_leg["status"], (
+        bounded_leg["status"], wide_leg["status"]
+    )
+
+def test_the_match_horizon_CONTAINS_the_judged_window_so_the_read_cannot_clip_it() -> None:
+    """#642's safety invariant, asserted rather than argued.
+
+    The read window is `anchor +/- DELIVERY_MATCH_HORIZON_SECS`, while the verdict's `hits`
+    set is clipped to the narrower `[anchor - WINDOW_BEFORE, anchor + WINDOW_AFTER]`. Those
+    two only compose safely if the horizon is the WIDER of them: shrink the horizon below
+    the judged window and the read would silently drop rows `hits` is still allowed to
+    consider, turning a real delivery into an ABSENCE -- the #432 defect, reintroduced by a
+    performance knob. This is the guard on that knob.
+    """
+    horizon = RUNNER.DELIVERY_MATCH_HORIZON_SECS
+    assert horizon >= RUNNER.DELIVERY_WINDOW_BEFORE_SECS, (
+        f"read horizon {horizon} s is narrower than the judged window's before-half "
+        f"{RUNNER.DELIVERY_WINDOW_BEFORE_SECS} s -- the windowed read would clip a row the "
+        f"verdict still reads (#642/#432)"
+    )
+    assert horizon >= RUNNER.DELIVERY_WINDOW_AFTER_SECS, (
+        f"read horizon {horizon} s is narrower than the judged window's after-half "
+        f"{RUNNER.DELIVERY_WINDOW_AFTER_SECS} s -- the windowed read would clip a row the "
+        f"verdict still reads (#642/#432)"
+    )
+
+def test_leg_guard_ANNOUNCES_a_leg_before_it_runs_and_after_it_returns() -> None:
+    """#642 acceptance (4): a slow leg must not LOOK DEAD.
+
+    `main()` prints its verdict only after every leg returns, so before this the runner
+    emitted NOTHING for the whole round — measured 2026-11-15, a 724.58 s leg was killed
+    twice as "wedged" when a faulthandler dump showed it merely working. The start line
+    must reach STDERR (stdout carries the JSON verdict) BEFORE the leg body runs, and the
+    done line after it returns.
+    """
+    order: list[str] = []
+
+    def build():
+        order.append("BODY")
+        return {"name": "probe-leg", "status": "ASSERTED", "problems": [],
+                "excused": [], "coverage": {}}
+
+    stream = io.StringIO()
+    with mock.patch.object(sys, "stderr", stream):
+        leg = RUNNER.leg_guard("probe-leg", build, "2026-11-15T00:00:00Z")
+
+    text = stream.getvalue()
+    assert leg["status"] == "ASSERTED", leg
+    assert "probe-leg: starting" in text, text
+    assert "probe-leg: done in" in text, text
+    # the start line must precede the done line, and both must be on stderr
+    assert text.index("starting") < text.index("done in"), text
+    assert order == ["BODY"], order
