@@ -813,7 +813,7 @@ def load_rows(path: Path = LEDGER) -> list[dict]:
 
 
 def board_intake_leg(issues: list[dict], rows: list[dict], predicate=None,
-                     bound=None) -> dict:
+                     bound=None, own_repo=None) -> dict:
     """The live board-intake leg, with its own coverage beside its verdict.
 
     The BOUND is read through the ONE reader (`tests/ledger_boundary.py`), never carried
@@ -831,29 +831,50 @@ def board_intake_leg(issues: list[dict], rows: list[dict], predicate=None,
     `bound` is injectable for the reason every other dependency is: a probe must be able
     to drive a pre-boundary instance, a post-boundary one, and a refused bound without the
     live tree's declaration deciding its verdict.
+
+    `own_repo` is injectable for the same reason, and it is what makes a CROSS-REPO intake
+    row readable rather than phantom (#647). The intake predicate compares bare `#NNN`
+    subjects against ONE board, so a row whose `refs` declare `owner/name` other than this
+    factory's names an item that was never on this board at all -- `n=5067`'s `#857` is a
+    real issue on `leshchenko1979/opencrabs` under the two-stream routing law, and without
+    the declaration this leg reported it as a number the board never had. Resolution is
+    LAZY for the same reason it is on `board_unruled_leg`: a ledger declaring no `repo` ref
+    pays no `git remote` call.
     """
     predicate = predicate or load_predicate()
+    own = own_repo
+    if own is None and any(
+        field_predicate_readers().declared_repo_refs(row.get("refs")) for row in rows
+    ):
+        own = remote_slug()
+    # THE EXEMPTION STORE IS READ HERE, not inside the predicate (#647 half 2): the predicate
+    # stays hermetic so a probe can drive an exempted and an unexempted instance without the
+    # live tree deciding its verdict. A store that is absent means NO exemptions; a store
+    # that is MALFORMED is a problem, never a silent pass.
+    exempt, exempt_problems = predicate.load_intake_exemptions(
+        REPO / "docs" / "board-intake-exemptions.json"
+    )
     key = predicate.INVARIANT_KEY
     text, refusal, skip_reason = (bound or declared_leg_boundary)(REPO, key)
     if refusal:
         # The two bound-independent arms are still measured: what was not judged must not
         # read as what was not there (#242).
         coverage = predicate.board_intake_coverage(
-            issues, rows, "", complete_board=True
+            issues, rows, "", complete_board=True, own_repo=own, exempt=exempt
         )
         coverage.update({"bound_key": key, "bound_refusal": refusal, "bound_reason": ""})
         return {
             "name": "board-intake",
             "status": "REFUSED",
-            "problems": [refusal],
+            "problems": [refusal] + list(exempt_problems),
             "excused": [],
             "coverage": dict(coverage),
         }
     problems, excused = predicate.board_intake_problems(
-        issues, rows, text or None, complete_board=True
+        issues, rows, text or None, complete_board=True, own_repo=own, exempt=exempt
     )
     coverage = predicate.board_intake_coverage(
-        issues, rows, text, complete_board=True
+        issues, rows, text, complete_board=True, own_repo=own, exempt=exempt
     )
     coverage.update({"bound_key": key, "bound_refusal": "", "bound_reason": skip_reason})
     if skip_reason:
@@ -861,7 +882,7 @@ def board_intake_leg(issues: list[dict], rows: list[dict], predicate=None,
     return {
         "name": "board-intake",
         "status": "ASSERTED",
-        "problems": list(problems),
+        "problems": list(problems) + list(exempt_problems),
         "excused": list(excused),
         "coverage": dict(coverage),
     }
@@ -11638,7 +11659,6 @@ def board_unruled_leg(
     """
     predicate = predicate or load_predicate()
 
-    intaken = predicate.intaken_numbers(rows)
     open_numbers = predicate.open_issue_numbers(issues)
     by_n = {row.get("n"): row for row in rows if row.get("n") is not None}
 
@@ -11665,6 +11685,17 @@ def board_unruled_leg(
     # no `git remote` call at all, which is every run until a writer declares one.
     foreign: list[dict] = []
     own = own_repo
+    # THE INTAKE POPULATION IS SCOPED BY THE SAME DECLARATION (#647), and this is where the
+    # two populations are bound together: `intaken` is the gate's own predicate, while
+    # `intake_numbers` further down is this leg's own resolve, and the agreement check
+    # between them holds only if BOTH read the same rows. Resolving `own` here, once, is
+    # what lets that happen -- and a ledger carrying no `repo` ref still pays no `git
+    # remote` call, which is every run until a writer declares one.
+    if own is None and any(
+        field_predicate_readers().declared_repo_refs(row.get("refs")) for row in rows
+    ):
+        own = own_repo or remote_slug()
+    intaken = predicate.intaken_numbers(rows, own)
     for row in rows:
         if str(row.get("event") or "") != "ruling":
             continue
@@ -11749,6 +11780,13 @@ def board_unruled_leg(
     intake_numbers: set[int] = set()
     intake_arms = {"strict": 0, "declared": 0, "bridged": 0}
     intake_unbridgeable: list[dict] = []
+    # A FOREIGN INTAKE ROW IS NOT AN INTAKE ON THIS BOARD (#647). Its subject is a bare
+    # `#NNN`, and this ledger records intake for issues the two-stream routing law sends to
+    # the fork -- so `n=5067`'s `#857` is a real issue on `leshchenko1979/opencrabs` that
+    # the reverse arm read as a number this board never had. NAMED, never merely dropped:
+    # the same rule the ruling side above follows, and the partition below counts them so
+    # it still closes.
+    intake_foreign: list[dict] = []
     # Named, never merely counted -- the same attribution the ruling side carries, so the
     # two halves of one leg cannot disagree about how a bridge was sourced (#551).
     intake_bridges: list[dict] = []
@@ -11756,6 +11794,18 @@ def board_unruled_leg(
         if str(row.get("event") or "") != "intake":
             continue
         intake_rows_read += 1
+        elsewhere = field_predicate_readers().foreign_repo_refs(row.get("refs"), own)
+        if elsewhere:
+            intake_foreign.append(
+                {
+                    "n": row.get("n"),
+                    "subject": str(row.get("subject") or ""),
+                    "repo": elsewhere[0],
+                    "repos": elsewhere,
+                    "own_repo": own,
+                }
+            )
+            continue
         number, arm, bridge = resolve_ruling_issue(row, rows, predicate)
         if number is None:
             intake_unbridgeable.append(
@@ -11776,7 +11826,8 @@ def board_unruled_leg(
             )
     intake_repeated = intake_resolved_rows - len(intake_numbers)
     intake_partition_closes = (
-        len(intaken) + intake_repeated + len(intake_unbridgeable) == intake_rows_read
+        len(intaken) + intake_repeated + len(intake_unbridgeable)
+        + len(intake_foreign) == intake_rows_read
     )
     # TWO INSTRUMENTS, ONE QUESTION: the resolve walks every intake row, the predicate
     # keeps the FIRST row per number. They must agree about WHICH issues were intaken; a
@@ -11825,8 +11876,10 @@ def board_unruled_leg(
         problems.append(
             f"THE INTAKE PARTITION DOES NOT CLOSE: {intake_rows_read} intake row(s) read, "
             f"but {len(intaken)} DISTINCT issue(s) + {intake_repeated} REPEATED row(s) + "
-            f"{len(intake_unbridgeable)} unbridgeable row(s) = "
-            f"{len(intaken) + intake_repeated + len(intake_unbridgeable)}. Every intake row "
+            f"{len(intake_unbridgeable)} unbridgeable row(s) + {len(intake_foreign)} "
+            f"FOREIGN repo row(s) = "
+            f"{len(intaken) + intake_repeated + len(intake_unbridgeable) + len(intake_foreign)}. "
+            f"Every intake row "
             f"must land in exactly one bucket, so a gap means the resolve and the predicate "
             f"disagree about the population -- read `intake_unbridgeable` before trusting "
             f"either count"
@@ -11870,6 +11923,12 @@ def board_unruled_leg(
             "intake_repeated": intake_repeated,
             "intake_unbridgeable_rows": len(intake_unbridgeable),
             "intake_unbridgeable": intake_unbridgeable,
+            # The FOURTH bucket (#647). A foreign row is counted here, named by row number
+            # and repository, and excluded from both populations -- so the partition still
+            # closes and `intake_numbers_agree` still holds. A silent drop would have been
+            # the same defect wearing a hat.
+            "intake_foreign_rows": intake_foreign,
+            "intake_foreign": len(intake_foreign),
             "intake_resolution_arms": intake_arms,
             "intake_bridged_via": intake_bridges,
             "intake_partition_closes": intake_partition_closes,
@@ -17116,8 +17175,19 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"{cov['intake_resolution_arms']['bridged']}]; {cov['intake_repeated']} are "
                 f"REPEATED intake rows for an issue already intaken, which the append-only "
                 f"ledger keeps and this leg does NOT de-duplicate; "
-                f"{cov['intake_unbridgeable_rows']} unbridgeable)"
+                f"{cov['intake_unbridgeable_rows']} unbridgeable; "
+                f"{cov.get('intake_foreign', 0)} FOREIGN repo row(s) EXCLUDED, printed "
+                f"below)"
             )
+            # PRINTED, never dropped (#647): these rows were REMOVED from the intake
+            # population, so the leg says which ones and which repository each names -- the
+            # same rule the ruling side follows one line below.
+            for entry in cov.get("intake_foreign_rows", []):
+                lines.append(
+                    f"    FOREIGN intake row n={entry['n']} declares repo {entry['repo']} "
+                    f"(this factory is {entry['own_repo']}), so its subject "
+                    f"{entry['subject'] or '(none)'} is NOT an intake on this board"
+                )
             # A ROW THAT RESOLVES TO NO ISSUE IS NAMED, not merely counted (#548, ruling
             # n=4146): the count alone is what let three genuinely orphaned intake rows sit
             # invisible behind a number that read as repeats.

@@ -25,7 +25,10 @@ this — is a later step and is not this file's acceptance.
 2. **Reverse — a numeric `intake` row whose issue is not on the board.** Sound
    **only over the full board**, so the caller must say so: with
    `complete_board=False` this leg is skipped rather than guessing, because a
-   filtered list would report every issue outside the filter as missing.
+   filtered list would report every issue outside the filter as missing. A row
+   declaring a FOREIGN `repo` is not in this population at all (#647): its number
+   belongs to another board, and this ledger records intake for issues the routing
+   law sends elsewhere. The exclusion is NAMED in the coverage, with row and repo.
 3. **Judged — a numeric subject carrying a `claim` or a `close` with no `intake`
    row of its own.** Reported as `excused:` when that activity predates this gate,
    and as a problem otherwise — never folded into a bare clean, so "clean" and
@@ -65,6 +68,14 @@ from ledger_boundary import (  # noqa: E402
     post_boundary_rows,
     synthetic_tree,
 )
+
+# THE REPOSITORY-REF READER IS SHARED, NEVER A SECOND REGEX (#647). `tools/` goes on the path
+# rather than being imported as a package, exactly as `ledger_boundary` does one import above
+# and for the same reason: a bootstrapped factory has `tools/` and `tests/` as siblings with
+# no `__init__.py` in either. `foreign_repo_refs` is the ONE place the foreign/local decision
+# lives, so this gate cannot drift from the writer that refuses a malformed value.
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "tools"))
+from field_predicate import foreign_repo_refs  # noqa: E402
 
 import datetime as dt
 import json
@@ -121,20 +132,144 @@ def open_issue_numbers(issues: list[dict]) -> set[int]:
             numbers.add(number)
     return numbers
 
-def intaken_numbers(rows: list[dict]) -> dict[int, object]:
+def intake_rows_by_scope(
+    rows: list[dict], own_repo: "str | None" = None
+) -> tuple[list[dict], list[dict]]:
+    """(the `intake` rows about THIS factory, the ones declaring a FOREIGN repo).
+
+    THE ONE SCOPE DECISION (#647). An `intake` row's `subject` is a bare `#NNN` with no repo
+    qualifier, and this ledger records intake for issues filed on OTHER boards — the
+    two-stream routing law sends every OpenCrabs binary issue to the fork. So `n=5067`
+    records `#857`, a real issue on `leshchenko1979/opencrabs`, and the reverse leg read it
+    as a number this board has never heard of. The discriminator cannot come from the subject
+    or the prose: the WRITER declares it as a `repo` ref, which is the same admission the
+    ruling leg already requires (#592, ruling `n=4551`), read through the same shared reader.
+
+    ABSENT MEANS THIS FACTORY, inherited unchanged from `foreign_repo_refs`, which is what
+    keeps every historical intake row meaning what it meant with no backfill. `own_repo=None`
+    therefore returns EVERY row as local: a caller that cannot resolve its own repo cannot
+    prove a row foreign, and excluding a LOCAL row is the worse error — the count silently
+    shrinks and a clean verdict covers a population nobody named.
+
+    A foreign row is RETURNED, never merely dropped: an instrument that removes a row from a
+    population must say which row and which repo, or the exclusion is the same silent drop
+    turned around.
+    """
+    local: list[dict] = []
+    foreign: list[dict] = []
+    for row in rows:
+        if row.get("event") != "intake":
+            continue
+        elsewhere = foreign_repo_refs(row.get("refs"), own_repo)
+        if elsewhere:
+            foreign.append(
+                {
+                    "n": row.get("n"),
+                    "subject": str(row.get("subject") or ""),
+                    "repo": elsewhere[0],
+                    "repos": elsewhere,
+                    "own_repo": own_repo,
+                }
+            )
+            continue
+        local.append(row)
+    return local, foreign
+
+def intaken_numbers(rows: list[dict], own_repo: "str | None" = None) -> dict[int, object]:
     """Issue number -> the `n` of the intake row that records it.
 
     Numeric subjects only: a descriptive subject is not an issue reference, so it
     is not evidence about intake in either direction.
+
+    SCOPED WHEN THE CALLER KNOWS ITS OWN REPO (#647): a row declaring a foreign `repo`
+    names another board's issue, so it is not evidence about THIS board in either
+    direction. The default reads every row, which is the unscoped reading and what the
+    offline leg wants — see `intake_rows_by_scope` for why the default is the permissive
+    one.
     """
     intaken: dict[int, object] = {}
-    for row in rows:
-        if row.get("event") != "intake":
-            continue
+    for row in intake_rows_by_scope(rows, own_repo)[0]:
         number = issue_reference(row.get("subject"))
         if number is not None and number not in intaken:
             intaken[number] = row.get("n")
     return intaken
+
+EXEMPTIONS_PATH = REPO / "docs" / "board-intake-exemptions.json"
+# The exemption's GROUND, the same shape `docs/close-board-exemptions.json` established
+# (#437, ruling n=2844). A DECLARATION KEY WITH ONE LAWFUL VALUE (`docs/instruments/
+# ledger.md` §9.12): the entry's ground is a TRUTHFULNESS bar, and this surface admits no
+# other. It exists so the falsified ground — "the row can simply be corrected" — cannot be
+# re-stated as data: a `repo` ref appended to a published row records a declaration that
+# was never made, so the repair is a falsification, not a repair.
+EXEMPT_DOMAIN = (
+    "the intake row names an issue on another repository and declares no repo ref",
+)
+EXEMPT_BAR_KEY = "bar"
+EXEMPT_BAR_VALUE = "no-truthful-value"
+EXEMPT_BARS = (EXEMPT_BAR_VALUE,)
+
+def load_intake_exemptions(path: "Path | None" = None) -> tuple[dict[int, dict], list[str]]:
+    """Load the factory's board-intake exemptions, keyed by the row's own `n`.
+
+    Absent or empty data means NO exemptions — the shipped state of a new factory, and the
+    state every member inherits until it takes the `.example.json` half. Anything malformed
+    is a problem, never a silent pass: an exemption list that quietly fails to load is
+    indistinguishable from no exemptions, which is the vacuous-pass shape this whole gate
+    exists to catch.
+
+    Keyed by `n` deliberately (#647 half 2): a FUTURE intake row is a different `n`, so it
+    can never be excused by an entry written for this one. A short or invented key matches
+    nothing while looking like it should.
+    """
+    path = EXEMPTIONS_PATH if path is None else path
+    if not path.is_file():
+        return {}, []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {}, [f"{path.name}: unreadable or malformed JSON: {exc!r}"]
+    if not isinstance(data, dict):
+        return {}, [f"{path.name}: expected a JSON object with an 'exemptions' list"]
+    raw = data.get("exemptions", [])
+    if not isinstance(raw, list):
+        return {}, [f"{path.name}: 'exemptions' must be a list"]
+    out: dict[int, dict] = {}
+    problems: list[str] = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            problems.append(f"{path.name}: exemption #{i} is not an object")
+            continue
+        row_n = entry.get("n")
+        if not isinstance(row_n, int) or isinstance(row_n, bool):
+            problems.append(f"{path.name}: exemption #{i} has no integer `n`")
+            continue
+        reason = str(entry.get("reason") or "").strip()
+        proof = str(entry.get("proof") or "").strip()
+        domain = str(entry.get("domain") or "").strip()
+        if not reason or not proof:
+            problems.append(
+                f"{path.name}: exemption n={row_n} must state both `reason` and `proof`"
+            )
+            continue
+        if domain not in EXEMPT_DOMAIN:
+            problems.append(
+                f"{path.name}: exemption n={row_n} declares domain {domain!r}, outside the "
+                f"declared domain {EXEMPT_DOMAIN}"
+            )
+            continue
+        bar = str(entry.get(EXEMPT_BAR_KEY) or "").strip()
+        if bar not in EXEMPT_BARS:
+            problems.append(
+                f"{path.name}: exemption n={row_n} must declare "
+                f"`{EXEMPT_BAR_KEY}` as one of {EXEMPT_BARS} — its ground is the bar that "
+                f"HOLDS; got {bar!r}"
+            )
+            continue
+        if row_n in out:
+            problems.append(f"{path.name}: exemption n={row_n} is declared twice")
+            continue
+        out[row_n] = entry
+    return out, problems
 
 def subjects_acted_without_intake(rows: list[dict]) -> list[str]:
     """The OFFLINE leg's population: numeric subjects carrying a `claim` or a
@@ -164,6 +299,8 @@ def board_intake_coverage(
     rows: list[dict],
     boundary_text: str,
     complete_board: bool = True,
+    own_repo: "str | None" = None,
+    exempt: "dict[int, dict] | None" = None,
 ) -> dict[str, object]:
     """What each leg actually examined, so neither can be read as the other.
 
@@ -180,9 +317,18 @@ def board_intake_coverage(
     `subjects_acted_without_intake`, the same predicate the verdict is reached
     with, so the two cannot drift.
     """
+    _local_rows, foreign_rows = intake_rows_by_scope(rows, own_repo)
     return {
         "forward_issues_examined": len(open_issue_numbers(issues)),
-        "reverse_intake_rows_examined": len(intaken_numbers(rows)),
+        "reverse_intake_rows_examined": len(intaken_numbers(rows, own_repo)),
+        # NAMED, never merely counted (#647): the rows the reverse leg does NOT judge because
+        # they declare another repository, with the row number and the repo each names.
+        "reverse_foreign_rows": foreign_rows,
+        # DECLARED EXEMPTIONS are reported beside the foreign rows, never folded into them
+        # (#647 half 2). They are two different things: a foreign row is SCOPED by its own
+        # declaration, an exempt row is a DEBT carried because its declaration is absent and
+        # cannot truthfully be added.
+        "reverse_exempt_rows": sorted((exempt or {}).keys()),
         "reverse_leg": "asserted over the FULL board" if complete_board
         else "SKIPPED — partial board list, so the reverse direction is not sound",
         "offline_subjects_examined": len(subjects_acted_without_intake(rows)),
@@ -194,6 +340,8 @@ def board_intake_problems(
     rows: list[dict],
     exempt_before: str | None,
     complete_board: bool = True,
+    own_repo: "str | None" = None,
+    exempt: "dict[int, dict] | None" = None,
 ) -> tuple[list[str], list[str]]:
     """Return (problems, excused) for a board issue list against a ledger.
 
@@ -206,12 +354,31 @@ def board_intake_problems(
     judged against a boundary nobody wrote down — the same policy `tests/ledger_boundary.py`
     applies to every other boundary-reading gate (#428). The two board arms need no
     boundary and are judged either way.
+
+    `own_repo` is this factory's own repository, when the caller knows it (#647): an
+    intake row declaring a DIFFERENT one names another board's issue and is judged by
+    neither board arm. Omitted, every row is read as ours — the same default the ruling
+    leg uses, and the reason no historical row needs a backfill.
+
+    `exempt` is the factory's declared board-intake exemptions, keyed by row `n` (#647 half
+    2). It is the SECOND half of the remedy and it is not optional: a published row whose
+    refs declare no `repo` is invisible to `own_repo`, and its refs are immutable, so the
+    honest exit is a LOUD declaration rather than a silent rewrite. An exempted row is
+    excluded from the reverse arm AND named in `excused`; an exemption that matches NO
+    violation is a PROBLEM, because a stale entry inflates visible debt while excusing
+    nothing — the same vacuous-pass shape as an exemption list that fails to load.
     """
     boundary = None if exempt_before is None else _parse_ts(exempt_before)
     problems: list[str] = []
     excused: list[str] = []
+    declared = dict(exempt or {})
+    matched: set[int] = set()
 
-    intaken = intaken_numbers(rows)
+    # SCOPED WHEN THE CALLER KNOWS ITS OWN REPO (#647): an intake row declaring a FOREIGN
+    # `repo` names another board's issue, so it is not evidence about this board in either
+    # direction. `own_repo=None` reads every row, which is what the offline leg and every
+    # probe get, so no row silently leaves the population.
+    intaken = intaken_numbers(rows, own_repo)
 
     # 1. Forward: an open issue the ledger never recorded as filed.
     for number in sorted(open_issue_numbers(issues)):
@@ -229,10 +396,32 @@ def board_intake_problems(
         }
         for number, n in sorted(intaken.items()):
             if number not in on_board:
+                entry = declared.get(n) if isinstance(n, int) else None
+                if entry is not None:
+                    matched.add(n)
+                    excused.append(
+                        f"intake row n={n} records #{number}, which is not on the board — "
+                        f"EXEMPT: {entry.get('domain')} — {entry.get('reason')}"
+                    )
+                    continue
                 problems.append(
                     f"intake row n={n} records #{number}, which is not on the board — "
                     f"this leg is only sound over the FULL board"
                 )
+
+    # A STALE EXEMPTION IS A PROBLEM, never a quiet line (#437's shape, applied here). An
+    # entry that excuses nothing inflates visible debt while reading as forgiveness, and a
+    # key that no longer matches any row looks exactly like one that does. Scoped to the
+    # FULL board: over a partial list the reverse arm does not run, so every entry would
+    # read as stale and the gate would fail for a reason it never examined.
+    if complete_board:
+        for n in sorted(set(declared) - matched):
+            problems.append(
+                f"exemption n={n} in {EXEMPTIONS_PATH.name} matches NO violation — the row "
+                f"it names is not an intake row absent from this board, so it excuses "
+                f"nothing. Retire it rather than leaving a debt line that reads as "
+                f"forgiveness"
+            )
 
     # 3. Judged: a numeric subject carrying a `claim` or a `close` with no intake
     #    row of its own — the SAME population the coverage denominator counts, read
@@ -323,6 +512,162 @@ def test_an_intake_row_with_no_issue_is_reported_over_the_full_board() -> None:
         [{"number": 1, "state": "open"}], rows, _PROBE_BOUNDARY, complete_board=True
     )
     assert len(problems) == 1 and "#99" in problems[0], problems
+
+def test_a_cross_repo_intake_row_is_not_a_phantom_on_this_board() -> None:
+    """#647: the reverse arm reads the row's DECLARED repo, never its subject alone.
+
+    `n=5067` records `#857`, filed on the fork `leshchenko1979/opencrabs` under the
+    two-stream routing law. Its subject is a bare `#NNN` like every other intake row, so a
+    predicate reading the subject alone reports a number THIS board never had — a phantom,
+    and a permanent red no writer can clear, because the row is published and its refs are
+    immutable. The pair below is the discriminator: the SAME subject, once carrying a
+    foreign `repo` ref (excluded) and once carrying a `board` ref (judged).
+    """
+    own = "leshchenko1979/agent-factories"
+    foreign = {
+        "n": 1,
+        "ts": "2026-09-19T00:00:01Z",
+        "event": "intake",
+        "actor": "hq",
+        "subject": "#999",
+        "detail": "probe",
+        "refs": [{"repo": "other/repo"}],
+    }
+    local = dict(foreign, refs=[{"board": "999"}])
+    foreign_problems, _ = board_intake_problems(
+        [], [foreign], _PROBE_BOUNDARY, complete_board=True, own_repo=own
+    )
+    local_problems, _ = board_intake_problems(
+        [], [local], _PROBE_BOUNDARY, complete_board=True, own_repo=own
+    )
+    assert not foreign_problems, (
+        f"a row declaring another repository is NOT an intake on this board, so it must "
+        f"report nothing — got {foreign_problems}"
+    )
+    assert len(local_problems) == 1 and "#999" in local_problems[0], (
+        f"the SAME subject carrying a `board` ref IS an intake here and must still be "
+        f"judged — got {local_problems}"
+    )
+    # AND IT IS NAMED, never silently dropped: an instrument that removes a row from a
+    # population must say which one and which repository it declared, or the exclusion is
+    # the same defect wearing a hat.
+    coverage = board_intake_coverage(
+        [], [foreign], _PROBE_BOUNDARY, complete_board=True, own_repo=own
+    )
+    named = coverage.get("reverse_foreign_rows") or []
+    assert len(named) == 1 and named[0]["repo"] == "other/repo", coverage
+    assert coverage["reverse_intake_rows_examined"] == 0, coverage
+
+def test_an_exempted_cross_repo_row_is_excused_and_the_SAME_row_without_it_is_not() -> None:
+    """#647 half 2: the exemption is the honest exit for a row half 1 cannot reach.
+
+    `n=5067` declares `refs=[{"board": "857"}]` — no `repo` qualifier — so the predicate has
+    nothing to scope it by, and its refs are published and immutable. The pair below is the
+    discriminator: the SAME row is a PROBLEM with no exemption and EXCUSED with one. An
+    exemption that only ever quiets a line, and never has to be declared, would be
+    forgiveness rather than a visible debt.
+    """
+    row = {
+        "n": 5067,
+        "ts": "2026-11-16T00:21:43Z",
+        "event": "intake",
+        "actor": "triage",
+        "subject": "#857",
+        "detail": "probe",
+        "refs": [{"board": "857"}],
+    }
+    entry = {
+        "n": 5067,
+        "subject": "#857",
+        "ts": "2026-11-16T00:21:43Z",
+        "domain": EXEMPT_DOMAIN[0],
+        "bar": EXEMPT_BAR_VALUE,
+        "reason": "the refs are immutable and declare no repo",
+        "proof": "the fork issue reads OPEN and this board has no #857",
+    }
+    unexempt_problems, _ = board_intake_problems(
+        [], [row], _PROBE_BOUNDARY, complete_board=True
+    )
+    exempt_problems, exempt_excused = board_intake_problems(
+        [], [row], _PROBE_BOUNDARY, complete_board=True, exempt={5067: entry}
+    )
+    assert len(unexempt_problems) == 1 and "#857" in unexempt_problems[0], (
+        f"without the declaration this row IS a phantom and must be reported — got "
+        f"{unexempt_problems}"
+    )
+    assert not exempt_problems, (
+        f"a declared exemption must excuse the row, not add a problem — got "
+        f"{exempt_problems}"
+    )
+    assert any("EXEMPT" in line and "n=5067" in line for line in exempt_excused), (
+        f"an excused row must be NAMED by row number, never silently dropped — got "
+        f"{exempt_excused}"
+    )
+    # AND THE DEBT IS COUNTED BESIDE THE FOREIGN ROWS, never folded into them: a foreign row
+    # is scoped by its own declaration, an exempt row is a debt carried because it has none.
+    coverage = board_intake_coverage(
+        [], [row], _PROBE_BOUNDARY, complete_board=True, exempt={5067: entry}
+    )
+    assert coverage["reverse_exempt_rows"] == [5067], coverage
+    assert coverage["reverse_foreign_rows"] == [], coverage
+
+def test_a_stale_exemption_is_a_problem_and_never_a_quiet_line() -> None:
+    """An exemption that excuses nothing inflates visible debt while reading as forgiveness.
+
+    This is the vacuous-pass shape the whole gate exists to catch, one level up: a key that
+    no longer matches any row looks exactly like one that does.
+    """
+    entry = {
+        "n": 999999,
+        "subject": "#1",
+        "ts": "2026-09-19T00:00:00Z",
+        "domain": EXEMPT_DOMAIN[0],
+        "bar": EXEMPT_BAR_VALUE,
+        "reason": "stale",
+        "proof": "stale",
+    }
+    problems, _ = board_intake_problems(
+        [], [], _PROBE_BOUNDARY, complete_board=True, exempt={999999: entry}
+    )
+    assert len(problems) == 1 and "matches NO violation" in problems[0], problems
+
+def test_an_exemption_store_that_is_malformed_is_a_FAILURE_not_an_empty_list(
+    tmp_path: Path,
+) -> None:
+    """A list that quietly fails to load is indistinguishable from no exemptions.
+
+    Every required field is refused by NAME, and the `bar` key admits one lawful value so
+    the falsified ground ("the row can simply be corrected") cannot be re-stated as data.
+    """
+    good = {
+        "n": 1,
+        "subject": "#1",
+        "ts": "2026-09-19T00:00:00Z",
+        "domain": EXEMPT_DOMAIN[0],
+        "bar": EXEMPT_BAR_VALUE,
+        "reason": "r",
+        "proof": "p",
+    }
+    path = tmp_path / "board-intake-exemptions.json"
+    assert load_intake_exemptions(path) == ({}, []), "absent means no exemptions"
+    path.write_text(json.dumps({"exemptions": []}), encoding="utf-8")
+    assert load_intake_exemptions(path) == ({}, []), "empty means no exemptions"
+    path.write_text(json.dumps({"exemptions": [good]}), encoding="utf-8")
+    loaded, problems = load_intake_exemptions(path)
+    assert loaded == {1: good} and not problems, (loaded, problems)
+    for field in ("reason", "proof"):
+        broken = dict(good)
+        broken[field] = ""
+        path.write_text(json.dumps({"exemptions": [broken]}), encoding="utf-8")
+        loaded, problems = load_intake_exemptions(path)
+        assert loaded == {} and problems and field in problems[0], (field, loaded, problems)
+    broken = dict(good, bar="the-repair-space-is-empty")
+    path.write_text(json.dumps({"exemptions": [broken]}), encoding="utf-8")
+    loaded, problems = load_intake_exemptions(path)
+    assert loaded == {} and problems and "bar" in problems[0], (loaded, problems)
+    path.write_text("{not json", encoding="utf-8")
+    loaded, problems = load_intake_exemptions(path)
+    assert loaded == {} and problems and "malformed" in problems[0], (loaded, problems)
 
 def test_a_partial_board_skips_the_reverse_direction() -> None:
     """A filtered list would report every issue outside the filter as missing."""
@@ -463,7 +808,18 @@ def evaluate(repo: Path) -> tuple[str, str, list[str], list[str], int]:
     except GateError as exc:
         return "fail", "", list(exc.problems), [], 0
 
-    problems, excused = board_intake_problems([], rows, boundary_text, complete_board=False)
+    # THE EXEMPTION STORE IS READ FROM THE TREE UNDER TEST, never the live one (#647 half 2):
+    # a synthetic tree with no `docs/board-intake-exemptions.json` is the state every
+    # bootstrapped factory is in, and it means NO exemptions rather than a crash.
+    exempt, exempt_problems = load_intake_exemptions(
+        repo / "docs" / "board-intake-exemptions.json"
+    )
+    if exempt_problems:
+        return "fail", "", list(exempt_problems), [], 0
+
+    problems, excused = board_intake_problems(
+        [], rows, boundary_text, complete_board=False, exempt=exempt
+    )
     if problems:
         return "fail", "", problems, excused, 0
 

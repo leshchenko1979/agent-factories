@@ -1249,3 +1249,25 @@ def declared_repo_refs(refs) -> list[str]:
         if REPO_REF_VALUE_RE.match(text):
             found.append(text)
     return found
+
+
+def foreign_repo_refs(refs, own: "str | None") -> list[str]:
+    """The well-formed `repo` refs a row declares that name a repo OTHER than `own`.
+
+    THE ONE COMPARISON (#647). `declared_repo_refs` answers "which repository does this row
+    name"; this answers "does it name one that is NOT ours", and it is a DELEGATION for the
+    reason that function delegates to `declared_board_routings`: a second well-formedness
+    test one function down is the drift class this file exists to prevent, and a consumer
+    that re-tested the regex itself would disagree with the write path about which values
+    are names at all.
+
+    ABSENT MEANS THIS FACTORY is inherited unchanged: a row declaring no `repo` ref returns
+    [] and is ours, which is what keeps every historical row meaning what it meant and needs
+    no backfill. `own` falsy -- the caller could not resolve this factory's own repo --
+    returns [] for a reason of its own: an unresolved own repo cannot PROVE a row foreign,
+    and excluding a LOCAL row is the worse error of the two, because that row then leaves a
+    population it belongs to and the count silently shrinks.
+    """
+    if not own:
+        return []
+    return [repo for repo in declared_repo_refs(refs) if repo != own]
