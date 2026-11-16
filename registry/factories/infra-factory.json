@@ -13,7 +13,7 @@
       "Host and workspace hygiene: the single reap policy (tools/hygiene.py), its derived gate line, and disk-threshold remediation",
       "The Mac access path as fleet infrastructure - the CDP tunnel to the Mac and the route pin on its physical NIC",
       "Infra Factory process law and its own lanes (HQ, Triage, Surveys)",
-      "A SECOND VPN host (it-garage Frankfurt, created 2026-10-30) carrying the AmneziaWG endpoint the owner's clients use, after Russian ISPs began dropping inbound traffic to vpn's own public address - host-level operations only; its peer/key configuration is the owner's"
+      "A SECOND VPN host (it-garage Frankfurt) - host-level operations only. AmneziaWG was removed fleet-wide 2026-11-13 (provider bans it); the box 152.234.211.43 is bare, awaiting Xray VLESS+REALITY on the owner's own domain. Peer/key configuration is the owner's."
     ],
     "does_not_own": [
       "OpenCrabs daemon and harness source, and its development process (/root/opencrabs) - that is opencrabs-dev",
@@ -93,7 +93,7 @@
     "The fleet hosts vpn, apps, agents and agents-old - host-level state: systemd units, containers, disk, /usr/local/bin scripts",
     "Gatus monitoring configuration and alert routing on vpn",
     "The Mac access path (vpn/mac-access: CDP tunnel and route pin)",
-    "The second VPN host (it-garage Frankfurt) - container amnezia-awg2 on UDP 30494, the live AmneziaWG endpoint for the owner's phone and Mac. Its public address is MID-CHANGE: the address it was created with (31.77.175.86) no longer answers on port 22 as of 2026-11-09T06:05Z, and the provider hostname vm345692.it-garage.network resolves to Cloudflare (188.114.96.1 / 2a06:98c1::), not to the box"
+    "The second VPN host (it-garage Frankfurt, 152.234.211.43, vm345692) - bare Ubuntu 24.04, sshd only, no containers. The AmneziaWG endpoint no longer exists on any fleet host; 31.77.175.86 was null-routed and reissued to another customer."
   ],
   "announcements": [
     {
@@ -134,23 +134,23 @@
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "scope": "profile",
       "severity": "warning",
-      "text": "The tunnel is UP again, and the 2026-11-02 clause 'no path to it exists today from any host in the fleet' is WITHDRAWN as falsified \u2014 but the FLAP class is NOT closed. Read 2026-11-09T06:05Z: agents' mac-cdp-tunnel.service is active (running) since 2026-11-07T07:05:44Z, enabled, 1 d 22 h; :9222 listens on 127.0.0.1 and [::1] on agents; vpn holds :4444 via sshd with an ESTABLISHED ssh from the Mac's 87.249.25.155; Gatus ep13 mac-tunnel HEALTHY since 2026-11-06T15:02:08Z. The Suntel inbound block that caused the 2026-10-31 outage is no longer in effect \u2014 the Mac reaches 2.27.120.75:22 \u2014 and the recovery is attributable to NO act in the record. WHAT REMAINS: ep15 mac-cdp-tunnel flaps (22 state events on 2026-11-09 alone, latest HEALTHY 03:34:10Z), and ep21 mac-backup is UNHEALTHY since 2026-11-08T01:13:32Z. The 10-31 root cause stands as history (evidence/mac-tunnel-isp-block-20261031.md, vds-servers 2b737396); do not read this entry as a live outage.",
+      "text": "The Mac CDP tunnel flaps on sleep. The 2026-11-02 clause 'no path to it exists today from any host' is WITHDRAWN as falsified - the tunnel was UP on 2026-11-09 with Gatus ep13 HEALTHY. As of 2026-11-16 the mac-cdp-tunnel unit on vpn reads INACTIVE while two listeners still hold :4444, so the flap persists in a NEW shape rather than being closed. Read this as a live flap class, not as a live outage.",
       "affects": [
         "profile"
       ],
       "since": "2026-09-26",
       "review_by": "2026-11-20",
-      "evidence": "Read 2026-10-26T06:07-06:08Z. Gatus on vpn, sqlite file:/data/projects/gatus/data/gatus.db?mode=ro. endpoint_events ep15 latest four by endpoint_event_id desc: HEALTHY 2026-10-24T12:53:10, UNHEALTHY 2026-10-24T12:12:13, HEALTHY 2026-10-24T06:23:09, UNHEALTHY 2026-10-23T10:05:09 \u2014 no episode since. Unit this turn: systemctl show mac-cdp-tunnel.service -> ActiveState=active, UnitFileState=enabled, Restart=always, MainPID=730, NRestarts=0, ActiveEnterTimestamp Sat 2026-10-24 12:52:24 UTC; ss -ltnp shows 127.0.0.1:9222 (pid 730 fd 3) AND [::1]:9222 (pid 730 fd 6); predicate `curl -s --max-time 3 http://localhost:9222/json/version | grep -c Macintosh` -> 1, rc=0. endpoint_results: ep15 104 rows / 104 successful, newest 2026-10-26T06:08:09Z; ep13 104 / 104. endpoint_uptimes 30-day, 97 hourly entries each: ep15 42,309 total_executions / 8,033 successful_executions; ep13 8,467 / 3,322; ep21 29 / 15. Endpoint definitions from the deployed config, structure only: mac-cdp-tunnel url ssh://78.17.187.4:15259 interval 1m body 'curl -s --max-time 3 http://localhost:9222/json/version | grep -c Macintosh'; agents url ssh://78.17.187.4:15259 interval 5m body '/usr/local/bin/host-diag' \u2014 the SAME URL, differing only in body and cadence, which is why one stayed green while the other went red. Fix: agents/services/mac-cdp/mac-cdp-tunnel.service, vds-servers commit 6bd06c02, ledger n=1740 claim / n=1741 run."
+      "evidence": "infra-factory HQ read 2026-11-16: the mac-cdp-tunnel unit on vpn reads inactive, while two listeners hold :4444; prior reading 2026-11-09T06:05Z had the unit active (running) since 2026-11-07T07:05:44Z with :4444 held via sshd and an ESTABLISHED ssh from the Mac's 87.249.25.155, Gatus ep13 mac-tunnel HEALTHY since 2026-11-06T15:02:08Z. The 10-31 ISP block stands as history (evidence/mac-tunnel-isp-block-20261031.md, vds-servers 2b737396). Superseded evidence below is retained for the flap history it records."
     },
     {
       "id": "ops-daemon-dies-at-cgroup-cap",
-      "text": "Kill count is now FIVE since 2026-10-24, not four: the fifth is 2026-11-05T13:24:00Z ('A process of this unit has been killed by the OOM killer'), status=9/KILL at 13:24:03Z. Current incarnation began 2026-11-06T08:43:21Z, NRestarts=0. THE CAP IS UNCHANGED and still exceeded: MemoryHigh 2,952,790,016 / MemoryMax 3,221,225,472 / MemorySwapMax 2,684,354,560. Live 2026-11-09T06:04Z: MemoryCurrent 2,301,022,208 = 71.43 % of max (877.6 MiB headroom); MemoryPeak 2,953,863,168 = 91.70 % of max and 1,073,152 B (1.0 MiB) OVER MemoryHigh. memory.events high 56,073 / max 0 / oom 0 / oom_kill 0 \u2014 PER-INCARNATION zeros beside five kills, so they are not a clean life. Raising 2 GiB \u2192 3 GiB did not stop the class: the fifth kill arrived five days later, and peak sits at 91.70 % of the new ceiling.",
+      "text": "FIVE cgroup kills since 2026-10-24, the fifth at 2026-11-05T13:24:00Z. The current incarnation has been clean since 2026-11-16T04:11:07Z: NRestarts=0, oom_kill=0 - PER-INCARNATION zeros beside five kills, so they are not evidence of a clean life. The caps are UNCHANGED and still exceeded: MemoryHigh 2,952,790,016 / MemoryMax 3,221,225,472. Raising 2 GiB -> 3 GiB did not stop the class: the fifth kill arrived five days after the raise.",
       "severity": "warning",
       "affects": [
         "profile"
       ],
       "scope": "profile",
-      "evidence": "Read on agents 2026-10-26T06:05:51Z. journalctl --user -u opencrabs-ops.service --since '2026-10-24 00:00': kill 2026-10-25T23:32:06Z + status=9/KILL + restarted 23:32:12Z; clean stop/starts at 18:08:42/43, 18:39:52, 20:13:44/45, 20:56:02, 21:35:51. cgroup /sys/fs/cgroup/user.slice/user-0.slice/user@0.service/app.slice/opencrabs-ops.service: memory.current 2046410752, memory.max 2147483648, memory.peak 2147602432, memory.swap.current 1362341888, memory.swap.max 2684354560, memory.events low 0 high 1 max 72393 oom 0 oom_kill 0, anon 844730368, file 1109123072, inactive_file 977170432, slab 61190240. systemctl --user show -> MemoryMax=2147483648, MemorySwapMax=2684354560, OOMScoreAdjust=100, MainPID=1091416, NRestarts=1, ActiveEnterTimestamp Sun 2026-10-25 23:32:12 UTC. System-scope trap and dmesg +24 s trap both reproduced this turn. Drop-ins: /root/.config/systemd/user/opencrabs-ops.service.d/{10-oompolicy,20-memory,30-cores,40-killmode-reaper}.conf. Gatus ep34 events via sqlite file:/data/projects/gatus/data/gatus.db?mode=ro.",
+      "evidence": "infra-factory HQ read 2026-11-16: five cgroup kills since 2026-10-24, the fifth 2026-11-05T13:24:00Z; current incarnation clean since 2026-11-16T04:11:07Z with NRestarts=0 and oom_kill=0; caps re-read unchanged at MemoryHigh 2952790016 / MemoryMax 3221225472. Prior reading 2026-11-09T06:04Z: MemoryCurrent 2,301,022,208 = 71.43 % of max, MemoryPeak 2,953,863,168 = 91.70 % of max and 1,073,152 B over MemoryHigh, memory.events high 56,073 / max 0 / oom 0 / oom_kill 0. Drop-ins: /root/.config/systemd/user/opencrabs-ops.service.d/{10-oompolicy,20-memory,30-cores,40-killmode-reaper}.conf.",
       "review_by": "2026-11-20",
       "since": "2026-09-27T06:13:19Z"
     },
@@ -203,13 +203,13 @@
     },
     {
       "id": "opencrabs-home-unmanaged-growth",
-      "text": "THE TREND HAS REVERSED and the 2026-11-02 projection is WITHDRAWN. Measured on agents 2026-11-09T06:04Z: /root/.opencrabs = 12G and profiles/ops = 6.3G, DOWN from 20G / 14G on 2026-11-02; / is 45G of 58G = 79 % used with 13G free, against 86.2 % then. So the '~11-day horizon before the disk threshold fires' is falsified in direction and must not be quoted. Largest components now: profiles 7.0G (ops 6.3G, of which opencrabs.db 3.7G and memory 1.3G), projects 2.7G, opencrabs.db 466M, tmp 474M, backups 360M, logs 79M. WHAT IS NOT ATTRIBUTED: the ~8G drop has no producer in the record \u2014 the weekly cleanup ran 2026-11-08T03:00:01Z and logged 'hygiene cleanup complete: 0 item(s) reaped', freeing 0B of journals, so this factory's own instrument did not do it. Treat 12G as a measurement with an unattributed cause; carry neither the rate nor the horizon.",
+      "text": "Growth RESUMED: /root/.opencrabs measured 14G on 2026-11-16 against 12G on 2026-11-09 (+2G over 7 days), and / is at 86 % with 8.2G free. The 2026-11-09 reading that 'the trend reversed' no longer holds, and the 2026-11-02 projection must not be quoted either. The ~8G drop of 2026-11-02 still has NO attributed producer in the record: the weekly cleanup ran 2026-11-08T03:00:01Z and logged 'hygiene cleanup complete: 0 item(s) reaped', so this factory's own instrument did not do it. Treat every figure here as a measurement with an unattributed cause; carry neither a rate nor a horizon.",
       "severity": "info",
       "since": "2026-10-09",
       "affects": [
         "profile"
       ],
-      "evidence": "Re-measured on agents 2026-10-26T06:05:52Z: du -sh /root/.opencrabs = 14G; du -sh profiles/ops = 8.6G; family 737M, oc348probe 19M, avito/code-spike/miidas 1008K; df -h / -> /dev/sda1 58G total, 45-46G used, 12-13G free, 79% (two reads one minute apart differed by 1G because the disk was being written \u2014 report the range). /tmp 7.7G via du -sh, top entries /tmp/clone560 1.6G, /tmp/c560 1.6G, /tmp/verify560o 1.5G, /tmp/verify560 1.5G, all uid 0, mtimes 2026-10-25 19:11-21:37. Reaper: `7 * * * * /usr/bin/python3 /root/vds-servers/tools/hygiene.py --clean >> /var/log/hygiene-reap.log`, log 11.7 MB, last runs 04:07/05:07/06:07Z; AGE_CATCHALL_WINDOW_HOURS = 168 at tools/hygiene.py; /tmp/{namespace}-* built at :117-125, /tmp/-only guard at :179. SQLite read-only (file:...?mode=ro): memory/memory.db 1,101,709,312 B, page_count 269,062, page_size 4,096, freelist_count 0 (was 75,650 pages = 0.29 GiB on 10-25, and 1,013,444 pages = 3.87 GiB on 10-24); opencrabs.db 3,635,105,792 B, page_count 887,487, freelist 4. grep -ci vacuum on logs/opencrabs.2026-10-26 = 0 (10-25 = 83). / RE-MEASURED 2026-10-27T06:07:47Z (infra-factory HQ answer, this round): /root/.opencrabs 16G, profiles/ops 11G; the four 6.2G /tmp clone trees (clone560, c560, verify560o, verify560) are GONE and /tmp is 2.2G; / back to 76% (44G of 58G, 14G free)."
+      "evidence": "infra-factory HQ read 2026-11-16: du -sh /root/.opencrabs = 14G (12G at the 2026-11-09 reading); df -h / -> 86 % used, 8.2G free. Prior readings: 2026-11-09T06:04Z /root/.opencrabs 12G, profiles/ops 6.3G, / 45G of 58G = 79 %, 13G free; 2026-11-02 20G / 14G. Reaper log: weekly cleanup 2026-11-08T03:00:01Z 'hygiene cleanup complete: 0 item(s) reaped'. The ~8G drop of 2026-11-02 remains unattributed."
     },
     {
       "id": "agents-cpu-uncapped-under-factory-load",
@@ -257,7 +257,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-11-09T06:12:54Z",
+  "attested_at": "2026-11-16T06:15:00Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

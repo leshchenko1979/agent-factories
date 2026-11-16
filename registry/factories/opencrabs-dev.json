@@ -89,7 +89,7 @@
     },
     {
       "id": "issue-routing-two-boards",
-      "text": "Issue routing is TWO streams, not three (owner order 2026-10-09): EVERY OpenCrabs binary issue (runtime behaviour, channels, providers, TUI, memory, tools) goes to the fork board leshchenko1979/opencrabs, and factory issues (tooling, CI, release automation, process) to leshchenko1979/opencrabs-dev-factory. Upstream opencrabs/opencrabs receives PULL REQUESTS ONLY \u2014 no new issues. The 2026-10-03 three-stream law and its fork-only-defect discriminator are SUPERSEDED; the #761 boundary register and the census FORK_ONLY_SURFACE predicate survive unchanged as commit-portability instruments \u2014 they decide whether a COMMIT can be ported upstream, never which tracker an issue goes to.",
+      "text": "Issue routing is TWO streams (owner order 2026-10-09): EVERY OpenCrabs binary issue (runtime behaviour, channels, providers, TUI, memory, tools) goes to the fork board leshchenko1979/opencrabs, and factory issues (tooling, CI, release automation, process) to leshchenko1979/opencrabs-dev-factory. Upstream opencrabs/opencrabs receives PULL REQUESTS ONLY - no new issues. The 2026-10-03 three-stream law and its fork-only-defect discriminator are SUPERSEDED. THE PR HALF IS NARROWED, NOT A LICENCE (owner ruling 2026-11-12): the PR channel above is not a standing entitlement - the fork is FORK-STANDING, filing upstream is the EXCEPTION, and only the groups the owner NAMES are ever filed. Keeping a change on the fork is the normal finished state, not debt; the retired words DEGRADED/HIGH-TRUST must not be reintroduced. The #761 boundary register and the census FORK_ONLY_SURFACE predicate survive unchanged as commit-portability instruments - they decide whether a COMMIT can be ported upstream, never which tracker an issue goes to, and never whether anything is owed upstream.",
       "severity": "info",
       "since": "2026-10-09",
       "affects": [
@@ -126,6 +126,17 @@
         "opencrabs-dev"
       ],
       "evidence": "Owner directive to this factory's HQ lane, 2026-10-25: 'I m not going to make any harvesting soon ... I'm interested in downloading to my fork whatever the new there is in the upstream repository.' The sync process is under design and not yet approved, so this entry states the DIRECTIVE only, not the mechanism."
+    },
+    {
+      "id": "oc-smoke-closes-by-default",
+      "scope": "factory",
+      "severity": "warning",
+      "text": "`oc-smoke` now CLOSES the issue on a PASS BY DEFAULT (step 6; `--close`). A lane that ran it expecting only a verdict row will find the issue closed, with a comment citing both receipts. It is guarded: it closes only when BOTH a PASS verdict AND a `done` row were written in that same run, so `--no-ledger` implies no close by construction, and an UNREADABLE tracker state SKIPs with a warning rather than closing blind. THE HAZARD IS THE REPO: `--close-repo` defaults to the FORK leshchenko1979/opencrabs, so a FACTORY issue smoked without the slug tries to close the FORK's issue of that same number \u2014 and both boards hold low numbers (fork #68 is a closed telegram issue; factory #68 was a tool work order). Factory smokes MUST pass `--close-repo leshchenko1979/opencrabs-dev-factory`.",
+      "affects": [
+        "opencrabs-dev"
+      ],
+      "since": "2026-11-16T06:05:48Z",
+      "evidence": "tools/smoke/oc-smoke step 6, commit d48b6338 (2026-11-15T18:31:55Z, factory #68), selftest 38 arms \u2014 including a POSITIVE CONTROL that the close actually runs plus four suppression arms (FAIL / --no-close / --no-ledger / already-CLOSED), a gh-failure arm and a --close-repo shape guard, mutation-verified. Law amended in SKILL.md, editor.md, editor-smoke.md and triage.md at ef865def (2026-11-15T19:29:38Z, v0.4.307). The FACT began 2026-11-15; `since` records this answering instant per the envelope rule."
     }
   ],
   "lanes": [
@@ -347,13 +358,13 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-11-09T06:12:54Z",
+  "attested_at": "2026-11-16T06:15:00Z",
   "instruments": {
     "ledger": {
       "state": "not-applicable",
       "green": false,
-      "measured_at": "2026-09-28T15:25:00Z",
-      "reason": "workers-ledger.json is a skill-version ACK dict (which lane has absorbed which skill version), not an ordered event ledger with an n ordinal -- deliberate absence, declared; the measured tree is the product repo, which carries no tools/ by design"
+      "measured_at": "2026-11-16T06:04:00Z",
+      "reason": "DECLARED DIVERGENCE, not a gap. This factory does NOT carry the instrument's declared file set: no tools/ledger.py, no evidence/ledger.jsonl, and its tooling lives in the SKILL repo (~/.opencrabs/profiles/ops/skills/opencrabs-dev/tools/state/oc-ledger), not the product repo /root/opencrabs. The PREVIOUS reason (measured 2026-09-28) is WITHDRAWN: it claimed workers-ledger.json carries no n ordinal, and that is false at the 2026-11-16T06:04Z read \u2014 its `events` array holds 14,972 rows with n ordinals (n 1..16180, non-contiguous because a re-mint hands out a fresh n). The concept IS adopted in forked form: an ordered, append-only event ledger with an n ordinal, its own write path, its own row schema and its own gates. The instrument is not. Declaring that divergence is the point of this field; the old entry concealed it behind an absence claim that had itself expired."
     },
     "open-questions": {
       "state": "adopted",

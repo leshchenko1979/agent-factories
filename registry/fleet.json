@@ -53,7 +53,7 @@
       "chat_id": -1003936827469,
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
-      "job_prefixes": ["oc-"],
+      "job_prefixes": ["oc-", "opencrabs-dev-"],
       "aliases": ["opencrabs-dev", "opencrabs dev", "crabs kanban", "oc dev"]
     }
   ]

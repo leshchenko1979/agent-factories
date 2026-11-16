@@ -11,7 +11,7 @@
       "the outreach campaign repo /root/ai-antispam-outreach and its Postgres state",
       "Postgres ai_spam_bot on apps (schema outreach; single writer outreach/lib/db.py)",
       "the MAX domain - API surface, webhook ingress, subscription, moderation port",
-      "this factory's own chat (-1003993000918), its topics and its 17 cron rows (14 enabled, 3 disabled: ai-antispam-118-probe is a disabled probe leftover; ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots). The three close gates this fragment used to declare are GONE from the cron table - ai-antispam-43-close-gate, -52-close-gate and -62-close-gate have no row in profiles/ops/opencrabs.db, measured 2026-11-09.",
+      "this factory's own chat (-1003993000918), its topics and its 18 cron rows (15 enabled, 3 disabled: ai-antispam-118-probe is a spent one-shot probe; ai-antispam-day7-retire-wake and ai-antispam-watch-funnel-day7-report are 2027 one-shots). The three close-gate rows this fragment used to declare (ai-antispam-43-close-gate, ai-antispam-52-close-gate, ai-antispam-62-close-gate) NO LONGER EXIST in the cron table - measured 2026-11-16: zero rows match '%close-gate%'.",
       "the ai-gateway ai-antispam route write - its steps, step_timeout and route_timeout (q11, owner-answered 2026-10-01T10:41:21Z: HQ is the single writer; the LLM Gateway lane keeps the repo copy and the drift guard)"
     ],
     "does_not_own": [
@@ -125,6 +125,12 @@
       "audience": "owner",
       "entry": "cron 23e41198-75b4-41b4-acc0-4059a1972974",
       "cadence": "disabled 2027 one-shot (22 Sep 2027 09:00 MSK)"
+    },
+    {
+      "name": "ai-antispam-145-condition4",
+      "audience": "agent",
+      "entry": "cron a41957f6-b3cc-4601-83ab-802fb1b4b049",
+      "cadence": "one-shot 2026-11-17 12:00 UTC"
     }
   ],
   "substrates_owned": [
@@ -136,13 +142,13 @@
   "announcements": [
     {
       "id": "bot-repo-canonical-account-and-deploy-home",
-      "text": "leshchenko1979 is the CANONICAL GitHub account for this factory (owner ruling 2026-09-25), and leshchenko1979/ai-antispam is the canonical repo: it hosts the production landing page ai-antispam.ru, publishes the image (ghcr.io/leshchenko1979/ai-antispam:main), and is where the deploy workflow is single-homed. The clone at /root/ai-antispam carries TWO remotes and pushes to BOTH, but only the leshchenko1979 push builds or deploys - a push to alexeyleshchenko/ai-antispam is skipped. The BOARD was migrated to leshchenko1979/ai-antispam on 2026-10-04 (owner order; the 62 items were recreated and renumbered - map docs/board-migration/number-map.json), so board work now passes --repo leshchenko1979/ai-antispam, where gh holds admin. alexeyleshchenko is RETIRED and gets no new work.",
+      "text": "leshchenko1979 is the CANONICAL GitHub account for this factory (owner ruling 2026-09-25), and leshchenko1979/ai-antispam is the canonical repo: it hosts the production landing page ai-antispam.ru, publishes the image (ghcr.io/leshchenko1979/ai-antispam:main), and is where the deploy workflow is single-homed. The BOARD was migrated to leshchenko1979/ai-antispam on 2026-10-04 (owner order; the 62 items were recreated and renumbered - map docs/board-migration/number-map.json), so board work passes --repo leshchenko1979/ai-antispam, where gh holds admin. alexeyleshchenko is RETIRED (owner order 2026-10-04) and gets no new work: the clone at /root/ai-antispam still CARRIES both remotes, but new commits push to origin (leshchenko1979) ONLY - the former dual-push convention is superseded by the retirement order, and a push to alexeyleshchenko/ai-antispam builds nothing and deploys nothing.",
       "severity": "warning",
-      "since": "2026-09-25",
+      "since": "2026-11-16",
       "affects": [
         "profile"
       ],
-      "evidence": "owner ruling 2026-09-25 (canonical account, board unchanged); deploy.yml now pins image_repo to ghcr.io/leshchenko1979/ai-antispam instead of deriving it from github.repository_owner, and gates both jobs on github.repository == 'leshchenko1979/ai-antispam'; verified live runs 36185290979 (canonical: build-push success, deploy success) and 36185287619 (board: build-push skipped, deploy skipped); container on apps runs ghcr.io/leshchenko1979/ai-antispam:main, healthy, started 2026-09-25T20:23:39Z"
+      "evidence": "owner order 2026-10-04 (alexeyleshchenko retired, no new work); measured practice in this factory's daily self-audit runs since 2026-11-11, which record `alexey: blocked` on every run and push origin only; deploy.yml gates both jobs on github.repository == 'leshchenko1979/ai-antispam'"
     },
     {
       "id": "gh-pages-origin-ahead-not-diverged",
@@ -214,7 +220,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-11-09T06:12:54Z",
+  "attested_at": "2026-11-16T06:15:00Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

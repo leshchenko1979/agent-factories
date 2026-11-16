@@ -82,14 +82,14 @@
     },
     {
       "id": "ops-fallback-chain-reordered",
-      "text": "The ops-profile client fallback chain is inferhub, openrouter \u2014 two hops, best-first by measured per-hop success rate. It was gemini, opencode, openrouter, inferhub (three hops at or below 27.8 percent ahead of one at 99.1 percent); the chain is now the two strongest. Any lane running on the ops profile reaches a provider through this order. I cannot evidence the instant the four-hop chain was shortened to two \u2014 record the answering instant, do not take a guessed one from me.",
+      "text": "The OpenCrabs client fallback chain is ONE hop on all three live homes (default, ops, family): providers = [\"openrouter-glm\"], vision = [\"openrouter-glm\"], enabled = true. openrouter-glm is a custom provider pointed at https://openrouter.ai/api/v1, so the fallback path does NOT reach the InferHub gateway. Superseded text said inferhub, openrouter - that is no longer true and inferhub appears in no fallback list. I cannot evidence the instant the chain changed; record the answering instant, do not take a guessed one from me.",
       "severity": "warning",
       "scope": "profile",
-      "since": "2026-10-24T06:14:12Z",
+      "since": "2026-11-16",
       "affects": [
         "profile"
       ],
-      "evidence": "Live 2026-10-26: `providers = [\"inferhub\", \"openrouter\"]` at `/root/.opencrabs/config.toml:203`, `/root/.opencrabs/profiles/ops/config.toml:138`, `/root/.opencrabs/profiles/family/config.toml:136`. `vision` differs by profile by design: root `[\"minimax\", \"inferhub\"]` (:204), ops `[\"minimax\"]` (:139), family `[\"minimax\", \"inferhub\"]` (:137)."
+      "evidence": "/root/.opencrabs/profiles/ops/config.toml:144-147, /root/.opencrabs/config.toml:210-213, /root/.opencrabs/profiles/family/config.toml:144-147 - [providers.fallback] enabled = true, providers = [\"openrouter-glm\"], vision = [\"openrouter-glm\"], read by tomllib 2026-11-16T06:0xZ. The custom provider block [providers.custom.openrouter-glm] carries base_url = https://openrouter.ai/api/v1 and no inline api_key. Superseded evidence (2026-10-26) read providers = [\"inferhub\", \"openrouter\"] and a per-profile `vision` split; both are falsified by this reading - `vision` is now identical on all three homes."
     },
     {
       "id": "inferhub-root-credential-in-shared-compose",
@@ -100,6 +100,17 @@
         "infra-factory"
       ],
       "evidence": "Commit 452b08c8 in leshchenko1979/servers (2026-09-17) - the `since` is that commit's instant, the moment the literals landed; it is the one date I can stand behind and I am NOT inventing a second. New-API half committed in inferhub-watch 5fb4f2f (2026-09-17T01:08:46Z). Liveness measured 2026-09-24/25 digest-only: root token sha256_8 de0d7f4c authenticates id=1/role=100; INITIAL_ROOT_ACCESS_TOKEN first-32 -> HTTP 200, full 48 -> 401; INITIAL_ROOT_PASSWORD -> POST /api/user/login HTTP 200; SQL_DSN password sha256_8 d5bae8c3 == PGPASSWORD in /root/.inferhub_pg.env. Re-measured 2026-09-25: the two inferhub-watch literals are STILL present (sha256_8 de0d7f4c, both files). Config.Entrypoint=[/new-api] Cmd=[] closes the re-seed question structurally (PID 1 IS the binary; nothing can re-read those env names at boot). Scanned by digest only; no value printed, none on any command line."
+    },
+    {
+      "id": "combo-alias-pools-cn-exposed",
+      "text": "An InferHub combo member declared as a plain ALIAS can start routing to a different provider with no edit to the combo, because alias pools are catalog-level and mutable. The filtering is NOT CN-region-only: mm/MiniMax-M3.1-Flash-Preview returned 422 output new_sensitive (1027) at the GLOBAL endpoint (1 of 3 probes), so mm/mmcn are not a safe pair. With sticky:true the combo pins its highest-reliability member and attempts no failover, so one filtering member makes the WHOLE combo read as dead (6/6) instead of degrading. Pinning is necessary but not sufficient: move the member to kind:\"model\" with a concrete UUID modelId (never a prefix/model string) AND probe the provider behind that UUID - ali/alicn/cbcn filter CN-sensitive input, while the cb resale path served 3/3. State at 2026-10-28: combo/iq-75-plus is 20 members (3 pinned models, 17 aliases); deepseek-v4.1-flash, kimi-k3 and minimax-m3.1-flash are pinned to cb UUIDs, and minimax-m3.1-flash-preview was removed because every route for it filters.",
+      "severity": "warning",
+      "scope": "profile",
+      "since": "2026-10-28T07:05:37Z",
+      "affects": [
+        "profile"
+      ],
+      "evidence": "inferhub-watch#252; evidence/receipts/combo-iq75-cn-pin-2026-10-28.md; evidence/receipts/combo-iq75-backup-20261028T0700Z-pre-cn-pin.json; evidence/receipts/combo-iq75-hq-verification-2026-10-28.md; evidence/receipts/handover-inferhub-hq-2026-10-28.md - all five present in /root/inferhub-watch at origin/main. The member repo's mirror declared this entry in commits 148d4ec and a50408a (2026-10-28); the registry fragment did not carry it, so the 2026-11-02 and 2026-11-09 answers dropped it. The \"State at 2026-10-28\" clause is a DATED claim: live combo membership was not re-measured this round."
     }
   ],
   "lanes": [
@@ -129,7 +140,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-11-09T06:12:54Z",
+  "attested_at": "2026-11-16T06:15:00Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",

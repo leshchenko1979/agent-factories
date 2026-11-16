@@ -196,6 +196,17 @@
       ],
       "scope": "factory",
       "evidence": "docker ps on apps: miidas-ru-proxy Up 2 days (healthy), created 2026-10-30T11:53:56Z, compose project ru-proxy; `git ls-files | grep -c '^ru-proxy/'` = 0 at repo HEAD d3a1b34; the host tree holds Dockerfile, docker-compose.yml, entrypoint.sh, wg0.conf"
+    },
+    {
+      "id": "miidas-apps-ru-proxy-dns-dead",
+      "text": "The apps-side `miidas-ru-proxy` cannot resolve ANY hostname: its /etc/resolv.conf points at 1.1.1.1 and 8.8.8.8 directly, bypassing Docker's embedded resolver, so a host-level UDP/53 degradation silently kills name resolution inside it. Measured 2026-11-16: `wget https://ifconfig.me` returns `bad address`, while `getent hosts ifconfig.me` on the apps HOST resolves normally (2600:1901:0:b2bd::), so the fault is container-scoped, not host-wide. Healthcheck reads `unhealthy` with 3605 consecutive failures; container started 2026-10-30T11:53:56Z. Whether any client depends on THIS instance is NOT established - the clients on agents-old have their own container there, and that one has no HEALTHCHECK at all. Stated as measured, not as impact.",
+      "severity": "warning",
+      "scope": "factory",
+      "since": "2026-11-16",
+      "affects": [
+        "miidas"
+      ],
+      "evidence": "`docker inspect miidas-ru-proxy --format '{{.State.Health.Status}} {{.State.Health.FailingStreak}}'` -> `unhealthy 3605`; health log = `1: wget: bad address 'ifconfig.me'` repeated; `docker exec miidas-ru-proxy cat /etc/resolv.conf` -> `nameserver 1.1.1.1` / `nameserver 8.8.8.8`; host `getent hosts ifconfig.me` resolves 2600:1901:0:b2bd::"
     }
   ],
   "lanes": [
@@ -231,7 +242,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-11-09T06:12:54Z",
+  "attested_at": "2026-11-16T06:15:00Z",
   "instruments": {
     "ledger": {
       "state": "deferred",
