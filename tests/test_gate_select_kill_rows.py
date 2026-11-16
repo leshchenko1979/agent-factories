@@ -703,7 +703,69 @@ def _store_ships_checks() -> None:
 
     disk_rows = _rows_of(on_disk.read_text(encoding="utf-8"))
     key = lambda r: (r.get("n"), r.get("ts"), r.get("subject"))  # noqa: E731
-    missing = {key(r) for r in committed_rows} - {key(r) for r in disk_rows}
+    committed_keys = {key(r) for r in committed_rows}
+    disk_keys = {key(r) for r in disk_rows}
+
+    # A store THIS RUN just created is not the historical store, and calling it one
+    # fabricates exactly the class of defect #641 exists to prevent — one level up, because
+    # here the instrument manufactures the state it then condemns. Route A untracked the
+    # file, so a clean checkout starts with no store at all; the first gate killed in a
+    # sweep makes gate_select create one, holding only rows written after cutover. A later
+    # gate then reads that file, finds none of the pre-cutover rows in it, and reports mass
+    # deletion. Measured on a pristine checkout at cb62bb7e: all probes pass; the same
+    # checkout plus ONE fresh kill row: FAIL "86 committed row(s) missing".
+    #
+    # Two signals, and both must agree before this arm excuses anything:
+    #   * any identity overlap with the committed set -> this IS the historical store, so
+    #     the superset check below binds on it exactly as before.
+    #   * no overlap AND every on-disk row strictly newer than every committed row -> a
+    #     store created after cutover: STATED SKIP, naming the reason.
+    #   * no overlap but freshness not provable -> INABILITY by name, never a fabricated
+    #     deletion claim — the same rule arms (b) and (c1) now follow.
+    #
+    # Bite-proved in a temp repo against the real committed row set: a fresh store -> STATED
+    # SKIP; the historical store minus one row -> FAIL naming that row; an empty store ->
+    # FAIL; a fresh store with no ts -> INABILITY. Mutants pin which guard does the work:
+    # deleting the freshness test turns the fresh case into INABILITY, while deleting the
+    # OVERLAP test turns it into "86 committed row(s) missing" — the fabrication itself.
+    # So overlap is the guard and freshness only chooses between a stated skip and a named
+    # inability.
+    # Residual, stated rather than hidden: a store whose committed rows were ALL deleted and
+    # replaced by newer ones is indistinguishable from a fresh store by content alone, and
+    # this arm reads it as fresh. (c1) still holds the rows' survival in history, and the
+    # store is untracked factory data, so nothing ships on this reading.
+    if not disk_rows:
+        check(
+            "(c2) every committed row survives on disk (append-only: nothing deleted to pass)",
+            False,
+            f"{STORE_REL} exists but holds no rows: an append-only store cannot lose its last "
+            "row by itself, so this is a truncation rather than a store this run created",
+        )
+        return
+
+    if not (committed_keys & disk_keys):
+        disk_ts = [r.get("ts") for r in disk_rows]
+        comm_ts = [r.get("ts") for r in committed_rows]
+        comparable = all(isinstance(t, str) and t for t in disk_ts + comm_ts)
+        if comparable and min(disk_ts) > max(comm_ts):
+            print(
+                f"STATED SKIP (c2) {STORE_REL} holds {len(disk_rows)} row(s), the oldest at "
+                f"{min(disk_ts)}, all strictly newer than the newest committed row "
+                f"({max(comm_ts)}) — this run created the store after cutover, so there is no "
+                "history in it to violate; (c1) is the check that binds here"
+            )
+            return
+        check(
+            "(c2) every committed row survives on disk (append-only: nothing deleted to pass)",
+            False,
+            f"INABILITY, not a reading: {STORE_REL} shares no row with the "
+            f"{len(committed_rows)} committed row(s) and its freshness cannot be established "
+            "(every row needs a ts to prove it was written after cutover), so this arm reports "
+            "no verdict on the tree rather than claiming rows were deleted",
+        )
+        return
+
+    missing = committed_keys - disk_keys
     check(
         "(c2) every committed row survives on disk (append-only: nothing deleted to pass)",
         not missing,
