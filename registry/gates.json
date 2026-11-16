@@ -1208,6 +1208,14 @@
       "margin_x": 4.24,
       "measured_at": "be07a4c541109a1df648f2a2015cf77e66449a02",
       "measured_sec": 3.12
+    },
+    "tests/test_fixture_lifetime.py": {
+      "budget_sec": 249.99,
+      "measured_sec": 62.31,
+      "margin_x": 4.012,
+      "load_at_measure": 3.74,
+      "measured_at": "d7e00677701f264b7d3d69a7d4a737522c0a40e6",
+      "basis_note": "Declared 2026-11-16 (close criterion 4 of the #650 ruling) because this gate was UNDECLARED and therefore ran on the population default, 69.27 s, which killed it at 69.32 s in BOTH the 2026-11-15 and 2026-11-16 rounds (exit 124, duration_is_lower_bound true). It could not escape on its own: the default's population is built from COMPLETED samples only, so a censored gate never enters the population that would raise the wall above it. BASIS = the SLOWEST of five completed samples, per the slow-tail rule (#579, ruling n=4460): 20.71 s (-q), 22.16 s, 23.65 s, 23.35 s at load 1.29-1.42, and 62.31 s at load ~3.74. margin_for(62.31) = 4.012037, so budget_sec 249.99 -- 3.61x the censored round kill and 10.7x the quiet-box runtime. HONEST LIMIT, stated because it is load-bearing: one further run at load 3.74 was still going at 600 s when MY OWN timeout killed it, so this gate is load-sensitive well past this wall and a recurrence of that thrash regime will kill it again. The wall does NOT cover that regime, and it is not pretended to: the gate's own children carry timeout=600.0 (line 242) and the 120 s default (line 38), so its self-declared worst case is ~730 s, above any wall derivable from a completed sample. Sizing the wall to 730 s would mean a genuinely hung gate takes 12 minutes to detect. The real remedy is lowering the 600 s child timeout at line 242 -- sized for swap churn on 2026-11-14 when the quiet runtime is now ~22 s -- and that is Worker code, filed separately rather than smuggled into a manifest declaration."
     }
   },
   "modes": {
