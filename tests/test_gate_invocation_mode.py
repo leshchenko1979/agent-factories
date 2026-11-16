@@ -37,7 +37,6 @@ Exit: 0 every invoked gate's declared mode matches its call site, 1 a problem, 2
 
 from __future__ import annotations
 
-import ast
 import contextlib
 import io
 import json
@@ -46,107 +45,55 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import gate_registry  # noqa: E402
+
 REPO = Path(__file__).resolve().parent.parent
 AUDIT = REPO / "tools" / "audit.py"
 MANIFEST = REPO / "registry" / "gates.json"
 
 # The two conventions, and ONLY these two: a third would be a new call-site form nobody
 # declared, which is the class this gate exists to make loud rather than silently unjudged.
-MODES = ("script", "pytest")
+# READ FROM THE SHARED MODULE (#296): a private copy of the pair would be the same
+# "one field, two predicates" defect the ruling retires, one constant at a time.
+MODES = gate_registry.GATE_MODES
 
-class ManifestUnreadable(Exception):
-    """`registry/gates.json` exists and cannot be read -- a failure, never a skip."""
+# The failure class is the shared one too, so a caller catching it here catches exactly what
+# `gate_registry.declared_gate_modes` raises.
+ManifestUnreadable = gate_registry.GateModesUnreadable
 
 def invoked_gates(audit_path: Path = AUDIT) -> dict[str, str]:
     """Every gate the audit invokes, mapped to the convention its CALL SITE uses.
 
-    Parsed with `ast`, never a regex: the appends span several lines, and a regex over them
-    under-counts (a pattern-based read of this file produced a false "no call site" finding
-    for four entries before an AST corrected it). The population is the call sites and not a
-    glob, because a gate that ships but is never invoked owes no mode.
+    The map comes from the SHARED predicate (#296, HQ ruling n=2123), never from a parse of
+    this gate's own: `gate_registry.invoked_gate_modes` reads the mode out of the same append
+    scan that already carries the runner, so this gate and
+    `tests/test_gate_registration.py` cannot disagree about what the audit invokes or under
+    which convention. One field, one predicate -- a private mode-map walk beside it is the
+    same defect one level down, which is what the ruling retired.
+
+    The population is the call SITES and not a glob: a gate that ships but is never invoked
+    owes no mode.
+
+    The AST walk this replaces was written because a NAIVE regex over the appends
+    under-counted them. The shared scan is not that regex -- it is the append scan three
+    other directions already read -- and it was measured against the AST reader on this tree
+    before the switch: 133 paths, 0 population difference, 0 mode disagreement.
     """
-    tree = ast.parse(audit_path.read_text(encoding="utf-8"))
-    found: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        func = node.func
-        if not (isinstance(func, ast.Attribute) and func.attr == "append"):
-            continue
-        if not (isinstance(func.value, ast.Name) and func.value.id == "gates_to_run"):
-            continue
-        if len(node.args) != 1 or not isinstance(node.args[0], ast.List):
-            continue
-        argv = [
-            e.value for e in node.args[0].elts
-            if isinstance(e, ast.Constant) and isinstance(e.value, str)
-        ]
-        paths = [a for a in argv if a.endswith(".py")]
-        if not paths:
-            continue
-        mode = "pytest" if ("-m" in argv and "pytest" in argv) else "script"
-        path = paths[-1]
-        if path in found:
-            # A path invoked twice is reported by the both-forms probe below; keeping the
-            # FIRST form here would silently pick a winner, so the map holds the pair.
-            found[path] = f"{found[path]}+{mode}"
-        else:
-            found[path] = mode
-    return found
+    return gate_registry.invoked_gate_modes(audit_path)
 
 def declared_modes(manifest_path: Path = MANIFEST) -> tuple[dict[str, str], str]:
-    """`(modes, note)` from the manifest, or raises `ManifestUnreadable`."""
-    if not manifest_path.is_file():
-        raise FileNotFoundError(manifest_path)
-    try:
-        data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ManifestUnreadable(f"{manifest_path}: cannot be read as JSON — {exc}") from exc
-    if not isinstance(data, dict):
-        raise ManifestUnreadable(f"{manifest_path}: the manifest must be a JSON object")
-    modes = data.get("modes")
-    if not isinstance(modes, dict):
-        raise ManifestUnreadable(
-            f"{manifest_path}: no `modes` object — the invocation convention is undeclared, "
-            f"which is the state #195 exists to end (a consumer cannot compute their CI's "
-            f"population from it)"
-        )
-    for key, value in modes.items():
-        if value not in MODES:
-            raise ManifestUnreadable(
-                f"{manifest_path}: modes[{key!r}] = {value!r} is not one of {'/'.join(MODES)}"
-            )
-    return modes, f"{manifest_path.name}: {len(modes)} declared mode(s)"
+    """`(modes, note)` from the manifest, or raises -- the SHARED reader (#296).
+
+    Delegation, not a copy: `gate_registry.declared_gate_modes` is the one place a `modes`
+    object is read, so this gate and `tests/test_gate_registration.py` cannot disagree about
+    what a malformed declaration is either.
+    """
+    return gate_registry.declared_gate_modes(manifest_path)
 
 def problems(invoked: dict[str, str], declared: dict[str, str]) -> list[str]:
-    """Every mismatch between the call sites and the declaration, as named findings."""
-    out: list[str] = []
-    for path in sorted(invoked):
-        form = invoked[path]
-        if "+" in form:
-            forms = sorted(set(form.split("+")))
-            out.append(
-                f"{path}: invoked under BOTH forms ({', '.join(forms)}) — the call site's form "
-                f"is ambiguous, so no single declared mode can be right"
-            )
-            continue
-        want = declared.get(path)
-        if want is None:
-            out.append(
-                f"{path}: invoked as `{form}` by the audit and carries NO declared mode — a "
-                f"consumer cannot tell whether a pytest-based CI reaches it"
-            )
-        elif want != form:
-            out.append(
-                f"{path}: declared `{want}` but the audit invokes it as `{form}` — a "
-                f"declaration that can drift from its call site is one field read two ways"
-            )
-    for path in sorted(set(declared) - set(invoked)):
-        out.append(
-            f"{path}: declared `{declared[path]}` and NOT invoked by the audit — a declaration "
-            f"about a gate that does not run is a claim nobody can check"
-        )
-    return out
+    """Every mismatch between the call sites and the declaration -- the SHARED predicate."""
+    return gate_registry.gate_mode_problems(invoked, declared)
 
 def probe_the_population_is_the_call_sites_and_is_non_empty() -> None:
     """The population is the CALL SITES, and a predicate that examined nothing says so."""
@@ -304,6 +251,17 @@ def probe_the_ABSENT_manifest_is_a_stated_skip_and_never_a_PASS() -> None:
         # the gate AS IT SHIPS, beside a tree that has not adopted the declaration
         (tree / "tests" / "test_gate_invocation_mode.py").write_text(
             Path(__file__).read_text(encoding="utf-8"), encoding="utf-8")
+        # ...and the tree's HELPER MODULES, because the gate's mode map now comes from the
+        # shared predicate (#296) and that module carries its own helper import chain
+        # (`rework_table`). A synthetic tree carrying the gate WITHOUT the helper set is not a
+        # tree the kit ships -- it is a broken install, and driving it would test the import
+        # graph rather than the absent manifest this arm is about. The helpers are exactly the
+        # non-gate `.py` files beside this one.
+        for helper in Path(__file__).parent.glob("*.py"):
+            if helper.name.startswith("test_"):
+                continue
+            (tree / "tests" / helper.name).write_text(
+                helper.read_text(encoding="utf-8"), encoding="utf-8")
         (tree / "tools" / "audit.py").write_text(
             AUDIT.read_text(encoding="utf-8"), encoding="utf-8")
         assert not (tree / "registry" / "gates.json").exists(), (

@@ -1819,6 +1819,130 @@ def invoked_gates(audit_path: Path) -> list[str]:
         keys.append(f"{prefix}/{entry['name']}")
     return sorted(set(keys))
 
+def invoked_gate_modes(audit_path: Path) -> dict[str, str]:
+    """Every gate the audit INVOKES, mapped to the convention its CALL SITE uses.
+
+    A PROJECTION of `registration_entries`, never a second parse: the append scan already
+    reads the RUNNER (#107(d)), and the invocation mode IS that runner -- `script` where the
+    file's own `__main__` owns the verdict, `pytest` where `-m pytest` collects it. One
+    field, one predicate, two readers (#296, HQ ruling n=2123): a private mode-map parse
+    beside this one is the same defect one level down.
+
+    The population is the CALL SITES, not a file glob and not the budget manifest -- a gate
+    that ships but is never appended owes no mode, and 18 invoked gates carry no budget
+    entry, so a manifest-keyed population would declare a mode for 46 of 64 and read green
+    over the other 28 percent.
+
+    A path appended under BOTH forms is kept as `script+pytest` rather than resolved to one
+    of them: picking a winner would silently settle the ambiguity this declaration exists to
+    make loud. The pair is emitted only when the two forms genuinely DIFFER, so a same-form
+    double append is not reported as an ambiguity that does not exist.
+
+    Measured at d7e00677 against the AST reader it replaces: both scans returned 133 paths
+    with zero population and zero mode disagreement -- this projection changes the parse,
+    not the answer.
+    """
+    text = audit_path.read_text(encoding="utf-8") if audit_path.is_file() else ""
+    modes: dict[str, str] = {}
+    for entry in registration_entries(text):
+        path = entry["target"]
+        mode = entry["runner"]
+        prior = modes.get(path)
+        if prior is None:
+            modes[path] = mode
+        elif prior != mode:
+            modes[path] = f"{prior}+{mode}"
+    return modes
+
+
+# The two invocation conventions, and ONLY these two: a third would be a call-site form
+# nobody declared, which is the class #296 exists to make loud rather than silently unjudged.
+GATE_MODES = (SCRIPT_RUNNER, PYTEST_RUNNER)
+
+
+class GateModesUnreadable(Exception):
+    """A manifest that exists and cannot yield a mode map -- a FAILURE, never a skip.
+
+    The two are the same output to a caller that only sees a verdict, and one of them hides a
+    broken declaration. An ABSENT manifest is a legitimate state (a factory that has not
+    adopted the declaration yet); an unreadable one is not.
+    """
+
+
+def declared_gate_modes(manifest_path: Path) -> tuple[dict[str, str], str]:
+    """`(modes, note)` from a budget manifest's `modes` object, or raises.
+
+    `FileNotFoundError` when the manifest is ABSENT -- the caller's stated skip. Every other
+    unreadable state raises `GateModesUnreadable`, because a map that exists and cannot be
+    read is a failure and the caller must not be able to mistake it for the skip.
+    """
+    if not manifest_path.is_file():
+        raise FileNotFoundError(manifest_path)
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise GateModesUnreadable(
+            f"{manifest_path}: cannot be read as JSON -- {exc}"
+        ) from exc
+    if not isinstance(data, dict):
+        raise GateModesUnreadable(f"{manifest_path}: the manifest must be a JSON object")
+    modes = data.get("modes")
+    if not isinstance(modes, dict):
+        raise GateModesUnreadable(
+            f"{manifest_path}: no `modes` object -- the invocation convention is undeclared, "
+            f"which is the state #195 exists to end (a consumer cannot compute their CI's "
+            f"population from it)"
+        )
+    for key, value in modes.items():
+        if value not in GATE_MODES:
+            raise GateModesUnreadable(
+                f"{manifest_path}: modes[{key!r}] = {value!r} is not one of "
+                f"{'/'.join(GATE_MODES)}"
+            )
+    return modes, f"{manifest_path.name}: {len(modes)} declared mode(s)"
+
+
+def gate_mode_problems(invoked: dict[str, str], declared: dict[str, str]) -> list[str]:
+    """Every mismatch between the call sites and the declaration, as named findings.
+
+    THE ONE PREDICATE for #296, and the reason it lives here rather than in either gate:
+    `tests/test_gate_invocation_mode.py` reports the drift and
+    `tests/test_gate_registration.py` guards it, and two implementations would agree until a
+    message or a column changed and then disagree about what a mismatch IS. Both import
+    this, so the reporter and the guard cannot drift.
+
+    Four findings, in the order a reader should act on them: a path invoked under BOTH forms
+    (no single declared mode can be right), a path with NO declaration, a declaration that
+    CONTRADICTS its call site, and a declaration about a gate the audit does not run.
+    """
+    out: list[str] = []
+    for path in sorted(invoked):
+        form = invoked[path]
+        if "+" in form:
+            forms = sorted(set(form.split("+")))
+            out.append(
+                f"{path}: invoked under BOTH forms ({', '.join(forms)}) -- the call site's "
+                f"form is ambiguous, so no single declared mode can be right"
+            )
+            continue
+        want = declared.get(path)
+        if want is None:
+            out.append(
+                f"{path}: invoked as `{form}` by the audit and carries NO declared mode -- a "
+                f"consumer cannot tell whether a pytest-based CI reaches it"
+            )
+        elif want != form:
+            out.append(
+                f"{path}: declared `{want}` but the audit invokes it as `{form}` -- a "
+                f"declaration that can drift from its call site is one field read two ways"
+            )
+    for path in sorted(set(declared) - set(invoked)):
+        out.append(
+            f"{path}: declared `{declared[path]}` and NOT invoked by the audit -- a "
+            f"declaration about a gate that does not run is a claim nobody can check"
+        )
+    return out
+
 
 def exit_declaration_problems(
     invoked: list[str], exits: dict, repo_root: Path

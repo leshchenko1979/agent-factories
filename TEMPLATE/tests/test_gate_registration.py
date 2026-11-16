@@ -101,9 +101,13 @@ from gate_registry import (  # noqa: E402
     RUNNER_FORM_PREDICATE,
     SCRIPT_RUNNER,
     TOOL_INVOCATION_NOTE,
+    GateModesUnreadable,
+    declared_gate_modes,
     declared_gates,
     first_docstring_line,
+    gate_mode_problems,
     gate_registration_problems,
+    invoked_gate_modes,
     law_coverage_problems,
     declared_splits,
     manifest_drift_problems,
@@ -120,6 +124,7 @@ from gate_registry import (  # noqa: E402
 
 TESTS_DIR = REPO / "tests"
 AUDIT = REPO / "tools" / "audit.py"
+MANIFEST = REPO / "registry" / "gates.json"
 # Direction 4's two law sources. Both are meta-factory surfaces: a bootstrapped factory
 # has its own skill at a different path and no rework log until it writes one, and the
 # leg reports an unread source rather than treating it as an empty one.
@@ -4442,6 +4447,155 @@ def probe_an_UNREAD_kill_record_is_NEVER_reported_as_a_clean_one() -> None:
               len(seen) == 3 and "" not in seen,
               " | ".join(sorted(seen)))
 
+# --- #296: the invocation-mode declaration, the THIRD column of the same join ----------
+#
+# THE JOIN THIS COMPLETES. This file already joins the audit's run list to
+# `registry/gates.json` twice: direction 1 asks whether a declared gate is REGISTERED, and
+# direction 4 asks whether a registered target CAN RUN under the runner beside it. Neither
+# reads the manifest's `modes` object, so a gate could be registered, runnable, and still
+# leave a consumer unable to compute its CI's population -- the #204 recurrence the HQ ruling
+# at n=2123 decided. The mode is the third column of the SAME join, and it is guarded here
+# rather than only reported in `tests/test_gate_invocation_mode.py`, because a reporter that
+# is not a gate cannot block anything.
+#
+# WHY THE PREDICATE IS IMPORTED AND NOT RE-IMPLEMENTED. The ruling's constraint is "one
+# field, one predicate": `gate_registry.gate_mode_problems` is the only implementation and
+# both gates call it. A second implementation here would agree with the first until a message
+# or a column changed -- the drift this leg exists to catch, one level up.
+
+def probe_a_declared_mode_that_contradicts_its_call_site_is_named() -> None:
+    """The bite, driven from a CONSTRUCTED pair rather than from live data.
+
+    A guard that has only ever seen agreeing input has not been shown to reject disagreeing
+    input, and the subject here is a declaration drifting from the call site it describes.
+    """
+    found = gate_mode_problems(
+        {"tests/test_a.py": "script", "tests/test_b.py": "pytest"},
+        {"tests/test_a.py": "pytest", "tests/test_b.py": "pytest"},
+    )
+    check(
+        "a declared mode that CONTRADICTS its call site is named, and only that one",
+        len(found) == 1 and "tests/test_a.py" in found[0] and "declared `pytest`" in found[0],
+        str(found),
+    )
+
+def probe_an_undeclared_mode_an_ambiguous_form_and_an_orphan_are_all_named() -> None:
+    """The three other findings, each driven separately -- one arm per failure shape."""
+    missing = gate_mode_problems({"tests/test_c.py": "script"}, {})
+    check(
+        "a gate the audit invokes with NO declared mode is named",
+        len(missing) == 1 and "NO declared mode" in missing[0],
+        str(missing),
+    )
+    both = gate_mode_problems(
+        {"tests/test_d.py": "script+pytest"}, {"tests/test_d.py": "script"})
+    check(
+        "a path invoked under BOTH forms is named as ambiguous, not silently resolved",
+        len(both) == 1 and "BOTH forms" in both[0],
+        str(both),
+    )
+    orphan = gate_mode_problems({}, {"tests/test_e.py": "script"})
+    check(
+        "a declared mode for a gate the audit never invokes is named",
+        len(orphan) == 1 and "NOT invoked" in orphan[0],
+        str(orphan),
+    )
+
+def probe_the_mode_predicate_is_defined_ONCE_and_the_mode_gate_uses_it() -> None:
+    """#296's own constraint, asserted rather than trusted.
+
+    The ruling forbids a second parse of the mode map. A guard that merely CALLS the shared
+    predicate cannot see a private copy growing beside it, so this scans the tree's own
+    sources: exactly one definition of each, and the mode gate resolves to that same one.
+    """
+    definitions: list[str] = []
+    for path in sorted(TESTS_DIR.glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        # The needle is CONSTRUCTED, never spelled: a spelled-out definition line inside this
+        # probe's own source is a hit on this probe, and the first version of this arm failed
+        # on exactly that -- a guard grading its own homework.
+        for name in ("invoked_gate_modes", "gate_mode_problems"):
+            needle = f"def {name}"
+            if needle in text:
+                definitions.append(f"{path.name}:{needle}")
+    # The EXPECTED values are constructed from the same names, for the same reason: a
+    # spelled-out definition line in the expectation is another hit on this probe.
+    expected = sorted(
+        f"gate_registry.py:def {name}" for name in ("gate_mode_problems", "invoked_gate_modes")
+    )
+    check(
+        "exactly ONE definition of each mode predicate exists in tests/",
+        sorted(definitions) == expected,
+        str(definitions),
+    )
+    import test_gate_invocation_mode as mode_gate
+    check(
+        "...and the mode GATE resolves to that same predicate, not a copy of it",
+        mode_gate.gate_registry.gate_mode_problems is gate_mode_problems
+        and mode_gate.gate_registry.invoked_gate_modes is invoked_gate_modes,
+        mode_gate.gate_registry.__name__,
+    )
+
+def probe_an_absent_mode_manifest_is_a_skip_and_a_broken_one_is_a_FAILURE() -> None:
+    """The two absences are different facts and must not share an output.
+
+    A factory that has not adopted the declaration gets a stated SKIP; a manifest that exists
+    and cannot yield a map gets a FAILURE. Collapsing them would let a broken declaration read
+    as "not adopted yet" -- the confusion the mode gate's own docstring forbids.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        absent = Path(tmp) / "no-such-gates.json"
+        try:
+            declared_gate_modes(absent)
+        except FileNotFoundError:
+            check("an ABSENT mode manifest is the caller's stated SKIP", True)
+        except GateModesUnreadable as exc:
+            check("an ABSENT mode manifest is the caller's stated SKIP", False,
+                  f"read as unreadable: {exc}")
+        else:
+            check("an ABSENT mode manifest is the caller's stated SKIP", False,
+                  "returned a map for a file that does not exist")
+
+        broken = Path(tmp) / "gates.json"
+        broken.write_text('{"modes": {"tests/test_x.py": "shell"}}', encoding="utf-8")
+        try:
+            declared_gate_modes(broken)
+        except GateModesUnreadable:
+            check("a mode value outside the declared pair is a FAILURE, never a skip", True)
+        else:
+            check("a mode value outside the declared pair is a FAILURE, never a skip", False,
+                  "accepted an unknown convention")
+
+def probe_the_live_mode_join_is_clean_and_non_vacuous() -> None:
+    """The live tree, with the population printed -- a clean verdict over nothing is not one.
+
+    TWO PORTABILITY FACTS, both driven by the TEMPLATE copy of this file. There `REPO`
+    resolves to `TEMPLATE/`, which carries an audit but no budget manifest, and a bootstrapped
+    member may not have adopted the declaration at all: that is the mode gate's own documented
+    SKIP, so this leg STATES it and judges nothing. And the population bound is `> 1`, not a
+    literal count -- a member's audit registers its own gate set, and a bound tuned to THIS
+    tree's 133 would red a healthy factory.
+    """
+    invoked = invoked_gate_modes(AUDIT)
+    check(
+        "the mode join examined a non-empty population",
+        len(invoked) > 1,
+        f"{len(invoked)} invoked gate(s)",
+    )
+    try:
+        declared, note = declared_gate_modes(MANIFEST)
+    except FileNotFoundError:
+        print(f"  SKIP  no `modes` declaration at {MANIFEST.name} — this tree has not adopted "
+              f"the declaration, which is a legitimate state (#195), not a defect")
+        return
+    found = gate_mode_problems(invoked, declared)
+    check(
+        "every invoked gate declares the mode its call site uses",
+        not found,
+        f"{note}, {len(invoked)} invoked: " + "; ".join(found[:5]),
+    )
+
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -4598,6 +4752,14 @@ def main() -> int:
     probe_an_UNREAD_kill_record_is_NEVER_reported_as_a_clean_one()
     print("  live manifest — #295: the exit declaration, its classes and its coverage")
     probe_the_live_tree_declares_every_invoked_gate()
+
+    print("  synthetic probes — #296: the invocation mode is the THIRD column of the join")
+    probe_a_declared_mode_that_contradicts_its_call_site_is_named()
+    probe_an_undeclared_mode_an_ambiguous_form_and_an_orphan_are_all_named()
+    probe_the_mode_predicate_is_defined_ONCE_and_the_mode_gate_uses_it()
+    probe_an_absent_mode_manifest_is_a_skip_and_a_broken_one_is_a_FAILURE()
+    print("  live tree — #296: every invoked gate declares the mode its call site uses")
+    probe_the_live_mode_join_is_clean_and_non_vacuous()
 
     print()
     if failures:
