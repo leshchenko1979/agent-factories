@@ -61,7 +61,8 @@
     },
     "tests/test_board_intake_recorded.py": {
       "class": "write-path-refusal",
-      "refuser": "tools/ledger.py"
+      "refuser": "tools/ledger.py",
+      "table": "docs/board-intake-exemptions.json"
     },
     "tests/test_brain_metrics.py": {
       "class": "always-satisfiable"
