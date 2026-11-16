@@ -653,5 +653,43 @@ def main() -> int:
     return 0
 
 
+def test_the_fixture_never_shells_out_to_live_git_for_the_row_set() -> None:
+    """#648 second surface: `_run` must not resolve the row set against LIVE history.
+
+    `row_set_leg` reads a ledger's row numbers at a git BASE REF in the live repository
+    (`row_set_level` -> `git rev-list --left-right --count`, `row_set_tree` ->
+    `git show <ref>:<path>`, `row_set_remote` -> the remote's copy). Measured after the
+    activity read was pinned: 9.5 s of the 11.26 s a single `_run([], [])` still cost, so
+    a probe driven through here was paying this factory's own 5,000-row history to answer
+    a question about a fixture -- the same defect class as the live database read, on a
+    different substrate.
+
+    THE DISCRIMINATING HALF IS `assert not called`. A stub that returned NOT RUN would
+    still produce a leg verdict, so requiring "a verdict came back" proves nothing; the
+    reachability of the git readers is the property under test.
+    """
+    with mock.patch.object(RUNNER, "row_set_level") as level, \
+            mock.patch.object(RUNNER, "row_set_tree") as tree, \
+            mock.patch.object(RUNNER, "row_set_remote") as remote:
+        level.side_effect = RuntimeError("PROBE: live git history must never be read")
+        tree.side_effect = RuntimeError("PROBE: live git history must never be read")
+        remote.side_effect = RuntimeError("PROBE: live git history must never be read")
+        rc, out, err = _run([], [])
+
+    assert rc in (0, 1), f"expected a verdict, got rc={rc}: {err[-400:]}"
+    assert "Traceback" not in err, err[-800:]
+    assert out, "the runner printed nothing at all"
+
+    assert level.called is False, (
+        f"a probe driven through _run resolved LIVE git history: {level.call_args_list}"
+    )
+    assert tree.called is False, (
+        f"a probe driven through _run read LIVE git history: {tree.call_args_list}"
+    )
+    assert remote.called is False, (
+        f"a probe driven through _run read the LIVE remote: {remote.call_args_list}"
+    )
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

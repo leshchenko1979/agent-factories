@@ -224,6 +224,29 @@ def _empty_criterion_tree() -> Path:
         _EMPTY_CRITERION_TREE = _criterion_tree()
     return _EMPTY_CRITERION_TREE
 
+def _row_set_not_exercised(*, read_at: str, **_ignored) -> dict:
+    """The row-set leg a probe reads when it supplied no repository of its own (#648).
+
+    The leg resolves a ledger's row numbers against a git BASE REF in the live repository,
+    so driving it from a fixture means three `git` subprocesses over this factory's real
+    history. NOT RUN with its reason is the honest verdict for a probe that did not supply
+    a repository: it names the leg as unexercised instead of asserting over live state, and
+    it keeps `_run([], [])` off the box's git entirely. A probe whose SUBJECT is the row set
+    calls `row_set_leg` directly with its own injected fns and never comes through here.
+    """
+    return {
+        "name": "row-set",
+        "status": "NOT RUN",
+        "problems": [],
+        "excused": [],
+        "coverage": {
+            "read_at": read_at,
+            "reason": "probe: the row-set leg resolves a git base ref and is not "
+                      "exercised here; a probe asserting it injects its own fns",
+            "recovery": "supply `row_set_fn` to `_run`",
+        },
+    }
+
 def _issue(number: int, state: str, assignees: "list[str] | None" = None) -> dict:
     issue = {"number": number, "state": state, "title": f"issue {number}",
              "closedAt": None if state == "OPEN" else "2026-09-19T00:00:00Z"}
@@ -344,7 +367,7 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
          driverless_completion=None, dispatch_batches=None, questions_homes=None,
          standing_items=None, write_boundary_events=None, write_boundary_bindings=None,
          write_boundary_fragment=None, write_boundary_profile_root=None,
-         write_boundary_chat=None):
+         write_boundary_chat=None, row_set_fn=None):
     """Drive main() with an injected board, ledger, cron table AND log surface; return
     (rc, out, err).
 
@@ -433,6 +456,17 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         board_intake_exemptions_path=(
             _lazy_dir("_NO_INTAKE_EXEMPTIONS") if board_intake_exemptions_path is None
             else board_intake_exemptions_path
+        ),
+        # #648: the row-set leg shells out to real git against the LIVE repo -- three
+        # `git rev-list` / `git show` calls over this factory's 5,000-row ledger. Measured
+        # at 9.5 s of the 11.26 s a single `_run([], [])` costs, so a probe driven through
+        # here paid live history to answer a question about a fixture. NOT RUN with its
+        # reason, the same shape the delivery leg uses: a probe whose subject is the row
+        # set calls `row_set_leg` DIRECTLY with its own injected level/tree/remote fns
+        # (tests/test_patrol_criterion.py), so no probe loses the meaning it was written
+        # with, and no probe's verdict is decided by this factory's own git history.
+        row_set_fn=(
+            row_set_fn if row_set_fn is not None else _row_set_not_exercised
         ),
         # The delivery leg (#49) is made INERT by default: an absent bound renders it
         # NOT RUN with its reason and no problem, so every probe written before the leg
