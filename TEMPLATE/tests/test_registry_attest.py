@@ -739,6 +739,95 @@ def test_a_reader_that_scanned_nothing_says_so_rather_than_reporting_silence(mon
     assert "examined   0 session row(s)" in out, out
     assert "0 by notify" in out, out
 
+# --------------------------------------------------------------------------------------
+# #252 — a send may never be reported as sent without a receipt. The route is GONE.
+# --------------------------------------------------------------------------------------
+
+def _attest_source() -> str:
+    """The shipped tool's own bytes. Read from disk, never from the imported module —
+    `inspect.getsource` on a package-relative import is how an arm ends up grading a
+    string it wrote itself."""
+    return (REPO / "tools" / "registry_attest.py").read_text(encoding="utf-8")
+
+def _has_no_send_without_receipt_route(source: str) -> bool:
+    """#252 — no path may report `sent` without checking the target.
+
+    Two tokens, because the defect had two halves and either one alone leaves it
+    reachable: the FUNCTION that built the send and returned `sent=True` out of the
+    INVOKED PROCESS'S OWN stdout JSON, and the FLAG that exposed it to a caller. The
+    needles are the definition line and the quoted parser argument — never the bare word,
+    because the docstring's account of the removal names both and is prose, not a route.
+    """
+    if "def dispatch(" in source:
+        return False
+    if '"--dispatch"' in source:
+        return False
+    return True
+
+def test_the_sent_without_a_receipt_route_is_gone():
+    """#252 — the shipped tool carries no send route at all.
+
+    The ruling (n=1802, shape (1)) permitted verifying delivery by re-reading the
+    target's rows OR removing the route; it forbade letting a sent-without-a-receipt path
+    survive in either form. Removal was chosen because the flag had no caller left, and
+    the measurement behind that choice is in the module docstring. This arm is what makes
+    the removal stick: a re-introduced `dispatch()` or `--dispatch` fails here.
+    """
+    source = _attest_source()
+    assert _has_no_send_without_receipt_route(source) is True, (
+        "the sent-without-a-receipt route is back in tools/registry_attest.py"
+    )
+
+def test_the_predicate_rejects_a_reintroduced_dispatch_function():
+    """MUTATION CONTROL — the arm above must BITE, or it proves nothing.
+
+    Re-injects the pre-fix `dispatch()` into a COPY of the shipped source. If the
+    predicate still returned True, the arm would be asserting that a string it wrote is
+    absent from a string it wrote.
+    """
+    source = _attest_source()
+    assert "def dispatch(" not in source, "the shipped tool already carries the route"
+    mutated = source.replace(
+        "def _instant(",
+        'def dispatch(target: dict, stamp: str, dry_run: bool) -> tuple[bool, str]:\n'
+        '    return True, f"delivery=ok"\n\n'
+        "def _instant(",
+        1,
+    )
+    assert "def dispatch(" in mutated, "the injection did not land"
+    assert _has_no_send_without_receipt_route(mutated) is False
+
+def test_the_predicate_rejects_a_reintroduced_dispatch_flag():
+    """MUTATION CONTROL, the other half — the function and the flag are separate tokens.
+
+    A predicate that only looked for the function would pass a tree where the CLI still
+    offers the route to a caller, which is the shape that made the flag dangerous: the
+    pacemaker was instructed to invoke it.
+    """
+    source = _attest_source()
+    mutated = source.replace(
+        "    group = parser.add_mutually_exclusive_group(required=True)",
+        '    group.add_argument("--dispatch", action="store_true")\n'
+        "    group = parser.add_mutually_exclusive_group(required=True)",
+        1,
+    )
+    assert '"--dispatch"' in mutated, "the injection did not land"
+    assert _has_no_send_without_receipt_route(mutated) is False
+
+def test_removing_the_send_route_left_the_collect_leg_verifying_delivery():
+    """The verification that DID exist must not go with the route that did not.
+
+    `--collect` is the leg that measures whether a target answered, and it does so by
+    RE-READING the collector's own session store through `notified_senders()`. Removing
+    `--dispatch` must leave that intact — otherwise this change would have deleted the
+    only receipt-checking code in the file while claiming to have removed a fake one.
+    """
+    source = _attest_source()
+    assert callable(ra.notified_senders)
+    assert source.count("notified_senders(") >= 2, (
+        "notified_senders is defined but never called — the collect leg lost its receipt"
+    )
+
 if __name__ == "__main__":
     import sys
 

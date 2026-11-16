@@ -74,33 +74,42 @@ difference between a gap that is a finding and a gap that is a loss.
 
 Run:  python3 tools/registry_attest.py --check          # resolve and print targets
       python3 tools/registry_attest.py --dry-run        # print the brief, send nothing
-      python3 tools/registry_attest.py --dispatch       # send to every resolved HQ
       python3 tools/registry_attest.py --collect [--since ISO] [--recovered SLUG,...]
-Exit: 0 every target dispatched (or resolved, for --check; or accounted for, for
-      --collect); 1 if any HQ failed to resolve, or any target is unaccounted.
+Exit: 0 every target resolved (for --check) or accounted for (for --collect); 1 if
+      any HQ failed to resolve, or any target is unaccounted.
+
+THE SEND ROUTE IS GONE, AND THAT IS THE FIX (#252). `--dispatch` and the `dispatch()`
+helper behind it used to send each HQ its brief and then report `sent=True` built from
+the INVOKED PROCESS'S OWN stdout JSON -- a claim about delivery that was never checked
+against the target, so a send the recipient never received still read as sent. The
+ruling (n=1802, shape (1)) allowed either verifying delivery by RE-READING THE TARGET'S
+ROWS or removing the route outright, and authorised removal when the flag had no caller
+left. Measured before removing it: nothing in cron, docs or the registry instructs
+`--dispatch` any more (the pacemaker half, #252 (a), had already been retired), so the
+flag's only remaining audience was its own `Run:` line above. A route that cannot verify
+delivery and has no caller is a liability with a help string, so it is deleted rather
+than repaired -- the one thing the ruling forbids is letting a sent-without-a-receipt
+path survive in EITHER form. What remains is read-only: resolve (`--check`), render
+(`--dry-run`), and the collection leg (`--collect`), whose verification is untouched and
+still re-reads the collector's own session store through `notified_senders()`.
+`tests/test_registry_attest.py` asserts the route is gone and that the collect leg's
+verification survived, with the pre-fix source as its mutation control.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime
-import json
 import os
 import re
 import sqlite3
-import subprocess
 import sys
-import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
 import registry as reg  # noqa: E402
 
-OPENCRABS = "/usr/local/bin/opencrabs"
-PROFILE = reg.FACTORY_PROFILE
-SENDER = "Meta-Factory Delegate"
-BRIEF_TITLE = "Registry re-attestation"
 
 # The two shapes an inbound notify leaves in the RECEIVING session's own store: the full
 # uuid in the `session-notify` header, the 8-char short form in the delivery line. BOTH
@@ -320,44 +329,6 @@ def hq_targets(fragments: list[tuple[Path, dict]]) -> tuple[list[dict], list[str
     return targets, problems
 
 
-def dispatch(target: dict, stamp: str, dry_run: bool) -> tuple[bool, str]:
-    """Send one HQ its brief. Returns (sent, detail).
-
-    The elapsed seconds ride in the detail on purpose. Each send is a whole CLI
-    invocation, so a six-target run is six process spawns and it is NOT instant: the
-    first paced run was killed part-way through and the only surviving evidence was that
-    the targets sharing a PREFIX of the send order had answered and the rest had not.
-    A duration per target makes the next cut-off legible from the run's own output
-    instead of inferable only from who happened to reply.
-    """
-    text = BRIEF.format(slug=target["slug"], stamp=stamp)
-    command = [
-        OPENCRABS, "-p", PROFILE, "session", "notify", str(target["session_id"]),
-        "--text", text,
-        "--sender", SENDER,
-        "--title", f"{BRIEF_TITLE} {stamp}",
-        "--mode", "turn-end",
-        "--format", "json",
-    ]
-    if dry_run:
-        return True, f"dry-run: {len(text)} chars to {target['slug']}"
-    started = time.monotonic()
-    try:
-        done = subprocess.run(command, capture_output=True, text=True, timeout=120)
-    except (OSError, subprocess.SubprocessError) as exc:
-        return False, f"{type(exc).__name__}: {exc} ({time.monotonic() - started:.1f}s)"
-    elapsed = time.monotonic() - started
-    if done.returncode != 0:
-        detail = (done.stderr or done.stdout).strip().splitlines()
-        return False, f"rc={done.returncode}: {detail[-1] if detail else 'no output'} ({elapsed:.1f}s)"
-    line = (done.stdout or "").strip()
-    try:
-        payload = json.loads(line)
-        return True, f"delivery={payload.get('status') or payload.get('delivery') or 'ok'} ({elapsed:.1f}s)"
-    except (json.JSONDecodeError, AttributeError):
-        return True, f"{line[:80] or 'ok'} ({elapsed:.1f}s)"
-
-
 def _instant(value: str) -> int | None:
     """Parse a window bound as a bare epoch integer or an ISO-8601 stamp. None if unparseable."""
     text = (value or "").strip()
@@ -552,7 +523,6 @@ def main() -> int:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--check", action="store_true", help="resolve and print targets, send nothing")
     group.add_argument("--dry-run", action="store_true", help="print the brief, send nothing")
-    group.add_argument("--dispatch", action="store_true", help="send to every resolved HQ")
     group.add_argument(
         "--collect",
         action="store_true",
@@ -599,7 +569,7 @@ def main() -> int:
         "--only",
         metavar="SLUG[,SLUG...]",
         help=(
-            "restrict to these factory slugs (with --dispatch or --collect). A run can be cut "
+            "restrict to these factory slugs (with --collect). A run can be cut "
             "short — six sequential CLI invocations outlive a foreground shell's patience — and "
             "the targets that already answered must not be woken a second time to reach the ones "
             "that did not. A slug that resolves to no HQ is refused rather than skipped, so a "
@@ -639,21 +609,12 @@ def main() -> int:
     if args.check:
         return 1 if problems else 0
 
-    failures = 0
-    for target in targets:
-        sent, detail = dispatch(target, stamp, dry_run=args.dry_run)
-        if not sent:
-            failures += 1
-        print(f"  {'sent' if sent else 'FAILED'}  {target['slug']:<16} {detail}", flush=True)
-
-    if args.dry_run:
-        print("")
-        print(BRIEF.format(slug=targets[0]["slug"] if targets else "<slug>", stamp=stamp))
-        return 1 if problems else 0
-
-    print(f"registry-attest: {len(targets) - failures} sent, {failures} failed, "
-          f"{len(problems)} unresolved")
-    return 1 if (failures or problems) else 0
+    # --dry-run is the ONLY route that reaches here now that the send path is gone (#252).
+    # It renders the brief for a human to read and sends nothing BY CONSTRUCTION, rather
+    # than by a `dry_run` flag the send path had to remember to honour.
+    print("")
+    print(BRIEF.format(slug=targets[0]["slug"] if targets else "<slug>", stamp=stamp))
+    return 1 if problems else 0
 
 
 if __name__ == "__main__":
