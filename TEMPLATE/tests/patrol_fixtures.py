@@ -160,6 +160,11 @@ _LAZY_DIR_SPECS: dict = {
         "patrol-no-ref-roles-", "ledger-ref-roles-exemptions.json", None),
     "_NO_CRITERION_EXEMPTIONS": (
         "patrol-no-criterion-", "criterion-path-exemptions.json", None),
+    # #648: the board-intake exemption store. A path that does not exist, so a probe reads
+    # NO exemptions -- which is the state every probe written before #647 was written in,
+    # and the state in which a stale live entry can never become a probe's own finding.
+    "_NO_INTAKE_EXEMPTIONS": (
+        "patrol-no-intake-", "board-intake-exemptions.json", None),
     # #640: the P35 duty tree. Was `_DUTY_TREE = _duty_tree()` at module level with a
     # BARE mkdtemp (no prefix), so every import leaked one unowned `tmpXXXXXXXX` holding
     # docs/ledger-invariants.json + evidence/ledger.jsonl -- and a prefix-keyed leak count
@@ -329,12 +334,14 @@ def _probe_kit_pair() -> tuple[Path, Path]:
 def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=None,
          log_dir=None, kit_manifest=None, fleet_manifest=None, presence_fn=None,
          dirty_paths_fn=None, ruling_scope=None, ruling_exemptions_path=None,
+         board_intake_exemptions_path=None,
          delivery_scope=None, deliveries=None, criterion_repo=None,
          board_scope=None, lane_names_fn=None, cron_fires=None, scores_dir=None,
          shared_tree_fn=None, duty_scope=None, publish_fn=None, worktree_fn=None,
          duty_exemptions=None, ref_role_exemptions_path=None,
          criterion_exemptions_path=None, driverless_goals=None,
-         driverless_turn_open=None, dispatch_batches=None, questions_homes=None,
+         driverless_turn_open=None, driverless_activity=None,
+         driverless_completion=None, dispatch_batches=None, questions_homes=None,
          standing_items=None, write_boundary_events=None, write_boundary_bindings=None,
          write_boundary_fragment=None, write_boundary_profile_root=None,
          write_boundary_chat=None):
@@ -417,6 +424,15 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         ruling_exemptions_path=(
             _lazy_dir("_NO_RULING_EXEMPTIONS") if ruling_exemptions_path is None
             else ruling_exemptions_path
+        ),
+        # The board-intake exemption store (#647 half 2) gets the same treatment (#648): its
+        # path was FIXED inside the leg, so every probe driven through here read THIS
+        # factory's live adjudications. The store holds one entry for a row no probe supplies,
+        # and a stale entry is a PROBLEM, so the probe reported the live tree's exemption as
+        # its own finding -- eight patrol gates red on a change that never touched them.
+        board_intake_exemptions_path=(
+            _lazy_dir("_NO_INTAKE_EXEMPTIONS") if board_intake_exemptions_path is None
+            else board_intake_exemptions_path
         ),
         # The delivery leg (#49) is made INERT by default: an absent bound renders it
         # NOT RUN with its reason and no problem, so every probe written before the leg
@@ -504,6 +520,30 @@ def _run(issues, rows, *, cron_rows=None, homes=None, unreached=None, prefixes=N
         # WITHHOLDS the driven claim rather than granting it, so a probe that forgets to
         # inject cannot accidentally read a live turn as a driver it never asserted.
         driverless_turn_open_fn=lambda: dict(driverless_turn_open or {}),
+        # ... and the leg's FOURTH and FIFTH reads (#648) are injected here for the same
+        # reason, which `_run` had been quietly living without. `driverless_leg` calls
+        # `lane_activity_fn()` UNCONDITIONALLY, before it looks at its population, so a probe
+        # that injected neither fell through to the LIVE readers in the runner —
+        # `box_lane_activity` opening `~/.opencrabs/profiles/*/opencrabs.db` and
+        # `box_lane_completions` opening this factory's own ledger. Measured on a quiet box
+        # (load 0.49): one `_run([], [])` call took 196.18 s, of which the driverless-lane
+        # leg was 181.3 s and every other leg together were under 15 s. That is the defect
+        # the fixture's own law names at the top of this function -- a gate must never open
+        # the live database -- and it also censored every timing taken through here, because
+        # a probe's cost was dominated by a read it never asserted.
+        #
+        # The defaults are the file's existing `_activity_store()` / `_completion_store()`:
+        # a source that WAS READ and carries no work, which is the pre-#532 reading every
+        # probe was written against. A probe that asserts activity or completion passes its
+        # own, so no verdict can be decided by whichever lane this box happens to be running.
+        driverless_activity_fn=(
+            (lambda: driverless_activity) if driverless_activity is not None
+            else (lambda: _activity_store())
+        ),
+        driverless_completion_fn=(
+            (lambda: driverless_completion) if driverless_completion is not None
+            else (lambda: _completion_store())
+        ),
         # The undispatched-ruling leg's batch declaration (#519) is injected for the same
         # reason every other declaration here is: the leg's verdict is "is this ruled item
         # corroborated by a dispatch row or a DECLARED batch act", and a probe that read the

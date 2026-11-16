@@ -813,7 +813,7 @@ def load_rows(path: Path = LEDGER) -> list[dict]:
 
 
 def board_intake_leg(issues: list[dict], rows: list[dict], predicate=None,
-                     bound=None, own_repo=None) -> dict:
+                     bound=None, own_repo=None, exemptions_path=None) -> dict:
     """The live board-intake leg, with its own coverage beside its verdict.
 
     The BOUND is read through the ONE reader (`tests/ledger_boundary.py`), never carried
@@ -851,8 +851,15 @@ def board_intake_leg(issues: list[dict], rows: list[dict], predicate=None,
     # stays hermetic so a probe can drive an exempted and an unexempted instance without the
     # live tree deciding its verdict. A store that is absent means NO exemptions; a store
     # that is MALFORMED is a problem, never a silent pass.
+    #
+    # THE PATH IS INJECTED (#648), for the reason every read above is: a probe whose verdict
+    # came from THIS factory's live exemption store would be asserting which cross-repo rows
+    # this factory happens to have adjudicated, and a probe that placed its own row could not
+    # prove the exemption arm at all. The default is the live store, which is what the patrol
+    # run needs and what `_run` overrides with a path that does not exist.
     exempt, exempt_problems = predicate.load_intake_exemptions(
         REPO / "docs" / "board-intake-exemptions.json"
+        if exemptions_path is None else exemptions_path
     )
     key = predicate.INVARIANT_KEY
     text, refusal, skip_reason = (bound or declared_leg_boundary)(REPO, key)
@@ -18560,6 +18567,12 @@ def main(
     dirty_paths_fn=None,
     ruling_scope_fn=None,
     ruling_exemptions_path: Path | None = None,
+    # #648: the board-intake exemption store, injected for the same reason as every other
+    # exemption table here. #647 gave the leg a store at a FIXED path, so every probe driven
+    # through this function read THIS factory's live adjudications -- measured: the store's
+    # one entry excuses a row no probe supplies, so `_run([], [])` reported it as a stale
+    # exemption and reddened eight unrelated gates. A probe must place its own or hold none.
+    board_intake_exemptions_path: Path | None = None,
     delivery_scope_fn=None,
     deliveries_fn=None,
     criterion_repo_fn=None,
@@ -18829,7 +18842,9 @@ def main(
         return census_cache["v"]
 
     legs = [
-        leg_guard("board-intake", lambda: board_intake_leg(issues, rows, predicate=predicate, bound=board_bound), read_at),
+        leg_guard("board-intake", lambda: board_intake_leg(issues, rows, predicate=predicate,
+                         bound=board_bound,
+                         exemptions_path=board_intake_exemptions_path), read_at),
         leg_guard("board-close", lambda: board_close_leg(issues, rows, read_at=read_at, bound=board_bound), read_at),
         leg_guard("board-closed", lambda: board_closed_leg(issues, rows, read_at=read_at, predicate=predicate,
                          bound=board_bound), read_at),

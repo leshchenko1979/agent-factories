@@ -27,6 +27,7 @@ from patrol_fixtures import (  # noqa: F401
     _activity_store,
     _completion_store,
     _goal_store,
+    _run,
     _SKIPS,
 )
 
@@ -579,6 +580,54 @@ def test_an_UNRESOLVABLE_activity_root_is_UNREADABLE_and_never_RAISES() -> None:
     leg = _driverless_probe(store)
     assert leg["coverage"]["lanes"][0]["reading"] == "UNREADABLE", leg["coverage"]
     assert leg["coverage"]["driverless"] == 0, leg["coverage"]
+
+def test_the_fixture_never_opens_the_live_activity_store() -> None:
+    """#648: `_run` must INJECT the driverless leg's two reads, not fall through to live state.
+
+    `driverless_leg` calls `lane_activity_fn()` UNCONDITIONALLY, before it looks at its
+    population, and `main()` resolves `lane_activity_fn=driverless_activity_fn or
+    box_lane_activity` (`tools/patrol_host_state.py:18933`). Until `_run` passed either
+    function, EVERY probe driven through `main()` paid for a read of the live
+    `~/.opencrabs/profiles/*/opencrabs.db` -- measured on a quiet box (load 0.49): one
+    `_run([], [])` call took 196.18 s, of which this leg was 181.3 s and every other leg
+    together were under 15 s. The fixture's own law at the top of `_run` says a gate must
+    never open the live database, and the runner's contract says the read is "patched in
+    every probe".
+
+    THE DISCRIMINATING HALF IS `assert not called`, NOT THE VERDICT. `box_lane_activity`
+    contains its own failure and returns `readable: False` with a reason, and `leg_guard`
+    contains an exception and yields a leg verdict regardless -- so a probe that only
+    required "a verdict came back" would PASS against the defect it is meant to catch. The
+    reachability of the live reader is the property under test, so that is what is asserted.
+    """
+    with mock.patch.object(RUNNER, "load_module") as loader, \
+            mock.patch.object(RUNNER, "box_lane_completions") as completions:
+        registry = mock.Mock()
+        registry.FleetManifestError = RuntimeError
+        registry.opencrabs_home_dbs.side_effect = RuntimeError(
+            "PROBE: the live activity store must never be reached"
+        )
+        loader.return_value = registry
+        completions.side_effect = RuntimeError(
+            "PROBE: the live completion ledger must never be reached"
+        )
+        rc, out, err = _run([], [])
+
+    # A verdict was produced, and no traceback escaped the fixture.
+    assert rc in (0, 1), f"expected a verdict, got rc={rc}: {err[-400:]}"
+    assert "Traceback" not in err, err[-800:]
+    assert out, "the runner printed nothing at all"
+
+    # ... and BOTH live readers were never reached. This is the whole assertion.
+    assert registry.opencrabs_home_dbs.called is False, (
+        "a probe driven through _run reached the LIVE activity reader: "
+        f"{registry.opencrabs_home_dbs.call_args_list}"
+    )
+    assert completions.called is False, (
+        "a probe driven through _run reached the LIVE completion reader: "
+        f"{completions.call_args_list}"
+    )
+
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
