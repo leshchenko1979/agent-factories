@@ -449,6 +449,10 @@ DECLARATION_SURFACES: tuple[
     ("audit-rates-exemptions", "docs/audit-rates-exemptions.json", (),
      "entries name a ledger row `n` and a BOARD ISSUE (`subject`); the ledger is "
      "append-only, so a row cannot be stranded by a rename"),
+    ("board-intake-exemptions", "docs/board-intake-exemptions.json", (),
+     "entries name a ledger row `n` and a BOARD ISSUE (`subject`), neither of which this "
+     "leg can read offline; the ledger is append-only, so the row it excuses cannot be "
+     "re-pointed by a rename"),
     ("close-board-exemptions", "docs/close-board-exemptions.json", (),
      "entries name a BOARD ISSUE (`subject`) and a ledger row `n`, neither of which this "
      "leg can read offline"),
