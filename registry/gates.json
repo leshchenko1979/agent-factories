@@ -836,18 +836,18 @@
       "basis_note": "The declared basis is the WORST OBSERVED sample, per this manifest's slow-tail rule (#579, ruling n=4460): 7.59 s at load 6.23, observed on the pre-commit staging tree that became this revision. CORROBORATING at-tree sample, reproducible at the cited revision with `git worktree add <dir> ac08dfed` then `python3 -m pytest tests/test_patrol_census.py -q`: 2.47 s, rc=0, load 1.05->1.05. It is FASTER because the box was quiet (the whole twelve-leg sweep totalled 1570.68 s at load 0.43-4.23), so per #128/n=823 it does NOT re-base: a fresh sample that stays inside the cap is absorbed by margin_x, and re-basing on every new maximum ratchets the cap toward the too-high direction. measured_at is the revision whose TREE carries the twelve-leg population and whose blobs are unchanged to HEAD; the earlier basis was taken on the staging copy before the shared `_SKIPS` ownership fix, a change that removes a NameError and adds no test work, so the declared seconds remain an upper bound on what ships."
     },
     "tests/test_patrol_criterion.py": {
-      "budget_sec": 401.15,
-      "load_at_measure": 2.44,
-      "margin_x": 4.007,
+      "budget_sec": 1349.27,
+      "load_at_measure": 4.05,
+      "margin_x": 4.002,
       "measured_at": "75b4a214b44c0e2ca42459f1edcee2b48404cdbd",
-      "measured_sec": 100.1,
-      "basis_note": "The declared basis is the WORST OBSERVED sample, per this manifest's slow-tail rule (#579, ruling n=4460): 231.06 s at load 5.13, observed on the pre-commit staging tree that became this revision. CORROBORATING at-tree sample, reproducible at the cited revision with `git worktree add <dir> ac08dfed` then `python3 -m pytest tests/test_patrol_criterion.py -q`: 140.74 s, rc=0, load 1.05->1.14. It is FASTER because the box was quiet (the whole twelve-leg sweep totalled 1570.68 s at load 0.43-4.23), so per #128/n=823 it does NOT re-base: a fresh sample that stays inside the cap is absorbed by margin_x, and re-basing on every new maximum ratchets the cap toward the too-high direction. measured_at is the revision whose TREE carries the twelve-leg population and whose blobs are unchanged to HEAD; the earlier basis was taken on the staging copy before the shared `_SKIPS` ownership fix, a change that removes a NameError and adds no test work, so the declared seconds remain an upper bound on what ships.",
+      "measured_sec": 337.13,
+      "basis_note": "The declared basis is the SLOWEST licensed probe sample observed on this tree at 75b4a214, per ruling n=4460 (\"re-derive the wall from the SLOWER of the two completed samples\"). Two INDEPENDENT process runs, 3 min 32 s apart, on the same tree: the report run (08:54:56Z) drew 337.13 s, rc=0, load 4.05->3.40; the `--apply` run (08:58:28Z) drew 100.10 s, rc=0, load 2.19->2.48. Both carried concurrent_audits 0, one probe per gate per run, and nothing persists a probe sample between runs -- so the 3.37x spread is cross-run NON-DETERMINISM of the probe, not an in-run overwrite. The procedure sets no repeat-agreement rule, so ONE sample from that distribution decides the wall, and `--apply` happened to draw the fast tail: 401.15 s, which is 56.63 % BELOW the 924.99 s wall it replaced and 0.434x the censored kill floor (925.12 s, exit 124) that made this entry eligible -- the slow-tail rule inverted. Corrected here to the slower sample: margin_for(337.13) = 4.002225, budget_sec 1349.27, covering that censored floor at 1.458x. Load is NOT offered as the explanation: ruling n=4486 withdrew the load clause, and these two samples run OPPOSITE to the anti-correlation it found (the faster one ran at the LOWER load), so neither regime explains the spread and the variance stays unattributed.",
       "probe_sample": true,
       "probe_regime": {
-        "sample_sec": 100.1,
+        "sample_sec": 337.13,
         "ceiling_sec": 1849.98,
-        "load_at_start": 2.19,
-        "load_at_finish": 2.48,
+        "load_at_start": 4.05,
+        "load_at_finish": 3.4,
         "concurrent_audits": 0,
         "invocation": "/usr/bin/python3 -m pytest tests/test_patrol_criterion.py",
         "taken_at": "75b4a214b44c0e2ca42459f1edcee2b48404cdbd"
