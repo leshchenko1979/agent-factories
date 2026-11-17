@@ -45,7 +45,8 @@
       "tools/sync_binding.py"
     ],
     "tests/test_board_intake_recorded.py": [
-      "evidence/ledger.jsonl"
+      "evidence/ledger.jsonl",
+      "docs/board-intake-exemptions.json"
     ],
     "tests/test_brain_metrics.py": [
       "AGENTS.md",

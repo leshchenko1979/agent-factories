@@ -1300,15 +1300,51 @@ def probe_every_read_a_gate_opens_is_declared() -> None:
         f"(function-local or runtime-assembled reads are invisible to a static parse)"
     )
 
-    # ARM 3 -- over-declaration is NEVER a finding.
+    # ARM 3 -- over-declaration is NEVER a finding, measured as a DELTA against the live
+    # finding set. The ABSOLUTE form ("the generous copy has no findings") silently CONJOINS
+    # this arm with ARM 2: `findings` is one list over every mapped gate, so any unrelated
+    # undeclared read anywhere in the tree reds THIS arm and the message blames
+    # over-declaration for a read it never touched. Measured on #654 -- the arm was red with
+    # `1 finding(s) appeared from over-declaration alone` while the live map had exactly one
+    # undeclared read (`docs/board-intake-exemptions.json`), and it went green on that
+    # declaration alone with this fixture byte-identical.
     generous = json.loads(json.dumps(mapping))
     first = sorted(generous.get("gates", {}))[0]
     generous["gates"][first] = list(generous["gates"][first]) + ["no/such/path/at/all.xyz"]
     over = opened_vs_declared(root, generous)
+    added = [f for f in over["findings"] if f not in live["findings"]]
     check(
-        "ARM 3: a declared glob that matches nothing extracted is NOT a finding",
-        not over["findings"],
-        f"{len(over['findings'])} finding(s) appeared from over-declaration alone",
+        "ARM 3: a declared glob that matches nothing extracted ADDS no finding",
+        not added,
+        f"{len(added)} finding(s) appeared from over-declaration alone: {added[:4]}",
+    )
+
+    # ARM 3b -- the PAIR, not one arm (#654). The arm above is satisfied by a census that
+    # never reports anything at all, so the same question must be shown to BITE: removing a
+    # declaration has to add findings. The gate is taken from the census's own JUDGED set,
+    # never `sorted()[0]`, so the control cannot land on a blind gate and pass for having
+    # nothing to look at.
+    judged = [
+        gate for gate in sorted(generous.get("gates", {}))
+        if gate not in live["blind"] and generous["gates"][gate]
+    ]
+    check(
+        "ARM 3b CONTROL: the census judges at least one declared gate, so the pair is measurable",
+        bool(judged),
+        f"judged={live['gates_judged']} blind={len(live['blind'])} candidates={judged[:3]}",
+    )
+    under = json.loads(json.dumps(mapping))
+    for gate in judged[:1]:
+        under["gates"][gate] = []
+    starved_out = opened_vs_declared(root, under)
+    gained = [
+        f for f in starved_out["findings"]
+        if f not in live["findings"] and f["gate"] in judged[:1]
+    ]
+    check(
+        "ARM 3b CONTROL: under-declaring a JUDGED gate DOES add findings, so ARM 3 is not vacuous",
+        bool(gained),
+        f"stripped={judged[:1]} gained={gained[:4]}",
     )
 
     # ARM 4 -- it BITES. Undo #567's two declarations on a COPY of the live map: the census
