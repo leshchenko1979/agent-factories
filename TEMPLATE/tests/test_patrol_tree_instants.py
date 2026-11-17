@@ -29,6 +29,7 @@ from patrol_fixtures import (  # noqa: F401
     _EMPTY_LOG_DIR,
     _EMPTY_SCORES_DIR,
     _NO_CRITERION_EXEMPTIONS,
+    _NO_INTAKE_EXEMPTIONS,
     _NO_REF_ROLE_EXEMPTIONS,
     _RECEIPT_PROMPT,
     _RECEIPT_TS,
@@ -1199,6 +1200,8 @@ def test_an_absent_manifest_RENDERS_as_NOT_RUN_never_a_traceback() -> None:
             ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
         criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
+        # #655: the board-intake exemption store, injected for the same reason.
+        board_intake_exemptions_path=_NO_INTAKE_EXEMPTIONS,
         )
         text = out.getvalue()
         assert "LEG kit-drift" in text, text
@@ -1283,6 +1286,8 @@ def test_the_leg_reaches_the_RENDERED_report() -> None:
             ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
         criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
+        # #655: the board-intake exemption store, injected for the same reason.
+        board_intake_exemptions_path=_NO_INTAKE_EXEMPTIONS,
         )
         text = out.getvalue()
         assert "LEG kit-drift" in text, text

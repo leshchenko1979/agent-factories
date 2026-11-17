@@ -24,6 +24,7 @@ from patrol_fixtures import (  # noqa: F401
     RUNNER,
     _EMPTY_GOAL_STORE,
     _NO_CRITERION_EXEMPTIONS,
+    _NO_INTAKE_EXEMPTIONS,
     _NO_REF_ROLE_EXEMPTIONS,
     _issue,
     _rows,
@@ -133,6 +134,8 @@ def test_a_board_that_could_not_be_read_is_not_a_clean_board() -> None:
         ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
         criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
+        # #655: the board-intake exemption store, injected for the same reason.
+        board_intake_exemptions_path=_NO_INTAKE_EXEMPTIONS,
     )
     assert rc == 2, f"an unreadable board must exit 2, got rc={rc}"
     assert "FAILED" in err.getvalue(), err.getvalue()

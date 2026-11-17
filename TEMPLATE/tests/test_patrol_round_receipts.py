@@ -30,6 +30,7 @@ from patrol_fixtures import (  # noqa: F401
     _CLOSE_TS,
     _DUTY_BOUND,
     _EMPTY_GOAL_STORE,
+    _NO_INTAKE_EXEMPTIONS,
     _NO_RULING_EXEMPTIONS,
     _activity_store,
     _comment_numeric,
@@ -546,6 +547,8 @@ def test_the_board_read_abort_path_is_UNCHANGED_by_the_containment_guard() -> No
         # granting one, so a probe that never asserts a driver cannot read one.
         driverless_goals_fn=lambda: _EMPTY_GOAL_STORE,
         driverless_turn_open_fn=lambda: {},
+        # #655: the board-intake exemption store, injected for the same reason.
+        board_intake_exemptions_path=_NO_INTAKE_EXEMPTIONS,
     )
     assert rc == 2, f"the board-read abort must be unchanged, got rc={rc}"
     assert "NOT RUN: every leg" in err.getvalue(), err.getvalue()

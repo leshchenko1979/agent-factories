@@ -28,6 +28,7 @@ from patrol_fixtures import (  # noqa: F401
     _EMPTY_LOG_DIR,
     _EMPTY_SCORES_DIR,
     _NO_CRITERION_EXEMPTIONS,
+    _NO_INTAKE_EXEMPTIONS,
     _NO_REF_ROLE_EXEMPTIONS,
     _NO_RULING_EXEMPTIONS,
     _OWES_NONE_PROMPT,
@@ -236,6 +237,8 @@ def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
             driverless_turn_open_fn=lambda: {},
             # #330: the ref-role store is injected for the same reason the ruling table is.
             ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
+            # #655: the board-intake exemption store, injected for the same reason.
+            board_intake_exemptions_path=_NO_INTAKE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
         criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
         )
@@ -581,6 +584,8 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
         ref_role_exemptions_path=_NO_REF_ROLE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
         criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
+        # #655: the board-intake exemption store, injected for the same reason.
+        board_intake_exemptions_path=_NO_INTAKE_EXEMPTIONS,
         ruling_scope_fn=lambda: RUNNER.UNBOUNDED_SCOPE,
         ruling_exemptions_path=_NO_RULING_EXEMPTIONS,
     )
@@ -1982,6 +1987,60 @@ def test_538_the_render_PRINTS_the_scoping_and_the_board_it_read() -> None:
     assert "carrying 1 closed" in out2, out2
     assert "judged_closed_subject" in out2, out2
     assert rc2 == 0, out2
+
+def test_the_board_intake_pin_is_LOAD_BEARING_not_decorative() -> None:
+    """#655: the fixture pins the board-intake exemption store, and the pin BITES.
+
+    Seven `RUNNER.main` call sites across four files pinned every store this factory holds
+    EXCEPT this one, because the store is newer than the fixtures. The live store carries
+    `n=5067`, whose own rule is that an entry matching NO violation is a gate ERROR — so
+    against a fixture board that has no such violation, the live entry became the probe's
+    own finding and reded a test about a `NOT RUN` worktree leg.
+
+    A pin that is merely ADDED is what #648 found missing across 140 files: it looks like
+    isolation and nothing proves it. So this arm runs the SAME leg twice, against the SAME
+    fixture board, and the only difference is the pin:
+
+      * pinned   -> no problem, which is the state every probe was written in;
+      * unpinned -> the store that is NOT the fixture's becomes the finding.
+
+    The unpinned arm patches `RUNNER.REPO` at a directory holding ONE exemption that matches
+    no violation, which is the live store's shape rather than a mock of the loader: the leg
+    resolves the store through `REPO`, so moving `REPO` is what a fixture that forgot the
+    pin actually does. The pinned arm passing while the unpinned one fails is the proof.
+    """
+    issues = [_issue(1, "OPEN")]
+    rows = _rows(("intake", "#1", 1))
+
+    pinned = RUNNER.board_intake_leg(
+        issues, rows, exemptions_path=_NO_INTAKE_EXEMPTIONS
+    )
+    assert pinned["status"] == "ASSERTED", pinned
+    assert pinned["problems"] == [], pinned
+
+    # A store shaped exactly like this factory's live one: a well-formed entry that matches
+    # no violation on the fixture board, so the loader's stale-entry rule fires on it.
+    poison = Path(tempfile.mkdtemp(prefix="probe-poison-intake-"))
+    (poison / "docs").mkdir(parents=True, exist_ok=True)
+    (poison / "docs" / "board-intake-exemptions.json").write_text(json.dumps({
+        "exemptions": [{
+            "n": 999999, "subject": "#999999", "ts": "2026-01-01T00:00:00Z",
+            "domain": "the intake row names an issue on another repository and "
+                      "declares no repo ref",
+            "bar": "no-truthful-value", "reason": "probe", "proof": "probe",
+        }],
+    }), encoding="utf-8")
+    with mock.patch.object(RUNNER, "REPO", poison):
+        unpinned = RUNNER.board_intake_leg(issues, rows, exemptions_path=None)
+
+    assert unpinned["status"] == "ASSERTED", unpinned
+    assert any("999999" in problem for problem in unpinned["problems"]), (
+        "the unpinned arm MUST read the store it was not given — otherwise the pin is "
+        f"decorative and this arm proves nothing: {unpinned['problems']}"
+    )
+    assert pinned["problems"] != unpinned["problems"], (
+        "the pinned and unpinned arms must DIFFER, or the pin carries no weight"
+    )
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
