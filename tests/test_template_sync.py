@@ -419,6 +419,13 @@ PAIRS = [
     # fixtures carry the same import-leaks-nothing property; test_template_integrity refuses
     # a TEMPLATE copy with no pair here.
     ("tests/test_fixture_lifetime.py", "TEMPLATE/tests/test_fixture_lifetime.py"),
+    # The shared child-timeout derivation (#651, ruling n=5134). It pairs because TWO gates
+    # import it — this gate's own budget arm and `tests/test_gate_child_budget.py` — so a
+    # tree carrying one without the other fails at import, and a member that shipped the
+    # consumer without the derivation would bound its gates against a module that is not
+    # there. One parser, one copy: two copies of an AST walk drift, and the copy that
+    # drifts is the one nobody reads.
+    ("tests/child_budget.py", "TEMPLATE/tests/child_budget.py"),
     ("tests/test_gate_registration.py", "TEMPLATE/tests/test_gate_registration.py"),
     ("tests/test_gate_invocation_mode.py", "TEMPLATE/tests/test_gate_invocation_mode.py"),
     # The direct-invocation gate (#542, ruling n=4071). Paired because its POPULATION is the

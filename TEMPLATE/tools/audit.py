@@ -3874,6 +3874,21 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
     if (repo_root / "tests/test_audit_cadence.py").is_file():
         gates_to_run.append([sys.executable, "tests/test_audit_cadence.py"])
 
+    # tests/test_gate_child_budget.py -- issue #651, ruling this turn. THE MECHANISM IT
+    # GUARDS: a gate's declared worst case must sit strictly inside its own wall --
+    # `sum(child timeouts) < budget_sec`. The bound is the SUM and never a per-site value,
+    # because the regime that produced the censored run is one where several children crawl
+    # at once. tests/test_fixture_lifetime.py carried 1980.0 s of child timeouts against a
+    # 249.99 s wall (7.9203x), so NO child timeout could fire before the wall censored the
+    # gate: a hung child produced no verdict at all, and the gate's own comment claimed the
+    # opposite. Every literal looked defensible on its own; nothing read their sum.
+    #     PYTEST form, not script: the arms are `test_*` functions, so pytest collects them.
+    #     Hermetic: a synthetic module under a temp directory plus the tree's own declared
+    #     manifest -- no live board, no fleet manifest, no box-local fixture. Ships with its
+    #     TEMPLATE pair.
+    if (repo_root / "tests/test_gate_child_budget.py").is_file():
+        gates_to_run.append([sys.executable, "-m", "pytest", "tests/test_gate_child_budget.py"])
+
     return gates_to_run
 
 

@@ -30,12 +30,46 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
+# --- child-timeout budget (#651) ---------------------------------------------------------
+# A child timeout is only worth having if it can fire BEFORE this gate's declared wall. A
+# hung child that reaches the wall is CENSORED — killed with no verdict at all — while one
+# killed by its own timeout FAILS the arm it belongs to, which is a verdict. So the SUM of
+# every timeout is what must sit below the wall, never each site on its own: a per-site
+# "< wall" check is exactly what passed at 600.0 and 900.0 beside a 249.99 s wall.
+#
+# The sum is DERIVED from the call sites by `tests/child_budget.py`, never kept as a
+# hand-written total, because the defect this bounds was two literals that no declaration
+# mentioned. That module also expands WRAPPERS: `_alive_count` holds one `_child` call and
+# runs five times, so a census of source sites understates the worst case by 4x — the same
+# arithmetic error that produced the "~730 s" estimate this gate replaced (true pre-fix
+# worst case: 2463 s over runs, against the 1980 s a site count gives).
+#
+# Sized from MEASURED cost, not from caution: the whole gate is 12.83 s over 10 child runs on
+# a quiet box (2026-11-18, load 0.5), so a plain run costs ~1.3 s and gets >13x headroom.
+CHILD_TIMEOUT = 18.0        # the default: 5 `_alive_count` runs + leakmut + reintro + duty
+CONSUMER_TIMEOUT = 30.0     # one arm driving a single `_run`
+BARE_MUT_TIMEOUT = 40.0     # one arm driving TWO `_run` calls back to back
+HANG_PROBE_TIMEOUT = 3.0    # the deliberately-hung child that proves a timeout CAN fire
 
-def _child(code: str, tmp: str, timeout: float = 120.0) -> tuple[int, str, str]:
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import child_budget as _child_budget_mod  # noqa: E402  (path set above)
+
+GATE_KEY = "tests/test_fixture_lifetime.py"
+
+def _declared_wall(path: Path | None = None) -> float | None:
+    """This gate's own `budget_sec`, read from the tree's manifest by gate key."""
+    return _child_budget_mod.declared_wall(GATE_KEY, path)
+
+def _child_budget(path: Path, wall: float | None):
+    """(runs, total_sec, child_runs, problems) for `path` against `wall`."""
+    return _child_budget_mod.child_budget(path, wall)
+
+def _child(code: str, tmp: str, timeout: float = CHILD_TIMEOUT) -> tuple[int, str, str]:
     """Run `code` in a fresh interpreter under a private TMPDIR; kill the whole TREE on hang."""
     env = dict(os.environ, TMPDIR=tmp, PYTHONPATH=str(REPO / "tests"))
     proc = subprocess.Popen(
@@ -234,12 +268,12 @@ def test_a_consumer_call_reaches_the_internal_reads_and_completes() -> None:
             "assert isinstance(leg, dict), type(leg)\n"
             "print('consumers-clean')\n",
             tmp,
-            # n=5024 arms' wall sized against MEASURED IO thrash, not CPU: a bare
-            # `_run` probe sat in folio_wait_bit_common (D state) with <1s of CPU
-            # after 36s of wall at load 5.7 (2026-11-14) — swap churn makes every
-            # cold read glacial, so the wall covers starvation, and a REAL hang
-            # still dies inside it.
-            timeout=600.0,
+            # Sized from the SAME measured IO thrash the old 600.0 was aimed at, but
+            # bounded by the #651 budget instead of by caution: this arm drives ONE `_run`,
+            # which costs ~1.7 s quiet, and the whole six-arm gate is 12.83 s. The old
+            # literal was 2.4x the gate's OWN 249.99 s wall, so the timeout could never
+            # fire — the hang it was written to catch was censored at the wall instead.
+            timeout=CONSUMER_TIMEOUT,
         )
         assert rc == 0, (rc, err[-2000:])
         assert out.strip().endswith("consumers-clean"), (out, err[-500:])
@@ -296,8 +330,10 @@ def test_a_restored_bare_internal_read_is_caught_by_the_consumer_call() -> None:
             "print('mutant-bites')\n",
             tmp,
             # Same measured-IO basis, doubled: this ONE child drives TWO full
-            # `_run` calls (control then mutant) back to back.
-            timeout=900.0,
+            # `_run` calls (control then mutant) back to back, so it gets the largest
+            # share of the budget — and the pre-#651 literal (900.0) was 3.6x the gate's
+            # own wall, i.e. dead code that guaranteed censoring rather than a verdict.
+            timeout=BARE_MUT_TIMEOUT,
         )
         assert rc == 0, (rc, err[-2000:])
         assert out.strip().endswith("mutant-bites"), (out, err[-500:])
@@ -327,6 +363,65 @@ def test_the_duty_tree_is_lazy_and_carries_the_p35_shape() -> None:
         assert rc == 0, (rc, err[-2000:])
         assert out.strip().endswith("1"), out
         assert os.listdir(tmp) == [], os.listdir(tmp)
+
+
+def test_the_child_timeouts_sum_below_the_declared_wall() -> None:
+    # #651 criterion 2: the bound is the SUM, never each site on its own. That distinction is
+    # the whole defect — 600.0 and 900.0 each look unremarkable beside a 249.99 s wall, and
+    # together they are 6x it, so neither timeout could ever fire and a hung child was
+    # CENSORED at the wall with no verdict at all.
+    #
+    # The sum is re-derived from THIS file's call sites, wrappers expanded, so the number
+    # printed is the worst case and not a restatement of the constants above.
+    wall = _declared_wall()
+    runs, total, count, problems = _child_budget(Path(__file__), wall)
+    print(f"\nchild-timeout budget: {count} run(s), sum {total:.1f}s, wall "
+          f"{'absent (SKIP)' if wall is None else f'{wall:.2f}s'}")
+    for arm, line, tmo, mult in runs:
+        print(f"  {arm}:{line} timeout={tmo:.1f}s x{mult}")
+    assert not problems, problems
+    # Non-vacuous: an empty run list would satisfy the bound trivially, which is the same
+    # class of self-grading this gate's sibling arms have already been caught doing.
+    assert count >= 10, f"only {count} child run(s) found — the derivation lost sites"
+
+
+def test_a_widened_child_timeout_breaks_the_sum_bound() -> None:
+    # #651 criterion 4, second half: the bound must go RED when a timeout is widened back
+    # above the wall, not merely hold today. The needle is CONSTRUCTED from the constant, so
+    # this arm cannot match its own source text and grade its own homework.
+    wall = _declared_wall()
+    if wall is None:
+        # A member factory that has not declared this gate inherits the population default,
+        # which is not a tree-specific number to bound against. Documented SKIP, never a
+        # silent pass: the arm prints why it did nothing.
+        print("\nSKIP the widened-timeout arm: no declared wall for this gate in the tree")
+        return
+    needle = f"CONSUMER_TIMEOUT = {CONSUMER_TIMEOUT:.1f}"
+    with tempfile.TemporaryDirectory(prefix="lifetime-budgetmut-") as tmp:
+        src = Path(__file__).read_text(encoding="utf-8")
+        assert src.count(needle) == 1, f"needle occurs {src.count(needle)}x: {needle!r}"
+        mutant = Path(tmp) / "mutant_budget.py"
+        mutant.write_text(src.replace(needle, f"CONSUMER_TIMEOUT = {wall * 2:.2f}"),
+                          encoding="utf-8")
+        _, total, _, problems = _child_budget(mutant, wall)
+    assert total > wall, f"the mutant summed to {total:.1f}s, still under the {wall:.1f}s wall"
+    assert problems, (
+        f"a {total:.1f}s sum against a {wall:.1f}s wall produced NO problem: the bound does "
+        "not bite, so it would pass a timeout widened above the wall")
+
+
+def test_a_hung_child_is_killed_by_its_own_timeout_inside_the_wall() -> None:
+    # #651 criterion 4, first half: the timeouts must be able to FIRE. A child that hangs is
+    # killed by its OWN timeout, not by the gate's wall, so the arm that owns it fails WITH a
+    # verdict instead of being censored — and it dies long before the wall could take it.
+    with tempfile.TemporaryDirectory(prefix="lifetime-hang-") as tmp:
+        started = time.time()
+        rc, out, err = _child("import time\ntime.sleep(120)\n", tmp,
+                              timeout=HANG_PROBE_TIMEOUT)
+        elapsed = time.time() - started
+    assert rc != 0, (rc, out[-400:], err[-400:])
+    assert elapsed < HANG_PROBE_TIMEOUT + 5.0, (
+        f"the hung child took {elapsed:.1f}s: its {HANG_PROBE_TIMEOUT}s timeout did not fire")
 
 
 if __name__ == "__main__":

@@ -1165,6 +1165,20 @@ REQUIRED_GATES: tuple[str, ...] = (
     # different process than the one it named -- a number travelling with the wrong predicate,
     # which reads as a measurement of the duty while measuring its neighbours.
     "test_audit_cadence.py",
+    # Added with its registration (#651, ruled this turn). REQUIRED is the correct grain: the
+    # gate drives a SYNTHETIC module under a temp directory plus the tree's own declared
+    # manifest, reads no live board, no fleet manifest and no box-local fixture, and its one
+    # live reading is the tree's registered population, so it passes in a bootstrapped factory
+    # exactly as it does here. It is byte-paired with a TEMPLATE copy, so the manifest grain is
+    # what keeps a factory from dropping the runner and keeping the file.
+    # THE MECHANISM IT GUARDS: a gate's declared worst case must sit strictly inside its own
+    # wall -- `sum(child timeouts) < budget_sec`. Without an observer the sum drifts upward one
+    # literal at a time: tests/test_fixture_lifetime.py reached 1980.0 s against a 249.99 s wall
+    # (7.9203x) while every individual site looked defensible, so NO child timeout could fire
+    # before the wall censored the gate and a hung child produced no verdict at all. The sum is
+    # the bound, never the per-site value: the regime that produced the censored run is one
+    # where several children crawl at once.
+    "test_gate_child_budget.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather
