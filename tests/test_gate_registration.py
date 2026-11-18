@@ -1522,30 +1522,21 @@ def probe_the_live_sweep_states_its_own_account() -> None:
 def _live_undeclared_population(module) -> list[str]:
     """The gates that fall through to the default, resolved AT the manifest's own revision.
 
-    THE REVISION IS THE POINT. The manifest records `measured_at`, and the population it
-    carries is a fact about THAT revision -- so the comparison is made against the same
-    object database the staleness sweep already reads (`_runner_forms`), never against the
-    working tree. A peer's untracked gate file is therefore not in the population: it falls
-    through today, but it is not part of the tree the manifest describes, and admitting it
-    would make the recorded population describe bytes no revision contains. A gate that
-    lands later is caught by the re-derivation trigger, not by a working-tree read here.
+    THE PRODUCTION BUILDER, NOT A COPY (#650, correction C3). This helper used to carry its
+    own walk of `_runner_forms` + `cat-file -e` — the same four steps `gate_budget` now owns —
+    and two copies of a population is the `#99` defect: they agree until one of them is fixed.
+    So the leg reads `live_undeclared_population`, and this helper only translates its
+    INABILITY (`None`) into the empty list the callers below iterate, NAMING that it did so
+    rather than letting an unread population read as "no gate falls through".
     """
-    manifest = json.loads((REPO / "registry" / "gates.json").read_text(encoding="utf-8"))
-    declared = set(manifest.get("gates", {}))
-    revision = (manifest.get("default") or {}).get("measured_at")
-    if not isinstance(revision, str) or not revision:
+    built = module.live_undeclared_population(REPO)
+    if built is None:
+        print(
+            "  SKIP  the live undeclared population could not be built (no revision, no "
+            "object database, or no registration reader) — an INABILITY, not an empty set"
+        )
         return []
-    forms = module._runner_forms(REPO, revision) or {}
-    keys: list[str] = []
-    for argvs in forms.values():
-        for argv in argvs:
-            key = module.gate_key_for_cmd(argv.split(), REPO)
-            if not key or key in declared:
-                continue
-            exists = module._git(REPO, "cat-file", "-e", f"{revision}:{key}")[0] == 0
-            if exists:
-                keys.append(key)
-    return keys
+    return list(built)
 
 def probe_a_population_entry_above_the_default_is_refused() -> None:
     """THE BITE. A manifest whose default cannot contain its own population is refused.
@@ -4203,9 +4194,17 @@ def probe_a_gate_that_OUTRUNS_its_wall_is_probed_and_one_that_MEETS_it_is_not() 
         manifest = _probe_tree(
             root,
             {
+                # THE WALL IS JUST UNDER THE RUNTIME, AND THE ENVELOPE IS SIZED FROM IT.
+                # The probe may run to twice the declared wall, so a 1.35 s wall against a
+                # 1.5 s gate gives 2.7 s of envelope for a ~1.6 s run — 1.1 s of headroom.
+                # That headroom is NOT decoration: #650 makes the probe take TWO runs, so the
+                # gate is now exposed to peer load twice per probe, and the previous fixture
+                # (a 1.0 s wall, a 2.0 s envelope, a 1.5 s sleep) was killed at its own
+                # ceiling at load 19 by a lane that had nothing to do with this leg. The
+                # assertions below are unchanged: the gate still OUTRUNS its wall.
                 "tests/test_slow_gate.py": {
-                    "budget_sec": 1.0,
-                    "measured_sec": 0.2,
+                    "budget_sec": 1.35,
+                    "measured_sec": 0.27,
                     "margin_x": 5.0,
                     "measured_at": "unstated",
                     "wall_kills": {"rounds": ["r1", "r2"]},
@@ -4596,6 +4595,504 @@ def probe_the_live_mode_join_is_clean_and_non_vacuous() -> None:
     )
 
 
+# --- #650: the probe takes TWO runs, and a sample that does not reproduce moves no wall -----
+
+# The render markers, built by JOIN rather than written as literals: these strings are also
+# what this probe SEARCHES for in the render's own output, and a search term written as one
+# token is a term that matches its own source line. Composed here once, used by every
+# assertion below.
+NEEDLE_SPREAD = "[" + "SPREAD" + "]"
+NEEDLE_AGREEMENT_REFUSED = "[" + "AGREEMENT REFUSED" + "]"
+NEEDLE_FLOOR_ARMED = "[" + "FLOOR ARMED" + "]"
+NEEDLE_CENSORED_UNDECLARED = "[" + "CENSORED, UNDECLARED" + "]"
+
+# ONE GATE, TWO RUNTIMES, DETERMINISTICALLY. A counter file beside the gate decides which
+# sleep this invocation takes, so run 1 is SLOW and run 2 is FAST without depending on the
+# box's noise: the 3.37x pair in the defect was luck, and a probe that needs luck to test the
+# disagreement branch would be green on a quiet box and red on a busy one.
+_TWO_SPEEDS_BODY = """import pathlib, time
+_mark = pathlib.Path(__file__).with_suffix(".runs")
+_n = int(_mark.read_text()) if _mark.exists() else 0
+_mark.write_text(str(_n + 1))
+time.sleep(1.0 if _n == 0 else 0.2)
+"""
+
+def _two_speed_tree(root: Path, gates: dict, tolerance=None) -> Path:
+    """A throwaway tree whose single gate is SLOW on its first run and FAST on its second."""
+    manifest = _probe_tree(root, gates, {"tests/test_two_speeds.py": _TWO_SPEEDS_BODY})
+    if tolerance is not None:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["probe_agreement"] = {"tolerance": tolerance, "basis": "declared by the probe"}
+        manifest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return manifest
+
+def probe_two_DISAGREEING_runs_move_NO_wall_and_the_refusal_carries_BOTH_samples() -> None:
+    """#650 criterion 1: disagreeing consecutive probes move NO wall, and BOTH samples print.
+
+    THE DEFECT, REPRODUCED. Two runs of one gate on one tree returned 337.13 s and 100.10 s
+    (3.37x) and the wall was armed from whichever one the loop drew last. Here the pair is
+    1.0 s and 0.2 s (5x), declared against the manifest's own 1.5x band, so the gate is
+    DECLARED and the ruling is unambiguous: the wall is left EXACTLY as it is.
+
+    THE CONTROL IS THE NEUTER, not a second fixture: with `PROBE_RUNS = 1` — the pre-#650
+    single-run probe — the SAME tree and the SAME code move the wall from its first sample,
+    which is what makes the assertion above a consequence of the second run rather than of
+    the fixture agreeing with the tool.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    key = "tests/test_two_speeds.py"
+    gates = {key: {"budget_sec": 1.0, "measured_sec": 0.25, "margin_x": 4.0,
+                   "measured_at": "unstated",
+                   "wall_kills": {"rounds": ["r1", "r2"]}}}
+
+    def _probe(runs: int) -> tuple:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _two_speed_tree(root, json.loads(json.dumps(gates)))
+            pop = module.Population(
+                declared=1, examined=1, exhausted=(key,),
+                kills=module.read_wall_kills(manifest),
+            )
+            original = module.PROBE_RUNS
+            module.PROBE_RUNS = runs
+            try:
+                probed = module.run_probes(pop, manifest, root, peer_count_check=lambda: 0)
+                out = module.apply_rederivation(probed, manifest, root, "0" * 40)
+            finally:
+                module.PROBE_RUNS = original
+            entry = json.loads(manifest.read_text(encoding="utf-8"))["gates"][key]
+            return probed, out, entry
+
+    probed, out, entry = _probe(module.PROBE_RUNS)
+    taken = [p for p in probed.probes if p.key == key and p.taken]
+    check("#650 — TWO runs are taken, not one", len(taken) == 2,
+          f"{len(taken)} taken: {[p.sample_sec for p in taken]}")
+    last = taken[-1] if taken else None
+    check("#650 — the pair DISAGREES beyond the declared band",
+          last is not None and last.spread is not None and last.spread > 1.5
+          and last.agrees is False,
+          f"spread={getattr(last, 'spread', None)} agrees={getattr(last, 'agrees', None)} "
+          f"samples={getattr(last, 'samples_sec', None)}")
+    check("#650 — BOTH samples are carried on the record",
+          last is not None and len(last.samples_sec) == 2
+          and max(last.samples_sec) > 0.7 and min(last.samples_sec) < 0.6,
+          str(getattr(last, "samples_sec", None)))
+    check("#650 — no sample is seeded, so there is no basis to derive from",
+          key not in (probed.extras.get("probe_samples") or {}),
+          str(sorted(probed.extras.get("probe_samples") or {})))
+    record = (probed.extras.get("probe_disagreements") or {}).get(key) or {}
+    check("#650 — the refusal records BOTH samples AND the spread",
+          len(record.get("samples_sec") or ()) == 2
+          and record.get("spread") is not None and record.get("tolerance") == 1.5,
+          str(record))
+    check("#650 — a DECLARED gate's wall is left EXACTLY as it is",
+          entry.get("budget_sec") == 1.0,
+          f"budget_sec={entry.get('budget_sec')}")
+    check("#650 — the refusal is RECORDED against the entry, not only printed",
+          isinstance(entry.get("probe_disagreement"), dict)
+          and len(entry["probe_disagreement"].get("samples_sec") or ()) == 2,
+          str(entry.get("probe_disagreement"))[:120])
+    rendered = module.render(out)
+    refusal_lines = [l for l in rendered.splitlines() if NEEDLE_AGREEMENT_REFUSED in l]
+    # THE NUMBERS ARE READ FROM THE RECORD, never restated in the assertion: the sample is a
+    # real measurement of this box, so a literal pair here would be a claim about the box
+    # rather than about the render.
+    carried = [str(round(float(sec), 2)) for sec in (record.get("samples_sec") or ())]
+    check("#650 — the render NAMES the refusal with both samples",
+          len(refusal_lines) == 1
+          and all(str(sec) in refusal_lines[0] or str(round(sec, 2)) in refusal_lines[0]
+                  for sec in (record.get("samples_sec") or ()))
+          and str(record.get("spread")) in refusal_lines[0],
+          f"carried={carried} | " + " | ".join(refusal_lines))
+    spread_lines = [l for l in rendered.splitlines() if NEEDLE_SPREAD in l]
+    check("#650 — every probed gate PRINTS its observed spread (C8)",
+          len(spread_lines) == 1 and "DISAGREES" in spread_lines[0],
+          " | ".join(spread_lines))
+
+    # THE NEUTER: one run cannot disagree with anything, and that is the whole defect.
+    _, out_one, entry_one = _probe(1)
+    check("#650 NEUTERED (PROBE_RUNS=1) — a single run MOVES the wall it drew, "
+          "which is the defect this clause repairs",
+          entry_one.get("budget_sec") != 1.0,
+          f"budget_sec={entry_one.get('budget_sec')}")
+
+def probe_an_AGREEING_pair_arms_from_the_SLOWEST_sample_and_the_regime_records_it() -> None:
+    """#650 criterion 2: agreeing probes arm from the SLOWER sample, and the regime says so.
+
+    THE SAME TREE as the disagreement probe, with the band declared wide enough that the 5x
+    pair AGREES. The wall must then derive from 1.0 s — the slow half — and
+    `probe_regime.sample_sec` must BE that number, because a regime that recorded a different
+    sample from the one the wall derives from is exactly how the defect looked internally
+    consistent.
+
+    THE NEUTER IS `_basis_sample`, the named selector: swapped for `taken[-1]` (the
+    last-writer-wins defect) the same run arms from 0.2 s instead, so the assertion bites on
+    the choice rather than on the fixture.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    key = "tests/test_two_speeds.py"
+    gates = {key: {"budget_sec": 1.0, "measured_sec": 0.25, "margin_x": 4.0,
+                   "measured_at": "unstated",
+                   "wall_kills": {"rounds": ["r1", "r2"]}}}
+
+    def _probe(selector=None) -> tuple:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _two_speed_tree(root, json.loads(json.dumps(gates)), tolerance=100.0)
+            pop = module.Population(
+                declared=1, examined=1, exhausted=(key,),
+                kills=module.read_wall_kills(manifest),
+            )
+            original = module._basis_sample
+            if selector is not None:
+                module._basis_sample = selector
+            try:
+                probed = module.run_probes(pop, manifest, root, peer_count_check=lambda: 0)
+                out = module.apply_rederivation(probed, manifest, root, "0" * 40)
+            finally:
+                module._basis_sample = original
+            entry = json.loads(manifest.read_text(encoding="utf-8"))["gates"][key]
+            return probed, out, entry
+
+    probed, out, entry = _probe()
+    seeded = (probed.extras.get("probe_samples") or {}).get(key)
+    check("#650 — an AGREEING pair is seeded with a sample", seeded is not None,
+          str(seeded)[:120])
+    if seeded is None:
+        return
+    check("#650 — the basis is the SLOWEST sample, not the last one drawn",
+          seeded.sample_sec is not None and seeded.sample_sec > 0.7,
+          f"sample_sec={seeded.sample_sec}")
+    check("#650 — the agreement verdict is carried with its band",
+          seeded.agrees is True and seeded.tolerance == 100.0 and seeded.runs_taken == 2,
+          f"agrees={seeded.agrees} tolerance={seeded.tolerance} runs={seeded.runs_taken}")
+    regime = entry.get("probe_regime") or {}
+    check("#650 — `probe_regime.sample_sec` IS the sample the wall derives from",
+          regime.get("sample_sec") == seeded.sample_sec,
+          f"regime={regime.get('sample_sec')} basis={seeded.sample_sec}")
+    check("#650 — the wall is the margin law applied to the SLOWEST sample",
+          entry.get("budget_sec") == round(module.margin_for(seeded.sample_sec)
+                                           * seeded.sample_sec, 2),
+          f"budget_sec={entry.get('budget_sec')} measured_sec={entry.get('measured_sec')}")
+    check("#650 — the regime records BOTH samples and the verdict",
+          len(regime.get("samples_sec") or ()) == 2 and regime.get("agreement") == "AGREES",
+          str({k: regime.get(k) for k in ("samples_sec", "spread", "agreement")}))
+    spread_lines = [l for l in module.render(out).splitlines() if NEEDLE_SPREAD in l]
+    check("#650 — the render states the agreement and the band it was judged against",
+          len(spread_lines) == 1 and "AGREES" in spread_lines[0]
+          and "100.0" in spread_lines[0],
+          " | ".join(spread_lines))
+
+    # THE NEUTER: last-writer-wins, the defect itself.
+    _, _, entry_last = _probe(selector=lambda taken: taken[-1])
+    check("#650 NEUTERED (last-writer-wins) — the same pair arms from the FAST sample",
+          entry_last.get("budget_sec") != entry.get("budget_sec")
+          and (entry_last.get("probe_regime") or {}).get("sample_sec", 1.0) < 0.7,
+          f"budget_sec={entry_last.get('budget_sec')} "
+          f"sample={(entry_last.get('probe_regime') or {}).get('sample_sec')}")
+
+def probe_a_wall_below_a_CENSORED_observation_is_ARMED_to_the_FLOOR_or_REFUSED() -> None:
+    """#650 criterion 3: a wall below a censored observation of the SAME gate on the SAME tree
+    is armed to that floor, or REFUSED naming it — never written below it.
+
+    THE DEFECT IN ONE LINE: `--apply` armed 401.15 s from the fast half of a disagreeing pair,
+    against 925.12 s the audit had observed the gate needing (exit 124,
+    `duration_is_lower_bound` true) — 0.434x the floor, so the next round killed it again. A
+    floor is a fact about BYTES, so it binds only on the revision it was observed at; the
+    other-tree case is the second half of the probe and must NOT arm.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    key = "tests/test_floor_gate.py"
+    basis = {"measured_sec": 1.0, "margin_x": 4.75, "budget_sec": 4.75,
+             "measured_at": "unstated"}
+
+    def _run(floor_sec, floor_revision, head="0" * 40) -> tuple:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = _probe_tree(root, {key: dict(basis)}, {})
+            probe = module.ProbeSample(
+                key=key, invocation="<stub>", sample_sec=1.0, rc=0, ceiling_sec=2.0,
+                hard_cap_sec=module.PROBE_HARD_CAP_SEC, load_at_start=0.2,
+                load_at_finish=0.2, concurrent_audits=0, taken=True,
+                derived_sec=round(module.margin_for(1.0) * 1.0, 2), licensed=True,
+                samples_sec=(1.0, 1.0), spread=1.0, tolerance=1.5, agrees=True,
+                runs_taken=2,
+            )
+            pop = module.Population(
+                declared=1, examined=1, exhausted=(key,),
+                extras={"samples": {key: 1.0}, "probe_samples": {key: probe},
+                        module.CENSORED_FIELD: {
+                            key: {"floor_sec": floor_sec, "revision": floor_revision}
+                        }},
+            )
+            out = module.apply_rederivation(pop, manifest, root, head)
+            entry = json.loads(manifest.read_text(encoding="utf-8"))["gates"][key]
+            return out, entry
+
+    derived = round(module.margin_for(1.0) * 1.0, 2)
+    out, entry = _run(50.0, "0" * 40)
+    regime = entry.get("probe_regime") or {}
+    check("#650 — the derivation ALONE would land below the floor", derived < 50.0,
+          f"derived={derived} floor=50.0")
+    check("#650 — the wall is ARMED TO THE FLOOR, not to the derivation",
+          entry.get("budget_sec") == 50.0,
+          f"budget_sec={entry.get('budget_sec')} derived={derived}")
+    check("#650 — `measured_sec` stays the REAL sample and `margin_x` carries the multiple",
+          entry.get("measured_sec") == 1.0 and entry.get("margin_x") == 50.0,
+          f"measured_sec={entry.get('measured_sec')} margin_x={entry.get('margin_x')}")
+    check("#650 — the regime records the floor, that it BOUND, and the armed wall",
+          regime.get("censored_floor_sec") == 50.0
+          and regime.get("censored_floor_bound") is True
+          and regime.get("armed_sec") == 50.0 and regime.get("derived_sec") == derived,
+          str({k: regime.get(k) for k in
+               ("censored_floor_sec", "censored_floor_bound", "armed_sec", "derived_sec")}))
+    floor_lines = [l for l in module.render(out).splitlines() if NEEDLE_FLOOR_ARMED in l]
+    check("#650 — the render states the floor it armed to, and why",
+          len(floor_lines) == 1 and "50.0" in floor_lines[0],
+          " | ".join(floor_lines))
+
+    # THE OTHER TREE: the same number is NOT a floor for bytes nobody measured.
+    out_other, entry_other = _run(50.0, "1" * 40)
+    regime_other = entry_other.get("probe_regime") or {}
+    check("#650 — a floor observed at ANOTHER revision does not bind",
+          entry_other.get("budget_sec") == derived,
+          f"budget_sec={entry_other.get('budget_sec')} derived={derived}")
+    check("#650 — ...and the run SAYS so instead of silently ignoring it",
+          regime_other.get("censored_floor_bound") is False
+          and "observed at" in (regime_other.get("censored_floor_note") or ""),
+          str(regime_other.get("censored_floor_note"))[:140])
+
+    # ABOVE THE CAP: an armed wall the hard cap refuses is a REFUSAL that names the floor.
+    out_cap, entry_cap = _run(5000.0, "0" * 40)
+    refused = dict(out_cap.extras.get("probe_refused") or ())
+    check("#650 — an armed wall above the hard cap is REFUSED, and the wall stays",
+          entry_cap.get("budget_sec") == 4.75 and key in refused,
+          f"budget_sec={entry_cap.get('budget_sec')} refused={sorted(refused)}")
+    check("#650 — the refusal NAMES the floor it would have armed to",
+          "5000.0" in refused.get(key, ""),
+          refused.get(key, "")[:200])
+    check("#650 — the render carries the refusal, not only the population",
+          any("LICENCE REFUSED" in line
+              for line in module.render(out_cap).splitlines()),
+          " | ".join(l for l in module.render(out_cap).splitlines()
+                     if "LICENCE REFUSED" in l)[:200])
+
+    # THE NEUTER: with the floor reader returning nothing, the same run arms from the
+    # derivation — so every assertion above is a consequence of the floor, not of the sample.
+    original = module._censored_floor
+    module._censored_floor = lambda pop, gate_key, measured_at: (None, "")
+    try:
+        _, entry_neutered = _run(50.0, "0" * 40)
+    finally:
+        module._censored_floor = original
+    check("#650 NEUTERED (no floor) — the wall falls back to the derivation, below the floor",
+          entry_neutered.get("budget_sec") == derived,
+          f"budget_sec={entry_neutered.get('budget_sec')} derived={derived}")
+
+def probe_the_fixture_lifetime_entry_is_DECLARED_WHOLE_and_NOT_re_derived() -> None:
+    """#650 criterion 4: `tests/test_fixture_lifetime.py` was declared by Surveys and is NOT
+    this lane's to change — asserted, not assumed.
+
+    It is the gate the defect class was FOUND on: undeclared for two rounds, censored by the
+    default, invisible to every containment partition. Its entry landed with a hand-stated
+    basis (249.99 s against a 62.31 s measurement), so the two ways this lane could damage it
+    are (a) re-deriving it and (b) leaving it in `default.population`. Both are asserted here,
+    and the floor rule is checked to be a NO-OP for it: 69.32 s of observed floor sits BELOW
+    the 249.99 s wall, so nothing arms.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    path = REPO / "registry" / "gates.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    key = "tests/test_fixture_lifetime.py"
+    entry = data["gates"].get(key)
+    check("#650 — the declared entry EXISTS (the lane it belongs to is not this one)",
+          isinstance(entry, dict), str(entry)[:120])
+    if not isinstance(entry, dict):
+        return
+    check("#650 — its declared wall is UNCHANGED at 249.99 s",
+          entry.get("budget_sec") == 249.99, str(entry.get("budget_sec")))
+    check("#650 — its measured basis is UNCHANGED at 62.31 s",
+          entry.get("measured_sec") == 62.31, str(entry.get("measured_sec")))
+    check("#650 — the wall still IS the stated multiple of the measurement",
+          abs(entry.get("budget_sec", 0.0)
+              - round(module.margin_for(entry.get("measured_sec", 1.0))
+                      * entry.get("measured_sec", 1.0), 2)) <= 0.02,
+          f"budget={entry.get('budget_sec')} margin={entry.get('margin_x')}")
+    check("#650 — a DECLARED gate is not in the default's population",
+          key not in (data.get("default", {}).get("population") or {}),
+          str(sorted((data.get("default", {}).get("population") or {}))[:4]))
+    # THE FLOOR IS A NO-OP FOR IT: 69.32 s of observation against a 249.99 s wall.
+    derived = round(module.margin_for(entry["measured_sec"]) * entry["measured_sec"], 2)
+    check("#650 — the observed 69.32 s floor sits BELOW its wall, so nothing arms",
+          derived >= 69.32,
+          f"derived={derived} floor=69.32 wall={entry.get('budget_sec')}")
+
+def probe_a_CENSORED_UNDECLARED_gate_is_the_FOURTH_source_and_is_CREATED_whole() -> None:
+    """#650 correction C1/C4/C6: a censored gate the manifest does not declare is the FOURTH
+    source, and creating its entry also re-derives `default.population`.
+
+    WHY IT CANNOT BE ONE OF THE THREE: every containment source iterates `entries.items()`, so
+    a gate absent from the manifest is invisible to all of them — and the class is exactly the
+    one that produces it, since an undeclared gate runs on the default and the default's
+    population is built from COMPLETED samples, which a censored gate never produces. It
+    sat in that hole for two rounds before a lane declared it by hand.
+
+    THE COUPLING (C4): declaring it REMOVES it from the undeclared population, so the same
+    write must drop it from `default.population` AND re-derive the default from the new
+    largest — a default stating a basis nothing in its population supports is #208's defect
+    wearing the opposite sign.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    key = "tests/test_censored_gate.py"
+    other = "tests/test_still_undeclared.py"
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        manifest = _probe_tree(
+            root,
+            {other: {"measured_sec": 1.0, "margin_x": 4.75, "budget_sec": 4.75,
+                     "measured_at": "unstated"}},
+            {key: "import time\ntime.sleep(0.05)\n"},
+        )
+        # A STATED DERIVATION, so the coupling has something to couple: the censored gate is
+        # the largest recorded runtime, which is the case that forces a re-derivation.
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["default"] = {
+            "budget_sec": round(module.margin_for(30.0) * 30.0, 2),
+            "load_at_measure": 2.0,
+            "margin_x": round(module.margin_for(30.0), 3),
+            "measured_at": "0" * 40,
+            "measured_sec": 30.0,
+            "population": {key: 30.0, other: 1.0},
+        }
+        manifest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        report = root / "audit-report.json"
+        report.write_text(json.dumps({
+            "date": "2026-11-18",
+            "tree": {"head_sha": "0" * 40},
+            "gates": [{
+                "gate_key": key, "duration_sec": 300.0,
+                "unknown": True, "duration_is_lower_bound": True,
+            }],
+        }), encoding="utf-8")
+
+        pop = module.containment_population(manifest, root, report)
+        check("#650 — the censored UNDECLARED gate is its own population",
+              [k.key for k in pop.censored_undeclared] == [key],
+              str([k.key for k in pop.censored_undeclared]))
+        check("#650 — it is OUTSIDE `keys`, so no partition can be broken by it",
+              key not in pop.keys and module.partition_problems(pop) == (),
+              f"keys={list(pop.keys)} problems={module.partition_problems(pop)}")
+        check("#650 — its record states the CENSORING as the evidence",
+              pop.censored_undeclared
+              and pop.censored_undeclared[0].eligible is True
+              and "CENSORED" in pop.censored_undeclared[0].why,
+              pop.censored_undeclared[0].why[:100] if pop.censored_undeclared else "—")
+        check("#650 — the render names it, and says the manifest does not declare it",
+              any(NEEDLE_CENSORED_UNDECLARED in l
+                  for l in module.render(pop).splitlines()),
+              " | ".join(l for l in module.render(pop).splitlines()
+                         if NEEDLE_CENSORED_UNDECLARED in l)[:200])
+
+        probed = module.run_probes(pop, manifest, root, peer_count_check=lambda: 0)
+        taken = [p for p in probed.probes if p.key == key and p.taken]
+        check("#650 — an undeclared censored gate is PROBED on the same path as a kill",
+              len(taken) == 2, f"{[p.sample_sec for p in taken]}")
+        out = module.apply_rederivation(probed, manifest, root, "0" * 40)
+        written = json.loads(manifest.read_text(encoding="utf-8"))
+        created = written["gates"].get(key)
+        check("#650 — the entry is CREATED", isinstance(created, dict),
+              str(created)[:120])
+        if not isinstance(created, dict):
+            return
+        check("#650 — created FROM THE SLOWEST sample, and the wall clears the 300 s floor",
+              created.get("budget_sec") == 300.0,
+              f"budget_sec={created.get('budget_sec')} "
+              f"measured_sec={created.get('measured_sec')}")
+        check("#650 — the created entry STATES its own provenance",
+              "DECLARED BY THE RE-DERIVATION LEG" in (created.get("basis_note") or ""),
+              (created.get("basis_note") or "")[:140])
+        check("#650 — the gate LEFT the default's population in the SAME write",
+              key not in written["default"]["population"],
+              str(sorted(written["default"]["population"])))
+        new_largest = max(written["default"]["population"].values())
+        check("#650 — the default is RE-DERIVED from the population that remains",
+              written["default"]["measured_sec"] == round(new_largest, 2)
+              and written["default"]["budget_sec"]
+              == round(module.margin_for(new_largest) * new_largest, 2),
+              f"measured_sec={written['default']['measured_sec']} "
+              f"budget_sec={written['default']['budget_sec']}")
+        check("#650 — the write is REPORTED as a creation, not as a re-derivation",
+              out.extras.get("probe_created") == (key,),
+              str(out.extras.get("probe_created")))
+        check("#650 — the manifest still reads back through its own loader",
+              module.load_gate_budgets(manifest, root).gates != {},
+              "loaded")
+
+        # THE NEUTER: with the fourth source suppressed, the same round creates NOTHING —
+        # the gate is invisible to every containment partition, which is the hole.
+        suppressed = module.Population(
+            declared=pop.declared, examined=pop.examined, stale=pop.stale,
+            exhausted=pop.exhausted, growth=pop.growth, reset=pop.reset,
+            not_examined=pop.not_examined, note=pop.note, extras=pop.extras,
+        )
+        check("#650 NEUTERED (no fourth source) — the censored gate is in NO population",
+              key not in suppressed.keys and suppressed.censored_undeclared == (),
+              f"keys={list(suppressed.keys)}")
+
+def probe_the_agreement_band_is_STATED_even_when_NO_probe_runs() -> None:
+    """#650 C8: the tolerance is a DECLARED band, so an ordinary round must show it.
+
+    A band that only appears on the rounds that probe is a number nobody can audit: the
+    reader of a quiet round cannot tell a 1.5x declaration from a fallback, and the fallback
+    is exactly the value that must be REPORTED when the manifest declares nothing. Three
+    cases, because they are three different facts: declared, absent, and PRESENT BUT
+    UNREADABLE -- the last being the #595 class this leg has already been bitten by.
+    """
+    module = _rederive_module()
+    if module is None:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        manifest = _probe_tree(root, {"tests/test_quiet.py": _probe_entry()}, {})
+        pop = module.containment_population(manifest, root, None)
+        check("#650 — a manifest that declares no band STATES the fallback it applied",
+              pop.extras.get("probe_tolerance") == module.PROBE_TOLERANCE_DEFAULT
+              and "no `probe_agreement`" in (pop.extras.get("probe_tolerance_note") or ""),
+              f"{pop.extras.get('probe_tolerance')} | "
+              f"{pop.extras.get('probe_tolerance_note')}")
+        rendered = module.render(pop)
+        check("#650 — ...and the render prints it, on a round that probed NOTHING",
+              any("probe tolerance" in line for line in rendered.splitlines()),
+              " | ".join(l for l in rendered.splitlines() if "probe tolerance" in l))
+
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        data["probe_agreement"] = {"tolerance": 2.25, "basis": "declared by the probe"}
+        manifest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        pop_declared = module.containment_population(manifest, root, None)
+        check("#650 — a DECLARED band is read from the manifest, not compiled in",
+              pop_declared.extras.get("probe_tolerance") == 2.25
+              and "declared in the manifest" in (pop_declared.extras.get("probe_tolerance_note") or ""),
+              str(pop_declared.extras.get("probe_tolerance_note")))
+
+        data["probe_agreement"] = {"tolerance": "wide", "basis": "declared by the probe"}
+        manifest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        pop_bad = module.containment_population(manifest, root, None)
+        note = pop_bad.extras.get("probe_tolerance_note") or ""
+        check("#650 — an UNREADABLE band is REPORTED, never silently obeyed",
+              pop_bad.extras.get("probe_tolerance") == module.PROBE_TOLERANCE_DEFAULT
+              and "cannot be read" in note,
+              note[:140])
+
 def main() -> int:
     print("gate registry — an unregistered gate never runs (P29, issues #59, #68)")
     print("  synthetic probes")
@@ -4750,6 +5247,14 @@ def main() -> int:
     probe_a_sample_that_would_CARRY_an_OUTAGE_is_REFUSED_and_the_wall_stays()
     probe_the_PROBE_IS_ON_BY_DEFAULT_and_an_escape_nobody_invokes_is_not_one()
     probe_an_UNREAD_kill_record_is_NEVER_reported_as_a_clean_one()
+    print("  #650 — two probe runs, the censored floor, and the fourth source")
+    probe_two_DISAGREEING_runs_move_NO_wall_and_the_refusal_carries_BOTH_samples()
+    probe_an_AGREEING_pair_arms_from_the_SLOWEST_sample_and_the_regime_records_it()
+    probe_a_wall_below_a_CENSORED_observation_is_ARMED_to_the_FLOOR_or_REFUSED()
+    probe_the_fixture_lifetime_entry_is_DECLARED_WHOLE_and_NOT_re_derived()
+    probe_a_CENSORED_UNDECLARED_gate_is_the_FOURTH_source_and_is_CREATED_whole()
+    probe_the_agreement_band_is_STATED_even_when_NO_probe_runs()
+
     print("  live manifest — #295: the exit declaration, its classes and its coverage")
     probe_the_live_tree_declares_every_invoked_gate()
 

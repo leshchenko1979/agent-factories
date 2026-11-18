@@ -654,6 +654,62 @@ def default_population_problems(
     return problems
 
 
+def live_undeclared_population(
+    repo_root: Path | None = None, manifest_path: Path | None = None
+) -> tuple[str, ...] | None:
+    """The gates that fall through to the default, resolved AT the manifest's own revision.
+
+    THE REVISION IS THE POINT. The manifest records `measured_at`, and the population it
+    carries is a fact about THAT revision -- so the comparison is made against the same
+    object database the staleness sweep already reads (`_runner_forms`), never against the
+    working tree. A peer's untracked gate file is therefore not in the population: it falls
+    through today, but it is not part of the tree the manifest describes, and admitting it
+    would make the recorded population describe bytes no revision contains. A gate that
+    lands later is caught by the re-derivation trigger, not by a working-tree read here.
+
+    THIS IS THE ONLY BUILDER OF THE SET (#650, correction C3). It lived in a test helper
+    until 2026-11-18, so `default_population_problems` -- the predicate that compares the
+    default's recorded population against the gates that actually fall through -- had no
+    production caller at all: a check nobody runs upholds nothing. The re-derivation leg now
+    reads this same function for the coupling the fourth containment source needs (declaring
+    a gate REMOVES it from this set, so the default's population must lose the name in the
+    same write), and `tests/test_gate_registration.py` reads it too. One population, two
+    consumers, never two populations.
+
+    None means the set COULD NOT BE BUILT -- no manifest, no declared `measured_at`, a
+    revision this clone cannot resolve, or no registration reader. That is an INABILITY and
+    never an empty population: an empty tuple here would say "no gate falls through", which
+    is a verdict, and a caller must be able to tell the two apart (#595's own class).
+    """
+    root = Path(repo_root) if repo_root is not None else REPO_ROOT
+    path = Path(manifest_path) if manifest_path is not None else gates_manifest_path()
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(manifest, dict):
+        return None
+    declared = manifest.get("gates")
+    if not isinstance(declared, dict):
+        return None
+    revision = (manifest.get("default") or {}).get("measured_at")
+    if not isinstance(revision, str) or not revision:
+        return None
+    if _resolve_commit(root, revision) is None:
+        return None
+    forms = _runner_forms(root, revision)
+    if forms is None:
+        return None
+    keys: list[str] = []
+    for argvs in forms.values():
+        for argv in argvs:
+            key = gate_key_for_cmd(argv.split(), root)
+            if not key or key in declared:
+                continue
+            if _git(root, "cat-file", "-e", f"{revision}:{key}")[0] == 0:
+                keys.append(key)
+    return tuple(sorted(set(keys)))
+
 def load_gate_budgets(path: Path | None = None, repo_root: Path | None = None) -> GateBudgets:
     """Read the gate-budget manifest. Raises `GateBudgetManifestError` on a malformed one.
 
