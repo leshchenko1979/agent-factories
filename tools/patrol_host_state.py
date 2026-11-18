@@ -4514,7 +4514,12 @@ def job_schedule_text(row: dict) -> str:
 # is widened here, and naming them is the point:
 #
 #   * `tools/audit.py::check_cadence_integrity` judges ONE GLOBAL `<= 30.0` hour window
-#     against the newest `run`/`score` row. It reads no job, no schedule, no timezone.
+#     against the newest SELF-AUDIT row (`internal-self-audit`, bare or dated -- #324,
+#     ruled n=5171/n=5172). It reads no job, no schedule, no timezone. The population is
+#     named because it was not: before #324 it took the newest `run`/`score` row of ANY
+#     kind, so a patrol-park row answered for a self-audit 46.23 days stale and the printed
+#     figure described a different process than the one it named. It PRINTS
+#     `examined of scanned` so a zero-examined read cannot render as clean.
 #   * `duty_residual_for`'s `cadence_secs` (below) is the median gap between the job's own
 #     FIRES -- an OBSERVED cadence. It measures how often a job has been firing; it cannot
 #     say a slot ARRIVED and went unexecuted, because a job that never fired has no gap.

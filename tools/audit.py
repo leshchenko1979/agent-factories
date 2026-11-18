@@ -304,6 +304,59 @@ def format_elapsed_seconds(elapsed_secs: float) -> str:
     """
     return f"{int(elapsed_secs)}s"
 
+# THE SELF-AUDIT'S OWN SUBJECT STEM (#324). Two lawful forms name a self-audit row: the
+# legacy bare stem, stamped before the run date was carried (rows n=29, n=1980, n=2027),
+# and the dated form `internal-self-audit-YYYY-MM-DD` this change starts emitting. Both
+# are matched by ONE predicate so the cadence check and any future reader cannot disagree
+# about what counts as a self-audit row.
+SELF_AUDIT_SUBJECT_STEM = "internal-self-audit"
+
+# The declared cadence window: a daily duty, held at 30 hours so one late run does not
+# read as a missed day. It is a WINDOW, never a schedule — this check reads no cron.
+CADENCE_WINDOW_HOURS = 30.0
+
+
+def self_audit_duty(outcome: str, gate_summary: str) -> str:
+    """The run's duty disposition, in the three-token vocabulary the ruling fixed (#324).
+
+    `skipped` is NOT a failure: a stamp-only run (`--stamp` with no gates) took no
+    verdict, so recording it as `failed` would be a verdict nobody took, and recording it
+    as `completed` would claim a duty it never discharged. Derived from the SAME
+    `gate_summary`/`outcome` the row already carries, so the two can never disagree.
+    """
+    if gate_summary == "skipped":
+        return "skipped"
+    return "completed" if outcome == "accepted" else "failed"
+
+
+def self_audit_subject_matches(subject: Any) -> bool:
+    """True when `subject` names an internal self-audit row, and nothing else.
+
+    BOUNDARY-CHECKED, in the shape of `patrol_host_state.receipt_subject_matches`: a
+    subject that merely STARTS with the stem is not a self-audit row. So
+    `internal-self-audit-notes` fails (the tail is not a date),
+    `internal-self-audit-2026-13-01` fails (month 13 is not a date), and
+    `internal-self-audit-2026-11-180` fails (the character after the date is a digit,
+    which makes it a longer number rather than a date). This is what stops a future
+    subject that happens to share the prefix from silently satisfying the cadence check.
+    """
+    text = str(subject or "")
+    if text == SELF_AUDIT_SUBJECT_STEM:
+        return True
+    prefix = f"{SELF_AUDIT_SUBJECT_STEM}-"
+    if not text.startswith(prefix):
+        return False
+    rest = text[len(prefix):]
+    date_part, tail = rest[:10], rest[10:]
+    if len(date_part) != 10:
+        return False
+    try:
+        datetime.date.fromisoformat(date_part)
+    except ValueError:
+        return False
+    return not tail[:1].isdigit()
+
+
 def format_run_row_detail(
     stats: dict[str, Any], outcome: str, gate_summary: str, elapsed_secs: float
 ) -> str:
@@ -317,11 +370,18 @@ def format_run_row_detail(
     `duration=` is rendered from `elapsed_secs` — the caller's own measurement of the run
     — and never from a literal (#276). `turns=0` is honest: a mechanical run takes no agent
     turns, so it stays.
+
+    `duty=` is the TRAILER and is appended last (#324): three tokens for three states, so a
+    stamp-only run is `skipped` rather than being misread as either a completion or a
+    failure. It sits at the end deliberately — every existing reader matches `gate=` and
+    `yield=` as substrings, so a token inserted between them would move nothing while a
+    trailer cannot disturb them at all.
     """
     return (
         f"duration={format_elapsed_seconds(elapsed_secs)} turns=0 outcome={outcome} "
         f"gate={gate_summary} "
-        f"yield={format_yield_percent(stats.get('first_pass_yield'))}"
+        f"yield={format_yield_percent(stats.get('first_pass_yield'))} "
+        f"duty={self_audit_duty(outcome, gate_summary)}"
     )
 
 def format_yield_rate(stats: dict[str, Any]) -> str:
@@ -3801,6 +3861,19 @@ def registered_gates(repo_root: Path) -> list[list[str]]:
             [sys.executable, "-m", "pytest", "-q", "tests/test_gate_select_kill_rows.py"]
         )
 
+    # Mechanical gate: board #324 (ruled n=5171/n=5172) -- `check_cadence_integrity` selected
+    # the newest `run`/`score` row of ANY kind, so on 2026-11-18 a patrol-park row (n=5170,
+    # 31.7 h) answered for a self-audit last stamped `2026-10-03T02:59:00Z` (n=2027, 46.23 d).
+    # The verdict was RED either way; the FIGURE was the defect, because it described a
+    # different process than the one it named. The leg now selects its own population and
+    # PRINTS it (`examined of scanned`), so a zero-examined read cannot render as clean.
+    #     SCRIPT form, not pytest: the probes are `probe_*` functions called from `main()`, and
+    #     the file exits 1 on any failure -- `python3 <file>` runs them.
+    #     Hermetic: synthetic ledgers under a temp directory, no live board, no fleet manifest,
+    #     no box-local fixture. Ships with its TEMPLATE pair.
+    if (repo_root / "tests/test_audit_cadence.py").is_file():
+        gates_to_run.append([sys.executable, "tests/test_audit_cadence.py"])
+
     return gates_to_run
 
 
@@ -3850,38 +3923,105 @@ def execute_mechanical_gates(repo_root: Path) -> tuple[list[dict[str, Any]], Gat
 
 
 def check_cadence_integrity(ledger_path: Path) -> dict[str, Any]:
-    """Check whether recurring processes ran according to declared schedule."""
+    """Check whether the INTERNAL SELF-AUDIT ran according to its declared schedule.
+
+    THE POPULATION WAS THE DEFECT (#324 Leg B). This used to take the newest `run`/`score`
+    row of ANY kind, so a patrol or a survey stamped hours ago was read as this audit's own
+    cadence: on 2026-11-18 it returned `hours_since_last_run 31.7` from a patrol-park row
+    (n=5170) while the last real self-audit was n=2027 at 2026-10-03T02:59:00Z -- 46.23
+    days earlier. The number was right and the process it described was the wrong one, so
+    the verdict was red for a reason that was not the reason. It now selects on the
+    self-audit SUBJECT through the one boundary-checked predicate, in both lawful forms.
+
+    TWO COUNTS TRAVEL WITH THE VERDICT, because a zero must not pass as clean: `examined`
+    (self-audit rows found) sits beside `population` (run/score rows scanned), and both are
+    PRINTED by every surface that renders this. A ledger carrying no self-audit row is not
+    "cadence held" -- it is the duty never having been stamped, which is precisely what
+    this check exists to report, so it returns `cadence_held: False` with its reason named
+    rather than the vacuous green it used to return.
+    """
     if not ledger_path.is_file():
-        return {"cadence_held": False, "hours_since_last_run": None}
+        return {
+            "cadence_held": False,
+            "hours_since_last_run": None,
+            "last_run_ts": None,
+            "examined": 0,
+            "population": 0,
+            "reason": f"no ledger at {ledger_path}",
+        }
 
     now = datetime.datetime.now(datetime.timezone.utc)
+    last_dt = None
     last_ts = None
+    examined = 0
+    population = 0
     with open(ledger_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if line:
-                try:
-                    data = json.loads(line)
-                    if data.get("event") in ("run", "score"):
-                        last_ts = data.get("ts")
-                except Exception:
-                    pass
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except Exception:
+                continue
+            if data.get("event") not in ("run", "score"):
+                continue
+            population += 1
+            if not self_audit_subject_matches(data.get("subject")):
+                continue
+            examined += 1
+            ts = data.get("ts")
+            if not ts:
+                continue
+            try:
+                t_row = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            except Exception:
+                continue
+            # NEWEST BY PARSED INSTANT, never by file order or string compare: the ledger is
+            # append-only, so file order happens to agree today, but a row stamped with a
+            # different offset would sort wrongly as text. Parse first, compare second.
+            if last_dt is None or t_row > last_dt:
+                last_dt, last_ts = t_row, ts
 
-    if not last_ts:
-        return {"cadence_held": True, "hours_since_last_run": None}
-
-    try:
-        t_last = datetime.datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
-        hours_diff = (now - t_last).total_seconds() / 3600.0
-        # Expected daily cadence: interval <= 30 hours
-        cadence_held = hours_diff <= 30.0
+    if last_dt is None:
         return {
-            "cadence_held": cadence_held,
-            "hours_since_last_run": round(hours_diff, 1),
-            "last_run_ts": last_ts,
+            "cadence_held": False,
+            "hours_since_last_run": None,
+            "last_run_ts": None,
+            "examined": examined,
+            "population": population,
+            "reason": (
+                f"no internal self-audit row among {population} run/score row(s) scanned"
+            ),
         }
-    except Exception:
-        return {"cadence_held": False, "hours_since_last_run": None}
+
+    hours_diff = (now - last_dt).total_seconds() / 3600.0
+    return {
+        "cadence_held": hours_diff <= CADENCE_WINDOW_HOURS,
+        "hours_since_last_run": round(hours_diff, 1),
+        "last_run_ts": last_ts,
+        "examined": examined,
+        "population": population,
+        "window_hours": CADENCE_WINDOW_HOURS,
+    }
+
+
+def format_cadence_population(cadence_stats: dict[str, Any]) -> str:
+    """The cadence verdict's own population, so a clean read is never a read that found nothing.
+
+    Clause 5's shape applied to this check (#324 Leg B): `examined=N of M run/score row(s)`
+    travels with the verdict. A zero-examined population states its REASON rather than a
+    bare `0 of 0`, because the two are different facts — one is a broken selector, the
+    other is a duty never stamped — and neither may render as the same output.
+    """
+    examined = int(cadence_stats.get("examined") or 0)
+    population = int(cadence_stats.get("population") or 0)
+    reason = cadence_stats.get("reason")
+    if examined:
+        return f"self-audit rows: {examined} of {population} run/score row(s) scanned"
+    if reason:
+        return f"self-audit rows: 0 of {population} run/score row(s) scanned ({reason})"
+    return f"self-audit rows: 0 of {population} run/score row(s) scanned"
 
 
 def format_report_markdown(
@@ -3955,7 +4095,7 @@ def format_report_markdown(
         f"| **Avg Cost / Closed Task** | `{format_cost_usd(ledger_stats.get('avg_cost_per_closed_task_usd'))}` | ${ledger_stats.get('total_cost_usd', 0.0):.4f} total cost ÷ {ledger_stats.get('closed_subjects', 0)} distinct closed subjects |",
         f"| **Cost / Successful Task** | `{format_cost_usd(ledger_stats.get('cost_per_successful_task_usd'))}` | {format_cost_note(ledger_stats)} |",
         f"| **Total Tokens (In/Out)** | `{ledger_stats.get('total_tokens_in', 0)} / {ledger_stats.get('total_tokens_out', 0)}` | Cumulative prompt and completion tokens |",
-        f"| **Cadence Status** | `{'HELD' if cadence_stats.get('cadence_held') else 'MISSED'}` | Last run: {cadence_stats.get('hours_since_last_run')}h ago |",
+        f"| **Cadence Status** | `{'HELD' if cadence_stats.get('cadence_held') else 'MISSED'}` | Last run: {cadence_stats.get('hours_since_last_run')}h ago · {format_cadence_population(cadence_stats)} |",
         "",
         "---",
         "",
@@ -4215,7 +4355,7 @@ def main() -> int:
     # the predicate is a pattern set over free text. NOT RUN carries its reason, because an
     # absent register and a register with no declines must not read alike.
     print(f"  - {_intake_line(intake_stats, intake_stats.get('reason', ''))}" if _intake_line else f"  - declined-as-internal: NOT RUN — {intake_stats.get('reason', '')}")
-    print(f"  - Cadence: {'HELD' if cadence_ok else 'MISSED'} (last run: {cadence_stats.get('hours_since_last_run')}h ago)")
+    print(f"  - Cadence: {'HELD' if cadence_ok else 'MISSED'} (last run: {cadence_stats.get('hours_since_last_run')}h ago · {format_cadence_population(cadence_stats)})")
     print(f"\nMechanical Gates ({len(gate_results)}):")
     for g in gate_results:
         print(render_gate_line(g))
@@ -4339,6 +4479,12 @@ def main() -> int:
         )
         elapsed_secs = time.monotonic() - started
         detail = format_run_row_detail(ledger_stats, outcome, gate_summary, elapsed_secs)
+        # THE SUBJECT CARRIES THE RUN'S OWN DATE (#324 Leg A). The bare stem was ambiguous:
+        # a reader could not tell WHICH round a row recorded, so the cadence check could not
+        # select self-audit rows at all and settled for the newest `run`/`score` row of any
+        # kind -- a patrol row stamped hours ago read as this audit's cadence. The date is
+        # `today`, the same value the artifact is named from, so the row and the report it
+        # describes cannot disagree about which day they belong to.
         stamp_cmd = [
             sys.executable,
             "tools/ledger.py",
@@ -4348,7 +4494,7 @@ def main() -> int:
             "--actor",
             args.actor,
             "--subject",
-            "internal-self-audit",
+            f"{SELF_AUDIT_SUBJECT_STEM}-{today}",
             "--detail",
             detail,
         ]

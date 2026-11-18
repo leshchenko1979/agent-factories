@@ -487,6 +487,14 @@ PAIRS = [
     # measured basis is derived from a peak the gate itself recomputes, so the pair must travel
     # together or the number loses the thing that keeps it honest.
     ("tests/test_audit_scope.py", "TEMPLATE/tests/test_audit_scope.py"),
+    # Added with its registration (issue #324): the gate probes `tools/audit.py`'s own
+    # `check_cadence_integrity`, `self_audit_subject_matches`, `self_audit_duty` and
+    # `format_cadence_population` — all in a paired file — so it is only meaningful where BOTH
+    # ship. A factory that took the tool's population fix without the gate would carry a
+    # selector nothing checks (the exact shape of the defect: the figure was wrong for four
+    # runs and no gate looked at the predicate), and one that took the gate without the tool
+    # would run probes that cannot import.
+    ("tests/test_audit_cadence.py", "TEMPLATE/tests/test_audit_cadence.py"),
     # Added with its registration (issue #145): the gate drives `tools/audit.py`, which is a
     # paired file, so it is only meaningful where BOTH ship — a factory that took the tool's
     # in-flight guard without the gate proving it would carry a guard nothing checks, and one

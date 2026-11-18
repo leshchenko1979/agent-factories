@@ -36,6 +36,9 @@
     }
   },
   "exits": {
+    "tests/test_audit_cadence.py": {
+      "class": "always-satisfiable"
+    },
     "tests/test_audit_inflight_guard.py": {
       "class": "always-satisfiable"
     },
@@ -1228,6 +1231,7 @@
     }
   },
   "modes": {
+    "tests/test_audit_cadence.py": "script",
     "tests/test_audit_inflight_guard.py": "script",
     "tests/test_audit_rates.py": "pytest",
     "tests/test_audit_scope.py": "pytest",

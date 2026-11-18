@@ -1153,6 +1153,18 @@ REQUIRED_GATES: tuple[str, ...] = (
     # one night on `tests/test_hygiene_placement.py`, which was RED and correct on main while
     # the script form reported it green three times.
     "test_gate_direct_invocation.py",
+    # Added with its registration (issue #324, ruled n=5171/n=5172). REQUIRED is the correct
+    # grain: the gate drives SYNTHETIC ledgers under a temp directory -- no live board, no
+    # fleet manifest, no box-local fixture -- so it passes in a bootstrapped factory exactly
+    # as it does here, and its one live reading is REPORTED, never asserted, because the
+    # figure is a property of an instant. It is byte-paired with a TEMPLATE copy, so the
+    # manifest grain is what keeps a factory from dropping the runner and keeping the file.
+    # THE MECHANISM IT GUARDS: `check_cadence_integrity` took the newest `run`/`score` row of
+    # ANY kind, so a patrol-park row (n=5170, 31.7 h) answered for a self-audit last stamped
+    # 46.23 days earlier (n=2027). The audit was RED, and the figure it printed described a
+    # different process than the one it named -- a number travelling with the wrong predicate,
+    # which reads as a measurement of the duty while measuring its neighbours.
+    "test_audit_cadence.py",
 )
 
 # Gates the template does NOT ship, each with the reason it is not required. Stated rather
