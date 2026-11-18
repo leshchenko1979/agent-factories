@@ -5,6 +5,11 @@
     "tests/test_template_sync.py"
   ],
   "gates": {
+    "tests/test_audit_cadence.py": [
+      "evidence/ledger.jsonl",
+      "tests/test_audit_cadence.py",
+      "tools/audit.py"
+    ],
     "tests/test_audit_inflight_guard.py": [
       "TEMPLATE/tools/audit.py",
       "tools/audit.py"
