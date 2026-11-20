@@ -8628,6 +8628,90 @@ REF_ROLE_ASSERTION = re.compile(
 )
 REF_ROLES_JUDGED = ("intake", "dispatch", "close")
 
+# A QUOTATION IS NOT AN ASSERTION (#653). "Proven to bite" is required practice here, and
+# the honest proof reproduces the failure message the test emits -- so a close row that
+# proves a gate bites necessarily contains a string of the form `intake row n=1 ...` that
+# asserts NO role for any row of THIS ledger. The naive match reads that quotation as an
+# assertion and reds the leg on the very prose that documents the defect: measured
+# 2026-11-17, n=5196 is the patrol receipt that EXPLAINS the false positive and became an
+# instance of it. No wording discipline can escape this -- HQ reproduced it by writing the
+# phrase in a ruling -- so the exit is a PREDICATE change, never an exemption per row.
+#
+# TWO DISCRIMINATORS, both measured over the whole published corpus before shipping
+# (5199 rows, 309 matches): 8 matches are dropped as quotations, leaving 301 assertions and
+# 9 residuals, every one of them already adjudicated. NEITHER ALONE SUFFICES, and the
+# measurement is why:
+#   * QUOTE FENCING alone clears 3 of the 4 defect-class instances and MISSES n=5196, whose
+#     match is BARE -- "the fixture error string intake row n=1" carries no quote marks.
+#   * QUOTING CONTEXT alone clears all four, but a window that also accepted the word
+#     `message` dropped a GENUINE mismatch (n=2400's range assertion, "Dispatch rows
+#     n=2376-n=2389", preceded by "message sequence 3197"). `message` is therefore
+#     deliberately NOT an indicator: a widening that silently drops real mismatches is
+#     worse than the false positive it cures, which is this issue's own criterion 1.
+# The dropped count is PRINTED on every run, so the band is re-derived from data rather
+# than trusted, and a future widening that starts eating assertions is visible the round it
+# happens.
+REF_ROLE_QUOTING_CONTEXT = re.compile(
+    r"(reproduc|quot|error string|fixture|verbatim|prints?\b|emits?\b|raises?\b)",
+    re.IGNORECASE,
+)
+
+def ref_role_quoted_spans(detail: str) -> list[tuple[int, int]]:
+    """`(open, close)` index pairs of the quoted spans in `detail`.
+
+    An APOSTROPHE IS NOT AUTOMATICALLY A DELIMITER: English possessives (`Triage's`,
+    `Worker's`) are everywhere in this corpus, and a scanner that treats every `'` as a
+    quote opener reported 168 of 309 matches "inside quotes" -- a widening that would have
+    silently dropped more than half the assertions it was meant to judge. An opener must
+    follow whitespace or punctuation AND be followed by non-space; a closer must follow
+    non-space AND be followed by a boundary or end of text.
+    """
+    spans: list[tuple[int, int]] = []
+    index = 0
+    length = len(detail)
+    openers = " \t\n([{>*-_\u2014:;,"
+    boundaries = " \t\n.,;:!?)]}\u2014-"
+    while index < length:
+        char = detail[index]
+        if char in "\"'":
+            previous = detail[index - 1] if index > 0 else " "
+            following = detail[index + 1] if index + 1 < length else " "
+            if previous in openers and following not in " \t\n":
+                scan = index + 1
+                found = None
+                while scan < length:
+                    if detail[scan] == char:
+                        before = detail[scan - 1] if scan > 0 else " "
+                        after = detail[scan + 1] if scan + 1 < length else " "
+                        if before not in " \t\n" and (
+                            after in boundaries or scan + 1 == length
+                        ):
+                            found = scan
+                            break
+                    scan += 1
+                if found is not None:
+                    spans.append((index, found))
+                    index = found + 1
+                    continue
+        elif char in "\u201c\u2018":
+            closer = "\u201d" if char == "\u201c" else "\u2019"
+            close = detail.find(closer, index + 1)
+            if close != -1:
+                spans.append((index, close))
+                index = close + 1
+                continue
+        index += 1
+    return spans
+
+def ref_role_is_assertion(
+    detail: str, match: "re.Match[str]", spans: list[tuple[int, int]]
+) -> bool:
+    """Does `match` ASSERT a role, or does it merely QUOTE one?"""
+    if any(start <= match.start() and match.end() <= end for start, end in spans):
+        return False
+    window = detail[max(0, match.start() - 70):match.start()]
+    return REF_ROLE_QUOTING_CONTEXT.search(window) is None
+
 def load_ref_role_exemptions(path: Path | None = None) -> tuple[list[dict], list[str]]:
     """`(entries, problems)` for the declared ref-role exemption surface.
 
@@ -8703,11 +8787,29 @@ def ledger_ref_roles_leg(rows: list[dict], *, read_at: str,
     """
     by_n = {row.get("n"): row for row in rows if isinstance(row.get("n"), int)}
     assertions: list[tuple[int, str, int]] = []
+    quotations_skipped = 0
+    # NAMED, never merely counted (#653 criterion 2). A bare "8 skipped" leaves a reader
+    # unable to tell a residual the PREDICATE cleared from one an EXEMPTION excuses -- and
+    # those are opposite facts about the corpus. The list is what makes `n=5127` readable
+    # as CLEARED rather than as quietly dropped.
+    skipped_quotations: list[dict] = []
     for row in rows:
         row_n = row.get("n")
         if not isinstance(row_n, int):
             continue
-        for match in REF_ROLE_ASSERTION.finditer(str(row.get("detail") or "")):
+        detail = str(row.get("detail") or "")
+        spans = ref_role_quoted_spans(detail)
+        for match in REF_ROLE_ASSERTION.finditer(detail):
+            if not ref_role_is_assertion(detail, match, spans):
+                quotations_skipped += 1
+                skipped_quotations.append(
+                    {
+                        "row": row_n,
+                        "asserted": match.group(1).lower(),
+                        "asserted_row": int(match.group(2)),
+                    }
+                )
+                continue
             assertions.append((row_n, match.group(1).lower(), int(match.group(2))))
     residuals: list[dict] = []
     for row_n, asserted, asserted_row in assertions:
@@ -8768,6 +8870,8 @@ def ledger_ref_roles_leg(rows: list[dict], *, read_at: str,
             "rows_read": len(rows),
             "roles_judged": list(REF_ROLES_JUDGED),
             "assertions_examined": len(assertions),
+            "quotations_skipped": quotations_skipped,
+            "skipped_quotations": skipped_quotations,
             "residuals": residuals,
             "exemptions_declared": len(entries),
             "exempted": len(used),
@@ -17578,9 +17682,20 @@ def render(legs: list[dict], deferred: list[dict], *, slug: str, read_at: str,
                 f"  role assertions (a receipt naming the role of a row): "
                 f"{cov['assertions_examined']} examined over {cov['rows_read']} ledger "
                 f"row(s); roles judged: {'/'.join(cov['roles_judged'])}; "
+                f"{cov['quotations_skipped']} QUOTATION(s) skipped (prose that reproduces a "
+                f"string asserts no role -- #653); "
                 f"{len(cov['residuals'])} mismatch(es), {cov['exempted']} declared-exempt, "
                 f"{cov['unresolved']} unresolved"
             )
+            # WHICH rows were skipped, named (#653 criterion 2): a reader must be able to
+            # tell a residual the PREDICATE cleared from one an EXEMPTION excuses, and a
+            # count alone renders both as the same silence.
+            for skipped in cov.get("skipped_quotations") or []:
+                lines.append(
+                    f"    n={skipped['row']} names `{skipped['asserted']}` of "
+                    f"n={skipped['asserted_row']} inside a QUOTATION — CLEARED by the "
+                    f"predicate, not exempted"
+                )
             for residual in cov["residuals"]:
                 lines.append(
                     f"    n={residual['row']} asserts `{residual['asserted']}` of "

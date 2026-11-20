@@ -26,12 +26,6 @@
       "reason": "STALE by 6, and a RANGE -- 'Dispatch rows n=2376-n=2389' should read 2382-2395; correction row n=2405 maps the whole span (2374,2375,2376,2389,2390,2391,2392,2393 -> 2380,2381,2382,2395,2396,2397,2398,2399)."
     },
     {
-      "row": 2405,
-      "asserted": "intake",
-      "asserted_row": 2374,
-      "reason": "QUOTATION -- n=2405 IS the correction row; this match sits inside the stale text it exists to map (\"n=2400 prose 'intake row n=2374' -> n=2380\"). The row MENTIONS the defect rather than asserting the role, and deleting the quotation would delete the correction's own basis."
-    },
-    {
       "row": 2958,
       "asserted": "intake",
       "asserted_row": 2951,
@@ -60,12 +54,6 @@
       "asserted": "dispatch",
       "asserted_row": 4234,
       "reason": "QUOTATION -- n=4243 IS the correction row: this match sits inside the list of claims it exists to withdraw (\"The report delivered at the end of the 2026-10-24 12:00 slot claimed: ... dispatch row `n=4234`; duty receipt `n=4235`\"), immediately followed by \"NONE OF IT HAPPENED\", and item 3 of the SAME row names the truth (\"n=4234/n=4235 are the WORKER's #530 close and settlement receipt (14:03:12Z), not this lane's rows\"). The prose MENTIONS the fabricated pointer rather than asserting the role, and deleting the quotation would delete the correction's own basis -- the same shape as the n=2405 and n=3362 entries."
-    },
-    {
-      "row": 5127,
-      "asserted": "intake",
-      "asserted_row": 1,
-      "reason": "QUOTED FIXTURE OUTPUT -- the prose is quoting the ERROR MESSAGE a test prints, to prove the test bites: \"neutering foreign_repo_refs to return [] reproduces 'intake row n=1 records #999, which is not on the board'\". The row asserts no role for n=1; it reproduces a string a fixture emits about a synthetic ledger where row 1 IS an intake row. This ledger's n=1 is `genesis`, so the leg matches the quotation and reads a mismatch. Same class as entry 1215 (a quotation of another factory's filing). Measured 2026-11-16T18:0xZ from the 18Z patrol: this was the leg's single UNRESOLVED residual of 11 mismatches over 305 role assertions."
     }
   ]
 }

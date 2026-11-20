@@ -221,6 +221,123 @@ def check(module) -> tuple[list[str], int]:
                     f"{[p for p in leg['problems'] if 'matches no live' not in p]}"
                 )
 
+    # --- arm 11: a QUOTATION is not an assertion (#653) --------------------------------
+    # "Proven to bite" is required practice, and the honest proof reproduces the failure
+    # message a test emits. A close row that does so necessarily contains a string shaped
+    # like a role assertion that asserts NOTHING about this ledger. Measured on the live
+    # corpus: n=5196 is the patrol receipt that EXPLAINS the false positive and became an
+    # instance of it.
+    cases += 1
+    quoted = (
+        "neutering foreign_repo_refs to return [] reproduces "
+        "'intake row n=1 records #999, which is not on the board'"
+    )
+    leg = _leg(module, [
+        _row(1, "genesis", "GENESIS"),
+        _row(2, "close", f"CLOSE #900. {quoted}"),
+    ])
+    if leg["coverage"]["residuals"]:
+        problems.append(
+            f"arm 11: a QUOTED fixture string was read as a role assertion: "
+            f"{leg['coverage']['residuals']}"
+        )
+    if leg["problems"]:
+        problems.append(f"arm 11: a quotation red the leg: {leg['problems']}")
+    if leg["coverage"]["quotations_skipped"] != 1:
+        problems.append(
+            f"arm 11: expected 1 skipped quotation, got "
+            f"{leg['coverage']['quotations_skipped']} — a widening that skips nothing is "
+            f"the defect, and one that skips the wrong count is a silent hole"
+        )
+
+    # --- arm 12: the SAME words ASSERTING are still judged (the discriminating half) ----
+    # Without this arm a predicate that dropped every match would pass arm 11, which is
+    # the #645 shape: a guard that grades its own homework.
+    cases += 1
+    leg = _leg(module, [
+        _row(1, "genesis", "GENESIS"),
+        _row(2, "close", "CLOSE #900. Intake row n=1 landed this turn."),
+    ])
+    if len(leg["coverage"]["residuals"]) != 1:
+        problems.append(
+            f"arm 12: a BARE assertion of the same words was not judged: "
+            f"{leg['coverage']['residuals']}"
+        )
+    if not leg["problems"]:
+        problems.append("arm 12: a bare mismatch read clean")
+
+    # --- arm 13: the dropped count PRINTS, so the band is re-derived from data ---------
+    cases += 1
+    if "quotations_skipped" not in module.ledger_ref_roles_leg(
+        [_row(1, "genesis", "GENESIS")], read_at="gate",
+        exemptions_path=Path("/nonexistent/store.json"),
+    )["coverage"]:
+        problems.append(
+            "arm 13: coverage carries no `quotations_skipped`, so a widening that starts "
+            "eating assertions would be invisible"
+        )
+
+    # --- arm 16: a skipped quotation is NAMED, not merely counted (#653 criterion 2) ----
+    # A count alone cannot tell a residual the PREDICATE cleared from one an EXEMPTION
+    # excuses -- opposite facts that render as the same silence. The row number and the
+    # role it names must both survive into coverage, so a reader can check the judgement.
+    cases += 1
+    skipped_leg = module.ledger_ref_roles_leg(
+        [_row(7, "close", "The fixture reproduces 'intake row n=1 records #999' verbatim")],
+        read_at="gate", exemptions_path=Path("/nonexistent/store.json"),
+    )
+    named = skipped_leg["coverage"].get("skipped_quotations") or []
+    if not named:
+        problems.append(
+            "arm 16: a skipped quotation is COUNTED but never NAMED, so a reader cannot "
+            "tell a residual the predicate cleared from one an exemption excuses"
+        )
+    elif named[0].get("row") != 7 or named[0].get("asserted_row") != 1:
+        problems.append(
+            f"arm 16: the named skip carries the wrong identity: {named[0]!r} — expected "
+            "row 7 naming a role of row 1"
+        )
+
+    # --- arm 14: the BARE quotation is caught by CONTEXT alone (#653, n=5196 shape) -----
+    # n=5196 is the receipt that explains the false positive: its match carries NO quote
+    # marks at all, so quote fencing alone would miss it. This arm is what proves the
+    # quoting-context discriminator is load-bearing rather than decoration.
+    cases += 1
+    leg = _leg(module, [
+        _row(1, "genesis", "GENESIS"),
+        _row(2, "close", "CLOSE #900. BOTH are QUOTATIONS of the fixture error string "
+                         "intake row n=1, so neither asserts a role."),
+    ])
+    if leg["coverage"]["residuals"] or leg["problems"]:
+        problems.append(
+            f"arm 14: a BARE quotation was judged as an assertion: "
+            f"{leg['coverage']['residuals']} {leg['problems']}"
+        )
+    if leg["coverage"]["quotations_skipped"] != 1:
+        problems.append(
+            f"arm 14: expected 1 skipped bare quotation, got "
+            f"{leg['coverage']['quotations_skipped']}"
+        )
+
+    # --- arm 15: the FENCED quotation with no quoting verb is caught by SPANS alone -----
+    # The mirror of arm 14: no indicator word in the window, so only the span scanner can
+    # drop it. Together the two arms prove each discriminator independently.
+    cases += 1
+    leg = _leg(module, [
+        _row(1, "genesis", "GENESIS"),
+        _row(2, "close", 'CLOSE #900. The row said "intake row n=1" and nothing more.'),
+    ])
+    if leg["coverage"]["residuals"] or leg["problems"]:
+        problems.append(
+            f"arm 15: a FENCED quotation was judged as an assertion: "
+            f"{leg['coverage']['residuals']} {leg['problems']}"
+        )
+    if leg["coverage"]["quotations_skipped"] != 1:
+        problems.append(
+            f"arm 15: expected 1 skipped fenced quotation, got "
+            f"{leg['coverage']['quotations_skipped']}"
+        )
+
     return problems, cases
 
 def main() -> int:
@@ -241,7 +358,8 @@ def main() -> int:
         live = f"{cov['exemptions_declared']} declared exemption(s)"
         population = (
             f"{cov['assertions_examined']} assertion(s) over {cov['rows_read']} ledger "
-            f"row(s): {len(cov['residuals'])} mismatch(es), {cov['exempted']} "
+            f"row(s) ({cov['quotations_skipped']} quotation(s) skipped): "
+            f"{len(cov['residuals'])} mismatch(es), {cov['exempted']} "
             f"declared-exempt, {cov['unresolved']} unresolved"
         )
 
