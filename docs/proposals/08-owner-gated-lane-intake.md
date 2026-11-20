@@ -24,11 +24,16 @@ CLI verbs, never part of the harness), and **restored the AFK section** to first
 All load-bearing citations re-verified at harness HEAD `e8f2e03d1` (2026-10-19); issue numbers
 resolve through the key in §C.1.
 **Status:** design input — **not law**. Owner ruled **HOLD + rework** twice: 2026-10-05 (q59) and
-2026-10-19 (q63 — *"Hold - rework again"*, after the grill and the AX review). Q1 (q60) and Q6
-(q61) answered and folded (§4.1, §9). On approval the issue is filed on the **fork**
-`leshchenko1979/opencrabs` — the tracker that takes every binary issue (owner order 2026-10-09,
-which supersedes the 2026-10-05 upstream routing this document previously carried). **Nothing is
-implemented** — the proposed names are absent from the tree (checked this turn, §C).
+2026-10-19 (q63 — *"Hold - rework again"*, after the grill and the AX review). **Then on
+2026-11-20 the owner APPROVED THE DESIGN AND DEFERRED IMPLEMENTATION** — q76, answered
+06:46:21Z, *"Approve the idea, design only for now"*. Read that literally, because it carries two
+rulings: (a) **the diagnosis and the shape are accepted — do not re-ask for design approval**;
+(b) **no build and no filing is authorised** — no fork issue, no code, no lane-side law — until
+the owner says implement. Q1 (q60) and Q6 (q61) answered and folded (§4.1, §9). When that
+go-ahead comes, the issue is filed on the **fork** `leshchenko1979/opencrabs` — the tracker that
+takes every binary issue (owner order 2026-10-09, which supersedes the 2026-10-05 upstream routing
+this document previously carried). **Nothing is implemented** — the proposed names are absent from
+the tree (checked 2026-10-19, §C).
 **Related:** `PROP-01` (cron-gated goal pipeline), `PROP-02` (human-load pacing),
 `docs/addons/harness/opencrabs.md`; harness issues —
 [fork#13](https://github.com/leshchenko1979/opencrabs/issues/13) (in-flight failsafe),
@@ -780,6 +785,13 @@ it, and the alternative (assuming he is awake *because* he is silent) is worse.
 ---
 
 ## 12. Decisions the owner still holds
+
+**None of them, per his own standing order.** On 2026-10-02 the owner said four times that
+internal mechanism calls are the lane's to make — *"it's you internal question, don't ask me
+questions like this, decide by yourself"*. Every row below is that class: the recommendation
+column IS the decision, taken at implementation time and recorded in the commit that carries it.
+**Do not put any of these on the register.** The table survives as the design's own defaults, not
+as a queue of questions.
 
 The HOLD (q59) was a rework order, not a rejection of the diagnosis. Q1 (q60) and Q6 (q61) are
 answered and folded; the off-hours question (Q7) and the declaration verb (Q8) are resolved in
