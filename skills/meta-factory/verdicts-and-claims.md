@@ -139,7 +139,26 @@ canonicality claim.**
   state — is true only near the instant of the render, and it is REPORTED, never folded into the
   correctness verdict, because a check that fails by construction carries no more information than
   one that cannot fail. The POPULATION half is the predicate clause above: a predicate's scope is
-  its reader's population, and the two are stated together (#102, #103).
+  its reader's population, and the two are stated together (#102, #103). **AND AN INSTANT MUST
+  RESOLVE on a surface a reader can open — a live read's own stamp is not a citation.** The
+  clause above says a live measurement names its instant; this says which instant CAN be named.
+  An instant taken from an artifact REWRITTEN within its own period names a state no committed
+  byte holds: `evidence/instrument-census-<date>.md` is one path per day, re-run and re-committed
+  within the day, so a figure cited with a run's in-file stamp survives only until the next run,
+  and a reader at `origin/main` opens the artifact, sees a different figure, and cannot reproduce
+  the basis. A citation therefore travels with the surface that HOLDS the bytes — the COMMIT that
+  carried them, or an append-only row — and the in-file stamp is corroboration only. Measured
+  2026-11-20: ruling n=5189 cited `08:20:14Z` from a live census run whose output was overwritten
+  before anything was committed; the artifact's three committed versions carry 08:26:52Z,
+  08:30:06Z and 08:31:39Z, so the cited instant appears in no committed byte — while the FIGURE
+  was right and reproducible (15/15, from commit `01c9238a`). The two are separately checkable,
+  and a reader could not tell which was which. Per-instant paths were considered and DECLINED,
+  named here so a later reader does not take them: the class is every per-day artifact in
+  `evidence/`, a filename is a naming convention and not an immutability guarantee, and forcing
+  every reader of the day's state onto a latest-wins glob adds a failure mode where a clean miss
+  reads as a clean result. Upheld by PROCESS (P29), never a gate — the lane that runs the
+  instrument appends a `run` row naming the instant and the figure, the pattern the
+  `survey-<date>` rows already follow, and a ruling cites the ROW.
 - **A gate's time budget is a DECLARED MULTIPLE of a MEASURED runtime, never a round number.**
   A cap picked by feel is uncalibrated in both directions: too low, it kills a healthy gate and
   reports a timeout as a verdict; too high, it hides a hung one. So each gate's cap is derived —
