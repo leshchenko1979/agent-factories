@@ -426,6 +426,10 @@ PAIRS = [
     # there. One parser, one copy: two copies of an AST walk drift, and the copy that
     # drifts is the one nobody reads.
     ("tests/child_budget.py", "TEMPLATE/tests/child_budget.py"),
+    # The gate that consumes it (#651). It was shipped without this row, so
+    # `tests/test_template_integrity.py` read a TEMPLATE copy nothing accounted for and went
+    # red on main — the derivation was paired and its own consumer was not.
+    ("tests/test_gate_child_budget.py", "TEMPLATE/tests/test_gate_child_budget.py"),
     ("tests/test_gate_registration.py", "TEMPLATE/tests/test_gate_registration.py"),
     ("tests/test_gate_invocation_mode.py", "TEMPLATE/tests/test_gate_invocation_mode.py"),
     # The direct-invocation gate (#542, ruling n=4071). Paired because its POPULATION is the
