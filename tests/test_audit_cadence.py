@@ -46,6 +46,7 @@ Exit: 0 every probe held, 1 otherwise.
 
 from __future__ import annotations
 
+import datetime
 import json
 import sys
 import tempfile
@@ -112,11 +113,22 @@ def probe_the_population_is_the_self_audits_not_the_newest_run_row() -> None:
     # The forward direction on the SAME predicate: a fresh self-audit under a stale patrol
     # row holds. Without this arm the probe above would pass on a selector that returned
     # nothing at all, which is the zero-examined shape wearing a verdict.
+    #
+    # THE FRESH INSTANT IS COMPUTED FROM THE CHECK'S OWN CLOCK, NEVER HARDCODED. This arm
+    # first shipped with a literal `2026-11-18T07:30:00Z`, which was "now" when it was
+    # written and expired exactly CADENCE_WINDOW_HOURS (30 h) later: on 2026-11-20 the same
+    # fixture read 50.39 h old, `cadence_held` came back False, and the gate went RED on a
+    # timer with no code change behind it -- measured at origin/main 4bf38d2a in a clean
+    # worktree, so it was not any one lane's change. A probe asserting "fresh holds" must
+    # take its freshness from the clock the predicate reads, or it tests the calendar
+    # instead of the predicate.
+    fresh_instant = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
     rows = [
         {"n": 1, "event": "run", "subject": "patrol-park-2026-10-01",
          "ts": "2026-10-01T00:00:00Z", "detail": "duration=1s"},
-        {"n": 2, "event": "run", "subject": f"{STEM}-2026-11-18",
-         "ts": "2026-11-18T07:30:00Z", "detail": "duration=9s"},
+        {"n": 2, "event": "run",
+         "subject": f"{STEM}-{fresh_instant.date().isoformat()}",
+         "ts": fresh_instant.strftime("%Y-%m-%dT%H:%M:%SZ"), "detail": "duration=9s"},
     ]
     with tempfile.TemporaryDirectory() as tmp:
         stats = audit.check_cadence_integrity(write_ledger(tmp, rows))
