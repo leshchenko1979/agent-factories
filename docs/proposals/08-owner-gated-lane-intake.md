@@ -591,7 +591,9 @@ uses `--json`.
 ## 8. Boundary — who implements what
 
 The runtime change belongs to the **OpenCrabs harness** — on approval, a **binary issue on
-`opencrabs/opencrabs`** (owner order 2026-10-05), this proposal attached. This factory's part is
+`leshchenko1979/opencrabs`** (the fork that takes every binary issue, owner order 2026-10-09; this
+supersedes the 2026-10-05 upstream routing named here in earlier revisions), this proposal
+attached. This factory's part is
 the **process law** that follows from it: what a lane must do when it parks, what a sender must
 expect (its push may be held), and the reversibility test it applies before asking at all (§9).
 The two ship together — the harness leg alone would hold pushes with no lane-side rule to declare
@@ -822,7 +824,7 @@ reader who saw an earlier revision can find where each landed.
 | **a harness tool to set the wait on a session id, so an external agent can follow the graph** (owner, 2026-10-05) | structured **`await_target`** + the **`graph`** action on `await_external`, and the CLI `session await graph` (§4.2) |
 | **digest: how to avoid info loss, and who makes it** (owner, 2026-10-05) | the digest is rendered **mechanically** by the harness drain code, never a model summary, and carries the **full bodies**; the rows are readable **pre-drain** through the new per-session read + verb (`rows_for_session` / `session held`, §4.5). rev.13 withdrew the claim that they outlive the drain |
 | **a sender must be able to replace its own un-drained push** (owner, 2026-10-05) | stable **`key`** + supersede-while-un-drained; the `queued`/`superseded` verdict (§4.6) |
-| **the issue goes to `opencrabs/opencrabs`** (owner, 2026-10-05) | §8 boundary + header updated |
+| **the issue goes to `opencrabs/opencrabs`** (owner, 2026-10-05) | §8 boundary + header updated — **superseded 2026-10-09**: `leshchenko1979/opencrabs` takes every binary issue |
 | **the AFK section vanished** (owner, 2026-10-05) | **restored** to first-class standing — the six rules and the owner-scoped clock (§11) |
 | the sweep has **no payload to re-emit** | new optional **`await_prompt`** (the owner-facing text/card); cadence bounded, `last_nudge_at` dedup (§4.1, §5) |
 | quiet hours were an **assumption** where the substrate has a **measurement** | the nudge consumes an **owner-scoped** activity clock — `note_owner_activity()`; polarity is the **inverse** of the reclaim; the reclaim's starvation cap must **not** force through this gate (§11.1) |
