@@ -8,6 +8,7 @@ verdict from the whole fleet.
 # --- imports ---------------------------------------------------------------
 from __future__ import annotations
 import importlib.util
+import inspect
 import io
 import json
 import os
@@ -16,6 +17,7 @@ import shutil
 import subprocess
 import tempfile
 import datetime as dt
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 import pytest
@@ -52,6 +54,48 @@ from patrol_fixtures import (  # noqa: F401
 
 
 # --- this leg's own helpers -------------------------------------------------
+
+class _SetattrPatch:
+    """A minimal stand-in for pytest's `monkeypatch`, so `main()` can drive every arm.
+
+    This gate ships in BOTH forms: pytest (which injects the real fixture) and
+    `python3 tests/test_patrol_round_receipts.py` (which supplies this one). One arm, one
+    body -- a second copy of the assertions for the script form would be a fixture that
+    drifts, which is the shape `tests/test_audit_scope.py` already settled on.
+
+    #666: without it, an arm declared `(monkeypatch)` raised `TypeError` under `main()`,
+    which caught only `skip` and `AssertionError`, so ONE arm crashed the gate and every
+    arm after it in sorted order was never evaluated -- a gate that dies part-way reports
+    nothing about the arms it never reached.
+    """
+
+    _MISSING = object()
+
+    def __init__(self) -> None:
+        self._saved: list[tuple[object, str, object]] = []
+
+    def setattr(self, target: object, name: str, value: object) -> None:
+        previous = getattr(target, name, self._MISSING)
+        self._saved.append((target, name, previous))
+        setattr(target, name, value)
+
+    def undo(self) -> None:
+        while self._saved:
+            target, name, previous = self._saved.pop()
+            if previous is self._MISSING:
+                delattr(target, name)
+            else:
+                setattr(target, name, previous)
+
+@contextmanager
+def _script_patch():
+    """Yield a `monkeypatch` stand-in for the script form, restoring every attribute after."""
+    patch = _SetattrPatch()
+    try:
+        yield patch
+    finally:
+        patch.undo()
+
 def _499_row(**kw) -> dict:
     """The duty row whose newest fire is the LAST of the four — the round is their date."""
     kw.setdefault("last_run_at", _plus(_DUTY_BOUND, _499_FIRE_HOURS[-1]))
@@ -346,12 +390,20 @@ def test_622_a_A_SUPPRESSED_FIRE_OWES_NO_RECEIPT_and_is_printed_as_excused() -> 
         assert _plus(_DUTY_BOUND, hour) in excused, (
             f"the excuse must name the fire it excuses ({hour}): {leg['excused']}")
 
-def test_622_b_MUTANT_a_suppression_blind_reader_restores_the_false_RED(monkeypatch) -> None:
+def test_622_b_MUTANT_a_suppression_blind_reader_restores_the_false_RED(monkeypatch=None) -> None:
     """#622 arm (b): the mutant that discards the suppression flag must reproduce the bug.
 
     Without this arm the green above is unattributable — any change that emptied the fire
     population would read clean for the same reason the fix does.
+
+    The fixture is OPTIONAL on purpose (#666): pytest injects the real one, and `main()`
+    -- which calls every arm with no arguments -- supplies `_script_patch()` instead. An
+    arm that needs a fixture `main()` cannot supply does not get skipped, it crashes the
+    gate and takes every later arm down with it.
     """
+    if monkeypatch is None:
+        with _script_patch() as scripted:
+            return test_622_b_MUTANT_a_suppression_blind_reader_restores_the_false_RED(scripted)
     hours = _499_FIRE_HOURS[:3]
     fires = _622_fires(hours, suppressed_hours=hours[:2])
     real = RUNNER.round_fire_records
@@ -1056,6 +1108,34 @@ def test_the_census_EXCLUDES_a_declared_standing_item_and_NEVER_a_REFUSED_one() 
     assert "OWED #581" in out, out
     assert "does not exist" in out, out
 
+def test_no_arm_requires_a_fixture_the_script_form_cannot_supply() -> None:
+    """#666's durable guard: every arm must be callable with no arguments.
+
+    The damage was never the `TypeError` itself but its CONSEQUENCE — `main()` stopped at
+    the first arm it could not call, so every arm after it in sorted order was silently
+    unevaluated while the gate printed a traceback instead of a verdict. A SIGNATURE
+    check, never a source grep: a new pytest-style arm fails here BY NAME, and the check
+    cannot grade its own homework the way a literal-matching arm would.
+    """
+    stranded = []
+    for name, value in sorted(globals().items()):
+        if not name.startswith("test_") or not inspect.isfunction(value):
+            continue
+        required = [
+            parameter.name
+            for parameter in inspect.signature(value).parameters.values()
+            if parameter.default is inspect.Parameter.empty
+            and parameter.kind in (parameter.POSITIONAL_ONLY,
+                                   parameter.POSITIONAL_OR_KEYWORD,
+                                   parameter.KEYWORD_ONLY)
+        ]
+        if required:
+            stranded.append(f"{name} requires {required}")
+    assert not stranded, (
+        "arm(s) cannot be driven by main(), so every arm after them in sorted order is "
+        "unevaluated: " + "; ".join(stranded)
+    )
+
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())
               if name.startswith("test_") and callable(value)]
@@ -1068,6 +1148,12 @@ def main() -> int:
         except AssertionError as exc:
             failures.append(f"{check.__name__}: {exc}")
             print(f"  FAIL  {check.__name__} — {exc}")
+        except Exception as exc:  # noqa: BLE001 — an arm that raises has proved nothing
+            # #666: a raising arm must cost ITS OWN verdict, never the rest of the suite.
+            # Before this clause a `TypeError` escaped and the gate exited on a traceback
+            # with every later arm unevaluated -- a crash wearing the shape of a failure.
+            failures.append(f"{check.__name__}: {type(exc).__name__}: {exc}")
+            print(f"  FAIL  {check.__name__} — {type(exc).__name__}: {exc}")
         else:
             print(f"  PASS  {check.__name__}")
     print()
