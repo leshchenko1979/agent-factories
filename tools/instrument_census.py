@@ -52,6 +52,7 @@ import datetime as dt
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -351,9 +352,101 @@ def render(c: dict) -> str:
     return "\n".join(lines)
 
 
+# ONE `run` row per census run, so a run is addressable by its INSTANT and not only by the day
+# it landed on (#660). The artifact path carries the DATE, so four runs in one morning overwrite
+# one file and leave no trace of the three that were replaced; a row carries the instant, the
+# declared-set size and the per-member split, and the ledger is append-only.
+# THE ACTOR IS DERIVED, NEVER DECLARED. `tools/ledger.py` maps the writing session to its lane
+# (`resolve_actor`), and a declared actor is accepted only on a FIXTURE — so a constant here
+# would make the row unwritable from every lane except the one it names, and would record a lane
+# that may not be the one that ran. Measured 2026-11-20: a hardcoded `surveys` was REFUSED with
+# "actor 'surveys' does not match the role this session resolves to ('worker')". A live run
+# therefore omits `--actor`; `--row-actor` exists for a synthetic tree, which has no lane
+# fragments to bind to.
+# Bounded retries, not one attempt: the ledger is single-writer under `flock`, so a row can lose
+# a short race to a peer lane and win the next one. Past the last timeout the run reports the
+# loss BY NAME rather than silently recording nothing.
+CENSUS_ROW_TIMEOUTS = (10.0, 20.0, 30.0)
+CENSUS_ROW_REF = "board:660"
+
+def _census_row_detail(c: dict, instant: str) -> str:
+    """The row's detail: the instant, the declared-set size, and the per-member split.
+
+    The split is spelled `<member>=<held>/<of>/<status>` because those are the three facts a
+    later reader needs to tell a member that LOST a path from one that never held it, and a
+    bare total cannot separate them.
+    """
+    rows = c.get("rows") or []
+    split = "; ".join(
+        f"{r.get('member') or '?'}={r.get('held')}/{r.get('of')}/{r.get('status')}"
+        for r in rows)
+    parts = [f"instant={instant}",
+             f"declared_set={len(c.get('paths') or [])} path(s)",
+             f"members={len(rows)}"]
+    if split:
+        parts.append(f"split={split}")
+    return "; ".join(parts)
+
+def _census_row_cmd(writer: Path, subject: str, detail: str,
+                    actor: str | None) -> list[str]:
+    """The append argv. `--actor` appears ONLY when a fixture declared one.
+
+    A live run omits it, which is what makes the row record the lane that actually ran the
+    census instead of a constant that can be false.
+    """
+    cmd = [sys.executable, str(writer), "append", "--event", "run",
+           "--subject", subject, "--detail", detail, "--ref", CENSUS_ROW_REF]
+    if actor:
+        cmd += ["--actor", actor]
+    return cmd
+
+def _record_census_run_row(c: dict, instant: str, actor: str | None = None) -> None:
+    """Append the run row, or say why not — never a silent no-op.
+
+    A census run is a duty, and a duty that leaves no row is invisible to every patrol that
+    reads the ledger. So this either writes the row or prints the reason it could not, and in
+    neither case does it change the census's own verdict: a ledger that cannot be written is
+    not a census that failed.
+    """
+    writer = REPO / "tools" / "ledger.py"
+    if not writer.is_file():
+        print(f"instrument census: run row SKIPPED — this tree carries no "
+              f"{writer.relative_to(REPO)}, so it is not a factory and has no ledger to record into")
+        return
+    if not os.environ.get("OC_LEDGER_PATH") and not (REPO / "evidence" / "ledger.jsonl").is_file():
+        # The guard that keeps a test tree off the live ledger. `tools/ledger.py` resolves its
+        # store from OC_LEDGER_PATH or this repo, so a tree carrying neither must record nothing
+        # rather than reach for a store outside itself.
+        print("instrument census: run row SKIPPED — no evidence/ledger.jsonl in this tree and no"
+              " OC_LEDGER_PATH; a tree with no ledger of its own records nothing rather than"
+              " reaching for one")
+        return
+    subject = f"instrument-census-{instant}"
+    detail = _census_row_detail(c, instant)
+    cmd = _census_row_cmd(writer, subject, detail, actor)
+    last = ""
+    for timeout in CENSUS_ROW_TIMEOUTS:
+        try:
+            proc = subprocess.run(cmd, cwd=str(REPO), capture_output=True, text=True,
+                                  timeout=timeout)
+        except subprocess.TimeoutExpired:
+            last = f"timed out after {timeout:.0f}s"
+            continue
+        if proc.returncode == 0:
+            print(f"instrument census: run row recorded — {subject}")
+            return
+        lines = (proc.stderr or proc.stdout or "").strip().splitlines()
+        last = lines[-1] if lines else f"exit {proc.returncode}"
+    print(f"instrument census: run row NOT recorded after {len(CENSUS_ROW_TIMEOUTS)} attempt(s)"
+          f" — {last}")
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("instrument", help="instrument slug, e.g. review-rotation")
+    ap.add_argument("--row-actor", default=None,
+                    help="actor for the run row; OMITTED = derived from the writing session, "
+                         "which is what a live run wants. A synthetic tree has no lane fragments "
+                         "to bind to, so a fixture declares its own")
     ap.add_argument("--out", default="", help="artifact path (default: dated, under evidence/)")
     ap.add_argument("--stdout", action="store_true", help="also print the artifact")
     args = ap.parse_args(argv)
@@ -376,6 +469,9 @@ def main(argv: list[str] | None = None) -> int:
                  if body_out.is_relative_to(REPO) else body_out)
         print(f"instrument census: REFUSED — {c['problem']}")
         print(f"instrument census: refusal recorded at {shown} at {instant}")
+        # A refusal is a run too: it consumed the duty, and a reader asking "did the census run
+        # that morning" gets no answer from an artifact that four runs overwrote.
+        _record_census_run_row(c, instant, args.row_actor)
         if args.stdout:
             print(body_out.read_text(encoding="utf-8"))
         return 1
@@ -392,6 +488,7 @@ def main(argv: list[str] | None = None) -> int:
     out.write_text(body, encoding="utf-8")
     print(f"instrument census: published {out.relative_to(REPO) if out.is_relative_to(REPO) else out}"
           f" at {c['instant']} — {len(c['rows'])} member(s), declared set {len(c['paths'])}")
+    _record_census_run_row(c, c["instant"], args.row_actor)
     if args.stdout:
         print(body)
     return 0

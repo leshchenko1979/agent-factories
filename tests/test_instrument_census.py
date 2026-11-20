@@ -30,7 +30,18 @@ WHAT IT PINS, and why each arm is here:
      would make a short list and a wrong list indistinguishable;
   9. the `held` figures are published WITH THEIR AXIS (template-instruments.md §7.5): `held`
      reads a WORKING TREE, so a declared path may be present and untracked, and the figure may
-     never be quoted as a fact about the member's repository.
+     never be quoted as a fact about the member's repository;
+ 10. ONE `run` row per run, subject `instrument-census-<instant>`, carrying the instant, the
+     declared-set size and the per-member split (#660). The artifact path carries the DATE, so
+     four runs in one morning overwrite one file and leave no trace of the three that were
+     replaced: the row is what makes a reading addressable by its INSTANT (HQ n=5197 — an
+     instant must RESOLVE on a surface a reader can open, and per-instant artifact paths were
+     declined). A second run the same day is a second ROW, not a second artifact;
+ 11. a REFUSAL is a run too — it consumed the duty, and a refusal that rows nothing leaves a
+     refused census indistinguishable from no census at all;
+ 12. a tree that is not a factory records NOTHING and says why: the duty may never be
+     discharged by a silent no-op, and a tree records into a ledger INSIDE itself, never one
+     outside it (asserted by the HERMETICITY arm over the LIVE ledger).
 
 THE PREDICATE IS REUSED, NOT RESTATED. These arms run against the REPO'S OWN
 `tools/registry.py`, so the refusal wording asserted below is the registry's real one: if the
@@ -43,6 +54,7 @@ Exit: 0 all arms hold; 1 a failure, printed.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -99,6 +111,73 @@ def run(root: Path, out: Path) -> tuple[int, str]:
     )
     return proc.returncode, proc.stdout + proc.stderr
 
+
+# The ledger writer and its import chain, copied WHOLE so the row arms exercise the real
+# `tools/ledger.py` rather than a stub of it. A stubbed writer would assert the shape this gate
+# already believes; the real one is the only thing that can prove the row is ADMISSIBLE — that
+# `run` accepts a declared fixture actor and `board` is a declared ref kind in this factory.
+LEDGER_CHAIN = (
+    "tools/ledger.py",
+    "tools/ledger_declaration.py",
+    "tools/field_predicate.py",
+    "tools/reconstruction.py",
+    "tools/registry.py",
+    "tools/actors.txt",
+    "docs/ledger-refs-kinds.json",
+)
+
+
+def build_ledger_tree(root: Path, fragments: dict[str, dict],
+                      held: dict[str, list[str]]) -> Path:
+    """A census tree that is ALSO a factory: the ledger writer, its chain, and an empty store.
+
+    The store is the tree's OWN `evidence/ledger.jsonl`, and the run below names it through
+    `OC_LEDGER_PATH` — the fixture mode `tools/ledger.py` documents. That is what keeps a
+    synthetic run's row out of the live ledger: a tree records into a ledger INSIDE itself, and
+    the HERMETICITY arm at the foot of this file asserts the live store gained nothing.
+    """
+    build_tree(root, fragments, held)
+    for rel in LEDGER_CHAIN:
+        dst = root / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text((REPO / rel).read_text(encoding="utf-8"), encoding="utf-8")
+    (root / "evidence").mkdir(parents=True, exist_ok=True)
+    (root / "evidence" / "ledger.jsonl").write_text("", encoding="utf-8")
+    return root
+
+
+# The actor the FIXTURE declares. A synthetic tree carries no lane fragments, so the ledger
+# cannot derive a role there; a declared actor is the fixture's own declaration and is lawful
+# only because `OC_LEDGER_PATH` marks the target as a fixture. A LIVE run declares none.
+FIXTURE_ROW_ACTOR = "worker"
+
+def run_with_ledger(root: Path, out: Path) -> tuple[int, str]:
+    """`run`, with the tree's own ledger named explicitly (fixture mode)."""
+    env = dict(os.environ, OC_LEDGER_PATH=str(root / "evidence" / "ledger.jsonl"))
+    proc = subprocess.run(
+        [sys.executable, "tools/instrument_census.py", "review-rotation",
+         "--row-actor", FIXTURE_ROW_ACTOR,
+         "--out", str(out), "--stdout"],
+        cwd=root, capture_output=True, text=True, env=env,
+    )
+    return proc.returncode, proc.stdout + proc.stderr
+
+
+def ledger_rows(root: Path) -> list[dict]:
+    store = root / "evidence" / "ledger.jsonl"
+    if not store.is_file():
+        return []
+    return [json.loads(line) for line in store.read_text(encoding="utf-8").splitlines()
+            if line.strip()]
+
+
+def artifact_instant(body: str) -> str:
+    """The instant the artifact itself stamps, read back from the artifact."""
+    for line in body.splitlines():
+        if "**Instant:**" in line:
+            return line.split("**Instant:**", 1)[1].strip().rstrip(".")
+    return ""
+
 def row(body: str, member: str) -> str:
     """The member's row, so an arm asserts on ITS cell rather than on the whole document."""
     for line in body.splitlines():
@@ -108,6 +187,12 @@ def row(body: str, member: str) -> str:
 
 def main() -> int:
     live_before = sorted(p.name for p in (REPO / "evidence").glob("instrument-census-*"))
+    # The LIVE ledger's size, so the row arms below cannot pass by writing into the store the
+    # patrol reads. A fixture that reached the live ledger would be the same defect one surface
+    # over: a gate whose verdict depends on — and now MUTATES — the state it is meant to observe.
+    live_ledger = REPO / "evidence" / "ledger.jsonl"
+    live_ledger_before = len(live_ledger.read_text(encoding="utf-8").splitlines()) \
+        if live_ledger.is_file() else 0
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -223,9 +308,101 @@ def main() -> int:
         check("a refusal with no --out still lands under evidence/ (template-instruments.md §1.5)",
               proc.returncode == 1 and len(default) == 1, f"rc={proc.returncode}, {default}")
 
+        # ARM 9 — #660: ONE `run` row per run, addressable by its INSTANT. The artifact path
+        # carries the DATE, so four runs in one morning overwrite one file and leave no trace of
+        # the three that were replaced (measured 2026-11-20: 08:26:52Z / 08:30:06Z / 08:31:39Z /
+        # 09:31:01Z landed on one path, and only the last survived in the tree). HQ ruled
+        # (n=5197) that an instant must RESOLVE on a surface a reader can open — the commit that
+        # carried the bytes, or an append-only row — and declined per-instant artifact paths. So
+        # the row is what makes a reading citable, and its subject must name the SAME instant the
+        # artifact stamps, or the two would be two readings.
+        root = build_ledger_tree(tmp / "i",
+                                 {"m1": {"instruments": {"review-rotation":
+                                                         {"state": "adopted", "green": True}}}},
+                                 {"m1": ALL_PATHS})
+        rc, out = run_with_ledger(root, tmp / "i.md")
+        rows_i = ledger_rows(root)
+        body_i = (tmp / "i.md").read_text(encoding="utf-8")
+        instant_i = artifact_instant(body_i)
+        check("a census run appends EXACTLY ONE `run` row",
+              rc == 0 and len(rows_i) == 1, f"rc={rc}, rows={len(rows_i)}, {out.strip()[-120:]}")
+        check("  ... whose subject names the INSTANT the artifact itself stamps",
+              bool(instant_i) and len(rows_i) == 1
+              and rows_i[0].get("subject") == f"instrument-census-{instant_i}",
+              f"artifact instant={instant_i!r}, "
+              f"subject={rows_i[0].get('subject') if rows_i else None!r}")
+        detail_i = rows_i[0].get("detail", "") if rows_i else ""
+        check("  ... carrying the instant, the declared-set size and the per-member split",
+              f"instant={instant_i}" in detail_i and "declared_set=2 path(s)" in detail_i
+              and "members=1" in detail_i and "split=m1=2/2/ADOPTED" in detail_i, detail_i)
+        check("  ... written by the actor the FIXTURE declared, and citing the board item",
+              len(rows_i) == 1 and rows_i[0].get("actor") == FIXTURE_ROW_ACTOR
+              and rows_i[0].get("event") == "run"
+              and any("660" in str(r.get("board", "")) for r in (rows_i[0].get("refs") or [])),
+              f"actor={rows_i[0].get('actor') if rows_i else None}, "
+              f"refs={rows_i[0].get('refs') if rows_i else None}")
+
+        # ARM 9c — THE LIVE SHAPE. No subprocess arm can reach the live ledger, so the argv a
+        # live run builds is pinned here: `--actor` must be ABSENT, because a declared actor is
+        # refused on the live path (identity is derived from the writing session). This is the
+        # regression that started it — a hardcoded constant made the row unwritable from every
+        # lane but the one it named.
+        sys.path.insert(0, str(REPO / "tools"))
+        import instrument_census as _ic
+        live_cmd = _ic._census_row_cmd(Path("ledger.py"), "s", "d", None)
+        declared_cmd = _ic._census_row_cmd(Path("ledger.py"), "s", "d", "worker")
+        check("a LIVE run declares NO actor, so the ledger derives the lane that ran it",
+              "--actor" not in live_cmd,
+              f"argv={live_cmd}")
+        check("  ... while a FIXTURE may declare one, and only then does `--actor` appear",
+              declared_cmd[declared_cmd.index("--actor") + 1] == "worker",
+              f"argv={declared_cmd}")
+
+        # ARM 9b — a SECOND run on the same day is a second row. This is the whole point: the
+        # artifact path is overwritten, so a day that ran twice must still be readable as two
+        # runs. Two rows, each addressable, on one path.
+        rc2, _ = run_with_ledger(root, tmp / "i2.md")
+        rows_i2 = ledger_rows(root)
+        check("a second run on the SAME day appends a second row, not a second artifact",
+              rc2 == 0 and len(rows_i2) == 2
+              and all(str(r.get("subject", "")).startswith("instrument-census-")
+                      for r in rows_i2),
+              f"rc={rc2}, rows={len(rows_i2)}")
+
+        # ARM 10 — a REFUSAL is a run too. It consumed the duty and it is the reading a later
+        # reader most needs to find ("did the census run that morning, and what did it say"), so
+        # a refusal that rows nothing makes a refused census indistinguishable from no census.
+        root = build_ledger_tree(tmp / "j", {"m1": {}}, {"m1": ALL_PATHS})
+        (root / "docs" / "instruments" / "review-rotation.md").write_text(
+            "# no table here\n", encoding="utf-8")
+        rc, out = run_with_ledger(root, tmp / "j.md")
+        rows_j = ledger_rows(root)
+        check("a REFUSED census still appends its run row",
+              rc == 1 and len(rows_j) == 1, f"rc={rc}, rows={len(rows_j)}")
+        check("  ... and the row reports the set it REFUSED, not a clean one",
+              len(rows_j) == 1 and "declared_set=0 path(s)" in rows_j[0].get("detail", ""),
+              rows_j[0].get("detail", "") if rows_j else "")
+
+        # ARM 11 — a tree that is not a factory records NOTHING and SAYS SO. The duty may not be
+        # discharged by a silent no-op: a run that cannot record has to say why, or the next
+        # reader meets an empty ledger and cannot tell it from a lane that skipped the duty.
+        root = build_tree(tmp / "k",
+                          {"m1": {"instruments": {"review-rotation":
+                                                  {"state": "adopted", "green": True}}}},
+                          {"m1": ALL_PATHS})
+        rc, out = run(root, tmp / "k.md")
+        check("a tree with no ledger writer records nothing and says WHY",
+              rc == 0 and "run row SKIPPED" in out and not (root / "evidence").exists(),
+              f"rc={rc}, said_skipped={'run row SKIPPED' in out}")
+
     live_after = sorted(p.name for p in (REPO / "evidence").glob("instrument-census-*"))
     check("HERMETICITY: the live evidence directory gained nothing",
           live_before == live_after, f"{len(live_before)} -> {len(live_after)}")
+    live_ledger_after = len(live_ledger.read_text(encoding="utf-8").splitlines()) \
+        if live_ledger.is_file() else 0
+    check("HERMETICITY: the LIVE ledger gained no row — every row above is a tree's own",
+          live_ledger_before == live_ledger_after,
+          f"{live_ledger_before} -> {live_ledger_after}")
 
     print()
     if _failures:
