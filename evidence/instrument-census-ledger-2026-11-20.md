@@ -1,13 +1,13 @@
 # Instrument adoption census — one predicate over the declared population
 
-Read at **2026-11-20T08:30:06Z** by `tools/instrument_census.py`.
+Read at **2026-11-20T08:31:39Z** by `tools/instrument_census.py`.
 
 ## The predicate, stated before the figures
 
 **Predicate:** for each member, `os.path.isfile(member.repo / p)` for every path `p` the
-law doc's declared-set table declares — **15 path(s)** — plus the reload link's own state.
+law doc's declared-set table declares — **21 path(s)** — plus the reload link's own state.
 **Scope:** the member fragments in `registry/factories/*.json`.
-**Instant:** 2026-11-20T08:30:06Z.
+**Instant:** 2026-11-20T08:31:39Z.
 
 **WHAT THIS DOES NOT MEASURE.** It is ONE predicate on file PRESENCE. A present file may
 differ byte-wise from the manifest — that is `kit_pin`'s question, not this one —
@@ -38,18 +38,24 @@ guarded: zero parsed paths refuses rather than censusing an empty set):
 12. `tests/test_ledger_close_preflight.py`
 13. `tests/test_ledger_commit_cites_no_rows.py`
 14. `tests/test_ledger_index.py`
-15. `docs/instruments/ledger.md`
+15. `tests/test_declared_event_population.py`
+16. `tests/test_ledger_citation_declared.py`
+17. `tests/test_ledger_claim_preflight.py`
+18. `tests/test_ledger_factory_scope.py`
+19. `tests/test_ledger_header_closure.py`
+20. `tests/test_ledger_refs_preflight.py`
+21. `docs/instruments/ledger.md`
 
 ## The readings
 
 | member | held | reload link | fragment declares | status |
 |---|---|---|---|---|
-| `ai-antispam` | 15/15 | absent | partial · green=false | **DECLARED-PARTIAL** |
-| `inferhub-watch` | 9/15 | absent | partial · green=true | **DECLARED-PARTIAL** |
-| `infra-factory` | 6/15 | absent | deferred · green=true | **DECLARED-DEFERRED** |
-| `meta-factory` | 15/15 | resolves | adopted · green=true | **SOURCE** |
-| `miidas` | 6/15 | absent | deferred · green=true | **DECLARED-DEFERRED** |
-| `opencrabs-dev` | 0/15 | absent | not-applicable · green=false | **DECLARED-NOT-APPLICABLE** |
+| `ai-antispam` | 15/21 | absent | partial · green=false | **DECLARED-PARTIAL** |
+| `inferhub-watch` | 9/21 | absent | partial · green=true | **DECLARED-PARTIAL** |
+| `infra-factory` | 6/21 | absent | deferred · green=true | **DECLARED-DEFERRED** |
+| `meta-factory` | 21/21 | resolves | adopted · green=true | **SOURCE** |
+| `miidas` | 6/21 | absent | deferred · green=true | **DECLARED-DEFERRED** |
+| `opencrabs-dev` | 0/21 | absent | not-applicable · green=false | **DECLARED-NOT-APPLICABLE** |
 
 ## The two legs, and why a copy alone is not adoption
 

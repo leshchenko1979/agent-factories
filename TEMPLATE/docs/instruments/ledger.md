@@ -63,11 +63,17 @@ the pair is what a member adopts; the manifest hashes the `TEMPLATE/` half (fram
 | 12 | `tests/test_ledger_close_preflight.py` ↔ `TEMPLATE/tests/test_ledger_close_preflight.py` | `standalone` | **the gate** — a close's preconditions at the write path |
 | 13 | `tests/test_ledger_commit_cites_no_rows.py` ↔ `TEMPLATE/tests/test_ledger_commit_cites_no_rows.py` | `standalone` | **the gate** — a commit names no row number |
 | 14 | `tests/test_ledger_index.py` ↔ `TEMPLATE/tests/test_ledger_index.py` | `standalone` | **the gate** — a rebuild AGREES WITH A PLAIN SCAN |
-| 15 | `docs/instruments/ledger.md` ↔ `TEMPLATE/docs/instruments/ledger.md` | `standalone` | this file |
+| 15 | `tests/test_declared_event_population.py` ↔ `TEMPLATE/tests/test_declared_event_population.py` | `standalone` | **the gate** — a DECLARED event authorizes the WHOLE claim population, not a slice of it |
+| 16 | `tests/test_ledger_citation_declared.py` ↔ `TEMPLATE/tests/test_ledger_citation_declared.py` | `standalone` | **the gate** — a `§N` written into a ledger row NAMES the document it cites |
+| 17 | `tests/test_ledger_claim_preflight.py` ↔ `TEMPLATE/tests/test_ledger_claim_preflight.py` | `standalone` | **the gate** — a `claim` whose subject has no `intake` ANYWHERE is a defect, at the moment it is made |
+| 18 | `tests/test_ledger_factory_scope.py` ↔ `TEMPLATE/tests/test_ledger_factory_scope.py` | `standalone` | **the gate** — the ledger's lane resolver is SCOPED to this factory's own fragment |
+| 19 | `tests/test_ledger_header_closure.py` ↔ `TEMPLATE/tests/test_ledger_header_closure.py` | `standalone` | **the gate** — the ledger header's declared closure equals its ACTUAL intra-repo imports |
+| 20 | `tests/test_ledger_refs_preflight.py` ↔ `TEMPLATE/tests/test_ledger_refs_preflight.py` | `standalone` | **the gate** — an undeclared `--ref` KIND is refused at the write path, not a step later |
+| 21 | `docs/instruments/ledger.md` ↔ `TEMPLATE/docs/instruments/ledger.md` | `standalone` | this file |
 
 **This is the ONE table the census parses** — `tools/instrument_census.py::declared_paths` reads
 the numbered rows rather than keeping a second list that would drift, so a shipped path added here
-is measured there with no second edit. **A member is HELD only when all fifteen are present.**
+is measured there with no second edit. **A member is HELD only when all twenty-one are present.**
 
 **Rows 3–7 are the closure, and they are declared here because the census's question is *"is this
 instrument complete here?"* — a closure left out of the measured set answers it wrongly.** Measured
