@@ -225,6 +225,13 @@
       "tests/gate_registry.py",
       "tools/gate_budget_rederive.py"
     ],
+    "tests/test_gate_child_budget.py": [
+      "TEMPLATE/registry/gates.example.json",
+      "TEMPLATE/tests/**",
+      "registry/gates.example.json",
+      "registry/gates.json",
+      "tests/**"
+    ],
     "tests/test_gate_direct_invocation.py": [
       "TEMPLATE/tests/test_*.py",
       "TEMPLATE/tests/test_gate_direct_invocation.py",
