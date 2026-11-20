@@ -258,6 +258,15 @@ CLOSURE_MODULES = frozenset({
                                              # ports a leg without it collects zero tests
                                              # and reports a green run over an empty
                                              # population
+    "TEMPLATE/tests/child_budget.py",        # #663: the child-timeout arithmetic, imported
+                                             # by tests/test_gate_child_budget.py:35 and
+                                             # tests/test_fixture_lifetime.py:60 -- both
+                                             # call declared_wall()/child_budget() from it.
+                                             # No __main__, no argparse, no main(), so the
+                                             # residual classified it `standalone` and the
+                                             # gate red UNRUNNABLE: a file that nothing can
+                                             # run. The class was simply never stated; the
+                                             # residual is deliberate and stays as it is
 })
 
 # The seeds. Declared per path rather than matched on suffix, so that a file named
