@@ -7,6 +7,7 @@ verdict from the whole fleet.
 
 # --- imports ---------------------------------------------------------------
 from __future__ import annotations
+import functools
 import importlib.util
 import io
 import json
@@ -628,6 +629,293 @@ def test_the_fixture_never_opens_the_live_activity_store() -> None:
         f"{completions.call_args_list}"
     )
 
+
+# --- #646: the activity read is bounded by the leg's own window ----------------
+def _activity_fixture_db(tmp_path, rows, *, with_created_at_index=False):
+    """One home carrying a `tool_executions` table with `(session_id, created_at)` rows.
+
+    `created_at` is DECLARED without an affinity and individual rows may be INTEGER epochs or
+    TEXT, because this reader is handed other homes' databases too (#646).
+
+    `with_created_at_index` builds the index the DAEMON's schema carries on `ops`/`family`, so
+    the reader's `INDEXED BY idx_tool_executions_created_at` hint is exercised. A fixture that
+    only ever ran WITHOUT the index left that SQL clause unparsed -- measured: the hint read
+    `index by` instead of `indexed by`, which is a syntax error, and every fixture passed
+    because none of them created the index. The default is still no index, because a member
+    home may ship only the message-id and primary-key indexes and the reader must work there.
+    """
+    home = Path(tmp_path) / "probe-home"
+    home.mkdir(parents=True)
+    db = home / "opencrabs.db"
+    conn = sqlite3.connect(db)
+    conn.execute("create table tool_executions(session_id text, created_at)")
+    if with_created_at_index:
+        conn.execute(
+            "create index idx_tool_executions_created_at "
+            "on tool_executions(created_at)"
+        )
+    conn.executemany("insert into tool_executions values(?, ?)", list(rows))
+    conn.commit()
+    conn.close()
+    return db
+
+def _with_tmpdir(check):
+    """Supply a scratch directory to a probe under BOTH pytest and this gate's script main().
+
+    `main()` calls every check with NO arguments, so a probe declaring `tmp_path` passes under
+    pytest (which injects the fixture) and raises `TypeError` in script mode -- measured: the
+    gate died on its first such probe, and the failure looked like a broken gate rather than a
+    probe that only ran under one of the two runners. The directory is created per call and
+    removed afterwards, so the two modes see the same isolated tree.
+    """
+
+    @functools.wraps(check)
+    def wrapper(*_injected, **_kw_injected):
+        # `*_injected` absorbs the `tmp_path` pytest injects (functools.wraps exposes the
+        # wrapped signature, so pytest sees a one-argument probe). The probe builds its own
+        # isolated directory either way, so the two runners see the same tree.
+        with tempfile.TemporaryDirectory() as tmp:
+            return check(Path(tmp))
+
+    return wrapper
+
+@_with_tmpdir
+def test_the_bounded_read_works_WITH_and_WITHOUT_the_created_at_index(tmp_path) -> None:
+    """#646: the `INDEXED BY` hint is applied when the index exists and omitted when it does not.
+
+    Two homes, identical rows, one carrying `idx_tool_executions_created_at` and one not. BOTH
+    must return the same answer. The index-present arm is not decoration: without it the hint's
+    own SQL is never parsed, and a typo in the hint (`index by` for `indexed by`) is a syntax
+    error that every index-free fixture passes straight over -- measured on the shipped tree.
+    """
+    now = _NOW
+    now_e = int(now.timestamp())
+    rows = [
+        ("sess-in", int(now_e - 3600)),
+        ("sess-out", int(now_e - 5 * 86400)),
+        ("sess-both", int(now_e - 9 * 86400)),
+        ("sess-both", int(now_e - 60)),
+    ]
+    plain = _activity_fixture_db(tmp_path / "plain", rows)
+    indexed = _activity_fixture_db(
+        tmp_path / "indexed", rows, with_created_at_index=True
+    )
+
+    # The index really is there (and really is absent in the control), so the two arms differ.
+    conn = sqlite3.connect(indexed)
+    names = {r[0] for r in conn.execute(
+        "select name from sqlite_master where type='index'"
+    )}
+    conn.close()
+    assert "idx_tool_executions_created_at" in names, names
+
+    without = _activity_store_from_db(plain, now=now)
+    with_idx = _activity_store_from_db(indexed, now=now)
+    assert with_idx["epochs"] == without["epochs"], (with_idx["epochs"], without["epochs"])
+    assert with_idx["outside_window"] == without["outside_window"], (
+        with_idx["outside_window"], without["outside_window"]
+    )
+    assert without["outside_window"] == ["sess-out"], without["outside_window"]
+    assert set(without["epochs"]) == {"sess-in", "sess-both"}, without["epochs"]
+
+def _activity_store_from_db(db, *, now, window_days=1.0):
+    """Run the REAL `box_lane_activity` over one fixture db, window and all (#646).
+
+    `load_module` is patched ONLY for the registry lookup; every other name -- notably the
+    boundary reader that `activity_epoch` reaches for a TEXT `created_at` -- is delegated to
+    the real loader. So the reader under test is the shipped one, and only its fleet
+    resolution is stubbed.
+    """
+    registry = mock.Mock()
+    registry.opencrabs_home_dbs.return_value = ([Path(db)], [])
+    real_load = RUNNER.load_module
+
+    def _load(name, path):
+        return registry if name == "oc_registry" else real_load(name, path)
+
+    with mock.patch.object(RUNNER, "load_module", side_effect=_load):
+        return RUNNER.box_lane_activity(now=now, window_days=window_days)
+
+@_with_tmpdir
+def test_the_bounded_read_returns_the_SAME_in_window_answer(tmp_path) -> None:
+    """#646's load-bearing test: the window is IN the query and the answer does not change.
+
+    A real SQLite store with rows INSIDE and OUTSIDE a one-day window. For every session with
+    in-window activity the bounded read must return the SAME session set and the SAME newest
+    instant as the UNBOUNDED query filtered to that window -- the unbounded truth is computed
+    here from the file itself, never from the implementation under test.
+    """
+    now = _NOW
+    now_e = int(now.timestamp())
+
+    def ep(days):
+        return int(now_e - days * 86400)
+
+    db = _activity_fixture_db(tmp_path, [
+        ("sess-in", ep(0.2)), ("sess-in", ep(0.1)),
+        ("sess-out", ep(5)), ("sess-out", ep(9)),
+        ("sess-both", ep(3)), ("sess-both", ep(0.05)),
+    ])
+    store = _activity_store_from_db(db, now=now, window_days=1.0)
+    cutoff = store["cutoff_epoch"]
+    assert cutoff == int(now_e - 86400), (cutoff, now_e)
+    assert store["window_days"] == 1.0, store
+
+    conn = sqlite3.connect(db)
+    unbounded = dict(conn.execute(
+        "select session_id, max(created_at) from tool_executions "
+        "where session_id is not null and session_id != '' group by session_id"
+    ).fetchall())
+    conn.close()
+
+    # THE ANSWER: same session set, same newest instant, for every in-window session.
+    expected = {k: v for k, v in unbounded.items() if v >= cutoff}
+    assert store["epochs"] == expected, (store["epochs"], expected)
+    for session_ref, epoch in expected.items():
+        assert store["newest"][session_ref] == dt.datetime.fromtimestamp(
+            epoch, dt.timezone.utc
+        ).isoformat(), (session_ref, store["newest"][session_ref])
+
+    # A session whose only rows predate the cutoff is NOT dropped into silence: it is reported
+    # as outside_window and is absent from the in-window aggregate.
+    assert store["outside_window"] == ["sess-out"], store["outside_window"]
+    assert "sess-out" not in store["epochs"], store["epochs"]
+    # ... and a session with BOTH old and recent rows is in-window at its RECENT instant.
+    assert store["epochs"]["sess-both"] == ep(0.05), store["epochs"]
+
+@_with_tmpdir
+def test_the_window_parameter_is_the_one_the_query_applies(tmp_path) -> None:
+    """#646: the bound is the CALLER's window, parameterised -- not a hardcoded day.
+
+    A session five days old is `outside_window` at a one-day window and IN-window at a ten-day
+    one, over the same store. Only `window_days` changes. This shows the window reached the SQL
+    rather than being applied after an unbounded read.
+    """
+    now = _NOW
+    now_e = int(now.timestamp())
+    db = _activity_fixture_db(tmp_path, [
+        ("sess-five", int(now_e - 5 * 86400)),
+        ("sess-half", int(now_e - 0.5 * 86400)),
+    ])
+    tight = _activity_store_from_db(db, now=now, window_days=1.0)
+    assert tight["outside_window"] == ["sess-five"], tight
+    assert set(tight["epochs"]) == {"sess-half"}, tight["epochs"]
+
+    wide = _activity_store_from_db(db, now=now, window_days=10.0)
+    assert wide["outside_window"] == [], wide
+    assert set(wide["epochs"]) == {"sess-five", "sess-half"}, wide["epochs"]
+
+@_with_tmpdir
+def test_a_TEXT_created_at_is_KEPT_and_placed_not_dropped(tmp_path) -> None:
+    """#646: the cutoff applies only to INTEGER epochs; TEXT rows are retained and placed.
+
+    SQLite orders INTEGER below TEXT, so a bare `created_at >= ?` would let EVERY text row
+    through whatever its date, and a bare `<` would drop them all. The `typeof` clause keeps
+    them for `activity_epoch`, which parses the RFC3339 form -- so an OLD text row is READ and
+    placed at its true age, never reported as `outside_window` (that name is for INTEGER rows
+    the bound excluded) and never lost.
+    """
+    now = _NOW
+    now_e = int(now.timestamp())
+    old_text = (now - dt.timedelta(days=20)).isoformat()
+    new_text = (now - dt.timedelta(hours=1)).isoformat()
+    db = _activity_fixture_db(tmp_path, [
+        ("sess-text-old", old_text),
+        ("sess-text-new", new_text),
+        ("sess-int-in", int(now_e - 3600)),
+    ])
+    store = _activity_store_from_db(db, now=now, window_days=1.0)
+
+    # Both text sessions are READ (present in epochs) whatever their date ...
+    assert "sess-text-old" in store["epochs"], store
+    assert "sess-text-new" in store["epochs"], store
+    # ... and the old one is placed at its true age, so the leg reads it as out-of-window READ.
+    assert store["epochs"]["sess-text-old"] == int(
+        (now - dt.timedelta(days=20)).timestamp()
+    ), store["epochs"]
+    # TEXT rows are never in `outside_window` -- that set means "integer rows the bound cut".
+    assert store["outside_window"] == [], store["outside_window"]
+    assert store["unparsed"] == [], store["unparsed"]
+
+def test_a_session_outside_the_window_reads_OUTSIDE_WINDOW_not_NONE() -> None:
+    """#646: "measured before the window" must never collapse into "not measured".
+
+    The bounded read cannot return a session whose every row predates the cutoff, so the store
+    lists it in `outside_window`. The leg must read that as OUTSIDE_WINDOW -- READ and idle in
+    the window -- not as NONE. The CONTROL is a session in neither `epochs` nor
+    `outside_window`, which reads NONE. Both halves in one probe, so neither passes alone.
+    """
+    store = _activity_store()  # a READ source with no in-window work
+    store["outside_window"] = ["sess-old"]
+    census = _census_with(
+        _lane_slot("sess-old", ["#1"], lane="Old Lane"),
+        _lane_slot("sess-never", ["#2"], lane="Never Lane"),
+    )
+    leg = RUNNER.driverless_leg(
+        census,
+        goals=_goal_store(),
+        read_at="2026-10-21T12:00:00Z",
+        lane_names_fn=lambda: {},
+        lane_turn_open_fn=lambda: {},
+        lane_activity_fn=lambda: store,
+        lane_completion_fn=lambda: _completion_store(),
+        now=_NOW,
+    )
+    cov = leg["coverage"]
+    by_lane = {entry["lane"]: entry for entry in cov["lanes"]}
+    assert by_lane["Old Lane"]["activity_state"] == "outside_window", by_lane["Old Lane"]
+    assert by_lane["Never Lane"]["activity_state"] == "none", by_lane["Never Lane"]
+    # The VERDICT is unchanged by the bound (both DRIVERLESS), but the SENTENCES differ.
+    assert by_lane["Old Lane"]["reading"] == "DRIVERLESS", by_lane["Old Lane"]
+    assert by_lane["Never Lane"]["reading"] == "DRIVERLESS", by_lane["Never Lane"]
+    problems = {
+        p.split("LANE ", 1)[1].split(":", 1)[0]: p for p in leg["problems"]
+    }
+    assert "HAS measured tool executions" in problems["Old Lane"], problems["Old Lane"]
+    assert "NONE inside the" in problems["Old Lane"], problems["Old Lane"]
+    assert "no tool execution for that session" in problems["Never Lane"], problems["Never Lane"]
+    # ... and the outside-window population is printed on coverage, not hidden.
+    assert cov["activity_outside_window"] == ["sess-old"], cov
+    assert cov["activity_outside_window_count"] == 1, cov
+
+def test_the_leg_hands_its_WINDOW_to_a_reader_that_takes_one() -> None:
+    """#646: the SQL bound must match the window the leg reasons with.
+
+    A reader that DECLARES `window_days` receives the leg's own `threshold_days`; a
+    zero-argument probe lambda is called unchanged (backward compatibility). Asserted as a
+    pair, so neither half can pass alone.
+    """
+    seen = {}
+
+    def reader(*, window_days):
+        seen["window_days"] = window_days
+        return _activity_store()
+
+    RUNNER.driverless_leg(
+        _census_with(_lane_slot("sess-x", ["#1"], lane="L")),
+        goals=_goal_store(),
+        read_at="2026-10-21T12:00:00Z",
+        lane_names_fn=lambda: {},
+        lane_turn_open_fn=lambda: {},
+        lane_activity_fn=reader,
+        lane_completion_fn=lambda: _completion_store(),
+        threshold_days=7.0,
+        now=_NOW,
+    )
+    assert seen["window_days"] == 7.0, seen
+
+    # ... and a zero-argument lambda still works, unchanged.
+    leg = RUNNER.driverless_leg(
+        _census_with(_lane_slot("sess-x", ["#1"], lane="L")),
+        goals=_goal_store(),
+        read_at="2026-10-21T12:00:00Z",
+        lane_names_fn=lambda: {},
+        lane_turn_open_fn=lambda: {},
+        lane_activity_fn=lambda: _activity_store(),
+        lane_completion_fn=lambda: _completion_store(),
+        now=_NOW,
+    )
+    assert leg["coverage"]["activity_window_days"] == 1.0, leg["coverage"]
 
 def main() -> int:
     checks = [value for name, value in sorted(globals().items())

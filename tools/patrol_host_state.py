@@ -83,6 +83,7 @@ import argparse
 import datetime as dt
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 import re
@@ -2441,6 +2442,16 @@ def box_goal_rows(root: Path | None = None) -> dict:
 LANE_ACTIVITY_READ = "read"              # source read; this session carries measured work
 LANE_ACTIVITY_NONE = "none"              # source read; this session carries NO work at all
 LANE_ACTIVITY_UNREADABLE = "unreadable"  # source could not be read -- never a zero (#271)
+# THE OUTSIDE-WINDOW READING (#646). The activity read is now BOUNDED by the leg's own window
+# (the query carries a `created_at` predicate instead of scanning total history and filtering in
+# Python). A bound that simply DROPPED every session whose newest row predates the cutoff would
+# turn "measured, last seen 2026-10-01" into `LANE_ACTIVITY_NONE`, i.e. silently rewrite the
+# record from "measured and idle" to "not measured" -- the exact confusion this module's
+# docstring forbids. So a session the bounded read did NOT return, but which the store KNOWS
+# exists (it has rows, all outside the window), is reported with THIS name: READ, and IDLE IN
+# THE WINDOW. It is deliberately NOT `none`: `none` means "the source was read and this session
+# carries no work at all", and that is a different, and here false, statement.
+LANE_ACTIVITY_OUTSIDE_WINDOW = "outside_window"  # read; exists, but idle inside the window (#646)
 
 # THE SECOND FACT, BESIDE THE FIRST AND NOT INSTEAD OF IT (#624). The activity fact answers "was
 # this session MEASURED doing anything", and ONE `tool_executions` row satisfies it -- so a lane
@@ -2481,9 +2492,50 @@ def activity_epoch(value) -> tuple[int | None, str]:
         return None, f"created_at {text!r} carries no zone offset"
     return int(parsed.timestamp()), ""
 
-def box_lane_activity(root: Path | None = None) -> dict:
-    """{newest, epochs, homes_read, homes_without_store, unreached, unparsed, readable,
-    reason} for every home's `tool_executions`, newest instant PER SESSION (#532).
+def box_lane_activity(
+    root: Path | None = None,
+    *,
+    window_days: float = STALL_CENSUS_THRESHOLD_DAYS,
+    now: dt.datetime | None = None,
+) -> dict:
+    """{newest, epochs, outside_window, homes_read, homes_without_store, unreached, unparsed,
+    readable, reason, window_days, cutoff_epoch} for every home's `tool_executions`, newest
+    instant PER SESSION inside the leg's own window (#532, bounded by #646).
+
+    THE WINDOW IS PUSHED INTO SQL (#646). The pre-#646 read grouped the WHOLE of
+    `tool_executions` and let `driverless_leg` apply the window in Python afterwards, so the
+    window existed everywhere except in the query and every round scanned total history
+    (measured on the `ops` home: 174,628 rows, 1.22 GB, 160 ms per round). The cutoff is now a
+    PARAMETERISED `created_at` predicate -- never string-interpolated -- and the answer is
+    unchanged: still `max(created_at)` per session over that window.
+
+    THE PREDICATE IS `created_at >= :cutoff OR typeof(created_at) <> 'integer'`. `created_at`
+    is INTEGER epoch seconds in the daemon's schema, where an integer `>=` is exact, but this
+    reader is handed OTHER homes' databases too (see `activity_epoch`). SQLite orders INTEGER
+    below TEXT, so a bare `created_at >= :cutoff` would include EVERY text row whatever its
+    date, and a bare `<` would drop every text row -- either way placing a text home by a rule
+    that was never about it. The `typeof` clause therefore applies the cutoff ONLY to integer
+    rows and KEEPS every non-integer row, which `activity_epoch` then places in Python exactly
+    as before. For an all-integer home (the daemon's own schema) the clause is a no-op and the
+    result is identical to `created_at >= :cutoff`.
+
+    `INDEXED BY idx_tool_executions_created_at` IS APPLIED WHEN THAT INDEX EXISTS, and omitted
+    when it does not (a member home may ship only the message-id and primary-key indexes).
+    Without the hint SQLite answers this `group by session_id` from the session-id index, which
+    is the total-history scan #646 exists to stop; with it the read is a range over the window.
+    Measured on `ops`: 160 ms unbounded, 32 ms with the hint, 7.9 ms with a bare integer bound.
+
+    A SESSION WHOSE NEWEST ROW PREDATES THE CUTOFF IS `outside_window`, NEVER DROPPED (#646).
+    The bounded aggregate cannot see such a session's rows, so this reader separately lists the
+    sessions it KNOWS exist (a `distinct session_id` over the covering index, 0.3 ms) minus the
+    ones the bounded read returned, and reports that set as `outside_window`. `driverless_leg`
+    turns membership in it into `LANE_ACTIVITY_OUTSIDE_WINDOW` -- "measured, but idle inside the
+    window" -- rather than the `LANE_ACTIVITY_NONE` a silent drop would produce. The exact
+    pre-window instant is deliberately NOT carried: recovering it would require scanning the
+    pre-window history this change exists to stop scanning, and the reading it would decorate
+    (`LANE_ACTIVITY_OUTSIDE_WINDOW`) already says the honest thing. This is the ruling's option
+    (a): a bounded aggregate plus a separately-reported set, so the record says "outside window"
+    rather than "not read".
 
     THE FOURTH READING'S SOURCE. `box_goal_rows` answers "is a goal loop armed"; this answers
     "was this session MEASURED DOING anything", which is the fact the driverless-lane leg
@@ -2514,6 +2566,11 @@ def box_lane_activity(root: Path | None = None) -> dict:
     clause 4 says an unreadable source yields UNREADABLE WITH ITS REASON. A guard that let the
     error through would satisfy the letter of "never a zero" and fail its point.
     """
+    # The window is computed ONCE, before any home is opened, so every home is judged against
+    # the same instant and the store can state its own basis (#646). `cutoff_epoch` is an
+    # INTEGER epoch second, matching `created_at`'s stored type; the comparison is exact.
+    now_epoch = (now or dt.datetime.now(dt.timezone.utc)).timestamp()
+    cutoff_epoch = int(now_epoch - float(window_days) * 86400.0)
     registry = load_module("oc_registry", REGISTRY)
     try:
         dbs, unreached = registry.opencrabs_home_dbs(root)
@@ -2521,15 +2578,24 @@ def box_lane_activity(root: Path | None = None) -> dict:
         return {
             "newest": {},
             "epochs": {},
+            "outside_window": [],
             "homes_read": [],
             "homes_without_store": [],
             "unreached": [f"no OpenCrabs home could be located: {exc}"],
             "unparsed": [],
             "readable": False,
             "reason": f"the activity source could not be located ({exc})",
+            "window_days": float(window_days),
+            "cutoff_epoch": cutoff_epoch,
         }
     newest: dict[str, str] = {}
     epochs: dict[str, int] = {}
+    # #646: `known_sessions` is every session any home carries; `bounded_ids` is every session
+    # the WINDOWED read returned. The difference is the `outside_window` set -- sessions that
+    # exist but carry no row inside the window. Keeping the two apart is what stops the bound
+    # from silently rewriting "measured, last seen before T" into "not measured".
+    known_sessions: set[str] = set()
+    bounded_ids: set[str] = set()
     homes_read: list[str] = []
     homes_without_store: list[str] = []
     unparsed: list[str] = []
@@ -2550,24 +2616,57 @@ def box_lane_activity(root: Path | None = None) -> dict:
             if "session_id" not in columns or "created_at" not in columns:
                 homes_without_store.append(db.parent.name)
                 continue
+            # THE WINDOW, IN THE QUERY (#646). The predicate is parameterised -- `?` carries
+            # the integer cutoff, never a formatted string -- and the `typeof` clause confines
+            # it to integer epochs, keeping every text row for `activity_epoch` to place (see
+            # the function docstring). `max(created_at)` per session over that window is the
+            # answer, unchanged from the pre-#646 unbounded read once filtered to the window.
+            indexes = {
+                row[0] for row in conn.execute(
+                    "select name from sqlite_master where type='index' "
+                    "and tbl_name='tool_executions'"
+                )
+            }
+            force_index = (
+                " indexed by idx_tool_executions_created_at"
+                if "idx_tool_executions_created_at" in indexes
+                else ""
+            )
             fetched = list(conn.execute(
-                "select session_id, max(created_at) from tool_executions "
-                "where session_id is not null and session_id != '' group by session_id"
+                "select session_id, max(created_at) from tool_executions" + force_index +
+                " where session_id is not null and session_id != '' "
+                "and (created_at >= ? or typeof(created_at) <> 'integer') "
+                "group by session_id",
+                (cutoff_epoch,),
             ))
+            # EVERY session this home carries, from the covering session-id index, so the ones
+            # the bounded read did not return can be reported as `outside_window` rather than
+            # vanishing (#646). Cheap: measured 0.3 ms over 174k rows on `ops`.
+            known = {
+                str(row[0]) for row in conn.execute(
+                    "select distinct session_id from tool_executions "
+                    "where session_id is not null and session_id != ''"
+                )
+            }
         except sqlite3.Error as exc:
             unreached.append(f"{db.parent.name}: {exc}")
             continue
         finally:
             conn.close()
+        known_sessions |= known
         for session_id, created_at in fetched:
+            session_key = str(session_id)
+            # A session returned by the bounded read is NOT `outside_window`, even if its one
+            # row is unplaceable: the read did return it, and it is reported in `unparsed`.
+            bounded_ids.add(session_key)
             epoch, why = activity_epoch(created_at)
             if epoch is None:
                 unparsed.append(f"{db.parent.name}:{session_id}: {why}")
                 continue
-            prior = epochs.get(str(session_id))
+            prior = epochs.get(session_key)
             if prior is None or epoch > prior:
-                epochs[str(session_id)] = epoch
-                newest[str(session_id)] = dt.datetime.fromtimestamp(
+                epochs[session_key] = epoch
+                newest[session_key] = dt.datetime.fromtimestamp(
                     epoch, dt.timezone.utc
                 ).isoformat()
         homes_read.append(db.parent.name)
@@ -2582,15 +2681,23 @@ def box_lane_activity(root: Path | None = None) -> dict:
         )
     else:
         reason = "no OpenCrabs home database was found to read"
+    # #646: sessions the store KNOWS exist but the bounded read did NOT return -- every row
+    # they carry is outside the window. Reported as a set, never folded into `epochs` (whose
+    # values are in-window instants) and never dropped: `driverless_leg` reads membership here
+    # as LANE_ACTIVITY_OUTSIDE_WINDOW, so the record says "outside window", not "not read".
+    outside_window = sorted(known_sessions - bounded_ids)
     return {
         "newest": newest,
         "epochs": epochs,
+        "outside_window": outside_window,
         "homes_read": homes_read,
         "homes_without_store": homes_without_store,
         "unreached": unreached,
         "unparsed": unparsed,
         "readable": readable,
         "reason": reason,
+        "window_days": float(window_days),
+        "cutoff_epoch": cutoff_epoch,
     }
 
 def box_lane_completions(ledger_path: Path | None = None) -> dict:
@@ -11276,8 +11383,11 @@ def driver_reading(
 
     `activity` IS REQUIRED and has no default: a caller that does not state the fact would get
     the pre-#532 reading back silently, which is exactly the defect. Its `state` is one of
-    LANE_ACTIVITY_READ / LANE_ACTIVITY_NONE / LANE_ACTIVITY_UNREADABLE, and only the READ arm
-    carries `in_window` and `instant`.
+    LANE_ACTIVITY_READ / LANE_ACTIVITY_NONE / LANE_ACTIVITY_UNREADABLE / LANE_ACTIVITY_OUTSIDE_WINDOW
+    (#646 adds the last: READ, but idle inside the window), and only the READ arm carries
+    `in_window` and `instant`. OUTSIDE_WINDOW reads DRIVERLESS, exactly as an out-of-window READ
+    did before the bound; what it preserves is the RECORD -- "measured before the window" must
+    not be rewritten as "not measured".
 
     `completion` IS REQUIRED FOR THE SAME REASON (#624), and it is the SECOND fact, never a
     replacement: the activity fact still decides whether the lane was measured doing anything at
@@ -11327,6 +11437,13 @@ def driver_reading(
     kind = str((activity or {}).get("state") or "")
     if kind == LANE_ACTIVITY_UNREADABLE:
         return "UNREADABLE", newest
+    # #646: a session the bounded read saw ONLY outside the window is READ, and reads
+    # DRIVERLESS exactly as it did before -- the VERDICT is unchanged. It is stated here rather
+    # than left to fall through so the intent is visible: the reading is NOT `NONE`, and this
+    # arm exists to keep "measured before the window" out of the "not measured" bucket, not to
+    # move the verdict.
+    if kind == LANE_ACTIVITY_OUTSIDE_WINDOW:
+        return "DRIVERLESS", newest
     if kind == LANE_ACTIVITY_READ and bool((activity or {}).get("in_window")):
         # ... and INSIDE that arm the COMPLETION fact splits the lane in two (#624). Measured
         # execution is not measured WORK: a single `tool_executions` row satisfies the first and
@@ -11367,6 +11484,25 @@ def stall_lane_turn_open() -> dict[str, bool]:
             continue
         open_turns[session_id] = bool(row.get("turn_open_at"))
     return open_turns
+
+def _call_windowed(fn, window_days):
+    """Call an injected activity reader, passing the leg's window when it accepts one (#646).
+
+    The live reader `box_lane_activity` takes `window_days`, so the SQL bound it pushes matches
+    the window this leg reasons with -- a 7-day leg must not be handed a 1-day store. Probes
+    inject a ZERO-ARGUMENT lambda over a prepared store (`lane_activity_fn=lambda: activity`)
+    and must keep working byte-for-byte unchanged, so the window is passed ONLY when the
+    callable declares the parameter. The signature is read, never a `try/except TypeError`
+    around the call: a TypeError raised INSIDE a reader would be swallowed as "no window
+    support" and hide a real defect in the reader.
+    """
+    try:
+        parameters = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+    if "window_days" in parameters:
+        return fn(window_days=float(window_days))
+    return fn()
 
 def driverless_leg(
     census: dict,
@@ -11428,11 +11564,17 @@ def driverless_leg(
     open_turns = (lane_turn_open_fn or stall_lane_turn_open)()
     # "was this session MEASURED doing anything" is the fact the leg was missing (#532), and
     # it rides the same injection discipline: a source that could not be read yields
-    # UNREADABLE for every lane, never a zero.
-    activity_store = lane_activity_fn()
+    # UNREADABLE for every lane, never a zero. The leg's own window is handed to the reader
+    # (#646) so the SQL bound it pushes matches the window reasoned about here; a probe's
+    # zero-argument lambda is called unchanged.
+    activity_store = _call_windowed(lane_activity_fn, threshold_days)
     activity_readable = bool(activity_store.get("readable"))
     activity_epochs = activity_store.get("epochs") or {}
     activity_newest = activity_store.get("newest") or {}
+    # #646: sessions the store KNOWS exist but the bounded read did not return -- every row
+    # they carry is outside the window. Kept as a SET so `activity_for` can say "outside
+    # window" instead of the `LANE_ACTIVITY_NONE` a silent drop would produce.
+    activity_outside_window = set(activity_store.get("outside_window") or ())
     # "did any WORK UNIT FINISH" is the second fact (#624), and it rides the same discipline: a
     # ledger that could not be read yields UNREADABLE, never "finished nothing".
     completion_store = lane_completion_fn()
@@ -11471,6 +11613,15 @@ def driverless_leg(
             }
         epoch = activity_epochs.get(session_ref)
         if epoch is None:
+            # #646: the bounded read did not return this session, but the store KNOWS it
+            # exists (it has rows, all outside the window). That is READ AND IDLE IN THE
+            # WINDOW, never NONE -- a silent drop here would rewrite "measured, last seen
+            # before T" as "not measured", the confusion this module forbids.
+            if session_ref in activity_outside_window:
+                return {
+                    "state": LANE_ACTIVITY_OUTSIDE_WINDOW,
+                    "window_days": float(threshold_days),
+                }
             return {"state": LANE_ACTIVITY_NONE}
         age_secs = now_epoch - float(epoch)
         return {
@@ -11565,6 +11716,15 @@ def driverless_leg(
             measured = (
                 f"its newest measured tool execution is {activity.get('instant')} "
                 f"({float(activity.get('age_days') or 0.0):.2f} d before this read)"
+            )
+        elif activity.get("state") == LANE_ACTIVITY_OUTSIDE_WINDOW:
+            # #646: it HAS run, just not inside this window. Saying "no tool execution" here
+            # (the `else` below) would be false, and would merge "measured before the window"
+            # with "never measured" -- the two facts this reading exists to keep apart.
+            measured = (
+                f"it HAS measured tool executions, but NONE inside the "
+                f"{float(threshold_days):.2f} d window this read applied -- it was READ and "
+                f"found idle in the window, which is not the same as never having run"
             )
         elif activity.get("state") == LANE_ACTIVITY_UNREADABLE:
             measured = "its activity could not be read at all"
@@ -11692,6 +11852,12 @@ def driverless_leg(
             ),
             "activity_homes_unreached": list(activity_store.get("unreached") or []),
             "activity_instants_unparsed": list(activity_store.get("unparsed") or []),
+            # #646: the sessions the bounded read did not return because every row they carry
+            # is outside the window. Printed as a count AND the set, so a reader can see the
+            # population the bound excluded and confirm it was reported as "outside window",
+            # not silently turned into "no work".
+            "activity_outside_window_count": len(activity_outside_window),
+            "activity_outside_window": sorted(activity_outside_window),
             # THE COMPLETION STORE PRINTS BESIDE THE ACTIVITY STORE (#624), for the same reason
             # and with the same shape: an unread ledger must read as "could not look", never as
             # "this lane finished nothing".
