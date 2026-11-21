@@ -179,15 +179,15 @@
     },
     {
       "id": "ops-lane-silence-on-provider-5xx",
-      "text": "An ops-profile lane can fall silent for ~1.9 h with nothing posted in its topic: when the provider fallback chain holds only the provider that is failing, five 5xx retries exhaust and the turn settles Failed producing no text. The chain is now [inferhub, openrouter], so a repeat is less likely, but the class is not closed - the daemon accepts a one-entry chain equal to its own provider and logs '1 ready, 0 skipped' with no warning.",
+      "text": "An ops-profile lane can fall silent for ~1.9 h with nothing posted in its topic: when the provider fallback chain holds only the provider that is failing, five 5xx retries exhaust and the turn settles Failed producing no text. As of 2026-11-21 the chain is a SINGLE entry, [openrouter-glm], against a primary of custom.inferhub - so it is no longer the [inferhub, openrouter] pair this entry recorded, and the exact shape (a one-entry chain EQUAL to the failing provider) is not armed today. The CLASS is not closed: the daemon still accepts a one-entry chain without warning, so a future config that collapses the chain onto the active provider reproduces the silence. No 'fallback chain reloaded' line has been logged in the 7 days to 2026-11-21, so the single entry is stable rather than mid-edit.",
       "severity": "warning",
       "since": "2026-10-01T19:35:04Z",
       "affects": [
         "profile"
       ],
       "scope": "profile",
-      "evidence": "Ledger n=966 (intake) / n=967 (ruling). Daemon log: five 'API error (502)' retries 19:41:32.728064Z-19:54:04.974683Z; tool_loop.rs:3635 'All 5 5xx retries failed, checking for fallback provider'; turn_settle Failed 19:54:06.727609Z; ConfigWatcher 'fallback chain reloaded - [inferhub, openrouter] (was [inferhub])' 20:57:14.402309Z.",
-      "review_by": "2026-11-16"
+      "evidence": "Ledger n=966 (intake) / n=967 (ruling). Daemon log: five 'API error (502)' retries 19:41:32.728064Z-19:54:04.974683Z; tool_loop.rs:3635 'All 5 5xx retries failed, checking for fallback provider'; turn_settle Failed 19:54:06.727609Z; ConfigWatcher 'fallback chain reloaded - [inferhub, openrouter] (was [inferhub])' 20:57:14.402309Z. Re-verified 2026-11-21T09:10Z: [providers.fallback] enabled=true, providers=[openrouter-glm], vision=[openrouter-glm]; [agent] default_provider=custom.inferhub. The prior 'chain is now [inferhub, openrouter]' sentence was STALE and is corrected in the text above. journalctl --user -u opencrabs-ops --since 2026-11-14 carries 0 'fallback chain reloaded' lines, so the chain has not moved in that window.",
+      "review_by": "2026-11-28"
     },
     {
       "id": "gatus-page-can-be-silently-lost",
@@ -198,8 +198,8 @@
         "profile"
       ],
       "since": "2026-10-07",
-      "review_by": "2026-11-20",
-      "evidence": "Receiver GET /attempts seq 244 @ 2026-10-06T22:09:55Z: outcome=failed, delivered=false, attempts=3, rc=4 transport_error cannot reach the A2A gateway at http://127.0.0.1:18791/a2a/v1; three journal rows caller=root target=fb67ca75 exit=4 at 22:09:17/42/55Z; ledger n=1164 (subject gatus-alert-session-leg-coupled). q16 read this turn from ~/.opencrabs/profiles/ops/questions/open.json: status=answered, answered_at 2026-10-02T12:33:31Z, answer \"Trust the notify queue - the notifications always land. If they are list, it's not a problem\" \u2014 quoted in full so the next reader can judge the citation rather than inherit it."
+      "review_by": "2026-11-28",
+      "evidence": "Receiver GET /attempts seq 244 @ 2026-10-06T22:09:55Z: outcome=failed, delivered=false, attempts=3, rc=4 transport_error cannot reach the A2A gateway at http://127.0.0.1:18791/a2a/v1; three journal rows caller=root target=fb67ca75 exit=4 at 22:09:17/42/55Z; ledger n=1164 (subject gatus-alert-session-leg-coupled). q16 read this turn from ~/.opencrabs/profiles/ops/questions/open.json: status=answered, answered_at 2026-10-02T12:33:31Z, answer \"Trust the notify queue - the notifications always land. If they are list, it's not a problem\" \u2014 quoted in full so the next reader can judge the citation rather than inherit it. Re-verified 2026-11-21T09:10Z, and the defect is LIVE, not historical: the gatus-notify relay on vpn is active and journalctl -u gatus-notify --since 2026-11-14 carries 5 'Alert delivery FAILED after 3 attempt(s)' lines - seq=453, 454, 458, 459, 466 - every one a transport_error 'cannot reach the A2A gateway at http://127.0.0.1:18791/a2a/v1'. A second shape appears 2026-11-20T19:42:18Z: rc=255 'ssh: connect to host 78.17.187.4 port 15259: Connection timed out', so the hop can also die at the SSH leg rather than at the gateway. Latest observed loss 2026-11-20T19:42Z."
     },
     {
       "id": "opencrabs-home-unmanaged-growth",
