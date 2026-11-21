@@ -29,6 +29,7 @@ from __future__ import annotations
 import datetime
 import html
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -1050,6 +1051,34 @@ STATE_PATH = REPO_ROOT / "registry" / "state.json"
 SNAPSHOT_SCHEMA = "factory-registry-state/1"
 
 
+def repo_relative_path(path: object) -> str:
+    """A fragment's path as the REPO sees it, never as the caller typed it (#669).
+
+    The snapshot is committed and then read on boxes that never ran the render,
+    so a path recorded in it has to be resolvable from the repo root alone.
+    Recording `str(path)` made it the INVOCATION path instead: six entries at
+    revision `d454a98d` carried `/tmp/wt-reg-1116/registry/factories/*.json`, and
+    a consumer that RESOLVED them read a temp worktree still holding the
+    pre-amendment bytes — measured `0 differing of 6` there, against `1 of 6`
+    when the same comparison was keyed on the repo-relative suffix. On a clean
+    clone the target is simply absent, which is the same defect reading as a
+    false green rather than as a missing file.
+
+    The anchor is `REPO_ROOT`, the directory this module was loaded from, so a
+    fragment in the live store records as `registry/factories/<slug>.json` and
+    one injected from OUTSIDE the tree records as a `../`-relative path: still
+    relative, still resolvable from the root, and never a copy of the invocation
+    string. An input that is already relative is read against `REPO_ROOT`,
+    because that is the only root the recorded value is defined against — which
+    also makes a record/replay round trip idempotent.
+    """
+    raw = str(path or "")
+    if not raw:
+        return ""
+    absolute = raw if os.path.isabs(raw) else os.path.join(str(REPO_ROOT), raw)
+    return Path(os.path.relpath(os.path.normpath(absolute), str(REPO_ROOT))).as_posix()
+
+
 def record_state(
     fragments: list[dict],
     bindings: list[dict],
@@ -1085,12 +1114,20 @@ def record_state(
     predicates, one of which opens every OpenCrabs home database and another
     shells out to systemd, so a replay that re-ran them would be as volatile
     as the live path it replaced.
+
+    Each fragment's `path` is recorded REPO-RELATIVE (#669), through the one
+    derivation `repo_relative_path` keeps. The snapshot is committed and read on
+    boxes that never ran this render, so an invocation path recorded here is not
+    a path a reader can follow — at revision `d454a98d` all six named a temp
+    worktree. Only the VALUE changes: the `{path, data}` shape stands, and a
+    replay reads `data` alone, so this is a portability fix rather than a change
+    to what the snapshot is.
     """
     recorded_fragments = []
     for fragment in fragments:
         data = {k: v for k, v in fragment.items() if k != "_path"}
         recorded_fragments.append(
-            {"path": str(fragment.get("_path") or ""), "data": data}
+            {"path": repo_relative_path(fragment.get("_path")), "data": data}
         )
     recorded_jobs = [
         {k: v for k, v in job.items() if k not in ("_owner", "_basis")}

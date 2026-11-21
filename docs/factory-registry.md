@@ -2,14 +2,14 @@
 
 **Generated** by `tools/registry.py render` — never hand-edited; the drift gate re-renders and compares the state-bearing bytes.
 
-**resolved at** `2026-11-21T09:29:33Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
+**resolved at** `2026-11-21T10:03:56Z` — every binding, lane and job row below was read at that instant. The declared half ages on its own clock: a moved binding is a state change (re-rendering fixes it), while an old attestation is a process failure (re-rendering fixes nothing).
 
 ## Freshness
 
 | Half | Source | State |
 |---|---|---|
 | declared | 6 fragment(s) | 6 attested, 0 awaiting an answer |
-| generated | live reads | resolved `2026-11-21T09:29:33Z` |
+| generated | live reads | resolved `2026-11-21T10:03:56Z` |
 
 ## Announcements
 
@@ -201,7 +201,7 @@ CLI exit contract: `0` delivered/redirected/parked · `2` unknown or dead uuid �
 | `ai-antispam-bot-service-health` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-11-22T06:15:00+00:00 | — | — |
 | `ai-antispam-day7-retire-wake` | ops | `15 6 22 9 *` | UTC | **no** | 0 | **absent** | 2027-09-22T06:15:00+00:00 | session:acc3fa9b-cefa-4e35-bf87-422696e558f0 | — |
 | `ai-antispam-gate-harness` | ops | `17 5 * * *` | UTC | yes | 0 | **absent** | 2026-11-22T05:17:00+00:00 | session:6ca0d547-4a72-4c29-ac10-967daa98af0a | /bin/bash /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/run_ga… |
-| `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-11-21T09:45:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | timeout 1800 /usr/bin/python3.14 /root/ai-antispam/scripts/loss_watch.p… |
+| `ai-antispam-loss-watch` | ops | `15,45 * * * *` | UTC | yes | 0 | **absent** | 2026-11-21T10:15:00+00:00 | session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07 | timeout 1800 /usr/bin/python3.14 /root/ai-antispam/scripts/loss_watch.p… |
 | `ai-antispam-outreach-auto-kick` | ops | `0 7 * * *` | UTC | yes | 0 | **absent** | 2026-11-22T07:00:00+00:00 | — | — |
 | `ai-antispam-outreach-db-sync` | ops | `15 9 * * *` | Europe/Moscow | yes | 0 | **absent** | 2026-11-22T06:15:00+00:00 | — | — |
 | `ai-antispam-outreach-mining-tranche` | ops | `15 6 * * Mon,Wed,Fri` | UTC | yes | 0 | **absent** | 2026-11-23T06:15:00+00:00 | — | — |
@@ -567,7 +567,7 @@ Attribution basis: deliver_to -> lane.
 | Providers: Routing | `Providers: Routing` | 30045 | _unstated_ | `127429e6-08de-439c-9162-2c8b0a9f73d9` | Gemini Reasoning and Flow Message Analysis | resolved | telegram | 2026-11-12T10:19:49Z | — |
 | Telegram: Push | `Telegram: Push` | 30090 | editor | `d18ce16a-75a0-447c-90c7-ab7dabce4411` | Editor lane: #17/#19 channel-ownership PRs | resolved | telegram | 2026-11-20T10:48:44Z | — |
 | Telegram: Options | `Telegram: Options` | 30134 | _unstated_ | `1a63f103-b899-4ad2-a5b3-c89f2902bf97` | Deploy #235 Option Collision Guard | resolved | telegram | 2026-11-20T18:09:03Z | — |
-| OC DEV HQ | `OC DEV HQ` | 30220 | hq | `0117dd29-5f4b-4184-9bf4-d19dc74ac266` | Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220] | resolved | telegram | 2026-11-21T08:06:40Z | — |
+| OC DEV HQ | `OC DEV HQ` | 30220 | hq | `0117dd29-5f4b-4184-9bf4-d19dc74ac266` | Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220] | resolved | telegram | 2026-11-21T09:34:44Z | — |
 | Core: Subagents | `Core: Subagents` | 30517 | _unstated_ | `a5b34466-1c14-441f-b2c6-6eaf4f316dde` | Telegram: Opencrabs Dev Factory / Subagents [chat:-1003936827469:topic:30517] | resolved | telegram | 2026-11-20T22:49:12Z | — |
 | Telegram: Throttling | `Telegram: Throttling` | 30679 | _unstated_ | `61161247-5b1d-4efe-979b-bf46ffc85c48` | Telegram: Opencrabs Dev Factory / Flood Throttling [chat:-1003936827469:topic:30679] | resolved | telegram | 2026-10-06T20:34:51Z | — |
 | Lifecycle: Restarts | `Lifecycle: Restarts` | 31683 | _unstated_ | `7e1ebbb6-68b3-478b-abc2-b697e70c2f37` | Telegram: Opencrabs Dev Factory / Graceful restart [chat:-1003936827469:topic:31683] | resolved | telegram | 2026-11-20T04:47:34Z | — |
@@ -575,7 +575,7 @@ Attribution basis: deliver_to -> lane.
 | Telegram: Rich Text | `Telegram: Rich Text` | 31847 | _unstated_ | `2fbfb2f8-9b08-417a-aae8-c75edc1de1ea` | Fix #1938/#1939/#1940 — marker & link seam | resolved | telegram | 2026-11-21T00:16:55Z | — |
 | Memory: Compaction | `Compaction visibility` | 34653 | _unstated_ | `cbdfde4a-b3fe-457a-817b-5113b938f12d` | Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653] | resolved | telegram | 2026-11-18T20:29:15Z | — |
 | Memory: Vectors | `Memory: Vectors` | 36841 | _unstated_ | `212b3c83-6659-49c8-9984-0cf849f769c1` | Telegram: Opencrabs Dev Factory / Vector memory [chat:-1003936827469:topic:36841] | resolved | telegram | 2026-11-20T23:55:12Z | — |
-| OC DEV TOOLSMITH | `Carrier tools` | 39171 | toolsmith | `2fae1230-de9e-4fa5-aa24-822cf7188c3e` | Toolsmith Issue 255 and PR Dependency Laws | resolved | telegram | 2026-11-21T00:52:25Z | — |
+| OC DEV TOOLSMITH | `Carrier tools` | 39171 | toolsmith | `2fae1230-de9e-4fa5-aa24-822cf7188c3e` | Toolsmith Issue 255 and PR Dependency Laws | resolved | telegram | 2026-11-21T09:34:44Z | — |
 | Upstream: Harvest | `Upstream: Harvest` | 39218 | _unstated_ | `4b0990b7-aff8-4744-8de5-e38e54de7693` | Harvesting upstream PRs into OpenCrabs | resolved | telegram | 2026-10-19T11:24:04Z | — |
 | Lifecycle: Boot | `Lifecycle: Boot` | 39862 | _unstated_ | `c10cd97b-2c99-49fa-a1c4-d78a02dfd7d1` | Telegram: Opencrabs Dev Factory / Rich resume wire [chat:-1003936827469:topic:39862] | resolved | telegram | 2026-11-20T12:20:37Z | — |
 | Core: Loop | `Core: Loop` | 39883 | _unstated_ | `40427d4f-af4a-48ba-993f-f5f0b21916c0` | Telegram: Opencrabs Dev Factory / Loop guard [chat:-1003936827469:topic:39883] | resolved | telegram | 2026-09-27T14:32:52Z | — |

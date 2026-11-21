@@ -2472,6 +2472,128 @@ def probe_the_motivating_tree_reports_exactly_one_of_six() -> None:
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
+def probe_the_recorded_fragment_path_is_repo_relative() -> None:
+    """#669: a snapshot records a path a READER can follow, never the invocation path.
+
+    The snapshot is committed and then consumed on boxes that never ran the render, so
+    `fragments[].path` has to resolve from the repo root. It recorded `str(path)`
+    instead, which is the INVOCATION path: six entries at revision `d454a98d` named
+    `/tmp/wt-reg-1116/registry/factories/*.json`, and a comparator that RESOLVED them
+    measured `0 differing of 6` against a tree whose live bytes differ — it was reading
+    the stale temp worktree those paths pointed at. Keyed on the repo-relative suffix
+    the same comparison was `1 of 6`. On a clean clone the target is absent, which is
+    the same defect reading as a missing file rather than as a false green.
+
+    Two legs, because one render proves the DERIVATION and the tree's snapshot proves
+    it SHIPPED:
+
+      * an ABSOLUTE path OUTSIDE the tree is rendered through `render_all` — the
+        production path that writes the snapshot beside the artifacts — and the
+        recorded value must be relative, must not be the invocation string, and must
+        resolve back to the input from `REPO_ROOT` alone. The input is INJECTED into a
+        throwaway directory rather than read from the live store (#211's lesson): the
+        point of the leg is that the recorded value cannot be derived from where the
+        render was invoked, and a live store path would be under the root already.
+      * the snapshot in the TREE records every fragment relative and every recorded
+        path resolves to a file under the root. It reads the working tree on purpose —
+        its subject is the bytes about to be committed, which a clean clone will read;
+        GATE A separately holds the COMMITTED pair to a byte-exact replay of this
+        snapshot, so the two legs answer different questions and neither is the other's
+        proof. A tree with no snapshot SKIPS this leg by name rather than passing it
+        silently.
+
+    The render is aimed at throwaway artifact paths: `render_all` writes what it
+    renders, so leaving `MD_PATH`/`INDEX_PATH`/`STATE_PATH` on the real files would
+    mutate the artifacts this gate is judging while it judged them.
+    """
+    live = load_live()
+    if not live:
+        check(
+            "the live store holds a fragment to render from",
+            False,
+            "no fragments in registry/factories/",
+        )
+        return
+    _source, fragment = live[0]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        outside = Path(tmp).resolve() / f"{fragment['factory']}.json"
+        outside.write_text(json.dumps(fragment, indent=2) + "\n", encoding="utf-8")
+        check(
+            "the probe's fragment is OUTSIDE the tree, so its path cannot be repo-relative",
+            not outside.is_relative_to(REPO),
+            str(outside),
+        )
+        state_file = Path(tmp) / "registry" / "state.json"
+        saved = (rr.MD_PATH, rr.INDEX_PATH, rr.STATE_PATH)
+        try:
+            rr.MD_PATH = Path(tmp) / "docs" / "factory-registry.md"
+            rr.INDEX_PATH = Path(tmp) / "registry" / "index.json"
+            rr.STATE_PATH = state_file
+            rc, report = rr.render_all(explicit=[str(outside)])
+        finally:
+            rr.MD_PATH, rr.INDEX_PATH, rr.STATE_PATH = saved
+        check(
+            "a render from an outside path writes its snapshot beside the artifacts",
+            rc == 0 and state_file.is_file(),
+            f"rc={rc} error={report.get('error')}",
+        )
+        if not state_file.is_file():
+            return
+        recorded = [
+            str(entry.get("path") or "")
+            for entry in json.loads(state_file.read_text(encoding="utf-8")).get("fragments") or []
+            if isinstance(entry, dict)
+        ]
+        check(
+            "the snapshot records exactly the one fragment the render consumed",
+            len(recorded) == 1,
+            str(recorded),
+        )
+        value = recorded[0] if recorded else ""
+        check(
+            "the recorded path is RELATIVE and is not the invocation string (#669)",
+            bool(value) and not os.path.isabs(value) and value != str(outside)
+            and not str(outside).startswith(value),
+            f"recorded={value!r} invocation={str(outside)!r}",
+        )
+        check(
+            "...and it RESOLVES to that input from the repo root alone",
+            bool(value) and (rr.REPO_ROOT / value).resolve() == outside,
+            f"{(rr.REPO_ROOT / value).resolve() if value else None} vs {outside}",
+        )
+
+    if not rr.STATE_PATH.is_file():
+        check(
+            "the tree's snapshot records every fragment path RELATIVE",
+            True,
+            f"STATED SKIP: {relpath(rr.STATE_PATH)} is absent in this tree, so there is "
+            f"no snapshot to read — a bootstrapped factory carries none",
+        )
+        return
+    snapshot = json.loads(rr.STATE_PATH.read_text(encoding="utf-8"))
+    shipped = [
+        str(entry.get("path") or "")
+        for entry in snapshot.get("fragments") or []
+        if isinstance(entry, dict)
+    ]
+    absolute = [path for path in shipped if os.path.isabs(path)]
+    check(
+        f"the tree's snapshot records all {len(shipped)} fragment path(s) RELATIVE",
+        bool(shipped) and not absolute,
+        f"absolute: {absolute[:2]}" if absolute else f"{len(shipped)} relative",
+    )
+    absent = [
+        path
+        for path in shipped
+        if not (rr.REPO_ROOT / path).resolve().is_relative_to(rr.REPO_ROOT)
+        or not (rr.REPO_ROOT / path).is_file()
+    ]
+    check(
+        "...and every recorded path resolves to a file UNDER the repo root",
+        bool(shipped) and not absent,
+        f"escaping the root or absent: {absent[:2]}" if absent else f"{len(shipped)} resolve",
+    )
 
 PROBES = (
     probe_a_supersession_chain_is_not_ambiguity,
@@ -2505,6 +2627,7 @@ PROBES = (
     probe_an_already_canonical_fragment_is_canonicalised_in_silence,
     probe_the_dry_run_declares_the_same_drift_without_writing,
     probe_the_reason_is_measured_not_asserted,
+    probe_the_recorded_fragment_path_is_repo_relative,
 )
 
 def main() -> int:

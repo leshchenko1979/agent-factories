@@ -1,7 +1,7 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-11-21T09:29:33Z",
+  "resolved_at": "2026-11-21T10:03:56Z",
   "counts": {
     "factories": 6,
     "attested": 6,
@@ -2249,7 +2249,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-21T08:06:40Z",
+          "bound_at": "2026-11-21T09:34:44Z",
           "announcements": []
         },
         {
@@ -2345,7 +2345,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-21T00:52:25Z",
+          "bound_at": "2026-11-21T09:34:44Z",
           "announcements": []
         },
         {
@@ -2813,8 +2813,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-21T09:45:00+00:00",
-      "last_run_at": "2026-11-21T09:15:28Z",
+      "next_run_at": "2026-11-21T10:15:00+00:00",
+      "last_run_at": "2026-11-21T09:45:38Z",
       "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
       "trigger_cmd": "timeout 1800 /usr/bin/python3.14 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json; rc=$?; [ $rc -eq 124 ] && echo \"loss-watch: TIMEOUT after 1800s — slot released\"; exit $rc",
       "profile": "ops",

@@ -1,9 +1,9 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-11-21T09:29:33Z",
+  "resolved_at": "2026-11-21T10:03:56Z",
   "fragments": [
     {
-      "path": "/root/agent-factories/registry/factories/ai-antispam.json",
+      "path": "registry/factories/ai-antispam.json",
       "data": {
         "factory": "ai-antispam",
         "display_name": "ai-antispam",
@@ -259,7 +259,7 @@
       }
     },
     {
-      "path": "/root/agent-factories/registry/factories/inferhub-watch.json",
+      "path": "registry/factories/inferhub-watch.json",
       "data": {
         "factory": "inferhub-watch",
         "display_name": "Inferhub watch",
@@ -428,7 +428,7 @@
       }
     },
     {
-      "path": "/root/agent-factories/registry/factories/infra-factory.json",
+      "path": "registry/factories/infra-factory.json",
       "data": {
         "factory": "infra-factory",
         "display_name": "Infra Factory",
@@ -713,7 +713,7 @@
       }
     },
     {
-      "path": "/root/agent-factories/registry/factories/meta-factory.json",
+      "path": "registry/factories/meta-factory.json",
       "data": {
         "factory": "meta-factory",
         "display_name": "Factories",
@@ -951,7 +951,7 @@
       }
     },
     {
-      "path": "/root/agent-factories/registry/factories/miidas.json",
+      "path": "registry/factories/miidas.json",
       "data": {
         "factory": "miidas",
         "display_name": "Miidas Factory",
@@ -1216,7 +1216,7 @@
       }
     },
     {
-      "path": "/root/agent-factories/registry/factories/opencrabs-dev.json",
+      "path": "registry/factories/opencrabs-dev.json",
       "data": {
         "factory": "opencrabs-dev",
         "display_name": "Opencrabs Dev Factory",
@@ -2490,7 +2490,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1795185244,
+      "session_updated_at": 1795255361,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2529,7 +2529,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Agent Factories Triage Lane",
-      "session_updated_at": 1795178870,
+      "session_updated_at": 1795255431,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2828,7 +2828,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Gatus alert routing and fleet triage",
-      "session_updated_at": 1795253248,
+      "session_updated_at": 1795253782,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2893,7 +2893,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1795253273,
+      "session_updated_at": 1795255429,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3158,19 +3158,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "8248a734-a784-420a-b289-5142f7d96f69",
-      "channel": "telegram",
-      "chat_id": "-1004493125364",
-      "thread_id": 19043,
-      "updated_at": 1795151732,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: business tinder / HQ [chat:-1004493125364:topic:19043]",
-      "session_updated_at": 1795248983,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "329bf3a3-6299-4173-b991-7ea0427563e3",
       "channel": "telegram",
       "chat_id": "-1003936827469",
@@ -3314,32 +3301,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 39171,
-      "updated_at": 1795222345,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1795247902,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 30220,
-      "updated_at": 1795248400,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1795248936,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "f99324b9-d167-4868-972d-3286b8008b12",
       "channel": "telegram",
       "chat_id": "-5364020915",
@@ -3362,6 +3323,45 @@
       "turn_open_at": null,
       "session_title": "InferHub Watch: Fallback Publisher Diversity & Predictors",
       "session_updated_at": 1795250300,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 30220,
+      "updated_at": 1795253684,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
+      "session_updated_at": 1795254142,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 39171,
+      "updated_at": 1795253684,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
+      "session_updated_at": 1795253729,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "8248a734-a784-420a-b289-5142f7d96f69",
+      "channel": "telegram",
+      "chat_id": "-1004493125364",
+      "thread_id": 19043,
+      "updated_at": 1795253684,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: business tinder / HQ [chat:-1004493125364:topic:19043]",
+      "session_updated_at": 1795254232,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
@@ -3520,8 +3520,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-11-21T09:45:00+00:00",
-      "last_run_at": "2026-11-21T09:15:28Z",
+      "next_run_at": "2026-11-21T10:15:00+00:00",
+      "last_run_at": "2026-11-21T09:45:38Z",
       "trigger_cmd": "timeout 1800 /usr/bin/python3.14 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json; rc=$?; [ $rc -eq 124 ] && echo \"loss-watch: TIMEOUT after 1800s — slot released\"; exit $rc",
       "_profile": "ops"
     },
