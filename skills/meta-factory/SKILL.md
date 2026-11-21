@@ -1,7 +1,7 @@
 ---
 name: meta-factory
 description: Process law for the agent-factories meta-factory (/root/agent-factories). Load before ANY meta-factory task - surveying a member factory, deriving a template law, writing to TEMPLATE/ or docs/, scoring a factory, briefing the Delegate lane, or answering an owner question about the factory project. (/meta-factory, agent-factories, meta-factory, factory template, quality criteria)
-version: 0.1.64
+version: 0.1.65
 author: leshchenko1979
 globs:
   - "/root/agent-factories/**"
@@ -379,6 +379,24 @@ The shared brain file carries a one-line pointer here for exactly this reason. M
 **This law states requirements. A binding states the mechanics that satisfy them on one
 product.** A product name in a sentence stating *mechanics* is a leak — run the leak test
 (`TEMPLATE/README.md`) before shipping any core law file.
+
+**The harness's own interpreter (owner-approved host policy, relayed by Infra HQ 2026-11-21).**
+The box's bare `python3` is **3.12 by design**: Ubuntu apt tooling (`apt_pkg` — apt-news,
+esm-cache, update-notifier, `apt.systemd.daily`/unattended-upgrades) and `update-grub` need it,
+and without it `update-grub` can write a boot menu with no kernels. So a caller that needs 3.14
+or pip packages (`aiosqlite`, `asyncpg`, `psycopg2`, `telethon`, `fastmcp`, ai-antispam,
+outreach) pins `/usr/bin/python3.14` or its project venv, and **never** runs
+`update-alternatives` on `python3` (`--auto`/`--set`/`--config`) nor repoints it at 3.14: a
+factory's internal problem does not license a box-wide change — fix the caller or report the
+breakage. Canonical text: the ops profile's `BASH.md`, and the always-loaded rule that carries
+it. `/usr/bin/python3` is the alternatives **symlink**, so it FLOATS — audit a caller for
+3.14-only imports before assuming either version. **This factory's own state, measured
+2026-11-21:** `tools/` and `tests/` import stdlib only (every non-stdlib name in the import
+census is a local module), the `factory-*` crons that carry a `trigger_cmd` already pin
+`/usr/bin/python3.14`, and the two profile wrapper scripts (`oc_questions_gc.sh`,
+`oc_questions_redeliver.sh`) pipe JSON into a `python3 -c` snippet importing only `json` and
+`sys` — stdlib on both versions, so deliberately left unpinned rather than inheriting 3.14's
+own fragility for no benefit.
 
 Bindings are **mandatory and singular**: a factory must have a chat surface and a runtime,
 and exactly one of each. Domain packs are **optional and compose**: a factory may carry
