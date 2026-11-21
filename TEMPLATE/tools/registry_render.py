@@ -913,6 +913,33 @@ def render_markdown(ctx: dict) -> str:
 
 INDEX_SCHEMA = "factory-registry/1"
 
+def orphan_counts(jobs: list[dict], owner_key: str = "_owner") -> dict[str, int]:
+    """The orphan PAIR: how many rows no factory owns, and how many of those are live.
+
+    #670 — the scalar alone was read as if it answered "how many orphans are RUNNING".
+    Measured 2026-11-21 on the live box: of seven unattributed rows, five are parked
+    probes (`enabled` 0) and two fire daily, so a lane sent to the single number reports
+    seven "orphans" when two are live jobs. The discriminator was already rendered one
+    surface over — the markdown table carries an `enabled` column per row — but the
+    brief pointed at the aggregate and never at the table, and `tools/registry_attest.py`
+    did not contain the word `enabled` at all, so it could not name what it lacked.
+
+    Both artifacts call THIS function, so the two surfaces cannot disagree about what an
+    orphan is. `owner_key` is the one thing that differs between them: the machine index
+    carries the row's owner as `owner` (its own transformation renames the field), while
+    the CLI report reads the raw context where it is `_owner`. One fact, two spellings,
+    one predicate.
+
+    `unattributed_jobs` keeps its present value and meaning: it is read by
+    `tools/registry.py` and pinned by `tests/test_registry_attest.py`, so this ADDS a
+    field and changes nothing that was already published.
+    """
+    orphans = [j for j in jobs if not j.get(owner_key)]
+    return {
+        "unattributed_jobs": len(orphans),
+        "unattributed_enabled": sum(1 for j in orphans if j.get("enabled")),
+    }
+
 
 def render_index(ctx: dict) -> dict:
     """The machine form: same context, no prose, no prompt bodies.
@@ -1013,7 +1040,10 @@ def render_index(ctx: dict) -> dict:
             "lanes": sum(len(f["lanes"]) for f in factories),
             "announcements": len(ctx["announcements"]),
             "jobs": len(jobs),
-            "unattributed_jobs": sum(1 for j in jobs if not j.get("owner")),
+            # The orphan PAIR, from the one predicate both artifacts share. The scalar
+            # keeps its value; `unattributed_enabled` ships beside it so a reader sent
+            # to this file learns how many of those rows actually fire (#670).
+            **orphan_counts(jobs, owner_key="owner"),
         },
         "announcements": [
             {
@@ -1219,6 +1249,32 @@ def render_from_snapshot(snapshot: dict) -> tuple[str, str, dict]:
     return render_texts(recorded=snapshot)
 
 
+def report_from_ctx(ctx: dict, paths: list, checks: int = 0) -> dict:
+    """The CLI report dict, PURE over the context it is handed.
+
+    Split out of `render_all` so the orphan pair can be probed hermetically: the
+    report path used to be reachable only by driving `render_all`, which reads every
+    live profile database. A gate that asserted the pair through `render_all` would be
+    asserting whatever the box happened to be running — the exact class this file's
+    header refuses. Same values, same keys, no live read.
+    """
+    return {
+        "resolved_at": ctx["resolved_at"],
+        "fragments": len(paths),
+        "factories": len(ctx["factories"]),
+        "lanes": sum(len(f["lanes"]) for f in ctx["factories"]),
+        "announcements": len(ctx["announcements"]),
+        "jobs": len(ctx["jobs"]),
+        # Same pair, same predicate, raw-row spelling (`_owner`) — a reader of either
+        # artifact must not get a number whose meaning depends on which file it opened.
+        **orphan_counts(ctx["jobs"]),
+        "checks": checks,
+        "problems": ctx["problems"],
+        "markdown": str(MD_PATH),
+        "index": str(INDEX_PATH),
+        "state": str(STATE_PATH),
+    }
+
 def render_all(
     explicit: list[str] | None = None,
     resolved_at: str | None = None,
@@ -1252,20 +1308,7 @@ def render_all(
         topics=ctx.get("_topics") or {},
     )
     snapshot_text = json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n"
-    report = {
-        "resolved_at": ctx["resolved_at"],
-        "fragments": len(paths),
-        "factories": len(ctx["factories"]),
-        "lanes": sum(len(f["lanes"]) for f in ctx["factories"]),
-        "announcements": len(ctx["announcements"]),
-        "jobs": len(ctx["jobs"]),
-        "unattributed_jobs": sum(1 for j in ctx["jobs"] if not j.get("_owner")),
-        "checks": len(snapshot["checks"]),
-        "problems": ctx["problems"],
-        "markdown": str(MD_PATH),
-        "index": str(INDEX_PATH),
-        "state": str(STATE_PATH),
-    }
+    report = report_from_ctx(ctx, paths, checks=len(snapshot["checks"]))
     if write:
         MD_PATH.parent.mkdir(parents=True, exist_ok=True)
         INDEX_PATH.parent.mkdir(parents=True, exist_ok=True)

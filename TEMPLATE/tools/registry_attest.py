@@ -145,7 +145,9 @@ never a bare string; `evidence` is REQUIRED when severity is warning or critical
 QUESTION 3 — YOUR JOB PREFIX AND YOUR CRON ROWS. (a) PREFIX — the `job_prefixes` entry
 your `registry/fleet.json` record declares, and whether it still matches how you name your
 jobs. (b) ORPHANS — the set is COMPUTED, not remembered: read `counts.unattributed_jobs`
-in `registry/index.json` at `origin/main`. If you have seen a job the render does NOT name
+in `registry/index.json` at `origin/main`, and `counts.unattributed_enabled` BESIDE it —
+the second is how many of those FIRE. A parked probe is not
+a live job, so name which you mean. If you have seen a job the render does NOT name
 there, name it, the profile home you read it from, and what you saw. "None seen" is a
 complete answer, and never disable, delete, edit or repace a job attributed to another
 factory.
@@ -237,10 +239,15 @@ QUESTION 3 — YOUR JOB PREFIX AND YOUR CRON ROWS. Confirm the prefix, report wh
     (a) PREFIX — your declared prefix, and whether it still matches how you name your jobs.
     (b) ORPHANS — the set is COMPUTED, not remembered. `registry/index.json` carries
         `counts.unattributed_jobs`, and its `jobs` array names each row with
-        `owner: null`; read that at `origin/main` and report from it. A remembered list
-        drifts: the one returned every round for weeks was four rows long and wrong in
-        both directions — it named a job already attributed, and missed the one live
-        unattributed job on the box.
+        `owner: null`; read that at `origin/main` and report from it. Read
+        `counts.unattributed_enabled` BESIDE it — the same rows restricted to `enabled`
+        true, i.e. the orphans that actually FIRE. The plain `unattributed_jobs` count
+        also holds PARKED probes, and reading it alone is how this brief spent rounds
+        sending every lane to a number that was 7 while 2 of those rows were live. If
+        the two counts differ, say which rows you mean.
+        A remembered list drifts: the one returned every round for weeks was four rows
+        long and wrong in both directions — it named a job already attributed, and
+        missed the one live unattributed job on the box.
         TWO CENSUSES, TWO POPULATIONS. The ATTRIBUTION leg reads the declared profiles
         only; the box-wide floor leg also reads the DEFAULT home. So a job living in the
         default home is outside the attribution population by construction —

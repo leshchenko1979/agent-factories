@@ -1,14 +1,15 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-11-21T22:27:32Z",
+  "resolved_at": "2026-11-21T22:56:01Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 70,
     "announcements": 42,
     "jobs": 83,
-    "unattributed_jobs": 7
+    "unattributed_jobs": 7,
+    "unattributed_enabled": 2
   },
   "announcements": [
     {
@@ -2249,7 +2250,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-21T22:22:28Z",
+          "bound_at": "2026-11-21T22:29:05Z",
           "announcements": []
         },
         {
@@ -2345,7 +2346,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-21T21:49:20Z",
+          "bound_at": "2026-11-21T22:35:58Z",
           "announcements": []
         },
         {
@@ -2813,8 +2814,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-21T22:45:00+00:00",
-      "last_run_at": "2026-11-21T22:15:19Z",
+      "next_run_at": "2026-11-21T23:15:00+00:00",
+      "last_run_at": "2026-11-21T22:45:32Z",
       "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
       "trigger_cmd": "timeout 1800 /usr/bin/python3.14 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json; rc=$?; [ $rc -eq 124 ] && echo \"loss-watch: TIMEOUT after 1800s — slot released\"; exit $rc",
       "profile": "ops",

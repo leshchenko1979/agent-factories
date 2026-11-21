@@ -1,6 +1,6 @@
 {
   "snapshot_schema": "factory-registry-state/1",
-  "resolved_at": "2026-11-21T22:27:32Z",
+  "resolved_at": "2026-11-21T22:56:01Z",
   "fragments": [
     {
       "path": "registry/factories/ai-antispam.json",
@@ -2414,7 +2414,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Delegate [chat:-1004497192134:topic:68]",
-      "session_updated_at": 1794818184,
+      "session_updated_at": 1795301145,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2492,7 +2492,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Factories / Worker [chat:-1004497192134:topic:1271]",
-      "session_updated_at": 1795295024,
+      "session_updated_at": 1795301462,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -2882,7 +2882,7 @@
       "last_origin": "text",
       "turn_open_at": null,
       "session_title": "Telegram: Infra Factory / HQ [chat:-1004486255170:topic:4]",
-      "session_updated_at": 1795299586,
+      "session_updated_at": 1795301477,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3285,7 +3285,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Editor lane: #17/#19 channel-ownership PRs",
-      "session_updated_at": 1795299793,
+      "session_updated_at": 1795301754,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3298,20 +3298,7 @@
       "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: Opencrabs Dev Factory / Compaction visibility [chat:-1003936827469:topic:34653]",
-      "session_updated_at": 1795299776,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
-      "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 39171,
-      "updated_at": 1795297760,
-      "last_origin": "callback",
-      "turn_open_at": 1795297760,
-      "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
-      "session_updated_at": 1795299884,
+      "session_updated_at": 1795301697,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3329,19 +3316,6 @@
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
     {
-      "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
-      "channel": "telegram",
-      "chat_id": "-1003936827469",
-      "thread_id": 30220,
-      "updated_at": 1795299748,
-      "last_origin": "text",
-      "turn_open_at": null,
-      "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
-      "session_updated_at": 1795299887,
-      "_profile": "ops",
-      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
-    },
-    {
       "session_id": "8248a734-a784-420a-b289-5142f7d96f69",
       "channel": "telegram",
       "chat_id": "-1004493125364",
@@ -3350,7 +3324,33 @@
       "last_origin": "callback",
       "turn_open_at": 1795299850,
       "session_title": "Telegram: business tinder / HQ [chat:-1004493125364:topic:19043]",
-      "session_updated_at": 1795299851,
+      "session_updated_at": 1795301755,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 30220,
+      "updated_at": 1795300145,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Telegram: Opencrabs Dev Factory / OC DEV HQ [chat:-1003936827469:topic:30220]",
+      "session_updated_at": 1795300848,
+      "_profile": "ops",
+      "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
+    },
+    {
+      "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
+      "channel": "telegram",
+      "chat_id": "-1003936827469",
+      "thread_id": 39171,
+      "updated_at": 1795300558,
+      "last_origin": "text",
+      "turn_open_at": null,
+      "session_title": "Toolsmith Issue 255 and PR Dependency Laws",
+      "session_updated_at": 1795301698,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     },
@@ -3359,11 +3359,11 @@
       "channel": "telegram",
       "chat_id": "-5273090278",
       "thread_id": null,
-      "updated_at": 1795299934,
-      "last_origin": "text",
+      "updated_at": 1795301421,
+      "last_origin": "callback",
       "turn_open_at": null,
       "session_title": "Telegram: fast-mcp-telegram [chat:-5273090278]",
-      "session_updated_at": 1795299939,
+      "session_updated_at": 1795301476,
       "_profile": "ops",
       "_db": "/root/.opencrabs/profiles/ops/opencrabs.db"
     }
@@ -3522,8 +3522,8 @@
       "enabled": 1,
       "set_goal": 0,
       "goal_template": null,
-      "next_run_at": "2026-11-21T22:45:00+00:00",
-      "last_run_at": "2026-11-21T22:15:19Z",
+      "next_run_at": "2026-11-21T23:15:00+00:00",
+      "last_run_at": "2026-11-21T22:45:32Z",
       "trigger_cmd": "timeout 1800 /usr/bin/python3.14 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json; rc=$?; [ $rc -eq 124 ] && echo \"loss-watch: TIMEOUT after 1800s — slot released\"; exit $rc",
       "_profile": "ops"
     },

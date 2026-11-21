@@ -600,6 +600,85 @@ def test_a_shared_id_renders_once_in_the_block_and_once_in_the_index():
     assert index["announcements"][0]["origins"] == ["alpha", "beta"]
     assert index["counts"]["announcements"] == 1
 
+def test_the_orphan_counts_separate_a_job_that_fires_from_a_probe_that_is_parked():
+    """#670 — the orphan SCALAR is not the orphan SET, and the pair must ship together.
+
+    Measured on the live box 2026-11-21: seven unattributed rows, of which five are
+    parked probes and two fire daily. The attest brief sent every lane to
+    `counts.unattributed_jobs` alone, so the answer was "7 orphans" while the box had
+    two live unattributed jobs — a scalar read as if it answered a question it never
+    carried. The discriminator already existed one surface over (the markdown table
+    renders an `enabled` column per row), but the brief pointed at the aggregate.
+
+    The fixture is the discriminating pair, not a population: ONE enabled orphan and
+    ONE parked orphan. A count that ignored `enabled` returns 2/2, and a count that
+    ignored ownership returns 3/2 — so both halves of the predicate are pinned. The
+    third job is attributed, and is here so a renderer that counted every enabled row
+    fails on 2 rather than passing by coincidence.
+    """
+    live = _job("tmp-live-orphan", owner=None, basis="unattributed", enabled=1)
+    parked = _job("tmp-parked-probe", owner=None, basis="unattributed", enabled=0)
+    owned = _job("alpha-real", owner="alpha", basis="name prefix", enabled=1)
+    ctx = _ctx([_fragment("alpha")], jobs=[live, parked, owned])
+
+    index = rr.render_index(ctx)
+    assert index["counts"]["unattributed_jobs"] == 2, index["counts"]
+    assert index["counts"]["unattributed_enabled"] == 1, index["counts"]
+
+    # The same pair off the CLI report path, which reads the RAW rows (`_owner`) rather
+    # than the index's renamed `owner`. Both spellings must land on the same numbers, or
+    # a reader gets a different answer depending on which artifact they opened.
+    report = rr.report_from_ctx(ctx, ["registry/factories/alpha.json"])
+    assert report["unattributed_jobs"] == 2, report
+    assert report["unattributed_enabled"] == 1, report
+
+    # And the predicate is ONE function, not two sums that can drift apart: a shared
+    # reader is the only thing that keeps the two artifacts honest over time.
+    assert rr.orphan_counts([live, parked, owned]) == {
+        "unattributed_jobs": 2,
+        "unattributed_enabled": 1,
+    }
+
+
+def test_the_orphan_pair_arm_bites_when_the_enabled_half_is_neutered():
+    """MUTATION CONTROL for the arm above.
+
+    Neutering: `orphan_counts` is replaced by a copy whose `unattributed_enabled` is
+    computed over ALL rows (the "count every enabled row" mistake) — the shape a
+    careless fix takes when it forgets the ownership half of the predicate. The
+    fixture above must go RED, proving the probe is not satisfied by a number that
+    merely exists.
+    """
+    live = _job("tmp-live-orphan", owner=None, basis="unattributed", enabled=1)
+    parked = _job("tmp-parked-probe", owner=None, basis="unattributed", enabled=0)
+    owned = _job("alpha-real", owner="alpha", basis="name prefix", enabled=1)
+    jobs = [live, parked, owned]
+
+    real = rr.orphan_counts
+    try:
+        rr.orphan_counts = lambda rows, owner_key="_owner": {
+            "unattributed_jobs": sum(1 for j in rows if not j.get(owner_key)),
+            # The mutation: forgets `not j.get(owner_key)`, so the attributed row counts.
+            "unattributed_enabled": sum(1 for j in rows if j.get("enabled")),
+        }
+        index = rr.render_index(_ctx([_fragment("alpha")], jobs=jobs))
+        assert index["counts"]["unattributed_jobs"] == 2, index["counts"]
+        assert index["counts"]["unattributed_enabled"] == 2, (
+            "the neutering did not apply — expected the mutant's 2, got "
+            f"{index['counts']['unattributed_enabled']}"
+        )
+        assert index["counts"]["unattributed_enabled"] != 1, (
+            "the arm did not bite: the mutant's answer matches the real one"
+        )
+    finally:
+        rr.orphan_counts = real
+
+    # Restored, the real predicate answers 1 again — the mutation left nothing behind.
+    assert rr.render_index(_ctx([_fragment("alpha")], jobs=jobs))["counts"][
+        "unattributed_enabled"
+    ] == 1
+
+
 if __name__ == "__main__":
     import sys
 
