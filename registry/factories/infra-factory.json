@@ -134,24 +134,24 @@
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "scope": "profile",
       "severity": "warning",
-      "text": "The Mac CDP tunnel flaps on sleep. The 2026-11-02 clause 'no path to it exists today from any host' is WITHDRAWN as falsified - the tunnel was UP on 2026-11-09 with Gatus ep13 HEALTHY. As of 2026-11-16 the mac-cdp-tunnel unit on vpn reads INACTIVE while two listeners still hold :4444, so the flap persists in a NEW shape rather than being closed. Read this as a live flap class, not as a live outage.",
+      "text": "The Mac CDP tunnel flaps on sleep. The 2026-11-02 clause 'no path to it exists today from any host' is WITHDRAWN as falsified - the tunnel was UP on 2026-11-09 with Gatus ep13 HEALTHY. As of 2026-11-21 the mac-cdp-tunnel unit on vpn reads INACTIVE and NO listener holds :4444 - the two listeners the 2026-11-16 round recorded are gone, so the flap has moved a third time (unit down AND no listener, where 11-16 read unit down with two listeners). Read this as a live flap class, not as a live outage.",
       "affects": [
         "profile"
       ],
       "since": "2026-09-26",
-      "review_by": "2026-11-20",
-      "evidence": "infra-factory HQ read 2026-11-16: the mac-cdp-tunnel unit on vpn reads inactive, while two listeners hold :4444; prior reading 2026-11-09T06:05Z had the unit active (running) since 2026-11-07T07:05:44Z with :4444 held via sshd and an ESTABLISHED ssh from the Mac's 87.249.25.155, Gatus ep13 mac-tunnel HEALTHY since 2026-11-06T15:02:08Z. The 10-31 ISP block stands as history (evidence/mac-tunnel-isp-block-20261031.md, vds-servers 2b737396). Superseded evidence below is retained for the flap history it records."
+      "review_by": "2026-11-23",
+      "evidence": "infra-factory HQ read 2026-11-21T08:15Z over ssh: `systemctl is-active mac-cdp-tunnel` -> inactive, `ss -lntp | grep :4444 | wc -l` -> 0, `systemctl is-active gatus-notify` -> active. Prior read 2026-11-16: the unit inactive while two listeners hold :4444; prior reading 2026-11-09T06:05Z had the unit active (running) since 2026-11-07T07:05:44Z with :4444 held via sshd and an ESTABLISHED ssh from the Mac's 87.249.25.155, Gatus ep13 mac-tunnel HEALTHY since 2026-11-06T15:02:08Z. The 10-31 ISP block stands as history (evidence/mac-tunnel-isp-block-20261031.md, vds-servers 2b737396). Superseded evidence below is retained for the flap history it records."
     },
     {
       "id": "ops-daemon-dies-at-cgroup-cap",
-      "text": "FIVE cgroup kills since 2026-10-24, the fifth at 2026-11-05T13:24:00Z. The current incarnation has been clean since 2026-11-16T04:11:07Z: NRestarts=0, oom_kill=0 - PER-INCARNATION zeros beside five kills, so they are not evidence of a clean life. The caps are UNCHANGED and still exceeded: MemoryHigh 2,952,790,016 / MemoryMax 3,221,225,472. Raising 2 GiB -> 3 GiB did not stop the class: the fifth kill arrived five days after the raise.",
+      "text": "SIX cgroup kills since 2026-10-24, the sixth at 2026-11-21T06:37:00Z. The 2026-11-16 round recorded 'clean since 2026-11-16T04:11:07Z, NRestarts=0' and that reading is FALSIFIED: that very incarnation was OOM-killed 5 days later, so the count has moved 5 -> 6. The current incarnation has been clean since 2026-11-21T06:37:13Z: NRestarts=1, memory.events oom_kill=0, memory.peak 1,505,263,616 (46.7 % of max) - PER-INCARNATION zeros beside six kills, so they are not evidence of a clean life. The caps are UNCHANGED: MemoryHigh 2,952,790,016 / MemoryMax 3,221,225,472. Raising 2 GiB -> 3 GiB did not stop the class: the fifth kill arrived five days after the raise, and the sixth 16 days after the fifth.",
       "severity": "warning",
       "affects": [
         "profile"
       ],
       "scope": "profile",
-      "evidence": "infra-factory HQ read 2026-11-16: five cgroup kills since 2026-10-24, the fifth 2026-11-05T13:24:00Z; current incarnation clean since 2026-11-16T04:11:07Z with NRestarts=0 and oom_kill=0; caps re-read unchanged at MemoryHigh 2952790016 / MemoryMax 3221225472. Prior reading 2026-11-09T06:04Z: MemoryCurrent 2,301,022,208 = 71.43 % of max, MemoryPeak 2,953,863,168 = 91.70 % of max and 1,073,152 B over MemoryHigh, memory.events high 56,073 / max 0 / oom 0 / oom_kill 0. Drop-ins: /root/.config/systemd/user/opencrabs-ops.service.d/{10-oompolicy,20-memory,30-cores,40-killmode-reaper}.conf.",
-      "review_by": "2026-11-20",
+      "evidence": "infra-factory HQ read 2026-11-21T08:15Z: SIX cgroup kills since 2026-10-24, the sixth 2026-11-21T06:37:00Z. journalctl --user -u opencrabs-ops: 'A process of this unit has been killed by the OOM killer' 06:37:00, 'Main process exited, code=killed, status=9/KILL' 06:37:01, 'Failed with result signal' 06:37:04, 'Started' 06:37:13. Unit re-read: NRestarts=1, ActiveEnterTimestamp=2026-11-21T06:37:13Z, MemoryHigh=2952790016, MemoryMax=3221225472 (both UNCHANGED). cgroup at user.slice/user-0.slice/user@0.service/app.slice/opencrabs-ops.service: memory.peak=1505263616, memory.events 'high 0 / max 0 / oom_kill 0', cgroup.controllers='memory pids', cpu.max ABSENT. NOTE the unit is a USER unit: `systemctl show opencrabs-ops` (system scope) returns 'could not be found', and /sys/fs/cgroup/system.slice/opencrabs-ops.service does not exist - a system-scope read of this unit is a read of nothing. Prior reading 2026-11-16: five kills, the fifth 2026-11-05T13:24:00Z, incarnation clean since 2026-11-16T04:11:07Z with NRestarts=0 and oom_kill=0 - now falsified by the sixth kill. Prior reading 2026-11-09T06:04Z: MemoryCurrent 2,301,022,208 = 71.43 % of max, MemoryPeak 2,953,863,168 = 91.70 % of max and 1,073,152 B over MemoryHigh, memory.events high 56,073 / max 0 / oom 0 / oom_kill 0. Drop-ins: /root/.config/systemd/user/opencrabs-ops.service.d/{10-oompolicy,20-memory,30-cores,40-killmode-reaper}.conf.",
+      "review_by": "2026-11-23",
       "since": "2026-09-27T06:13:19Z"
     },
     {
@@ -203,24 +203,24 @@
     },
     {
       "id": "opencrabs-home-unmanaged-growth",
-      "text": "Growth RESUMED: /root/.opencrabs measured 14G on 2026-11-16 against 12G on 2026-11-09 (+2G over 7 days), and / is at 86 % with 8.2G free. The 2026-11-09 reading that 'the trend reversed' no longer holds, and the 2026-11-02 projection must not be quoted either. The ~8G drop of 2026-11-02 still has NO attributed producer in the record: the weekly cleanup ran 2026-11-08T03:00:01Z and logged 'hygiene cleanup complete: 0 item(s) reaped', so this factory's own instrument did not do it. Treat every figure here as a measurement with an unattributed cause; carry neither a rate nor a horizon.",
+      "text": "/root/.opencrabs measured 11G on 2026-11-21 against 14G on 2026-11-16 (-3G over 5 days), while / is UNCHANGED at 86 % used with 8.2G free. So the 2026-11-16 'growth RESUMED, +2G over 7 days' reading does not stand either, and NO rate may be carried in EITHER direction. TWO drops now have NO attributed producer: the ~8G of 2026-11-02, and this -3G of 2026-11-21. This factory's own instrument cannot account for either: the hourly reaper is crontab '7 * * * * /usr/bin/python3.14 tools/hygiene.py --clean', whose SCRATCH_ROOT is '/tmp' (tools/hygiene.py:41) so /root/.opencrabs is outside its reach by construction, and /var/log/hygiene-reap.log carries no /root/.opencrabs path; the weekly cleanup ran 2026-11-08T03:00:01Z and logged 'hygiene cleanup complete: 0 item(s) reaped'. Treat every figure here as a measurement with an unattributed cause; carry neither a rate nor a horizon.",
       "severity": "info",
       "since": "2026-10-09",
       "affects": [
         "profile"
       ],
-      "evidence": "infra-factory HQ read 2026-11-16: du -sh /root/.opencrabs = 14G (12G at the 2026-11-09 reading); df -h / -> 86 % used, 8.2G free. Prior readings: 2026-11-09T06:04Z /root/.opencrabs 12G, profiles/ops 6.3G, / 45G of 58G = 79 %, 13G free; 2026-11-02 20G / 14G. Reaper log: weekly cleanup 2026-11-08T03:00:01Z 'hygiene cleanup complete: 0 item(s) reaped'. The ~8G drop of 2026-11-02 remains unattributed."
+      "evidence": "infra-factory HQ read 2026-11-21T08:15Z: du -sh /root/.opencrabs = 11G, du -sb = 10.16 GiB; df -h / -> 58G total, 49G used, 8.2G free, 86 % (UNCHANGED from 2026-11-16). Breakdown: profiles 5.1G, projects 3.0G, opencrabs.db 558M, backups 541M, tmp 459M, channel_attachments 263M. The -3G drop is NOT the reaper's: crontab '7 * * * * /usr/bin/python3.14 tools/hygiene.py --clean' has SCRATCH_ROOT='/tmp' (tools/hygiene.py:41), and /var/log/hygiene-reap.log reaps /tmp paths only - no /root/.opencrabs entry. Prior reading 2026-11-16: du -sh = 14G (12G at the 2026-11-09 reading); df -h / -> 86 % used, 8.2G free. Prior readings: 2026-11-09T06:04Z /root/.opencrabs 12G, profiles/ops 6.3G, / 45G of 58G = 79 %, 13G free; 2026-11-02 20G / 14G. Reaper log: weekly cleanup 2026-11-08T03:00:01Z 'hygiene cleanup complete: 0 item(s) reaped'. The ~8G drop of 2026-11-02 remains unattributed."
     },
     {
       "id": "agents-cpu-uncapped-under-factory-load",
       "scope": "profile",
       "severity": "warning",
-      "text": "Re-read 2026-11-09T06:04Z: the delegation is ABSENT AGAIN \u2014 the opencrabs-ops.service cgroup's cgroup.controllers reads 'memory pids' and cpu.max does not exist. That is the THIRD absent window (2026-10-23, 2026-10-26, now) against one present window (2026-10-25T18:22:56Z), so the intermittent reading stands: read it live, never carry it from a prior round. THE FACT THAT SURVIVES: there is no CPU ceiling in effect either way \u2014 where cpu.max exists it reads 'max 100000' (an unlimited quota), and where it is absent there is no quota object at all. The load finding stands unchanged: host-diag calibrates on ldavg-15, so a load1 peak is not comparable with its 12.99 max.",
+      "text": "Re-read 2026-11-21T08:15Z: the delegation is ABSENT AGAIN \u2014 the opencrabs-ops.service cgroup's cgroup.controllers reads 'memory pids' and cpu.max does not exist. That is the FOURTH absent window (2026-10-23, 2026-10-26, 2026-11-09, now) against one present window (2026-10-25T18:22:56Z), so the intermittent reading stands: read it live, never carry it from a prior round. THE FACT THAT SURVIVES: there is no CPU ceiling in effect either way \u2014 where cpu.max exists it reads 'max 100000' (an unlimited quota), and where it is absent there is no quota object at all. The load finding stands unchanged: host-diag calibrates on ldavg-15, so a load1 peak is not comparable with its 12.99 max.",
       "affects": [
         "profile"
       ],
       "since": "2026-10-23",
-      "review_by": "2026-11-20",
+      "review_by": "2026-11-23",
       "evidence": "Read on agents 2026-10-26T06:05:51Z and re-read 06:10:00Z: unit cgroup.controllers='memory pids'; `cat cpu.max` -> No such file or directory; /sys/fs/cgroup/user.slice/user-0.slice/user@0.service/app.slice/cgroup.subtree_control='memory pids'; app.slice/cgroup.controllers='cpu memory pids'; user@0 subtree_control='cpu memory pids'. systemctl --user show opencrabs-ops.service -> CPUAccounting=yes, CPUWeight=[not set], CPUQuotaPerSecUSec=infinity, AllowedCPUs= (empty). No app.slice.d directory in either scope. journalctl --user --since 2026-10-25 | grep -Ei 'cpu controller|delegat' -> 0 lines. Prior reads: 2026-10-23T07:23:40Z cpu.max ABSENT; 2026-10-25T18:22:56Z cpu.max 'max 100000' with cpu.stat usage_usec 1642877746 nr_periods 0 nr_throttled 0 throttled_usec 0 nr_bursts 0. host-diag /usr/local/bin/host-diag at 2026-10-23T07:09:43Z: stdout '1042 87 1315' rc=1, captured as out=$(host-diag 2>&1); rc=$? \u2014 the separated form because it is shell-INDEPENDENT (bare echo \"$(cmd) rc=$?\" reports the command's status under bash and a false 0 under dash; /bin/sh here is dash). Thresholds from the script's own bytes: LOAD_MAX default 1000 (15-min loadavg x100), DISK_MAX 90, MEM_MIN_MB 80 (host-diag:24-26), compared at :121,:124,:132. Calibration p50 1.71 / p90 4.74 / p95 6.26 / p99 8.63 / max 12.99 over 671 sar ldavg-15 samples (vpn/docs/gatus-diagnostics.md:137, evidence/rework.md:37)."
     }
   ],
@@ -257,7 +257,7 @@
     }
   ],
   "status": "attested",
-  "attested_at": "2026-11-16T06:15:00Z",
+  "attested_at": "2026-11-21T08:20:00Z",
   "instruments": {
     "pacemaker": {
       "state": "adopted",
