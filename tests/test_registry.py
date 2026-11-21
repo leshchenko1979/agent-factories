@@ -2,7 +2,7 @@
 """Gate: the factory registry's declared half is valid, bound and covered, and its
 generated half is byte-reproducible.
 
-Seven checks, each printed with the count it measured:
+Eight checks, each printed with the count it measured:
 
   1. every fragment validates against the schema — the live store AND the fixtures,
      because a fixture that stops validating has stopped describing the schema
@@ -17,6 +17,14 @@ Seven checks, each printed with the count it measured:
   6. `resolved_at` is gated on its own terms — present, parseable, not in the future,
      and the two artifacts agree on it
   7. every announcement is well-formed and unambiguous
+  8. every resolved lane carries a topic name this box OBSERVED — a name copied from a
+     fragment does not count, because the flag's whole claim is that the surface was read
+  9. every fragment RECORDED in `registry/state.json` parses equal to the fragment this tree
+     holds now — content, never mtime, keyed on the repo-relative suffix and never on the
+     recorded path. This is the question GATE A cannot answer and must not try to: GATE A
+     replays the committed artifacts from the snapshot beside them, so it is blind to a
+     fragment amended after the render. `report_freshness()` stays NON-GATING (ruling
+     `n=613`); check 9 is greenable by re-rendering, which freshness is not.
 
 Why the registry needs a gate at all. The document is generated from live state, so it
 is true by construction — and for exactly that reason it rots the moment a topic
@@ -107,11 +115,12 @@ import io
 import json
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "tools"))
@@ -127,7 +136,9 @@ PREDICATE = (
     "snapshot committed beside them; `resolved_at` is present, parseable, not in the "
     "future and agreed by both artifacts; every announcement is well-formed and no two "
     "entries sharing an `id` carry differing text; every lane that resolves to a live "
-    "binding carries a topic name this box OBSERVED."
+    "binding carries a topic name this box OBSERVED; every fragment recorded in the "
+    "snapshot parses equal to the fragment this tree holds now, compared by CONTENT and "
+    "keyed on the repo-relative path."
 )
 
 failures: list[str] = []
@@ -1865,6 +1876,127 @@ def check_lane_topic_names() -> list[str]:
     return problems
 
 
+def repo_relative_fragment_path(recorded_path: str) -> str | None:
+    """The fragment's REPO-RELATIVE path, taken from the recorded path's SUFFIX.
+
+    Never the recorded value itself (#668). `registry/state.json` records the path the
+    render was INVOKED with, and that has been ABSOLUTE — `/tmp/wt-reg-1116/...` at
+    `d454a98d`, and the rendering checkout's own path before that. A check that RESOLVED
+    such a value would compare the snapshot against the very tree it was taken from and
+    return a zero guaranteed by construction: measured, a comparator reading the recorded
+    paths reported `0 differing of 6` on a clean worktree while the same rows keyed on the
+    suffix reported `1 of 6` (ruling on #668, board comment 7060752544).
+
+    The suffix `registry/factories/<slug>.json` is the only portable part, and both an
+    absolute and a relative record carry it — so this reads correctly whether or not
+    #669's fix (record the relative path) has landed. A record with no such suffix
+    resolves to no tree path at all, and the caller NAMES it rather than skipping it.
+    """
+    parts = PurePosixPath(recorded_path).parts
+    for index in range(len(parts) - 2):
+        if parts[index] == "registry" and parts[index + 1] == "factories":
+            return "/".join(parts[index:])
+    return None
+
+
+def _fragment_diff_summary(recorded, current) -> str:
+    """Which top-level fields differ — short, deterministic, enough to act on."""
+    if not isinstance(recorded, dict) or not isinstance(current, dict):
+        return f"recorded {type(recorded).__name__} vs on-disk {type(current).__name__}"
+    differing = sorted(k for k in set(recorded) | set(current) if recorded.get(k) != current.get(k))
+    if not differing:
+        return "no top-level field differs, so a nested value does"
+    shown = ", ".join(differing[:6])
+    more = "" if len(differing) <= 6 else f" and {len(differing) - 6} more"
+    return f"differing field(s): {shown}{more}"
+
+
+def _read_fragment_from_tree(rel: str) -> dict:
+    """The fragment as THIS tree holds it now, parsed. Raises when it cannot be read."""
+    return json.loads((rr.REPO_ROOT / rel).read_text(encoding="utf-8"))
+
+
+def check_fragment_content_fresh(state_path=None, read_current=None) -> list[str]:
+    """9. every recorded fragment parses equal to the fragment the tree holds — CONTENT.
+
+    The question GATE A cannot answer, and must not try to. GATE A replays the committed
+    artifacts from the snapshot committed BESIDE them, so it is blind by construction to a
+    fragment amended after the render: the defect is the ABSENCE of a render, and a guard
+    in the write path cannot observe a write that never happened (#668). This reads the
+    recorded snapshot and the tree as they stand NOW.
+
+    CONTENT, never mtime. mtime does not survive clone or checkout, so an mtime leg
+    reports differently on two boxes holding identical bytes, and the verdict would be a
+    property of the box rather than of the tree. No clock, deterministic, and greenable by
+    re-rendering — which matters, because a RED a lane cannot clear is a RED that gets
+    ignored (#103).
+
+    This is NOT a re-coupling of `report_freshness()`, which stays non-gating and printed
+    outside the verdict (ruling `n=613`): freshness asks whether the BOX moved since the
+    last render, which no lane can green. This asks whether one recorded fact still matches
+    the tree it claims to describe, which the lane clears by running the renderer.
+
+    Both sides are injectable so the bite proof can drive the tree that motivated the
+    defect without touching this one.
+    """
+    path = Path(state_path) if state_path is not None else rr.STATE_PATH
+    shown = relpath(path) if path.is_relative_to(rr.REPO_ROOT) else str(path)
+    if not path.is_file():
+        return [
+            f"{shown} is absent, so no recorded fragment can be compared against the tree "
+            f"— a missing snapshot is not a clean one"
+        ]
+    try:
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return [f"{shown} is unreadable ({exc.__class__.__name__}: {exc}), so check 9 has no snapshot to compare"]
+    recorded = snapshot.get("fragments")
+    if not isinstance(recorded, list) or not recorded:
+        return [
+            f"{shown} records no `fragments` list, so check 9 would have compared NOTHING "
+            f"and reported that as clean"
+        ]
+    reader = read_current or _read_fragment_from_tree
+    problems: list[str] = []
+    compared = 0
+    for entry in recorded:
+        if not isinstance(entry, dict):
+            problems.append(f"{shown} records a fragment entry that is not an object: {entry!r}"[:200])
+            continue
+        recorded_path = str(entry.get("path") or "")
+        rel = repo_relative_fragment_path(recorded_path)
+        if rel is None:
+            problems.append(
+                f"{shown} records the fragment path {recorded_path!r}, which carries no "
+                f"registry/factories/ suffix, so the row resolves to no tree path and is "
+                f"reported rather than skipped"
+            )
+            continue
+        try:
+            current = reader(rel)
+        except FileNotFoundError:
+            problems.append(
+                f"{rel} is recorded in {shown} but absent from this tree — the snapshot "
+                f"describes a fragment the tree does not carry"
+            )
+            continue
+        except (OSError, ValueError) as exc:
+            problems.append(f"{rel} could not be read or parsed ({exc.__class__.__name__}: {exc})")
+            continue
+        compared += 1
+        if current != entry.get("data"):
+            problems.append(
+                f"{rel} DIFFERS from the data recorded in {shown} — the snapshot was taken "
+                f"from older bytes than the tree now holds, so the render is STALE. "
+                f"Re-render to green this ({_fragment_diff_summary(entry.get('data'), current)})"
+            )
+    counts.append(
+        f"check 9: {compared} recorded fragment(s) compared by CONTENT against the tree, "
+        f"keyed on the repo-relative suffix and never on the recorded path"
+    )
+    return problems
+
+
 CHECKS = (
     ("1. every fragment validates against the schema", check_fragments_validate),
     ("2+3. every declared lane resolves to a live binding", check_lanes_bound),
@@ -1873,6 +2005,7 @@ CHECKS = (
     ("6. resolved_at is present, parseable, not in the future", check_resolved_at),
     ("7. every announcement is well-formed and unambiguous", check_announcements),
     ("8. every resolved lane carries an OBSERVED topic name", check_lane_topic_names),
+    ("9. every recorded fragment parses equal to the fragment on disk", check_fragment_content_fresh),
 )
 
 def _mutate_harness(fragment: dict) -> tuple[tempfile.TemporaryDirectory, Path]:
@@ -2184,12 +2317,171 @@ def probe_the_dry_run_declares_the_same_drift_without_writing() -> None:
         finally:
             reg.FRAGMENT_STORE = saved
 
+def _temp_registry_tree(old: dict, new: dict, recorded_path: str):
+    """A throwaway tree holding `new` on disk, plus a snapshot recording `old`.
+
+    Returns `(tempdir, state_path, rel)`. The state file sits INSIDE the temp tree, so the
+    check reads a synthetic snapshot rather than this factory's own — the `#211` lesson,
+    applied to the read side: a probe that let the check find the LIVE store would be
+    testing the box instead of the predicate.
+    """
+    root = Path(tempfile.mkdtemp(prefix="check9-"))
+    frag_dir = root / "registry" / "factories"
+    frag_dir.mkdir(parents=True)
+    (frag_dir / "probe.json").write_text(json.dumps(new, indent=1), encoding="utf-8")
+    state = root / "registry" / "state.json"
+    state.write_text(
+        json.dumps({"fragments": [{"path": recorded_path, "data": old}]}, indent=1),
+        encoding="utf-8",
+    )
+    return root, state, "registry/factories/probe.json"
+
+
+def probe_a_stale_fragment_is_named_and_a_fresh_one_is_green() -> None:
+    """Check 9 measures CONTENT — a stale render is named, a re-render clears it.
+
+    Two arms over one synthetic tree: the snapshot records `attested_at` 06:15:00Z while
+    the fragment on disk carries 08:20:00Z, which is the exact shape measured on the
+    motivating tree. The stale arm must name the fragment; the fresh arm — same paths,
+    recorded data updated to what the disk holds — must report nothing. The second arm is
+    what makes the first a VERDICT rather than a permanent red: a check a lane cannot
+    green is a check that gets ignored (#103).
+    """
+    old = {"slug": "probe", "attested_at": "2026-11-16T06:15:00Z"}
+    new = {"slug": "probe", "attested_at": "2026-11-21T08:20:00Z"}
+    root, state, rel = _temp_registry_tree(old, new, "/tmp/wt-probe/registry/factories/probe.json")
+
+    def read_temp(target: str) -> dict:
+        return json.loads((root / target).read_text(encoding="utf-8"))
+
+    try:
+        stale = check_fragment_content_fresh(state_path=state, read_current=read_temp)
+        check(
+            "a STALE fragment is NAMED by its repo-relative path",
+            len(stale) == 1 and rel in stale[0] and "STALE" in stale[0],
+            f"problems={stale[:1]}",
+        )
+        # Same tree, recorded data brought up to date — the re-render a lane would run.
+        state.write_text(
+            json.dumps({"fragments": [{"path": f"/tmp/wt-probe/{rel}", "data": new}]}, indent=1),
+            encoding="utf-8",
+        )
+        fresh = check_fragment_content_fresh(state_path=state, read_current=read_temp)
+        check(
+            "the SAME tree goes green once the recorded data matches it, so the check is clearable",
+            fresh == [],
+            f"problems={fresh[:1]}",
+        )
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def probe_the_recorded_path_is_never_resolved_only_its_suffix() -> None:
+    """The discriminator: keying on the recorded path produces a FALSE GREEN.
+
+    One snapshot, two keying strategies, opposite verdicts — which is the whole defect
+    (#668). The recorded path is an absolute path into a directory that still holds the
+    OLD bytes, exactly as `/tmp/wt-reg-1116` does on this box. A comparator that RESOLVES
+    it compares the snapshot against the tree the snapshot was taken from and reports
+    nothing wrong, by construction. Keyed on the repo-relative suffix against the tree that
+    is actually under test, the same rows report the drift.
+
+    If these two ever AGREE, this check has started resolving the recorded path and has
+    reproduced the bug it exists to catch — so the disagreement is asserted, not the
+    individual verdicts alone.
+    """
+    old = {"slug": "probe", "attested_at": "2026-11-16T06:15:00Z"}
+    new = {"slug": "probe", "attested_at": "2026-11-21T08:20:00Z"}
+    leaked = Path(tempfile.mkdtemp(prefix="check9-leak-"))
+    try:
+        # The "leaked worktree": an absolute directory holding the bytes the snapshot came
+        # from, mirroring the real shape `/tmp/wt-reg-1116/registry/factories/<slug>.json`
+        # — the suffix is what makes the two keying strategies comparable at all.
+        (leaked / "registry" / "factories").mkdir(parents=True)
+        (leaked / "registry" / "factories" / "probe.json").write_text(
+            json.dumps(old, indent=1), encoding="utf-8")
+        recorded_path = str(leaked / "registry" / "factories" / "probe.json")
+        root, state, rel = _temp_registry_tree(old, new, recorded_path)
+
+        def read_temp(target: str) -> dict:
+            return json.loads((root / target).read_text(encoding="utf-8"))
+
+        try:
+            suffix_keyed = check_fragment_content_fresh(state_path=state, read_current=read_temp)
+            resolved_keyed = check_fragment_content_fresh(
+                state_path=state,
+                read_current=lambda _rel: json.loads(Path(recorded_path).read_text(encoding="utf-8")),
+            )
+            check(
+                "resolving the recorded path is a FALSE GREEN while the suffix names the drift",
+                resolved_keyed == [] and len(suffix_keyed) == 1 and rel in suffix_keyed[0],
+                f"resolved={len(resolved_keyed)} suffix={len(suffix_keyed)}",
+            )
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+    finally:
+        shutil.rmtree(leaked, ignore_errors=True)
+
+
+def probe_the_motivating_tree_reports_exactly_one_of_six() -> None:
+    """The bite target from the ruling, on the tree that motivated it.
+
+    Revision `d454a98d` recorded six fragments from a temp worktree whose bytes were the
+    2026-11-16 state, while its own committed fragment for `infra-factory` had already
+    moved to 2026-11-21. Keyed on the repo-relative suffix, exactly ONE of six differs.
+    Zero differing means the check is keyed on the recorded absolute path — the bug.
+
+    STATED SKIP when the revision is not in this tree's history: a member factory's clone
+    has no `d454a98d`, and a check that crashed there would report a defect of the kit.
+    """
+    revision = "d454a98d"
+    probe_rev = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", f"{revision}^{{commit}}"],
+        cwd=REPO, capture_output=True,
+    )
+    if probe_rev.returncode != 0:
+        print(f"  STATED SKIP (check 9 bite target): {revision} is not in this tree's history")
+        return
+    snapshot = json.loads(
+        subprocess.run(
+            ["git", "show", f"{revision}:registry/state.json"],
+            cwd=REPO, capture_output=True, text=True, check=True,
+        ).stdout
+    )
+    root = Path(tempfile.mkdtemp(prefix="check9-hist-"))
+    try:
+        state = root / "state.json"
+        state.write_text(json.dumps(snapshot), encoding="utf-8")
+
+        def read_committed(rel: str) -> dict:
+            return json.loads(
+                subprocess.run(
+                    ["git", "show", f"{revision}:{rel}"],
+                    cwd=REPO, capture_output=True, text=True, check=True,
+                ).stdout
+            )
+
+        problems = check_fragment_content_fresh(state_path=state, read_current=read_committed)
+        total = len(snapshot.get("fragments") or [])
+        named = [p for p in problems if "infra-factory" in p]
+        check(
+            f"on {revision} exactly 1 of {total} fragment(s) DIFFERS, and it is infra-factory",
+            len(problems) == 1 and len(named) == 1,
+            f"{len(problems)} of {total} reported: {problems[:1]}",
+        )
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 PROBES = (
     probe_a_supersession_chain_is_not_ambiguity,
     probe_a_hand_edit_is_named,
     probe_only_the_stamp_advanced_passes,
     probe_the_sentinel_would_rewrite_badges,
     probe_a_mutated_snapshot_is_named,
+    probe_a_stale_fragment_is_named_and_a_fresh_one_is_green,
+    probe_the_recorded_path_is_never_resolved_only_its_suffix,
+    probe_the_motivating_tree_reports_exactly_one_of_six,
     probe_a_hand_edited_committed_artifact_is_named,
     probe_a_working_tree_edit_does_not_move_the_verdict,
     probe_the_monitor_read_path_is_load_bearing,
