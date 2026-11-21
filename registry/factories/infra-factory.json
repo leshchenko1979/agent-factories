@@ -105,8 +105,8 @@
         "profile"
       ],
       "since": "2026-09-19",
-      "review_by": "2026-11-06",
-      "evidence": "Root-caused by Infra Factory HQ and filed upstream as leshchenko1979/opencrabs#382 (OPEN, filed 2026-09-19T06:47:53Z). Two independent jobs confirmed in the daemon log: infra-sender-logs-check - 186 span lines before the 2026-09-18 15:09:34 restart, 0 after; infra-surveys-daily - 792 before the 2026-09-19 06:08:33 restart, 0 after. Ruling doc: /root/vds-servers/docs/rulings/2026-09-19-cron-result-lost-on-restart.md"
+      "review_by": "2026-11-28",
+      "evidence": "Root-caused by Infra Factory HQ and filed upstream as leshchenko1979/opencrabs#382 (OPEN, filed 2026-09-19T06:47:53Z). Two independent jobs confirmed in the daemon log: infra-sender-logs-check - 186 span lines before the 2026-09-18 15:09:34 restart, 0 after; infra-surveys-daily - 792 before the 2026-09-19 06:08:33 restart, 0 after. Ruling doc: /root/vds-servers/docs/rulings/2026-09-19-cron-result-lost-on-restart.md Re-verified 2026-11-21T08:45Z: leshchenko1979/opencrabs#382 is still OPEN (state OPEN, closedAt null, updated 2026-11-16T20:58:21Z), so the claim stands and remains unremediated upstream."
     },
     {
       "id": "vds-servers-single-writer-route",
@@ -127,8 +127,8 @@
         "profile"
       ],
       "since": "2026-09-23",
-      "review_by": "2026-11-06",
-      "evidence": "11 key blocks confirmed in BOTH the repo copy (vpn/services/gatus/config/config.yaml) and the deployed copy on vpn (grep -c 'BEGIN OPENSSH PRIVATE KEY' = 11 on each), re-measured 2026-10-17 \u2014 was 9 at the 2026-09-23 measurement, so the surface GREW (new host keys). Prior evidence stands: third re-exposure 2026-09-29, guard refuse-arm printed both blocks, fixed aab431f1; intake n=265/n=267, re-exposures n=275/n=285."
+      "review_by": "2026-11-28",
+      "evidence": "11 key blocks confirmed in BOTH the repo copy (vpn/services/gatus/config/config.yaml) and the deployed copy on vpn (grep -c 'BEGIN OPENSSH PRIVATE KEY' = 11 on each), re-measured 2026-10-17 \u2014 was 9 at the 2026-09-23 measurement, so the surface GREW (new host keys). Prior evidence stands: third re-exposure 2026-09-29, guard refuse-arm printed both blocks, fixed aab431f1; intake n=265/n=267, re-exposures n=275/n=285. Re-verified 2026-11-21T08:45Z: vpn/services/gatus/config/config.yaml is unchanged since 2026-10-24 (21,929 B, 637 lines) and still carries 22 'PRIVATE KEY' markers, 11 'BEGIN OPENSSH' blocks and 9 credential keys - read by count only, no value printed."
     },
     {
       "id": "mac-cdp-tunnels-flap-on-sleep",
