@@ -3409,6 +3409,263 @@ def probe_a_growing_gate_is_reported_first_and_derived_on_the_second_breach() ->
 # exhausted-only, and growth-INTERSECT-exhausted entries, and the overlap that actually
 # occurred was the one shape it omitted.
 
+# ---------------------------------------------------------------------------------------
+# #649 — A BREACH RECORD MUST CARRY THE BOX IT WAS MEASURED ON.
+#
+# THE DEFECT, in three halves, all of them in `tools/gate_budget_rederive.py`:
+#
+#   (a) the `growth_breach` marker recorded `sample_sec`, `basis_sec`, `round_id` and NOTHING
+#       about the machine it was taken on, so a page-cache artifact was indistinguishable from
+#       a gate that GREW. The entry's own `load_at_measure` is not a substitute: that one
+#       describes the BASIS, never the sample the breach was reported on.
+#   (b) the CARRIED arm set `consecutive=2` UNCONDITIONALLY. Its whole licence is that the
+#       sample it sizes from is REAL — the reporting round's own completed passing sample — and
+#       a kill in ANY later round cashed it in, so a gate killed on a quiet box spent a number
+#       measured on a loaded one. #558 states the rule it was violating: a refusal "measures
+#       how fast the gate REFUSED, never that it GREW", and a kill measures how fast the box ran
+#       out of wall.
+#   (c) the RESET arm then POPPED the marker, so a round that came back inside the wall in a
+#       DIFFERENT regime erased the only record of why the wall had been reported and never
+#       moved — the evidence spent on an observation of a different box.
+#
+# THE LIVE INSTANCE that makes this a REGIME question and not a growth one: on ONE revision,
+# `tests/test_hygiene_evidence_supersession.py` read 7.05 s in the shared (warm) tree and
+# 4.09 s in a fresh detached (cold) worktree — the COLD tree FASTER, on identical bytes. A
+# marker with no regime turns that into a 2.96 s "growth" that no reader can see is an artifact.
+#
+# THREE ARMS, AND EACH ONE HAS A MUTANT. The positive arm alone proves nothing: a leg that
+# refused EVERY carried breach, or withheld EVERY reset, would pass it and be useless. So each
+# arm is also run with the pre-#649 behaviour restored IN PROCESS — `_same_regime` forced True,
+# `_regime` neutered — and the HARM is required to reappear: the wall moving to 120.75 on a
+# round that measured nothing, and the marker being consumed. A check that cannot tell the fix
+# from a blanket refusal is not a check; and a test that greps for a literal can match its own
+# source, so every needle here is built at run time and every arm turns on a NUMBER.
+
+def probe_a_growth_marker_carries_the_REGIME_of_its_sample() -> None:
+    """#649: the marker records its regime, a carried streak needs one, and no pop on a foreign one."""
+    module = _rederive_module()
+    if module is None:
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        base, head = _two_commit_repo(root)
+        if base is None or head is None:
+            check("the #649 probe repository could be built and committed", False,
+                  f"base={base} head={head} — this leg could not judge")
+            return
+
+        # THE LOAD IS PINNED, AND ONLY THE LOAD. `_same_regime` compares the reading taken when
+        # the breach was RECORDED against the reading taken when the next round JUDGES; a live
+        # loadavg that happened to double between the two would fail the SAME-regime arms for a
+        # reason that has nothing to do with #649. The two DISCRETE fields — checkout kind and
+        # cache state — are read for real from the throwaway repo, and they are what every arm
+        # below turns on. Pinning one leaf is a fixture property; the alternative is a gate that
+        # reds on a busy box and teaches its reader to ignore it.
+        live_load = module._load_at_measure
+        module._load_at_measure = lambda: 1.0
+        try:
+            def manifest(name: str) -> Path:
+                return _manifest(root, {"tests/test_moved.py": _basis(head)}, name=name)
+
+            def entry_of(path: Path) -> dict:
+                return json.loads(path.read_text(encoding="utf-8"))["gates"]["tests/test_moved.py"]
+
+            counter = {"n": 0}
+
+            def report(date: str, duration: float, *, passed: bool = True,
+                       unknown: bool = False) -> Path:
+                counter["n"] += 1
+                path = root / f"audit-649-{counter['n']:03d}.json"
+                path.write_text(json.dumps({
+                    "date": date,
+                    "tree": {"head_sha": head, "modified_count": 0},
+                    "gates": [{
+                        "gate_key": "tests/test_moved.py", "cmd": "synthetic",
+                        "passed": passed, "unknown": unknown,
+                        "duration_sec": duration,
+                        "exit_code": 0 if passed else 1,
+                    }],
+                }), encoding="utf-8")
+                return path
+
+            # THE BASIS IS AT HEAD, so the entry is NOT stale — staleness outranks growth and
+            # would own the entry, which is the cell this probe must not accidentally build.
+            def breach_round(path: Path) -> Path:
+                """One completed PASSING sample at 30.0 s against a 4.0 s wall: 7.5x, a breach."""
+                pop = module.containment_population(path, root, report("2026-11-01", 30.0))
+                return module.record_growth_state(pop, path)
+
+            def kill_round(path: Path):
+                """A round in which the gate was MEASURED and KILLED: no sample, 999.0 s floor."""
+                return module.containment_population(
+                    path, root, report("2026-11-02", 999.0, passed=False, unknown=True))
+
+            def quiet_round(path: Path):
+                """A round back INSIDE the wall at 0.5 s."""
+                return module.containment_population(
+                    path, root, report("2026-11-03", 0.5))
+
+            # ARM (a) — THE MARKER CARRIES THE REGIME, or the next round has nothing to compare.
+            first = manifest("gates-649-a.json")
+            breach_round(first)
+            marker = entry_of(first).get("growth_breach")
+            recorded = marker.get("regime") if isinstance(marker, dict) else None
+            check("#649(a) — the growth marker records the REGIME its sample was taken in",
+                  isinstance(recorded, dict)
+                  and isinstance(recorded.get("load"), float)
+                  and recorded.get("tree") in ("main", "worktree")
+                  and recorded.get("cache") in ("warm", "cold"),
+                  json.dumps(marker))
+            check("#649(a) — and the recorded regime is the box's OWN reading, field for field",
+                  isinstance(recorded, dict)
+                  and recorded.get("load") == 1.0
+                  and recorded.get("tree") == module._tree_kind(root)
+                  and recorded.get("cache") == module._cache_state(root),
+                  f"recorded={recorded} tree={module._tree_kind(root)} "
+                  f"cache={module._cache_state(root)}")
+
+            # MUTANT (a): neuter the observation. The marker must then carry NO usable regime,
+            # which is the pre-#649 shape — so the two checks above are not decoration.
+            live_regime = module._regime
+            module._regime = lambda _root: None
+            try:
+                blind = manifest("gates-649-a-mutant.json")
+                breach_round(blind)
+            finally:
+                module._regime = live_regime
+            blind_marker = entry_of(blind).get("growth_breach")
+            check("MUTANT — with the observation neutered the marker carries NO usable regime",
+                  isinstance(blind_marker, dict) and not blind_marker.get("regime"),
+                  json.dumps(blind_marker))
+
+            # ARM (b) — A CARRIED BREACH MAY NOT BE BANKED BY A ROUND IN ANOTHER REGIME.
+            # The foreign regime is built by FLIPPING THE DISCRETE FIELDS, never by moving the
+            # load: a load band is a continuous comparison, and a fixture that leaned on it
+            # would pass or fail with whatever else the box is running.
+            observed = module._regime(root)
+            foreign = dict(observed)
+            foreign["tree"] = "worktree" if observed.get("tree") == "main" else "main"
+            foreign["cache"] = "warm" if observed.get("cache") == "cold" else "cold"
+            check("#649 — the fixture's foreign regime really IS foreign to this box",
+                  not module._same_regime(foreign, observed),
+                  f"foreign={foreign} observed={observed}")
+
+            def seed_foreign(path: Path) -> None:
+                """A breach recorded in this box's regime, then RE-STAMPED into the foreign one.
+
+                Written by rewriting the field rather than by monkeypatching the recorder: the
+                shape a live marker arrives in after a round in another checkout is exactly a
+                marker whose regime differs from the one this round reads, and that is what the
+                arm has to be fed."""
+                breach_round(path)
+                data = json.loads(path.read_text(encoding="utf-8"))
+                data["gates"]["tests/test_moved.py"]["growth_breach"]["regime"] = foreign
+                path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+            carried = manifest("gates-649-b.json")
+            seed_foreign(carried)
+            pop = kill_round(carried)
+            text = module.render(pop)
+            check("#649(b) — a CARRIED breach in a DIFFERENT regime does not advance the streak",
+                  pop.growth == ()
+                  and [k for k, _ in pop.extras.get("growth_carried_refused") or ()]
+                  == ["tests/test_moved.py"],
+                  f"growth={[g.key for g in pop.growth]} "
+                  f"refused={pop.extras.get('growth_carried_refused')}")
+            note = dict(pop.extras.get("growth_carried_refused") or ()).get(
+                "tests/test_moved.py", "")
+            check("#649(b) — and the refusal NAMES the entry and BOTH regimes in the output",
+                  f"[CARRIED REFUSED] tests/test_moved.py" in text
+                  and "recorded " in note and "this round " in note
+                  and foreign["tree"] in note and foreign["cache"] in note,
+                  text[-900:])
+            module.apply_rederivation(pop, carried, root, head)
+            check("#649(b) — so the wall does NOT move on a round that measured nothing",
+                  entry_of(carried)["budget_sec"] == 4.0
+                  and isinstance(entry_of(carried).get("growth_breach"), dict),
+                  json.dumps(entry_of(carried)))
+
+            # THE CONTROL: the SAME history in ONE regime must still derive, or the fix would
+            # have bought safety by making the trend clause unreachable.
+            control = manifest("gates-649-b-control.json")
+            breach_round(control)
+            same = kill_round(control)
+            check("#649(b) CONTROL — in the SAME regime the carried sample still advances",
+                  [g.key for g in same.growth] == ["tests/test_moved.py"]
+                  and same.growth[0].consecutive == 2 and same.growth[0].carried,
+                  json.dumps([(g.key, g.consecutive, g.carried) for g in same.growth]))
+            module.apply_rederivation(same, control, root, head)
+            check("#649(b) CONTROL — and derives from the CARRIED sample, not the 999.0 kill",
+                  entry_of(control)["budget_sec"] == 120.75
+                  and entry_of(control)["measured_sec"] == 30.0,
+                  json.dumps(entry_of(control)))
+
+            # MUTANT (b): restore the unconditional `consecutive=2` by assuming sameness. The
+            # harm must reappear as the wall jumping to 120.75 on a round that measured nothing.
+            live_same = module._same_regime
+            module._same_regime = lambda *_: True
+            try:
+                mutant = manifest("gates-649-b-mutant.json")
+                seed_foreign(mutant)
+                mutant_pop = kill_round(mutant)
+                module.apply_rederivation(mutant_pop, mutant, root, head)
+            finally:
+                module._same_regime = live_same
+            check("MUTANT — with sameness assumed a foreign-regime kill CASHES IN the breach "
+                  "(the wall jumps to 120.75 on a round that measured nothing)",
+                  [g.key for g in mutant_pop.growth] == ["tests/test_moved.py"]
+                  and entry_of(mutant)["budget_sec"] == 120.75,
+                  json.dumps(entry_of(mutant)))
+
+            # ARM (c) — A ROUND INSIDE THE WALL IN ANOTHER REGIME MUST NOT EAT THE MARKER. A
+            # faster sample from a different box does not disprove a breach; it says nothing
+            # about it, and the marker is the only record of why the wall was reported.
+            withheld = manifest("gates-649-c.json")
+            seed_foreign(withheld)
+            quiet = quiet_round(withheld)
+            quiet_text = module.render(quiet)
+            check("#649(c) — a round inside the wall in a DIFFERENT regime WITHHOLDS the reset",
+                  quiet.reset == ()
+                  and [k for k, _ in quiet.extras.get("growth_reset_withheld") or ()]
+                  == ["tests/test_moved.py"],
+                  f"reset={quiet.reset} withheld={quiet.extras.get('growth_reset_withheld')}")
+            check("#649(c) — and the withholding is PRINTED, not silently skipped",
+                  "[RESET WITHHELD] tests/test_moved.py" in quiet_text, quiet_text[-900:])
+            module.record_growth_state(quiet, withheld)
+            check("#649(c) — so the marker SURVIVES: the evidence of the breach is not erased",
+                  isinstance(entry_of(withheld).get("growth_breach"), dict),
+                  json.dumps(entry_of(withheld)))
+
+            # THE CONTROL: in ONE regime the reset must still fire and still consume, or a
+            # one-off breach could be banked forever and the streak would never clear.
+            consumed = manifest("gates-649-c-control.json")
+            breach_round(consumed)
+            back = quiet_round(consumed)
+            check("#649(c) CONTROL — in the SAME regime the reset still fires",
+                  back.reset == ("tests/test_moved.py",)
+                  and not back.extras.get("growth_reset_withheld"),
+                  f"reset={back.reset} withheld={back.extras.get('growth_reset_withheld')}")
+            module.record_growth_state(back, consumed)
+            check("#649(c) CONTROL — ... and consumes the marker, so a one-off cannot be banked",
+                  "growth_breach" not in entry_of(consumed), json.dumps(entry_of(consumed)))
+
+            # MUTANT (c): assume sameness and the foreign-regime round eats the record again.
+            module._same_regime = lambda *_: True
+            try:
+                eaten = manifest("gates-649-c-mutant.json")
+                seed_foreign(eaten)
+                eaten_pop = quiet_round(eaten)
+                module.record_growth_state(eaten_pop, eaten)
+            finally:
+                module._same_regime = live_same
+            check("MUTANT — with sameness assumed the foreign-regime round ERASES the marker "
+                  "(the evidence is spent on an observation of a different box)",
+                  eaten_pop.reset == ("tests/test_moved.py",)
+                  and "growth_breach" not in entry_of(eaten),
+                  json.dumps(entry_of(eaten)))
+        finally:
+            module._load_at_measure = live_load
+
 def probe_the_containment_breakdown_sums_or_refuses() -> None:
     """#578: the printed breakdown sums to the population it renders, or the run refuses."""
     leg = REPO / "tools" / "gate_budget_rederive.py"
@@ -5213,6 +5470,9 @@ def main() -> int:
 
     print("  synthetic probes — #564: growth is a third source, reported first, derived on trend")
     probe_a_growing_gate_is_reported_first_and_derived_on_the_second_breach()
+
+    print("  synthetic probes — #649: a growth marker carries the regime of its sample")
+    probe_a_growth_marker_carries_the_REGIME_of_its_sample()
 
     print("  synthetic probes — #578: the containment breakdown sums, or the run refuses")
     probe_the_containment_breakdown_sums_or_refuses()

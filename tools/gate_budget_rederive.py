@@ -35,13 +35,31 @@ never the duration of the failure. A kill alone is not a size signal (n=3984); i
 only after growth has already been flagged. The streak RESETS on any round where the derivation
 stays inside the declared wall.
 
+...BUT ONLY IN THE REGIME THE BREACH WAS RECORDED IN (#649). A duration is evidence about the
+BOX as much as about the gate: on ONE revision this tree's `tests/test_hygiene_evidence_supersession.py`
+read 7.05 s in the shared (warm) tree and 4.09 s in a fresh detached (cold) worktree, at load
+5.77 and 5.65 — the cold tree FASTER on identical bytes. So a second observation is banked only
+when the checkout kind, the bytecode cache and the load band all agree with the ones recorded
+beside the first, and the two arms that could otherwise spend a number across a regime boundary
+now refuse: a CARRIED breach in a different regime does not advance the streak (it is named,
+and the marker is left exactly as written), and a round that comes back INSIDE the wall in a
+different regime does not consume the marker (a faster box does not disprove the breach, and
+the marker is the only record of why the wall was reported and never moved). This is the
+refusal arm's precedent one population over — a round that measured nothing may not cash in a
+number — not a third policy.
+
 "CONSECUTIVE" IS READ FROM THE MANIFEST, NEVER FROM A LANE'S MEMORY. The round that reports a
 breach records it IN THE ENTRY, as `growth_breach`, carrying the sample, the basis, the
-derivation and the round's own identity (the report's `date` and `tree.head_sha`). A fresh
+derivation, the REGIME the sample was taken in (#649: load, checkout kind, cache state) and the
+round's own identity (the report's `date` and `tree.head_sha`). A fresh
 process holding the manifest and a report therefore reaches the same verdict with no history of
 its own, and a re-run of the SAME round is idempotent because the identity it compares is the
 one the report declares. The marker is the REPORT's durable record and is written whenever the
 leg reports, with or without `--apply`; `--apply` remains the only path that changes a WALL.
+A marker written before this field existed carries no regime, so it is never consumed by a
+reset and never advanced by a carried round — stated rather than repaired, because the
+alternative (reading an absent regime as agreement) would spend exactly the evidence #649
+exists to keep.
 
 PRECEDENCE, WHEN MORE THAN ONE TRIGGER FIRES. STALE outranks growth: a basis whose bytes or
 argv moved describes a DIFFERENT command, and its remedy is a re-derivation from the fresh
@@ -125,6 +143,34 @@ EXIT_REFUSED = 3
 # reads it back. A lane's memory is never the store: a fresh process, on a fresh box, in a
 # fresh clone, reaches the same verdict from these two files alone.
 GROWTH_MARKER = "growth_breach"
+
+# THE REGIME THE SAMPLE WAS TAKEN IN, RECORDED IN THE MARKER (#649). A marker carrying
+# `sample_sec` and `basis_sec` alone answers "how big was the number" and never "what was the
+# box doing when it was taken", so a page-cache or load artifact is INDISTINGUISHABLE from
+# growth. The entry's own `load_at_measure` cannot answer it either: that field belongs to the
+# BASIS, never to the sample a breach was reported on. Measured instance, ONE revision:
+# `tests/test_hygiene_evidence_supersession.py` carried a breach at sample 6.56 s against a
+# 4.51 s basis while its `load_at_measure` 7.07 described the basis; the shared (warm) tree
+# read 0.94 s pytest / 7.05 s wall at load 5.77 and a fresh detached (cold) worktree read
+# 1.46 s pytest / 4.09 s wall at load 5.65. COLD FASTER THAN WARM on identical code, so 6.56 s
+# was a property of the TREE, never of the gate. The regime therefore travels WITH the number,
+# as `probe_regime` already does for a probe sample.
+GROWTH_REGIME_FIELD = "regime"
+
+# HOW DIFFERENT TWO REGIMES MAY BE AND STILL BE THE SAME ONE (#649). The predicate compares
+# the two DISCRETE observations exactly -- the checkout kind and the bytecode cache -- and the
+# load as a BAND, because a load average is continuous and equality on it would make two
+# consecutive runs on one idle box "different regimes" over 0.01.
+#
+# The band is an INITIAL declared value, not a derived one, and the two MEASURED points it has
+# to separate both live in this tree: the pair above reads 5.77 against 5.65 (1.02x, plainly
+# one box), while the `tests/test_hygiene_evidence_supersession.py` basis note records 2.86 s
+# at load 8.08 against 46.43 s at 17.59 (2.18x on load, 16x on runtime -- "the same gate, a
+# different regime"). 2.0 admits the first and refuses the second. The FLOOR exists because a
+# load average near zero makes a ratio undefined while both readings are plainly quiet: below
+# it, both readings are quiet and the band is not the thing that decides.
+REGIME_LOAD_FACTOR = 2.0
+REGIME_LOAD_FLOOR = 1.0
 
 # THE WALL-KILL RECORD, AND THE DEADLOCK IT BREAKS (#604). A gate killed at its own declared
 # wall produces `unknown: true` and NO sample, so the ordinary re-derivation can never fire:
@@ -235,6 +281,11 @@ class Growth:
     sample_revision: str | None = None
     carried: bool = False
     also_unknown: bool = False
+    # THE REGIME the sample that SIZES this record was taken in (#649). For a FRESH sample it
+    # is the observation this run made; for a CARRIED one it is the MARKER's own record, never
+    # a fresh reading — the number and the box it was taken on have to travel together, or a
+    # carried arm launders a warm-tree sample into a cold-tree wall.
+    regime: dict = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class WallKill:
@@ -578,6 +629,12 @@ def containment_population(
     failed_only: tuple = ()
     growth: tuple = ()
     reset: tuple = ()
+    # THE TWO REGIME HOLDS (#649): entries whose carried breach or whose reset could not be
+    # matched to this round's regime. Kept beside `growth`/`reset` rather than folded into
+    # either, because a hold is neither an advance nor a reset -- and printed, because a
+    # refusal nobody prints is indistinguishable from a mechanism that never fired.
+    growth_carried_refused: tuple = ()
+    growth_reset_withheld: tuple = ()
     samples: dict = {}
     sample_note = "no audit report given — the exhausted-budget trigger was not read"
     sample_revision: str | None = None
@@ -612,7 +669,9 @@ def containment_population(
         # a growth record has to know whether its entry ALSO reported UNKNOWN this round: the
         # two verdicts can hold at once, and precedence decides which one owns the entry in
         # the printed partition, never which one the reader is told about.
-        growth, reset = _growth_source(entries, {s.key for s in stale}, audit)
+        growth, reset, growth_carried_refused, growth_reset_withheld = _growth_source(
+            entries, {s.key for s in stale}, audit, root
+        )
         growth_keys = {g.key for g in growth}
         # PRECEDENCE: stale > growth > exhausted. Staleness was excluded inside the growth
         # read, so BOTH remaining sets are narrowed here against the ones that outrank them:
@@ -631,6 +690,16 @@ def containment_population(
             f"{'y' if len(growth) == 1 else 'ies'} whose own derivation now exceeds the "
             f"declared wall ({sum(1 for g in growth if g.consecutive >= 2)} on a SECOND "
             f"consecutive breach, {len(reset)} reset by a round inside the wall)"
+        )
+        # THE REGIME COUNTS (#649), printed on every run that read a report. Two entries can
+        # look identical in the growth population and differ here: one whose trend is
+        # established, and one whose carried sample was taken in a regime this round is not in.
+        # The second number is the one that must be able to shrink, and a hold nobody counts
+        # reads exactly like a clean round.
+        sample_note += (
+            f" | regime (#649): {len(growth_carried_refused)} carried breach(es) HELD because "
+            f"this round is in a different regime, {len(growth_reset_withheld)} reset(s) "
+            f"WITHHELD for the same reason"
         )
 
     # THE DECLARED-MODE HOLD (#615). An entry whose own declaration names more than one
@@ -655,6 +724,15 @@ def containment_population(
         stale = tuple(s for s in stale if s.key not in held_keys)
         exhausted = tuple(k for k in exhausted if k not in held_keys)
         growth = tuple(g for g in growth if g.key not in held_keys)
+        # ...and the two REGIME holds (#649) are narrowed the same way, for the same reason:
+        # an entry the declared-mode hold already owns is HELD there, and printing it a second
+        # time under a regime hold would name one entry in two places.
+        growth_carried_refused = tuple(
+            (k, why) for k, why in growth_carried_refused if k not in held_keys
+        )
+        growth_reset_withheld = tuple(
+            (k, why) for k, why in growth_reset_withheld if k not in held_keys
+        )
 
     # THE FOURTH SOURCE (#650): a gate the audit CENSORED that the manifest does not declare.
     #
@@ -737,6 +815,12 @@ def containment_population(
                 # default. A count nobody prints is indistinguishable from a mechanism.
                 "declared_hold": tuple(sorted(declared_hold.items())),
                 "undeclared_modes": tuple(undeclared),
+                # THE TWO REGIME HOLDS (#649). Carried to the render for the reason the
+                # declared-mode hold is: a carried breach refused and a reset withheld are
+                # both DECISIONS this run made, and a decision that reaches no reader is
+                # indistinguishable from a round that found nothing.
+                "growth_carried_refused": growth_carried_refused,
+                "growth_reset_withheld": growth_reset_withheld,
                 # THE RAW UNKNOWN SET, before any narrowing (#604). The containment
                 # partitions are narrowed against each other by precedence, so an entry that
                 # is BOTH stale and killed appears only under STALE -- and a kill record read
@@ -915,6 +999,99 @@ def _same_round(marker: object, round_id: str | None) -> bool:
         return False
     return marker.get("round_id") == round_id
 
+def _tree_kind(root: Path) -> str:
+    """Whether this checkout is the SHARED tree or a LINKED WORKTREE — "main" / "worktree".
+
+    The live instance behind #649 turned on exactly this: one revision read 7.05 s in the
+    shared tree and 4.09 s in a fresh detached worktree. The two are distinguishable without
+    guessing, because a linked worktree's `--git-dir` is a directory UNDER the common dir while
+    the shared checkout answers the same path twice. `unknown` when git cannot answer: an
+    observation that FAILED is not the observation that nothing differs.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--git-dir", "--git-common-dir"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    lines = [line.strip() for line in out.stdout.splitlines() if line.strip()]
+    if out.returncode != 0 or len(lines) != 2:
+        return "unknown"
+    # BOTH answers are RELATIVE to the repo (".git", "../.git/worktrees/<name>") — joined to
+    # the repo FIRST, never resolved against this process's cwd. From /tmp the relative form
+    # yields "/tmp/.git" and matches nothing while looking like a fix (tools/publish.py's trap).
+    git_dir, common_dir = ((root / raw).resolve() for raw in lines)
+    return "main" if git_dir == common_dir else "worktree"
+
+def _cache_state(root: Path) -> str:
+    """Whether the gate population's BYTECODE cache is present — "warm" / "cold".
+
+    The observable half of "warm" is the interpreter's bytecode cache, which a fresh worktree
+    does not have until it has run something. It is a PROXY and is stated as one: the page
+    cache is not observable from here and this field does not claim it. `unknown` when neither
+    `tests/` nor `tools/` is present, because then nothing was observed at all — and a field
+    that cannot tell "cold" from "not looked" would read every unseen tree as cold.
+    """
+    seen = 0
+    for name in ("tests", "tools"):
+        base = root / name
+        if not base.is_dir():
+            continue
+        seen += 1
+        if (base / "__pycache__").is_dir():
+            return "warm"
+    return "cold" if seen else "unknown"
+
+def _regime(root: Path) -> dict:
+    """The regime a sample was taken in: the box's load, its checkout kind, its cache state.
+
+    Read at the instant this leg runs, which is the closest observation to the sample it CAN
+    make: the audit report carries neither a load nor a cache state, and the documented normal
+    round runs this leg in the tree the audit ran in. Where that does not hold the reading is
+    an APPROXIMATION, and it is recorded BESIDE the number rather than presented as the number.
+    """
+    return {"load": _load_at_measure(), "tree": _tree_kind(root), "cache": _cache_state(root)}
+
+def _regime_text(regime: object) -> str:
+    """One phrase for a regime, or the fact that none was recorded."""
+    if not isinstance(regime, dict):
+        return "no regime recorded"
+    return (
+        f"load {regime.get('load')}, {regime.get('tree')} tree, {regime.get('cache')} cache"
+    )
+
+def _regime_note(recorded: object, observed: object) -> str:
+    """The two regimes in one line, so a refusal says WHICH observation differed."""
+    return f"recorded {_regime_text(recorded)}; this round {_regime_text(observed)}"
+
+def _same_regime(recorded: object, observed: object) -> bool:
+    """Whether two regimes are the SAME regime, so a second observation may bank the first.
+
+    THE FAILURE DIRECTION IS THE OPPOSITE OF `_same_round`'s, deliberately. `_same_round` fails
+    toward ADVANCING, because a re-run reading as its own successor is the worse error there.
+    Here the worse error is CASHING IN a number nothing can vouch for, so an absent, unreadable
+    or `unknown` field means sameness CANNOT BE SHOWN and the answer is False. A marker written
+    before this field existed (#649's 18 live entries) is therefore never consumed on the
+    strength of a comparison nobody made — the migration cost is stated in the header, and it
+    is the direction that keeps the evidence rather than the direction that spends it.
+    """
+    if not isinstance(recorded, dict) or not isinstance(observed, dict):
+        return False
+    for name in ("tree", "cache"):
+        left, right = recorded.get(name), observed.get(name)
+        if not isinstance(left, str) or not isinstance(right, str):
+            return False
+        if left == "unknown" or right == "unknown" or left != right:
+            return False
+    left, right = recorded.get("load"), observed.get("load")
+    if isinstance(left, bool) or isinstance(right, bool):
+        return False
+    if not isinstance(left, (int, float)) or not isinstance(right, (int, float)):
+        return False
+    low, high = sorted((float(left), float(right)))
+    return high <= max(low, REGIME_LOAD_FLOOR) * REGIME_LOAD_FACTOR
+
 def _growth_for(
     key: str,
     entry: dict,
@@ -924,12 +1101,15 @@ def _growth_for(
     sample_revision: str | None,
     carried: bool = False,
     also_unknown: bool = False,
+    regime: dict | None = None,
 ) -> Growth | None:
     """One growth record, with every figure the report owes a reader.
 
     `derived` is recomputed from the sample by the manifest's own law rather than copied from
     the marker: a record is a reading, and the leg's authority is the function, never the
-    last round's arithmetic.
+    last round's arithmetic. `regime` is the one figure the law CANNOT recompute — it is the
+    observation the sample was taken under, so it is carried in from the caller that observed
+    it (this round for a fresh sample, the marker for a carried one).
     """
     declared = _declared_sec(entry)
     basis = entry.get("measured_sec")
@@ -949,12 +1129,13 @@ def _growth_for(
         sample_revision=sample_revision,
         carried=carried,
         also_unknown=also_unknown,
+        regime=dict(regime) if isinstance(regime, dict) else {},
     )
 
 def _growth_source(
-    entries: dict, stale_keys: set, audit: AuditRead | None
-) -> tuple[tuple, tuple]:
-    """The GROWTH source (#564), and the entries whose streak RESETS this round.
+    entries: dict, stale_keys: set, audit: AuditRead | None, root: Path
+) -> tuple[tuple, tuple, tuple, tuple]:
+    """The GROWTH source (#564), the entries whose streak RESETS, and the two regime holds.
 
     Three conditions, and each is load-bearing:
 
@@ -972,11 +1153,25 @@ def _growth_source(
     sample the reporting round recorded. An entry the report never invoked has said nothing and
     advances nothing -- and an entry that was measured and REFUSED is excluded, because a
     refusal measures how fast the gate refused (#558), not that it grew.
+
+    BOTH ARMS NOW NEED THE REGIME TO AGREE (#649), and that is one rule, not two. A number is
+    evidence about the BOX as well as about the gate — the measured instance in the header has
+    a cold worktree running the same revision FASTER than the warm shared tree — so a second
+    observation counts only when it was taken in the regime the first one was recorded in. The
+    two places that rule bites are stated where they bite: the CARRIED arm below (a kill has no
+    sample of its own, so it may not bank the previous round's number from a different box) and
+    the RESET arm (a faster round does not disprove a breach, so it may not erase the marker).
     """
     if audit is None:
-        return (), ()
+        return (), (), (), ()
     growth: list[Growth] = []
     reset: list[str] = []
+    carried_refused: list[tuple[str, str]] = []
+    reset_withheld: list[tuple[str, str]] = []
+    # ONE OBSERVATION PER RUN. Every arm below compares against the SAME reading: two readings
+    # inside one run could disagree on load and let two arms judge one box differently, which is
+    # the drift class this file files against itself.
+    observed = _regime(root)
     for key, entry in entries.items():
         if key in stale_keys:
             continue
@@ -990,9 +1185,18 @@ def _growth_source(
         if sample is not None:
             derived = round(margin_for(float(sample)) * float(sample), 2)
             if derived <= declared:
-                # THE STREAK RESETS on any round inside the wall (#564 clause 4).
+                # THE STREAK RESETS on any round inside the wall (#564 clause 4) — but only
+                # when the round that came back inside is COMPARABLE (#649). A faster sample
+                # from a cold worktree, a quiet box or a warm cache does not disprove a breach
+                # taken under different conditions, and the marker is the ONLY record of why
+                # the wall was reported and never moved. So the marker is KEPT and NAMED: the
+                # streak neither advances nor is spent on an observation of a different box.
                 if marker is not None:
-                    reset.append(key)
+                    recorded = marker.get(GROWTH_REGIME_FIELD)
+                    if _same_regime(recorded, observed):
+                        reset.append(key)
+                    else:
+                        reset_withheld.append((key, _regime_note(recorded, observed)))
                 continue
             record = _growth_for(
                 key,
@@ -1000,6 +1204,7 @@ def _growth_source(
                 float(sample),
                 consecutive=2 if (marker is not None and not _same_round(marker, audit.round_id)) else 1,
                 sample_revision=audit.revision,
+                regime=observed,
             )
         elif marker is not None and key in audit.exhausted:
             carried_sample = marker.get("sample_sec")
@@ -1011,6 +1216,22 @@ def _growth_source(
                 # A marker with no usable sample cannot size a derivation; the ordinary path
                 # names the entry rather than inventing a number for it.
                 continue
+            # THE CARRIED ARM MAY NOT BANK A ROUND THAT MEASURED NOTHING (#649). This arm's
+            # whole licence is that the sample it sizes from is REAL — the reporting round's own
+            # completed passing sample — and `consecutive=2` was set here UNCONDITIONALLY, so a
+            # kill in ANY later box cashed it in. That is the refusal arm's defect one population
+            # over: #558 says a refusal "measures how fast the gate REFUSED, never that it GREW",
+            # and a kill measures how fast the box ran out of wall. Neither is a second
+            # observation of the growth, so the streak advances only when this round's regime
+            # MATCHES the one recorded with the breach — the same-regime second observation, not
+            # a third policy. On a mismatch the arm REFUSES in the refusal arm's own shape: the
+            # record is dropped, the entry is named, and the marker is left exactly as written
+            # (nothing here rewrites it, so a carried sample can never be laundered into the
+            # regime of a box it was not measured on).
+            carried_regime = marker.get(GROWTH_REGIME_FIELD)
+            if not _same_regime(carried_regime, observed):
+                carried_refused.append((key, _regime_note(carried_regime, observed)))
+                continue
             record = _growth_for(
                 key,
                 entry,
@@ -1019,6 +1240,9 @@ def _growth_source(
                 sample_revision=marker.get("sample_revision"),
                 carried=True,
                 also_unknown=True,
+                # THE SAMPLE'S OWN regime, never this round's: they agree by the predicate
+                # above, and carrying the recorded one keeps the number and the box together.
+                regime=carried_regime,
             )
         elif marker is not None and key in audit.present:
             # MEASURED AND REFUSED, not killed: #558's population. A refusal measures how fast
@@ -1028,7 +1252,12 @@ def _growth_source(
             continue
         if record is not None:
             growth.append(record)
-    return tuple(growth), tuple(sorted(reset))
+    return (
+        tuple(growth),
+        tuple(sorted(reset)),
+        tuple(sorted(carried_refused)),
+        tuple(sorted(reset_withheld)),
+    )
 
 def _write_manifest(data: dict, manifest_path: Path, root: Path, entries: dict) -> bool:
     """Write the manifest through the manifest's OWN loader, or leave the file untouched.
@@ -1099,12 +1328,25 @@ def record_growth_state(pop: Population, manifest_path: Path) -> Population:
             "derived_over_declared": growth.derived_over_declared,
             "round_id": round_id,
             "reported_at": now,
+            # THE REGIME THE SAMPLE WAS TAKEN IN (#649). This is the field that makes the
+            # marker answer "what was the box doing when this number was taken", which
+            # `sample_sec`/`basis_sec` cannot and the entry's own `load_at_measure` does not
+            # (that one describes the BASIS). Written for EVERY marker, so the next round can
+            # compare like with like instead of inheriting a number from an unknown regime.
+            GROWTH_REGIME_FIELD: (
+                dict(growth.regime) if isinstance(growth.regime, dict) else {}
+            ),
         }
         recorded.append(growth.key)
         changed = True
     for key in pop.reset:
         entry = entries.get(key)
         if isinstance(entry, dict) and GROWTH_MARKER in entry:
+            # THE ONE PLACE A LIVE MARKER IS CONSUMED BY A RESET (#649). `pop.reset` is
+            # populated only for a round that came back inside the wall IN THE MARKER'S OWN
+            # REGIME, so this pop can never erase the record of a breach on the strength of an
+            # observation of a different box — that is what the pop used to do, and the marker
+            # is the only evidence of why a wall was reported and never moved.
             entry.pop(GROWTH_MARKER, None)
             changed = True
     if changed and not _write_manifest(data, manifest_path, REPO_ROOT, entries):
@@ -2502,6 +2744,13 @@ def render(pop: Population) -> str:
             f"wall is {growth.derived_sec} s = {growth.derived_over_declared}x the declared "
             f"{growth.declared_sec} s (the sample is {growth.growth_x}x the basis)"
             + ("; the audit ALSO reported it UNKNOWN this round" if growth.also_unknown else "")
+            # THE REGIME TRAVELS WITH THE NUMBER (#649), as it does on a probe sample: a
+            # reader deciding whether this is growth or an artifact needs the box beside it.
+            + (
+                f"; taken in the regime {_regime_text(growth.regime)}"
+                if growth.regime
+                else "; NO REGIME RECORDED, so this number cannot be matched to another round"
+            )
         )
         if growth.consecutive >= 2 and growth.key in pop.applied:
             lines.append(
@@ -2529,6 +2778,23 @@ def render(pop: Population) -> str:
         lines.append(
             f"    [RESET] {key} — this round came back INSIDE the declared wall, so the "
             f"breach streak is cleared"
+        )
+    # ---- #649: the two REGIME holds, printed wherever they apply ----
+    # Both are REFUSALS this run made, and both would otherwise be invisible: a carried breach
+    # that did not advance and a reset that did not happen leave the population looking exactly
+    # like a clean round, which is the shape this file keeps filing against itself.
+    for key, note in tuple(pop.extras.get("growth_carried_refused") or ()):
+        lines.append(
+            f"    [CARRIED REFUSED] {key} — an outstanding breach and a round that produced NO "
+            f"completed passing sample, but NOT in the regime the breach was recorded in "
+            f"({note}): the streak does not advance and the wall does not move (#649)"
+        )
+    for key, note in tuple(pop.extras.get("growth_reset_withheld") or ()):
+        lines.append(
+            f"    [RESET WITHHELD] {key} — this round came back INSIDE the declared wall, but in "
+            f"a DIFFERENT regime from the breach ({note}), so the marker is KEPT: a faster box "
+            f"does not disprove the breach, and consuming it would erase the record of why the "
+            f"wall never moved (#649)"
         )
     # ---- #604: the wall-kill streak, the probe, and what the licence decided ----
     # THE CLEAN CLAIM IS GATED ON A READ THAT HAPPENED (#595's ordering lesson, applied here
