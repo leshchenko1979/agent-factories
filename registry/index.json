@@ -1,13 +1,13 @@
 {
   "schema": "factory-registry/1",
   "generated_by": "tools/registry.py render",
-  "resolved_at": "2026-11-21T22:56:01Z",
+  "resolved_at": "2026-11-22T20:19:50Z",
   "counts": {
     "factories": 6,
     "attested": 6,
     "lanes": 70,
     "announcements": 42,
-    "jobs": 83,
+    "jobs": 87,
     "unattributed_jobs": 7,
     "unattributed_enabled": 2
   },
@@ -169,11 +169,11 @@
       "id": "agents-cpu-uncapped-under-factory-load",
       "severity": "warning",
       "scope": "profile",
-      "text": "Re-read 2026-11-21T08:15Z: the delegation is ABSENT AGAIN — the opencrabs-ops.service cgroup's cgroup.controllers reads 'memory pids' and cpu.max does not exist. That is the FIFTH absent window (2026-10-23, 2026-10-26, 2026-11-09, 2026-11-21T08:15Z, now) against one present window (2026-10-25T18:22:56Z), so the intermittent reading stands: read it live, never carry it from a prior round. THE FACT THAT SURVIVES: there is no CPU ceiling in effect either way — where cpu.max exists it reads 'max 100000' (an unlimited quota), and where it is absent there is no quota object at all. The load finding stands unchanged: host-diag calibrates on ldavg-15, so a load1 peak is not comparable with its 12.99 max.",
+      "text": "Re-read 2026-11-22T20:16Z: the delegation is ABSENT AGAIN -- the opencrabs-ops.service cgroup's cgroup.controllers reads 'memory pids' and cpu.max does not exist. That is the SIXTH absent window (2026-10-23, 2026-10-26, 2026-11-09, 2026-11-21T08:15Z, 2026-11-21T22:2xZ, now) against one present window (2026-10-25T18:22:56Z), so the intermittent reading stands: read it live, never carry it from a prior round. THE FACT THAT SURVIVES: there is no CPU ceiling in effect either way -- where cpu.max exists it reads 'max 100000' (an unlimited quota), and where it is absent there is no quota object at all. The load finding stands unchanged: host-diag calibrates on ldavg-15, so a load1 peak is not comparable with its 12.99 threshold, and the count is not the test. The contrast that IS the test: the PARENT app.slice has cgroup.controllers='cpu memory pids' and cpu.max='max 100000' (unlimited) and delegates cpu to none of its children -- opencrabs.service, opencrabs-family.service and opencrabs-ops.service all read controllers='memory pids' with no cpu.max.",
       "since": "2026-10-23",
       "review_by": "2026-11-23",
       "check": null,
-      "evidence": "Read on agents 2026-10-26T06:05:51Z and re-read 06:10:00Z: unit cgroup.controllers='memory pids'; `cat cpu.max` -> No such file or directory; /sys/fs/cgroup/user.slice/user-0.slice/user@0.service/app.slice/cgroup.subtree_control='memory pids'; app.slice/cgroup.controllers='cpu memory pids'; user@0 subtree_control='cpu memory pids'. systemctl --user show opencrabs-ops.service -> CPUAccounting=yes, CPUWeight=[not set], CPUQuotaPerSecUSec=infinity, AllowedCPUs= (empty). No app.slice.d directory in either scope. journalctl --user --since 2026-10-25 | grep -Ei 'cpu controller|delegat' -> 0 lines. Prior reads: 2026-10-23T07:23:40Z cpu.max ABSENT; 2026-10-25T18:22:56Z cpu.max 'max 100000' with cpu.stat usage_usec 1642877746 nr_periods 0 nr_throttled 0 throttled_usec 0 nr_bursts 0. host-diag /usr/local/bin/host-diag at 2026-10-23T07:09:43Z: stdout '1042 87 1315' rc=1, captured as out=$(host-diag 2>&1); rc=$? — the separated form because it is shell-INDEPENDENT (bare echo \"$(cmd) rc=$?\" reports the command's status under bash and a false 0 under dash; /bin/sh here is dash). Thresholds from the script's own bytes: LOAD_MAX default 1000 (15-min loadavg x100), DISK_MAX 90, MEM_MIN_MB 80 (host-diag:24-26), compared at :121,:124,:132. Calibration p50 1.71 / p90 4.74 / p95 6.26 / p99 8.63 / max 12.99 over 671 sar ldavg-15 samples (vpn/docs/gatus-diagnostics.md:137, evidence/rework.md:37). Re-read 2026-11-21T22:16Z on agents: cgroup.controllers='memory pids'; cpu.max ABSENT; the only cpu.* entries in the cgroup directory are cpu.pressure, cpu.stat and cpu.stat.local - read-only informational files cgroup v2 exposes on every non-root cgroup, NOT a quota object, so a bare `ls | grep -c '^cpu\\.'` reads 3 here and that count is not the test. The contrast that IS the test: the PARENT app.slice has cgroup.controllers='cpu memory pids' and cpu.max='max 100000' (unlimited) and delegates cpu to none of its children - opencrabs.service, opencrabs-family.service and opencrabs-ops.service all read controllers='memory pids' with no cpu.max.",
+      "evidence": "Read on agents 2026-10-26T06:05:51Z and re-read 06:10:00Z: unit cgroup.controllers='memory pids'; `cat cpu.max` -> No such file or directory; /sys/fs/cgroup/user.slice/user-0.slice/user@0.service/app.slice/cgroup.subtree_control='memory pids'; app.slice/cgroup.controllers='cpu memory pids'; user@0 subtree_control='cpu memory pids'. systemctl --user show opencrabs-ops.service -> CPUAccounting=yes, CPUWeight=[not set], CPUQuotaPerSecUSec=infinity, AllowedCPUs= (empty). No app.slice.d directory in either scope. journalctl --user --since 2026-10-25 | grep -Ei 'cpu controller|delegat' -> 0 lines. Prior reads: 2026-10-23T07:23:40Z cpu.max ABSENT; 2026-10-25T18:22:56Z cpu.max 'max 100000' with cpu.stat usage_usec 1642877746 nr_periods 0 nr_throttled 0 throttled_usec 0 nr_bursts 0. host-diag /usr/local/bin/host-diag at 2026-10-23T07:09:43Z: stdout '1042 87 1315' rc=1, captured as out=$(host-diag 2>&1); rc=$? — the separated form because it is shell-INDEPENDENT (bare echo \"$(cmd) rc=$?\" reports the command's status under bash and a false 0 under dash; /bin/sh here is dash). Thresholds from the script's own bytes: LOAD_MAX default 1000 (15-min loadavg x100), DISK_MAX 90, MEM_MIN_MB 80 (host-diag:24-26), compared at :121,:124,:132. Calibration p50 1.71 / p90 4.74 / p95 6.26 / p99 8.63 / max 12.99 over 671 sar ldavg-15 samples (vpn/docs/gatus-diagnostics.md:137, evidence/rework.md:37). Re-read 2026-11-21T22:16Z on agents: cgroup.controllers='memory pids'; cpu.max ABSENT; the only cpu.* entries in the cgroup directory are cpu.pressure, cpu.stat and cpu.stat.local - read-only informational files cgroup v2 exposes on every non-root cgroup, NOT a quota object, so a bare `ls | grep -c '^cpu\\.'` reads 3 here and that count is not the test. The contrast that IS the test: the PARENT app.slice has cgroup.controllers='cpu memory pids' and cpu.max='max 100000' (unlimited) and delegates cpu to none of its children - opencrabs.service, opencrabs-family.service and opencrabs-ops.service all read controllers='memory pids' with no cpu.max. Re-read 2026-11-22T20:19:35Z: /sys/fs/cgroup/user.slice/user-0.slice/user@0.service/app.slice/opencrabs-ops.service exists, cgroup.controllers -> 'memory pids', and 'cat cpu.max' -> No such file or directory. SIXTH absent window confirmed, identical in shape to the five before it.",
       "affects": [
         "profile"
       ],
@@ -392,11 +392,11 @@
       "id": "ops-daemon-dies-at-cgroup-cap",
       "severity": "warning",
       "scope": "profile",
-      "text": "SIX cgroup kills since 2026-10-24, the sixth at 2026-11-21T06:37:00Z. The 2026-11-16 round recorded 'clean since 2026-11-16T04:11:07Z, NRestarts=0' and that reading is FALSIFIED: that very incarnation was OOM-killed 5 days later, so the count has moved 5 -> 6. The incarnation that began at 2026-11-21T06:37:13Z was itself replaced at 2026-11-21T21:48:41Z by a CLEAN systemd stop/start (a ship-chain restart, no OOM line), so the live incarnation reads NRestarts=0, memory.events oom_kill=0, memory.peak 1,291,657,216 (40.1 % of max) - PER-INCARNATION zeros beside six kills, so they are not evidence of a clean life. The caps are UNCHANGED: MemoryHigh 2,952,790,016 / MemoryMax 3,221,225,472. Raising 2 GiB -> 3 GiB did not stop the class: the fifth kill arrived five days after the raise, and the sixth 16 days after the fifth.",
+      "text": "SIX cgroup kills since 2026-10-24, the sixth at 2026-11-21T06:37:00Z, and NO seventh in the 23 h since. The 2026-11-16 round recorded 'clean since 2026-11-16T04:11:07Z, NRestarts=0' and that reading is FALSIFIED: that very incarnation was OOM-killed 5 days later, so the count has moved 5 -> 6. The incarnation that began at 2026-11-21T06:37:13Z was itself replaced - twice - by CLEAN systemd stop/start cycles (a ship-chain restart at 2026-11-21T21:48:41Z and another at 2026-11-22T19:19:01Z, the latter preceded by 'Stopping' 19:19:00 and followed by 'Stopped' and 'Started', with no OOM line). The live incarnation therefore reads NRestarts=0, memory.events oom_kill=0 and memory.peak 1,326,297,088 (41.2 % of max) - PER-INCARNATION zeros beside six kills, so they are not evidence of a clean life. The caps are UNCHANGED: MemoryHigh 2,952,790,016 / MemoryMax 3,221,225,472. Raising 2 GiB -> 3 GiB did not stop the class: the fifth kill arrived five days after the raise, and the sixth 16 days after the fifth.",
       "since": "2026-09-27T06:13:19Z",
       "review_by": "2026-11-23",
       "check": null,
-      "evidence": "infra-factory HQ read 2026-11-21T08:15Z: SIX cgroup kills since 2026-10-24, the sixth 2026-11-21T06:37:00Z. journalctl --user -u opencrabs-ops: 'A process of this unit has been killed by the OOM killer' 06:37:00, 'Main process exited, code=killed, status=9/KILL' 06:37:01, 'Failed with result signal' 06:37:04, 'Started' 06:37:13. Unit re-read: NRestarts=1, ActiveEnterTimestamp=2026-11-21T06:37:13Z, MemoryHigh=2952790016, MemoryMax=3221225472 (both UNCHANGED). cgroup at user.slice/user-0.slice/user@0.service/app.slice/opencrabs-ops.service: memory.peak=1505263616, memory.events 'high 0 / max 0 / oom_kill 0', cgroup.controllers='memory pids', cpu.max ABSENT. NOTE the unit is a USER unit: `systemctl show opencrabs-ops` (system scope) returns 'could not be found', and /sys/fs/cgroup/system.slice/opencrabs-ops.service does not exist - a system-scope read of this unit is a read of nothing. Prior reading 2026-11-16: five kills, the fifth 2026-11-05T13:24:00Z, incarnation clean since 2026-11-16T04:11:07Z with NRestarts=0 and oom_kill=0 - now falsified by the sixth kill. Prior reading 2026-11-09T06:04Z: MemoryCurrent 2,301,022,208 = 71.43 % of max, MemoryPeak 2,953,863,168 = 91.70 % of max and 1,073,152 B over MemoryHigh, memory.events high 56,073 / max 0 / oom 0 / oom_kill 0. Drop-ins: /root/.config/systemd/user/opencrabs-ops.service.d/{10-oompolicy,20-memory,30-cores,40-killmode-reaper}.conf. Re-read 2026-11-21T22:16Z: the user journal retains only from 2026-11-18T05:46:39Z, so the six-kill count is INHERITED from prior rounds - only the sixth kill is re-observable here (1 'killed by the OOM killer' line, 06:37:00Z, with status=9/KILL at 06:37:01Z). The 21:48:41Z transition reads Stopping -> Stopped -> Started with no OOM line, so it is a restart, not a seventh kill. Live unit: NRestarts=0, ActiveEnterTimestamp=2026-11-21T21:48:41Z, MemoryHigh=2952790016, MemoryMax=3221225472 (unchanged), CPUAccounting=yes, CPUQuotaPerSecUSec=infinity; cgroup memory.events oom_kill=0, memory.peak=1291657216 = 40.1 % of max, memory.current=1291657216, pids.current=44.",
+      "evidence": "infra-factory HQ read 2026-11-21T08:15Z: SIX cgroup kills since 2026-10-24, the sixth 2026-11-21T06:37:00Z. journalctl --user -u opencrabs-ops: 'A process of this unit has been killed by the OOM killer' 06:37:00, 'Main process exited, code=killed, status=9/KILL' 06:37:01, 'Failed with result signal' 06:37:04, 'Started' 06:37:13. Unit re-read: NRestarts=1, ActiveEnterTimestamp=2026-11-21T06:37:13Z, MemoryHigh=2952790016, MemoryMax=3221225472 (both UNCHANGED). cgroup at user.slice/user-0.slice/user@0.service/app.slice/opencrabs-ops.service: memory.peak=1505263616, memory.events 'high 0 / max 0 / oom_kill 0', cgroup.controllers='memory pids', cpu.max ABSENT. NOTE the unit is a USER unit: `systemctl show opencrabs-ops` (system scope) returns 'could not be found', and /sys/fs/cgroup/system.slice/opencrabs-ops.service does not exist - a system-scope read of this unit is a read of nothing. Prior reading 2026-11-16: five kills, the fifth 2026-11-05T13:24:00Z, incarnation clean since 2026-11-16T04:11:07Z with NRestarts=0 and oom_kill=0 - now falsified by the sixth kill. Prior reading 2026-11-09T06:04Z: MemoryCurrent 2,301,022,208 = 71.43 % of max, MemoryPeak 2,953,863,168 = 91.70 % of max and 1,073,152 B over MemoryHigh, memory.events high 56,073 / max 0 / oom 0 / oom_kill 0. Drop-ins: /root/.config/systemd/user/opencrabs-ops.service.d/{10-oompolicy,20-memory,30-cores,40-killmode-reaper}.conf. Re-read 2026-11-21T22:16Z: the user journal retains only from 2026-11-18T05:46:39Z, so the six-kill count is INHERITED from prior rounds - only the sixth kill is re-observable here (1 'killed by the OOM killer' line, 06:37:00Z, with status=9/KILL at 06:37:01Z). The 21:48:41Z transition reads Stopping -> Stopped -> Started with no OOM line, so it is a restart, not a seventh kill. Live unit: NRestarts=0, ActiveEnterTimestamp=2026-11-21T21:48:41Z, MemoryHigh=2952790016, MemoryMax=3221225472 (unchanged), CPUAccounting=yes, CPUQuotaPerSecUSec=infinity; cgroup memory.events oom_kill=0, memory.peak=1291657216 = 40.1 % of max, memory.current=1291657216, pids.current=44. Re-read 2026-11-22T20:19:35Z: the newest kill is STILL 2026-11-21T06:37:00Z, so the count remains SIX -- no seventh kill in the 23 h since. Live unit: NRestarts=0, ActiveEnterTimestamp 2026-11-22T19:19:01Z, MemoryHigh=2952790016, MemoryMax=3221225472 (unchanged). cgroup memory.events 'high 0 / max 0 / oom 0 / oom_kill 0', memory.peak=1,326,297,088 = 41.2 % of max, cgroup.controllers='memory pids', cpu.max ABSENT. The 19:19 restart was CLEAN: journal shows 'Stopping' 19:19:00, 'Stopped' 19:19:01 with 'Consumed 5min 28.098s CPU time, 598.5M memory peak', 'Started' 19:19:01, and oc-ops-reap-survivors reaped found=1 signalled=0. COVERAGE LIMIT, stated rather than glossed: the retained user journal begins 2026-11-19T10:38:26Z, so this window corroborates the SIXTH kill only - the five earlier kills rest on the prior rounds' records, not on anything readable now.",
       "affects": [
         "profile"
       ],
@@ -409,11 +409,11 @@
       "id": "mac-cdp-tunnels-flap-on-sleep",
       "severity": "warning",
       "scope": "profile",
-      "text": "The Mac CDP tunnel flaps on sleep. The 2026-11-02 clause 'no path to it exists today from any host' is WITHDRAWN as falsified - the tunnel was UP on 2026-11-09 with Gatus ep13 HEALTHY. As of 2026-11-21 the mac-cdp-tunnel unit on vpn reads INACTIVE and NO listener holds :4444 - the two listeners the 2026-11-16 round recorded are gone, so the flap has moved a third time (unit down AND no listener, where 11-16 read unit down with two listeners). Read this as a live flap class, not as a live outage.",
+      "text": "The Mac CDP tunnel flaps on sleep. The 2026-11-02 clause 'no path to it exists today from any host' is WITHDRAWN as falsified - the tunnel was UP on 2026-11-09 with Gatus ep13 HEALTHY. The flap has now been read in THREE distinct shapes on three consecutive rounds: 2026-11-09 unit ACTIVE with :4444 held; 2026-11-16 unit inactive WITH two listeners; 2026-11-21 unit inactive with ZERO listeners; and 2026-11-22T20:16Z unit inactive with TWO listeners again. So the listener count is not monotonic and neither shape may be carried - read both live every round. Read this as a live flap class, not as a live outage.",
       "since": "2026-09-26",
       "review_by": "2026-11-23",
       "check": null,
-      "evidence": "infra-factory HQ read 2026-11-21T08:15Z over ssh: `systemctl is-active mac-cdp-tunnel` -> inactive, `ss -lntp | grep :4444 | wc -l` -> 0, `systemctl is-active gatus-notify` -> active. Prior read 2026-11-16: the unit inactive while two listeners hold :4444; prior reading 2026-11-09T06:05Z had the unit active (running) since 2026-11-07T07:05:44Z with :4444 held via sshd and an ESTABLISHED ssh from the Mac's 87.249.25.155, Gatus ep13 mac-tunnel HEALTHY since 2026-11-06T15:02:08Z. The 10-31 ISP block stands as history (evidence/mac-tunnel-isp-block-20261031.md, vds-servers 2b737396). Superseded evidence below is retained for the flap history it records. Re-read 2026-11-21T22:17Z over ssh vpn: systemctl is-active mac-cdp-tunnel -> inactive; ss -lntp | grep -c ':4444' -> 0. Identical to the 08:15Z read, so the unit-down/zero-listener shape persists.",
+      "evidence": "infra-factory HQ read 2026-11-21T08:15Z over ssh: `systemctl is-active mac-cdp-tunnel` -> inactive, `ss -lntp | grep :4444 | wc -l` -> 0, `systemctl is-active gatus-notify` -> active. Prior read 2026-11-16: the unit inactive while two listeners hold :4444; prior reading 2026-11-09T06:05Z had the unit active (running) since 2026-11-07T07:05:44Z with :4444 held via sshd and an ESTABLISHED ssh from the Mac's 87.249.25.155, Gatus ep13 mac-tunnel HEALTHY since 2026-11-06T15:02:08Z. The 10-31 ISP block stands as history (evidence/mac-tunnel-isp-block-20261031.md, vds-servers 2b737396). Superseded evidence below is retained for the flap history it records. Re-read 2026-11-21T22:17Z over ssh vpn: systemctl is-active mac-cdp-tunnel -> inactive; ss -lntp | grep -c ':4444' -> 0. Identical to the 08:15Z read, so the unit-down/zero-listener shape persists. Re-read 2026-11-22T20:19:35Z over ssh vpn: systemctl is-active mac-cdp-tunnel -> inactive; ss -lntp | grep -c ':4444' -> 2. That REVERSES the 2026-11-21T22:17Z read of 0 listeners (22.5 h earlier) without the unit ever coming up, so the two sockets are held by something outside the unit's own lifetime. gatus-notify -> active. The flap cycle is confirmed, and the listener count must be read fresh each round: it has now read 2, 0, 2 across three reads.",
       "affects": [
         "profile"
       ],
@@ -447,7 +447,7 @@
       "since": "2026-09-23",
       "review_by": "2026-11-28",
       "check": null,
-      "evidence": "11 key blocks confirmed in BOTH the repo copy (vpn/services/gatus/config/config.yaml) and the deployed copy on vpn (grep -c 'BEGIN OPENSSH PRIVATE KEY' = 11 on each), re-measured 2026-10-17 — was 9 at the 2026-09-23 measurement, so the surface GREW (new host keys). Prior evidence stands: third re-exposure 2026-09-29, guard refuse-arm printed both blocks, fixed aab431f1; intake n=265/n=267, re-exposures n=275/n=285. Re-verified 2026-11-21T08:45Z: vpn/services/gatus/config/config.yaml is unchanged since 2026-10-24 (21,929 B, 637 lines) and still carries 22 'PRIVATE KEY' markers, 11 'BEGIN OPENSSH' blocks and 9 credential keys - read by count only, no value printed. Re-verified 2026-11-21T22:17Z: repo copy 21,929 B / 637 lines / 22 'PRIVATE KEY' markers / 11 'BEGIN OPENSSH' blocks; the deployed copy on vpn is the same 21,929 B at mtime 2026-10-23T10:31:46+03:00, mounted ro into the gatus container from /data/projects/gatus/config/config.yaml. Counts only, no value printed.",
+      "evidence": "11 key blocks confirmed in BOTH the repo copy (vpn/services/gatus/config/config.yaml) and the deployed copy on vpn (grep -c 'BEGIN OPENSSH PRIVATE KEY' = 11 on each), re-measured 2026-10-17 — was 9 at the 2026-09-23 measurement, so the surface GREW (new host keys). Prior evidence stands: third re-exposure 2026-09-29, guard refuse-arm printed both blocks, fixed aab431f1; intake n=265/n=267, re-exposures n=275/n=285. Re-verified 2026-11-21T08:45Z: vpn/services/gatus/config/config.yaml is unchanged since 2026-10-24 (21,929 B, 637 lines) and still carries 22 'PRIVATE KEY' markers, 11 'BEGIN OPENSSH' blocks and 9 credential keys - read by count only, no value printed. Re-verified 2026-11-21T22:17Z: repo copy 21,929 B / 637 lines / 22 'PRIVATE KEY' markers / 11 'BEGIN OPENSSH' blocks; the deployed copy on vpn is the same 21,929 B at mtime 2026-10-23T10:31:46+03:00, mounted ro into the gatus container from /data/projects/gatus/config/config.yaml. Counts only, no value printed. Re-verified 2026-11-22T20:19:35Z: the counts have MOVED -- repo copy AND the deployed copy on vpn are both 21,733 B / 627 lines / 22 'PRIVATE KEY' markers / 11 'BEGIN OPENSSH PRIVATE KEY' blocks (the 2026-11-21T22:17Z round read 21,929 B / 637 lines; key counts unchanged). The shrink is a real fleet change, vds-servers e45ee4d7 'gatus: remove apps_data-pipeline external endpoint' -- not a read artefact. Deployed copy mtime 2026-11-22T01:50:12+03:00, so vpn is in step with the repo. Counts only, no value printed.",
       "affects": [
         "profile"
       ],
@@ -481,7 +481,7 @@
       "since": "2026-09-19",
       "review_by": "2026-11-28",
       "check": null,
-      "evidence": "Root-caused by Infra Factory HQ and filed upstream as leshchenko1979/opencrabs#382 (OPEN, filed 2026-09-19T06:47:53Z). Two independent jobs confirmed in the daemon log: infra-sender-logs-check - 186 span lines before the 2026-09-18 15:09:34 restart, 0 after; infra-surveys-daily - 792 before the 2026-09-19 06:08:33 restart, 0 after. Ruling doc: /root/vds-servers/docs/rulings/2026-09-19-cron-result-lost-on-restart.md Re-verified 2026-11-21T08:45Z: leshchenko1979/opencrabs#382 is still OPEN (state OPEN, closedAt null, updated 2026-11-16T20:58:21Z), so the claim stands and remains unremediated upstream. Re-verified 2026-11-21T22:16Z: gh issue view 382 --repo leshchenko1979/opencrabs -> state OPEN, closedAt null, updatedAt 2026-11-16T20:58:21Z. The upstream defect is still unremediated.",
+      "evidence": "Root-caused by Infra Factory HQ and filed upstream as leshchenko1979/opencrabs#382 (OPEN, filed 2026-09-19T06:47:53Z). Two independent jobs confirmed in the daemon log: infra-sender-logs-check - 186 span lines before the 2026-09-18 15:09:34 restart, 0 after; infra-surveys-daily - 792 before the 2026-09-19 06:08:33 restart, 0 after. Ruling doc: /root/vds-servers/docs/rulings/2026-09-19-cron-result-lost-on-restart.md Re-verified 2026-11-21T08:45Z: leshchenko1979/opencrabs#382 is still OPEN (state OPEN, closedAt null, updated 2026-11-16T20:58:21Z), so the claim stands and remains unremediated upstream. Re-verified 2026-11-21T22:16Z: gh issue view 382 --repo leshchenko1979/opencrabs -> state OPEN, closedAt null, updatedAt 2026-11-16T20:58:21Z. The upstream defect is still unremediated. Re-verified 2026-11-22T20:19:35Z: gh issue view 382 --repo leshchenko1979/opencrabs -> state OPEN, closedAt null, updatedAt 2026-11-16T20:58:21Z (unchanged since the 22:16Z read -- no movement on the upstream side).",
       "affects": [
         "profile"
       ],
@@ -613,11 +613,11 @@
       "id": "opencrabs-home-unmanaged-growth",
       "severity": "info",
       "scope": null,
-      "text": "/root/.opencrabs measured 11G on 2026-11-21 against 14G on 2026-11-16 (-3G over 5 days), while / read 86 % used with 8.2G free at 08:15Z and 83 % with 9.9G free at 22:20Z - so / moved 1.7G inside the same day and the earlier 'UNCHANGED' clause is WITHDRAWN as falsified. So the 2026-11-16 'growth RESUMED, +2G over 7 days' reading does not stand either, and NO rate may be carried in EITHER direction. TWO drops now have NO attributed producer: the ~8G of 2026-11-02, and this -3G of 2026-11-21. This factory's own instrument cannot account for either: the hourly reaper is crontab '7 * * * * /usr/bin/python3.14 tools/hygiene.py --clean', whose SCRATCH_ROOT is '/tmp' (tools/hygiene.py:41) so /root/.opencrabs is outside its reach by construction, and /var/log/hygiene-reap.log carries no /root/.opencrabs path; the weekly cleanup ran 2026-11-08T03:00:01Z and logged 'hygiene cleanup complete: 0 item(s) reaped'. Treat every figure here as a measurement with an unattributed cause; carry neither a rate nor a horizon.",
+      "text": "/root/.opencrabs holds 11G on 2026-11-22, unchanged from the 11G read on 2026-11-21 and down from 14G on 2026-11-16 (-3G over 5 days). The ROOT filesystem is what moves: / read 86 % used with 8.2G free at 2026-11-21T08:15Z, 83 % with 9.9G free at 22:20Z, and 86 % with 8.4G free at 2026-11-22T20:16Z - THREE moves inside 36 h, so the earlier 'UNCHANGED' clause stays WITHDRAWN as falsified. The 2026-11-16 'growth RESUMED, +2G over 7 days' reading does not stand either, and NO rate may be carried in EITHER direction. TWO drops have NO attributed producer: the ~8G of 2026-11-02 and the -3G of 2026-11-21. This factory's own instrument cannot account for either: the hourly reaper is crontab '7 * * * * /usr/bin/python3.14 tools/hygiene.py --clean', whose SCRATCH_ROOT is '/tmp' (tools/hygiene.py:41).",
       "since": "2026-10-09",
       "review_by": null,
       "check": null,
-      "evidence": "infra-factory HQ read 2026-11-21T08:15Z: du -sh /root/.opencrabs = 11G, du -sb = 10.16 GiB; df -h / -> 58G total, 49G used, 8.2G free, 86 % (UNCHANGED from 2026-11-16). Breakdown: profiles 5.1G, projects 3.0G, opencrabs.db 558M, backups 541M, tmp 459M, channel_attachments 263M. The -3G drop is NOT the reaper's: crontab '7 * * * * /usr/bin/python3.14 tools/hygiene.py --clean' has SCRATCH_ROOT='/tmp' (tools/hygiene.py:41), and /var/log/hygiene-reap.log reaps /tmp paths only - no /root/.opencrabs entry. Prior reading 2026-11-16: du -sh = 14G (12G at the 2026-11-09 reading); df -h / -> 86 % used, 8.2G free. Prior readings: 2026-11-09T06:04Z /root/.opencrabs 12G, profiles/ops 6.3G, / 45G of 58G = 79 %, 13G free; 2026-11-02 20G / 14G. Reaper log: weekly cleanup 2026-11-08T03:00:01Z 'hygiene cleanup complete: 0 item(s) reaped'. The ~8G drop of 2026-11-02 remains unattributed. Re-read 2026-11-21T22:20Z: du -sh = 11G, du -sb = 11,009,768,461 B (10.25 GiB, up 0.09 GiB from the 08:15Z 10.16 GiB); df -B1 / -> 61,285,326,848 total, 50,667,094,016 used, 10,601,455,616 avail = 82.67 % used. Two moves inside one day (+0.09 GiB in the home, -1.7G on /) with no producer named; the 08:15Z and 22:20Z reads are both measurements, and neither may be carried as a rate.",
+      "evidence": "infra-factory HQ read 2026-11-21T08:15Z: du -sh /root/.opencrabs = 11G, du -sb = 10.16 GiB; df -h / -> 58G total, 49G used, 8.2G free, 86 % (UNCHANGED from 2026-11-16). Breakdown: profiles 5.1G, projects 3.0G, opencrabs.db 558M, backups 541M, tmp 459M, channel_attachments 263M. The -3G drop is NOT the reaper's: crontab '7 * * * * /usr/bin/python3.14 tools/hygiene.py --clean' has SCRATCH_ROOT='/tmp' (tools/hygiene.py:41), and /var/log/hygiene-reap.log reaps /tmp paths only - no /root/.opencrabs entry. Prior reading 2026-11-16: du -sh = 14G (12G at the 2026-11-09 reading); df -h / -> 86 % used, 8.2G free. Prior readings: 2026-11-09T06:04Z /root/.opencrabs 12G, profiles/ops 6.3G, / 45G of 58G = 79 %, 13G free; 2026-11-02 20G / 14G. Reaper log: weekly cleanup 2026-11-08T03:00:01Z 'hygiene cleanup complete: 0 item(s) reaped'. The ~8G drop of 2026-11-02 remains unattributed. Re-read 2026-11-21T22:20Z: du -sh = 11G, du -sb = 11,009,768,461 B (10.25 GiB, up 0.09 GiB from the 08:15Z 10.16 GiB); df -B1 / -> 61,285,326,848 total, 50,667,094,016 used, 10,601,455,616 avail = 82.67 % used. Two moves inside one day (+0.09 GiB in the home, -1.7G on /) with no producer named; the 08:15Z and 22:20Z reads are both measurements, and neither may be carried as a rate. Re-read 2026-11-22T20:19:35Z: du -sh /root/.opencrabs -> 11G (HOLDS at the 2026-11-21 value; no fourth drop, no resumed growth). df -h / -> /dev/sda1 58G total, 49G used, 8.4G free, 86 % -- so / moved BACK UP ~1.5 GiB from the 22:20Z read of 82.67 % / 9.9G free. That is the third distinct / reading inside 36 h (86 %, 82.67 %, 86 %) while the home itself sat still, which localises the churn on / and NOT on this factory's home. Still no named producer; still no rate carried.",
       "affects": [
         "profile"
       ],
@@ -685,7 +685,7 @@
       "since": "2026-09-19",
       "review_by": null,
       "check": null,
-      "evidence": "Re-verified 2026-11-21T22:18Z on /root/vds-servers: python3 tests/test_single_writer.py -> rc=0, 'single-writer state clean: 8 declared surface(s) audited, locking verified'; tools/ledger.py takes fcntl.LOCK_EX on evidence/.ledger.lock (tools/ledger.py:53, :156-157), which is what makes it the one writer. The route half (peers send fleet changes to HQ rather than committing here) is process law, declared at skills/infra-factory/SKILL.md:21 ('single-writer governed infrastructure management'), and has no machine gate - it is unmeasured beyond that declaration.",
+      "evidence": "Re-verified 2026-11-21T22:18Z on /root/vds-servers: python3 tests/test_single_writer.py -> rc=0, 'single-writer state clean: 8 declared surface(s) audited, locking verified'; tools/ledger.py takes fcntl.LOCK_EX on evidence/.ledger.lock (tools/ledger.py:53, :156-157), which is what makes it the one writer. The route half (peers send fleet changes to HQ rather than committing here) is process law, declared at skills/infra-factory/SKILL.md:21 ('single-writer governed infrastructure management'), and has no machine gate - it is unmeasured beyond that declaration. Re-ran 2026-11-22T20:19:35Z on /root/vds-servers: python3 tests/test_single_writer.py -> rc=0, 'single-writer state clean: 8 declared surface(s) audited, locking verified'. The machine-gated half holds; the route half remains process law with no gate.",
       "affects": [
         "profile"
       ],
@@ -1186,7 +1186,7 @@
       "factory": "infra-factory",
       "display_name": "Infra Factory",
       "status": "attested",
-      "attested_at": "2026-11-21T22:26:57Z",
+      "attested_at": "2026-11-22T20:19:35Z",
       "profile": "ops",
       "repo": "/root/vds-servers",
       "skill": "/root/vds-servers/skills/infra-factory/SKILL.md",
@@ -1199,7 +1199,7 @@
           "The fleet infrastructure source repo /root/vds-servers - fleet configs, host scripts, the process register and the factory ledger",
           "Host and workspace hygiene: the single reap policy (tools/hygiene.py), its derived gate line, and disk-threshold remediation",
           "The Mac access path as fleet infrastructure - the CDP tunnel to the Mac and the route pin on its physical NIC",
-          "Infra Factory process law and its own lanes (HQ thread 4, Triage thread 5, Surveys thread 7) plus the two topics it monitors but does not own (LLM Gateway thread 467, TG Hub thread 475) - five lane bindings in chat -1004486255170, re-read 2026-11-21T22:20Z",
+          "Infra Factory process law and its own lanes (HQ thread 4, Triage thread 5, Surveys thread 7) plus the two topics it monitors but does not own (LLM Gateway thread 467, TG Hub thread 475) - five lane bindings in chat -1004486255170, re-resolved 2026-11-22T20:17Z",
           "A SECOND VPN host - 152.234.211.43 = vm345692.it-garage.network (Frankfurt), host-level operations only. AmneziaWG was removed fleet-wide 2026-11-13 (the provider bans it) and must not be reinstalled; the replacement is Xray VLESS+REALITY on vpn.l1979.ru with our own certificate, never a third party's name. The box is bare and awaiting that install (measured 2026-11-21T22:22Z: no xray binary, no /etc/xray, 0 containers). Peer/key configuration is the owner's."
         ],
         "does_not_own": [
@@ -1356,7 +1356,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "Root-caused by Infra Factory HQ and filed upstream as leshchenko1979/opencrabs#382 (OPEN, filed 2026-09-19T06:47:53Z). Two independent jobs confirmed in the daemon log: infra-sender-logs-check - 186 span lines before the 2026-09-18 15:09:34 restart, 0 after; infra-surveys-daily - 792 before the 2026-09-19 06:08:33 restart, 0 after. Ruling doc: /root/vds-servers/docs/rulings/2026-09-19-cron-result-lost-on-restart.md Re-verified 2026-11-21T08:45Z: leshchenko1979/opencrabs#382 is still OPEN (state OPEN, closedAt null, updated 2026-11-16T20:58:21Z), so the claim stands and remains unremediated upstream. Re-verified 2026-11-21T22:16Z: gh issue view 382 --repo leshchenko1979/opencrabs -> state OPEN, closedAt null, updatedAt 2026-11-16T20:58:21Z. The upstream defect is still unremediated."
+          "evidence": "Root-caused by Infra Factory HQ and filed upstream as leshchenko1979/opencrabs#382 (OPEN, filed 2026-09-19T06:47:53Z). Two independent jobs confirmed in the daemon log: infra-sender-logs-check - 186 span lines before the 2026-09-18 15:09:34 restart, 0 after; infra-surveys-daily - 792 before the 2026-09-19 06:08:33 restart, 0 after. Ruling doc: /root/vds-servers/docs/rulings/2026-09-19-cron-result-lost-on-restart.md Re-verified 2026-11-21T08:45Z: leshchenko1979/opencrabs#382 is still OPEN (state OPEN, closedAt null, updated 2026-11-16T20:58:21Z), so the claim stands and remains unremediated upstream. Re-verified 2026-11-21T22:16Z: gh issue view 382 --repo leshchenko1979/opencrabs -> state OPEN, closedAt null, updatedAt 2026-11-16T20:58:21Z. The upstream defect is still unremediated. Re-verified 2026-11-22T20:19:35Z: gh issue view 382 --repo leshchenko1979/opencrabs -> state OPEN, closedAt null, updatedAt 2026-11-16T20:58:21Z (unchanged since the 22:16Z read -- no movement on the upstream side)."
         },
         {
           "id": "vds-servers-single-writer-route",
@@ -1369,7 +1369,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "Re-verified 2026-11-21T22:18Z on /root/vds-servers: python3 tests/test_single_writer.py -> rc=0, 'single-writer state clean: 8 declared surface(s) audited, locking verified'; tools/ledger.py takes fcntl.LOCK_EX on evidence/.ledger.lock (tools/ledger.py:53, :156-157), which is what makes it the one writer. The route half (peers send fleet changes to HQ rather than committing here) is process law, declared at skills/infra-factory/SKILL.md:21 ('single-writer governed infrastructure management'), and has no machine gate - it is unmeasured beyond that declaration."
+          "evidence": "Re-verified 2026-11-21T22:18Z on /root/vds-servers: python3 tests/test_single_writer.py -> rc=0, 'single-writer state clean: 8 declared surface(s) audited, locking verified'; tools/ledger.py takes fcntl.LOCK_EX on evidence/.ledger.lock (tools/ledger.py:53, :156-157), which is what makes it the one writer. The route half (peers send fleet changes to HQ rather than committing here) is process law, declared at skills/infra-factory/SKILL.md:21 ('single-writer governed infrastructure management'), and has no machine gate - it is unmeasured beyond that declaration. Re-ran 2026-11-22T20:19:35Z on /root/vds-servers: python3 tests/test_single_writer.py -> rc=0, 'single-writer state clean: 8 declared surface(s) audited, locking verified'. The machine-gated half holds; the route half remains process law with no gate."
         },
         {
           "id": "gatus-config-carries-live-credentials",
@@ -1382,12 +1382,12 @@
           "affects": [
             "profile"
           ],
-          "evidence": "11 key blocks confirmed in BOTH the repo copy (vpn/services/gatus/config/config.yaml) and the deployed copy on vpn (grep -c 'BEGIN OPENSSH PRIVATE KEY' = 11 on each), re-measured 2026-10-17 — was 9 at the 2026-09-23 measurement, so the surface GREW (new host keys). Prior evidence stands: third re-exposure 2026-09-29, guard refuse-arm printed both blocks, fixed aab431f1; intake n=265/n=267, re-exposures n=275/n=285. Re-verified 2026-11-21T08:45Z: vpn/services/gatus/config/config.yaml is unchanged since 2026-10-24 (21,929 B, 637 lines) and still carries 22 'PRIVATE KEY' markers, 11 'BEGIN OPENSSH' blocks and 9 credential keys - read by count only, no value printed. Re-verified 2026-11-21T22:17Z: repo copy 21,929 B / 637 lines / 22 'PRIVATE KEY' markers / 11 'BEGIN OPENSSH' blocks; the deployed copy on vpn is the same 21,929 B at mtime 2026-10-23T10:31:46+03:00, mounted ro into the gatus container from /data/projects/gatus/config/config.yaml. Counts only, no value printed."
+          "evidence": "11 key blocks confirmed in BOTH the repo copy (vpn/services/gatus/config/config.yaml) and the deployed copy on vpn (grep -c 'BEGIN OPENSSH PRIVATE KEY' = 11 on each), re-measured 2026-10-17 — was 9 at the 2026-09-23 measurement, so the surface GREW (new host keys). Prior evidence stands: third re-exposure 2026-09-29, guard refuse-arm printed both blocks, fixed aab431f1; intake n=265/n=267, re-exposures n=275/n=285. Re-verified 2026-11-21T08:45Z: vpn/services/gatus/config/config.yaml is unchanged since 2026-10-24 (21,929 B, 637 lines) and still carries 22 'PRIVATE KEY' markers, 11 'BEGIN OPENSSH' blocks and 9 credential keys - read by count only, no value printed. Re-verified 2026-11-21T22:17Z: repo copy 21,929 B / 637 lines / 22 'PRIVATE KEY' markers / 11 'BEGIN OPENSSH' blocks; the deployed copy on vpn is the same 21,929 B at mtime 2026-10-23T10:31:46+03:00, mounted ro into the gatus container from /data/projects/gatus/config/config.yaml. Counts only, no value printed. Re-verified 2026-11-22T20:19:35Z: the counts have MOVED -- repo copy AND the deployed copy on vpn are both 21,733 B / 627 lines / 22 'PRIVATE KEY' markers / 11 'BEGIN OPENSSH PRIVATE KEY' blocks (the 2026-11-21T22:17Z round read 21,929 B / 637 lines; key counts unchanged). The shrink is a real fleet change, vds-servers e45ee4d7 'gatus: remove apps_data-pipeline external endpoint' -- not a read artefact. Deployed copy mtime 2026-11-22T01:50:12+03:00, so vpn is in step with the repo. Counts only, no value printed."
         },
         {
           "id": "mac-cdp-tunnels-flap-on-sleep",
           "severity": "warning",
-          "text": "The Mac CDP tunnel flaps on sleep. The 2026-11-02 clause 'no path to it exists today from any host' is WITHDRAWN as falsified - the tunnel was UP on 2026-11-09 with Gatus ep13 HEALTHY. As of 2026-11-21 the mac-cdp-tunnel unit on vpn reads INACTIVE and NO listener holds :4444 - the two listeners the 2026-11-16 round recorded are gone, so the flap has moved a third time (unit down AND no listener, where 11-16 read unit down with two listeners). Read this as a live flap class, not as a live outage.",
+          "text": "The Mac CDP tunnel flaps on sleep. The 2026-11-02 clause 'no path to it exists today from any host' is WITHDRAWN as falsified - the tunnel was UP on 2026-11-09 with Gatus ep13 HEALTHY. The flap has now been read in THREE distinct shapes on three consecutive rounds: 2026-11-09 unit ACTIVE with :4444 held; 2026-11-16 unit inactive WITH two listeners; 2026-11-21 unit inactive with ZERO listeners; and 2026-11-22T20:16Z unit inactive with TWO listeners again. So the listener count is not monotonic and neither shape may be carried - read both live every round. Read this as a live flap class, not as a live outage.",
           "scope": "profile",
           "since": "2026-09-26",
           "review_by": "2026-11-23",
@@ -1395,12 +1395,12 @@
           "affects": [
             "profile"
           ],
-          "evidence": "infra-factory HQ read 2026-11-21T08:15Z over ssh: `systemctl is-active mac-cdp-tunnel` -> inactive, `ss -lntp | grep :4444 | wc -l` -> 0, `systemctl is-active gatus-notify` -> active. Prior read 2026-11-16: the unit inactive while two listeners hold :4444; prior reading 2026-11-09T06:05Z had the unit active (running) since 2026-11-07T07:05:44Z with :4444 held via sshd and an ESTABLISHED ssh from the Mac's 87.249.25.155, Gatus ep13 mac-tunnel HEALTHY since 2026-11-06T15:02:08Z. The 10-31 ISP block stands as history (evidence/mac-tunnel-isp-block-20261031.md, vds-servers 2b737396). Superseded evidence below is retained for the flap history it records. Re-read 2026-11-21T22:17Z over ssh vpn: systemctl is-active mac-cdp-tunnel -> inactive; ss -lntp | grep -c ':4444' -> 0. Identical to the 08:15Z read, so the unit-down/zero-listener shape persists."
+          "evidence": "infra-factory HQ read 2026-11-21T08:15Z over ssh: `systemctl is-active mac-cdp-tunnel` -> inactive, `ss -lntp | grep :4444 | wc -l` -> 0, `systemctl is-active gatus-notify` -> active. Prior read 2026-11-16: the unit inactive while two listeners hold :4444; prior reading 2026-11-09T06:05Z had the unit active (running) since 2026-11-07T07:05:44Z with :4444 held via sshd and an ESTABLISHED ssh from the Mac's 87.249.25.155, Gatus ep13 mac-tunnel HEALTHY since 2026-11-06T15:02:08Z. The 10-31 ISP block stands as history (evidence/mac-tunnel-isp-block-20261031.md, vds-servers 2b737396). Superseded evidence below is retained for the flap history it records. Re-read 2026-11-21T22:17Z over ssh vpn: systemctl is-active mac-cdp-tunnel -> inactive; ss -lntp | grep -c ':4444' -> 0. Identical to the 08:15Z read, so the unit-down/zero-listener shape persists. Re-read 2026-11-22T20:19:35Z over ssh vpn: systemctl is-active mac-cdp-tunnel -> inactive; ss -lntp | grep -c ':4444' -> 2. That REVERSES the 2026-11-21T22:17Z read of 0 listeners (22.5 h earlier) without the unit ever coming up, so the two sockets are held by something outside the unit's own lifetime. gatus-notify -> active. The flap cycle is confirmed, and the listener count must be read fresh each round: it has now read 2, 0, 2 across three reads."
         },
         {
           "id": "ops-daemon-dies-at-cgroup-cap",
           "severity": "warning",
-          "text": "SIX cgroup kills since 2026-10-24, the sixth at 2026-11-21T06:37:00Z. The 2026-11-16 round recorded 'clean since 2026-11-16T04:11:07Z, NRestarts=0' and that reading is FALSIFIED: that very incarnation was OOM-killed 5 days later, so the count has moved 5 -> 6. The incarnation that began at 2026-11-21T06:37:13Z was itself replaced at 2026-11-21T21:48:41Z by a CLEAN systemd stop/start (a ship-chain restart, no OOM line), so the live incarnation reads NRestarts=0, memory.events oom_kill=0, memory.peak 1,291,657,216 (40.1 % of max) - PER-INCARNATION zeros beside six kills, so they are not evidence of a clean life. The caps are UNCHANGED: MemoryHigh 2,952,790,016 / MemoryMax 3,221,225,472. Raising 2 GiB -> 3 GiB did not stop the class: the fifth kill arrived five days after the raise, and the sixth 16 days after the fifth.",
+          "text": "SIX cgroup kills since 2026-10-24, the sixth at 2026-11-21T06:37:00Z, and NO seventh in the 23 h since. The 2026-11-16 round recorded 'clean since 2026-11-16T04:11:07Z, NRestarts=0' and that reading is FALSIFIED: that very incarnation was OOM-killed 5 days later, so the count has moved 5 -> 6. The incarnation that began at 2026-11-21T06:37:13Z was itself replaced - twice - by CLEAN systemd stop/start cycles (a ship-chain restart at 2026-11-21T21:48:41Z and another at 2026-11-22T19:19:01Z, the latter preceded by 'Stopping' 19:19:00 and followed by 'Stopped' and 'Started', with no OOM line). The live incarnation therefore reads NRestarts=0, memory.events oom_kill=0 and memory.peak 1,326,297,088 (41.2 % of max) - PER-INCARNATION zeros beside six kills, so they are not evidence of a clean life. The caps are UNCHANGED: MemoryHigh 2,952,790,016 / MemoryMax 3,221,225,472. Raising 2 GiB -> 3 GiB did not stop the class: the fifth kill arrived five days after the raise, and the sixth 16 days after the fifth.",
           "scope": "profile",
           "since": "2026-09-27T06:13:19Z",
           "review_by": "2026-11-23",
@@ -1408,7 +1408,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "infra-factory HQ read 2026-11-21T08:15Z: SIX cgroup kills since 2026-10-24, the sixth 2026-11-21T06:37:00Z. journalctl --user -u opencrabs-ops: 'A process of this unit has been killed by the OOM killer' 06:37:00, 'Main process exited, code=killed, status=9/KILL' 06:37:01, 'Failed with result signal' 06:37:04, 'Started' 06:37:13. Unit re-read: NRestarts=1, ActiveEnterTimestamp=2026-11-21T06:37:13Z, MemoryHigh=2952790016, MemoryMax=3221225472 (both UNCHANGED). cgroup at user.slice/user-0.slice/user@0.service/app.slice/opencrabs-ops.service: memory.peak=1505263616, memory.events 'high 0 / max 0 / oom_kill 0', cgroup.controllers='memory pids', cpu.max ABSENT. NOTE the unit is a USER unit: `systemctl show opencrabs-ops` (system scope) returns 'could not be found', and /sys/fs/cgroup/system.slice/opencrabs-ops.service does not exist - a system-scope read of this unit is a read of nothing. Prior reading 2026-11-16: five kills, the fifth 2026-11-05T13:24:00Z, incarnation clean since 2026-11-16T04:11:07Z with NRestarts=0 and oom_kill=0 - now falsified by the sixth kill. Prior reading 2026-11-09T06:04Z: MemoryCurrent 2,301,022,208 = 71.43 % of max, MemoryPeak 2,953,863,168 = 91.70 % of max and 1,073,152 B over MemoryHigh, memory.events high 56,073 / max 0 / oom 0 / oom_kill 0. Drop-ins: /root/.config/systemd/user/opencrabs-ops.service.d/{10-oompolicy,20-memory,30-cores,40-killmode-reaper}.conf. Re-read 2026-11-21T22:16Z: the user journal retains only from 2026-11-18T05:46:39Z, so the six-kill count is INHERITED from prior rounds - only the sixth kill is re-observable here (1 'killed by the OOM killer' line, 06:37:00Z, with status=9/KILL at 06:37:01Z). The 21:48:41Z transition reads Stopping -> Stopped -> Started with no OOM line, so it is a restart, not a seventh kill. Live unit: NRestarts=0, ActiveEnterTimestamp=2026-11-21T21:48:41Z, MemoryHigh=2952790016, MemoryMax=3221225472 (unchanged), CPUAccounting=yes, CPUQuotaPerSecUSec=infinity; cgroup memory.events oom_kill=0, memory.peak=1291657216 = 40.1 % of max, memory.current=1291657216, pids.current=44."
+          "evidence": "infra-factory HQ read 2026-11-21T08:15Z: SIX cgroup kills since 2026-10-24, the sixth 2026-11-21T06:37:00Z. journalctl --user -u opencrabs-ops: 'A process of this unit has been killed by the OOM killer' 06:37:00, 'Main process exited, code=killed, status=9/KILL' 06:37:01, 'Failed with result signal' 06:37:04, 'Started' 06:37:13. Unit re-read: NRestarts=1, ActiveEnterTimestamp=2026-11-21T06:37:13Z, MemoryHigh=2952790016, MemoryMax=3221225472 (both UNCHANGED). cgroup at user.slice/user-0.slice/user@0.service/app.slice/opencrabs-ops.service: memory.peak=1505263616, memory.events 'high 0 / max 0 / oom_kill 0', cgroup.controllers='memory pids', cpu.max ABSENT. NOTE the unit is a USER unit: `systemctl show opencrabs-ops` (system scope) returns 'could not be found', and /sys/fs/cgroup/system.slice/opencrabs-ops.service does not exist - a system-scope read of this unit is a read of nothing. Prior reading 2026-11-16: five kills, the fifth 2026-11-05T13:24:00Z, incarnation clean since 2026-11-16T04:11:07Z with NRestarts=0 and oom_kill=0 - now falsified by the sixth kill. Prior reading 2026-11-09T06:04Z: MemoryCurrent 2,301,022,208 = 71.43 % of max, MemoryPeak 2,953,863,168 = 91.70 % of max and 1,073,152 B over MemoryHigh, memory.events high 56,073 / max 0 / oom 0 / oom_kill 0. Drop-ins: /root/.config/systemd/user/opencrabs-ops.service.d/{10-oompolicy,20-memory,30-cores,40-killmode-reaper}.conf. Re-read 2026-11-21T22:16Z: the user journal retains only from 2026-11-18T05:46:39Z, so the six-kill count is INHERITED from prior rounds - only the sixth kill is re-observable here (1 'killed by the OOM killer' line, 06:37:00Z, with status=9/KILL at 06:37:01Z). The 21:48:41Z transition reads Stopping -> Stopped -> Started with no OOM line, so it is a restart, not a seventh kill. Live unit: NRestarts=0, ActiveEnterTimestamp=2026-11-21T21:48:41Z, MemoryHigh=2952790016, MemoryMax=3221225472 (unchanged), CPUAccounting=yes, CPUQuotaPerSecUSec=infinity; cgroup memory.events oom_kill=0, memory.peak=1291657216 = 40.1 % of max, memory.current=1291657216, pids.current=44. Re-read 2026-11-22T20:19:35Z: the newest kill is STILL 2026-11-21T06:37:00Z, so the count remains SIX -- no seventh kill in the 23 h since. Live unit: NRestarts=0, ActiveEnterTimestamp 2026-11-22T19:19:01Z, MemoryHigh=2952790016, MemoryMax=3221225472 (unchanged). cgroup memory.events 'high 0 / max 0 / oom 0 / oom_kill 0', memory.peak=1,326,297,088 = 41.2 % of max, cgroup.controllers='memory pids', cpu.max ABSENT. The 19:19 restart was CLEAN: journal shows 'Stopping' 19:19:00, 'Stopped' 19:19:01 with 'Consumed 5min 28.098s CPU time, 598.5M memory peak', 'Started' 19:19:01, and oc-ops-reap-survivors reaped found=1 signalled=0. COVERAGE LIMIT, stated rather than glossed: the retained user journal begins 2026-11-19T10:38:26Z, so this window corroborates the SIXTH kill only - the five earlier kills rest on the prior rounds' records, not on anything readable now."
         },
         {
           "id": "board-gates-declared-inapplicable",
@@ -1465,7 +1465,7 @@
         {
           "id": "opencrabs-home-unmanaged-growth",
           "severity": "info",
-          "text": "/root/.opencrabs measured 11G on 2026-11-21 against 14G on 2026-11-16 (-3G over 5 days), while / read 86 % used with 8.2G free at 08:15Z and 83 % with 9.9G free at 22:20Z - so / moved 1.7G inside the same day and the earlier 'UNCHANGED' clause is WITHDRAWN as falsified. So the 2026-11-16 'growth RESUMED, +2G over 7 days' reading does not stand either, and NO rate may be carried in EITHER direction. TWO drops now have NO attributed producer: the ~8G of 2026-11-02, and this -3G of 2026-11-21. This factory's own instrument cannot account for either: the hourly reaper is crontab '7 * * * * /usr/bin/python3.14 tools/hygiene.py --clean', whose SCRATCH_ROOT is '/tmp' (tools/hygiene.py:41) so /root/.opencrabs is outside its reach by construction, and /var/log/hygiene-reap.log carries no /root/.opencrabs path; the weekly cleanup ran 2026-11-08T03:00:01Z and logged 'hygiene cleanup complete: 0 item(s) reaped'. Treat every figure here as a measurement with an unattributed cause; carry neither a rate nor a horizon.",
+          "text": "/root/.opencrabs holds 11G on 2026-11-22, unchanged from the 11G read on 2026-11-21 and down from 14G on 2026-11-16 (-3G over 5 days). The ROOT filesystem is what moves: / read 86 % used with 8.2G free at 2026-11-21T08:15Z, 83 % with 9.9G free at 22:20Z, and 86 % with 8.4G free at 2026-11-22T20:16Z - THREE moves inside 36 h, so the earlier 'UNCHANGED' clause stays WITHDRAWN as falsified. The 2026-11-16 'growth RESUMED, +2G over 7 days' reading does not stand either, and NO rate may be carried in EITHER direction. TWO drops have NO attributed producer: the ~8G of 2026-11-02 and the -3G of 2026-11-21. This factory's own instrument cannot account for either: the hourly reaper is crontab '7 * * * * /usr/bin/python3.14 tools/hygiene.py --clean', whose SCRATCH_ROOT is '/tmp' (tools/hygiene.py:41).",
           "scope": null,
           "since": "2026-10-09",
           "review_by": null,
@@ -1473,12 +1473,12 @@
           "affects": [
             "profile"
           ],
-          "evidence": "infra-factory HQ read 2026-11-21T08:15Z: du -sh /root/.opencrabs = 11G, du -sb = 10.16 GiB; df -h / -> 58G total, 49G used, 8.2G free, 86 % (UNCHANGED from 2026-11-16). Breakdown: profiles 5.1G, projects 3.0G, opencrabs.db 558M, backups 541M, tmp 459M, channel_attachments 263M. The -3G drop is NOT the reaper's: crontab '7 * * * * /usr/bin/python3.14 tools/hygiene.py --clean' has SCRATCH_ROOT='/tmp' (tools/hygiene.py:41), and /var/log/hygiene-reap.log reaps /tmp paths only - no /root/.opencrabs entry. Prior reading 2026-11-16: du -sh = 14G (12G at the 2026-11-09 reading); df -h / -> 86 % used, 8.2G free. Prior readings: 2026-11-09T06:04Z /root/.opencrabs 12G, profiles/ops 6.3G, / 45G of 58G = 79 %, 13G free; 2026-11-02 20G / 14G. Reaper log: weekly cleanup 2026-11-08T03:00:01Z 'hygiene cleanup complete: 0 item(s) reaped'. The ~8G drop of 2026-11-02 remains unattributed. Re-read 2026-11-21T22:20Z: du -sh = 11G, du -sb = 11,009,768,461 B (10.25 GiB, up 0.09 GiB from the 08:15Z 10.16 GiB); df -B1 / -> 61,285,326,848 total, 50,667,094,016 used, 10,601,455,616 avail = 82.67 % used. Two moves inside one day (+0.09 GiB in the home, -1.7G on /) with no producer named; the 08:15Z and 22:20Z reads are both measurements, and neither may be carried as a rate."
+          "evidence": "infra-factory HQ read 2026-11-21T08:15Z: du -sh /root/.opencrabs = 11G, du -sb = 10.16 GiB; df -h / -> 58G total, 49G used, 8.2G free, 86 % (UNCHANGED from 2026-11-16). Breakdown: profiles 5.1G, projects 3.0G, opencrabs.db 558M, backups 541M, tmp 459M, channel_attachments 263M. The -3G drop is NOT the reaper's: crontab '7 * * * * /usr/bin/python3.14 tools/hygiene.py --clean' has SCRATCH_ROOT='/tmp' (tools/hygiene.py:41), and /var/log/hygiene-reap.log reaps /tmp paths only - no /root/.opencrabs entry. Prior reading 2026-11-16: du -sh = 14G (12G at the 2026-11-09 reading); df -h / -> 86 % used, 8.2G free. Prior readings: 2026-11-09T06:04Z /root/.opencrabs 12G, profiles/ops 6.3G, / 45G of 58G = 79 %, 13G free; 2026-11-02 20G / 14G. Reaper log: weekly cleanup 2026-11-08T03:00:01Z 'hygiene cleanup complete: 0 item(s) reaped'. The ~8G drop of 2026-11-02 remains unattributed. Re-read 2026-11-21T22:20Z: du -sh = 11G, du -sb = 11,009,768,461 B (10.25 GiB, up 0.09 GiB from the 08:15Z 10.16 GiB); df -B1 / -> 61,285,326,848 total, 50,667,094,016 used, 10,601,455,616 avail = 82.67 % used. Two moves inside one day (+0.09 GiB in the home, -1.7G on /) with no producer named; the 08:15Z and 22:20Z reads are both measurements, and neither may be carried as a rate. Re-read 2026-11-22T20:19:35Z: du -sh /root/.opencrabs -> 11G (HOLDS at the 2026-11-21 value; no fourth drop, no resumed growth). df -h / -> /dev/sda1 58G total, 49G used, 8.4G free, 86 % -- so / moved BACK UP ~1.5 GiB from the 22:20Z read of 82.67 % / 9.9G free. That is the third distinct / reading inside 36 h (86 %, 82.67 %, 86 %) while the home itself sat still, which localises the churn on / and NOT on this factory's home. Still no named producer; still no rate carried."
         },
         {
           "id": "agents-cpu-uncapped-under-factory-load",
           "severity": "warning",
-          "text": "Re-read 2026-11-21T08:15Z: the delegation is ABSENT AGAIN — the opencrabs-ops.service cgroup's cgroup.controllers reads 'memory pids' and cpu.max does not exist. That is the FIFTH absent window (2026-10-23, 2026-10-26, 2026-11-09, 2026-11-21T08:15Z, now) against one present window (2026-10-25T18:22:56Z), so the intermittent reading stands: read it live, never carry it from a prior round. THE FACT THAT SURVIVES: there is no CPU ceiling in effect either way — where cpu.max exists it reads 'max 100000' (an unlimited quota), and where it is absent there is no quota object at all. The load finding stands unchanged: host-diag calibrates on ldavg-15, so a load1 peak is not comparable with its 12.99 max.",
+          "text": "Re-read 2026-11-22T20:16Z: the delegation is ABSENT AGAIN -- the opencrabs-ops.service cgroup's cgroup.controllers reads 'memory pids' and cpu.max does not exist. That is the SIXTH absent window (2026-10-23, 2026-10-26, 2026-11-09, 2026-11-21T08:15Z, 2026-11-21T22:2xZ, now) against one present window (2026-10-25T18:22:56Z), so the intermittent reading stands: read it live, never carry it from a prior round. THE FACT THAT SURVIVES: there is no CPU ceiling in effect either way -- where cpu.max exists it reads 'max 100000' (an unlimited quota), and where it is absent there is no quota object at all. The load finding stands unchanged: host-diag calibrates on ldavg-15, so a load1 peak is not comparable with its 12.99 threshold, and the count is not the test. The contrast that IS the test: the PARENT app.slice has cgroup.controllers='cpu memory pids' and cpu.max='max 100000' (unlimited) and delegates cpu to none of its children -- opencrabs.service, opencrabs-family.service and opencrabs-ops.service all read controllers='memory pids' with no cpu.max.",
           "scope": "profile",
           "since": "2026-10-23",
           "review_by": "2026-11-23",
@@ -1486,7 +1486,7 @@
           "affects": [
             "profile"
           ],
-          "evidence": "Read on agents 2026-10-26T06:05:51Z and re-read 06:10:00Z: unit cgroup.controllers='memory pids'; `cat cpu.max` -> No such file or directory; /sys/fs/cgroup/user.slice/user-0.slice/user@0.service/app.slice/cgroup.subtree_control='memory pids'; app.slice/cgroup.controllers='cpu memory pids'; user@0 subtree_control='cpu memory pids'. systemctl --user show opencrabs-ops.service -> CPUAccounting=yes, CPUWeight=[not set], CPUQuotaPerSecUSec=infinity, AllowedCPUs= (empty). No app.slice.d directory in either scope. journalctl --user --since 2026-10-25 | grep -Ei 'cpu controller|delegat' -> 0 lines. Prior reads: 2026-10-23T07:23:40Z cpu.max ABSENT; 2026-10-25T18:22:56Z cpu.max 'max 100000' with cpu.stat usage_usec 1642877746 nr_periods 0 nr_throttled 0 throttled_usec 0 nr_bursts 0. host-diag /usr/local/bin/host-diag at 2026-10-23T07:09:43Z: stdout '1042 87 1315' rc=1, captured as out=$(host-diag 2>&1); rc=$? — the separated form because it is shell-INDEPENDENT (bare echo \"$(cmd) rc=$?\" reports the command's status under bash and a false 0 under dash; /bin/sh here is dash). Thresholds from the script's own bytes: LOAD_MAX default 1000 (15-min loadavg x100), DISK_MAX 90, MEM_MIN_MB 80 (host-diag:24-26), compared at :121,:124,:132. Calibration p50 1.71 / p90 4.74 / p95 6.26 / p99 8.63 / max 12.99 over 671 sar ldavg-15 samples (vpn/docs/gatus-diagnostics.md:137, evidence/rework.md:37). Re-read 2026-11-21T22:16Z on agents: cgroup.controllers='memory pids'; cpu.max ABSENT; the only cpu.* entries in the cgroup directory are cpu.pressure, cpu.stat and cpu.stat.local - read-only informational files cgroup v2 exposes on every non-root cgroup, NOT a quota object, so a bare `ls | grep -c '^cpu\\.'` reads 3 here and that count is not the test. The contrast that IS the test: the PARENT app.slice has cgroup.controllers='cpu memory pids' and cpu.max='max 100000' (unlimited) and delegates cpu to none of its children - opencrabs.service, opencrabs-family.service and opencrabs-ops.service all read controllers='memory pids' with no cpu.max."
+          "evidence": "Read on agents 2026-10-26T06:05:51Z and re-read 06:10:00Z: unit cgroup.controllers='memory pids'; `cat cpu.max` -> No such file or directory; /sys/fs/cgroup/user.slice/user-0.slice/user@0.service/app.slice/cgroup.subtree_control='memory pids'; app.slice/cgroup.controllers='cpu memory pids'; user@0 subtree_control='cpu memory pids'. systemctl --user show opencrabs-ops.service -> CPUAccounting=yes, CPUWeight=[not set], CPUQuotaPerSecUSec=infinity, AllowedCPUs= (empty). No app.slice.d directory in either scope. journalctl --user --since 2026-10-25 | grep -Ei 'cpu controller|delegat' -> 0 lines. Prior reads: 2026-10-23T07:23:40Z cpu.max ABSENT; 2026-10-25T18:22:56Z cpu.max 'max 100000' with cpu.stat usage_usec 1642877746 nr_periods 0 nr_throttled 0 throttled_usec 0 nr_bursts 0. host-diag /usr/local/bin/host-diag at 2026-10-23T07:09:43Z: stdout '1042 87 1315' rc=1, captured as out=$(host-diag 2>&1); rc=$? — the separated form because it is shell-INDEPENDENT (bare echo \"$(cmd) rc=$?\" reports the command's status under bash and a false 0 under dash; /bin/sh here is dash). Thresholds from the script's own bytes: LOAD_MAX default 1000 (15-min loadavg x100), DISK_MAX 90, MEM_MIN_MB 80 (host-diag:24-26), compared at :121,:124,:132. Calibration p50 1.71 / p90 4.74 / p95 6.26 / p99 8.63 / max 12.99 over 671 sar ldavg-15 samples (vpn/docs/gatus-diagnostics.md:137, evidence/rework.md:37). Re-read 2026-11-21T22:16Z on agents: cgroup.controllers='memory pids'; cpu.max ABSENT; the only cpu.* entries in the cgroup directory are cpu.pressure, cpu.stat and cpu.stat.local - read-only informational files cgroup v2 exposes on every non-root cgroup, NOT a quota object, so a bare `ls | grep -c '^cpu\\.'` reads 3 here and that count is not the test. The contrast that IS the test: the PARENT app.slice has cgroup.controllers='cpu memory pids' and cpu.max='max 100000' (unlimited) and delegates cpu to none of its children - opencrabs.service, opencrabs-family.service and opencrabs-ops.service all read controllers='memory pids' with no cpu.max. Re-read 2026-11-22T20:19:35Z: /sys/fs/cgroup/user.slice/user-0.slice/user@0.service/app.slice/opencrabs-ops.service exists, cgroup.controllers -> 'memory pids', and 'cat cpu.max' -> No such file or directory. SIXTH absent window confirmed, identical in shape to the five before it."
         }
       ]
     },
@@ -2120,7 +2120,7 @@
       "profile": "ops",
       "repo": "/root/opencrabs",
       "skill": "/root/.opencrabs/profiles/ops/skills/opencrabs-dev/SKILL.md",
-      "skill_revision": "0.4.327",
+      "skill_revision": "0.4.330",
       "purpose": "Build and ship the OpenCrabs daemon that every lane on this box runs on, and author the process law those lanes follow: a gated source-to-swap pipeline, a versioned skill set, and a workers-ledger that records who holds what.",
       "zone": {
         "owns": [
@@ -2226,7 +2226,7 @@
           "session_id": "d18ce16a-75a0-447c-90c7-ab7dabce4411",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-21T21:38:36Z",
+          "bound_at": "2026-11-22T20:15:37Z",
           "announcements": []
         },
         {
@@ -2250,7 +2250,7 @@
           "session_id": "0117dd29-5f4b-4184-9bf4-d19dc74ac266",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-21T22:29:05Z",
+          "bound_at": "2026-11-22T19:45:22Z",
           "announcements": []
         },
         {
@@ -2298,7 +2298,7 @@
           "session_id": "462181e9-ad99-4163-bd3d-c983c48049a8",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-20T11:38:17Z",
+          "bound_at": "2026-11-22T12:02:36Z",
           "announcements": []
         },
         {
@@ -2310,7 +2310,7 @@
           "session_id": "2fbfb2f8-9b08-417a-aae8-c75edc1de1ea",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-21T00:16:55Z",
+          "bound_at": "2026-11-22T19:40:40Z",
           "announcements": []
         },
         {
@@ -2322,7 +2322,7 @@
           "session_id": "cbdfde4a-b3fe-457a-817b-5113b938f12d",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-21T21:44:12Z",
+          "bound_at": "2026-11-22T19:39:25Z",
           "announcements": []
         },
         {
@@ -2334,7 +2334,7 @@
           "session_id": "212b3c83-6659-49c8-9984-0cf849f769c1",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-21T21:51:29Z",
+          "bound_at": "2026-11-22T19:42:37Z",
           "announcements": []
         },
         {
@@ -2346,7 +2346,7 @@
           "session_id": "2fae1230-de9e-4fa5-aa24-822cf7188c3e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-21T22:35:58Z",
+          "bound_at": "2026-11-22T14:57:57Z",
           "announcements": []
         },
         {
@@ -2478,7 +2478,7 @@
           "session_id": "530c29ec-596e-43a4-9c7e-1b6dfc3cd870",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-17T03:10:38Z",
+          "bound_at": "2026-11-22T14:52:31Z",
           "announcements": []
         },
         {
@@ -2562,7 +2562,7 @@
           "session_id": "6cd8175f-fb27-4cf3-a390-971ff2519a47",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-12T10:33:58Z",
+          "bound_at": "2026-11-22T11:37:15Z",
           "announcements": []
         },
         {
@@ -2574,7 +2574,7 @@
           "session_id": "4b4463d5-381c-4458-aa0c-3cf199882084",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-15T23:51:15Z",
+          "bound_at": "2026-11-22T14:56:22Z",
           "announcements": []
         },
         {
@@ -2598,7 +2598,7 @@
           "session_id": "2ed8adeb-4784-4159-b68f-0e552490641e",
           "status": "resolved",
           "channel": "telegram",
-          "bound_at": "2026-11-20T04:18:53Z",
+          "bound_at": "2026-11-21T23:33:05Z",
           "announcements": []
         },
         {
@@ -2766,8 +2766,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T06:15:00+00:00",
-      "last_run_at": "2026-11-21T06:15:19Z",
+      "next_run_at": "2026-11-23T06:15:00+00:00",
+      "last_run_at": "2026-11-22T06:15:20Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2798,8 +2798,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T05:17:00+00:00",
-      "last_run_at": "2026-11-21T05:17:03Z",
+      "next_run_at": "2026-11-23T05:17:00+00:00",
+      "last_run_at": "2026-11-22T05:17:56Z",
       "deliver_to": "session:6ca0d547-4a72-4c29-ac10-967daa98af0a",
       "trigger_cmd": "/bin/bash /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/run_gate_harness.sh",
       "profile": "ops",
@@ -2814,8 +2814,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-21T23:15:00+00:00",
-      "last_run_at": "2026-11-21T22:45:32Z",
+      "next_run_at": "2026-11-22T20:45:00+00:00",
+      "last_run_at": "2026-11-22T20:15:37Z",
       "deliver_to": "session:6d921dca-fb0a-455b-bceb-dfb78dcf1f07",
       "trigger_cmd": "timeout 1800 /usr/bin/python3.14 /root/ai-antispam/scripts/loss_watch.py --state /root/.cache/ai-antispam/loss_watch.json; rc=$?; [ $rc -eq 124 ] && echo \"loss-watch: TIMEOUT after 1800s — slot released\"; exit $rc",
       "profile": "ops",
@@ -2830,8 +2830,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T07:00:00+00:00",
-      "last_run_at": "2026-11-21T07:01:00Z",
+      "next_run_at": "2026-11-23T07:00:00+00:00",
+      "last_run_at": "2026-11-22T07:00:30Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2846,8 +2846,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T06:15:00+00:00",
-      "last_run_at": "2026-11-21T06:15:29Z",
+      "next_run_at": "2026-11-23T06:15:00+00:00",
+      "last_run_at": "2026-11-22T06:15:21Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2878,8 +2878,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T00:00:00+00:00",
-      "last_run_at": "2026-11-21T00:00:42Z",
+      "next_run_at": "2026-11-23T00:00:00+00:00",
+      "last_run_at": "2026-11-22T00:00:02Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2894,8 +2894,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T00:07:00+00:00",
-      "last_run_at": "2026-11-21T18:07:02Z",
+      "next_run_at": "2026-11-23T00:07:00+00:00",
+      "last_run_at": "2026-11-22T18:07:54Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2910,8 +2910,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T06:30:00+00:00",
-      "last_run_at": "2026-11-21T06:31:38Z",
+      "next_run_at": "2026-11-23T06:30:00+00:00",
+      "last_run_at": "2026-11-22T06:30:24Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2926,8 +2926,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T05:50:00+00:00",
-      "last_run_at": "2026-11-21T05:50:05Z",
+      "next_run_at": "2026-11-23T05:50:00+00:00",
+      "last_run_at": "2026-11-22T05:51:00Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2942,8 +2942,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T00:40:00+00:00",
-      "last_run_at": "2026-11-21T18:40:03Z",
+      "next_run_at": "2026-11-23T00:40:00+00:00",
+      "last_run_at": "2026-11-22T18:40:56Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2958,8 +2958,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T12:00:00+00:00",
-      "last_run_at": "2026-11-21T12:00:12Z",
+      "next_run_at": "2026-11-23T12:00:00+00:00",
+      "last_run_at": "2026-11-22T12:00:58Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -2974,8 +2974,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T00:25:00+00:00",
-      "last_run_at": "2026-11-21T18:25:03Z",
+      "next_run_at": "2026-11-23T00:25:00+00:00",
+      "last_run_at": "2026-11-22T18:25:55Z",
       "deliver_to": null,
       "trigger_cmd": "out=$(timeout 25 /usr/bin/python3.14 -u /root/.opencrabs/profiles/ops/skills/ai-antispam/tools/triage_state_gate.py 2>&1); rc=$?; if [ \"$rc\" -ne 0 ]; then echo \"TRIAGE GATE FAILED (fail-open): gate exited rc=$rc\"; fi; printf '%s' \"$out\"",
       "profile": "ops",
@@ -3006,8 +3006,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T09:00:00+00:00",
-      "last_run_at": "2026-11-21T09:00:24Z",
+      "next_run_at": "2026-11-23T09:00:00+00:00",
+      "last_run_at": "2026-11-22T09:00:37Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -3054,8 +3054,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T05:00:00+00:00",
-      "last_run_at": "2026-11-21T05:00:00Z",
+      "next_run_at": "2026-11-23T05:00:00+00:00",
+      "last_run_at": "2026-11-22T05:00:54Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -3070,8 +3070,8 @@
       "enabled": 1,
       "set_goal": 1,
       "has_goal_template": true,
-      "next_run_at": "2026-11-22T00:10:00+00:00",
-      "last_run_at": "2026-11-21T18:10:02Z",
+      "next_run_at": "2026-11-23T00:10:00+00:00",
+      "last_run_at": "2026-11-22T18:10:55Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -3086,8 +3086,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T06:40:00+00:00",
-      "last_run_at": "2026-11-21T06:41:29Z",
+      "next_run_at": "2026-11-23T06:40:00+00:00",
+      "last_run_at": "2026-11-22T06:40:26Z",
       "deliver_to": "session:359fe71b-c7a1-420b-b856-acfb49939a7b",
       "trigger_cmd": null,
       "profile": "ops",
@@ -3102,8 +3102,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T00:23:00+00:00",
-      "last_run_at": "2026-11-21T18:23:03Z",
+      "next_run_at": "2026-11-23T00:23:00+00:00",
+      "last_run_at": "2026-11-22T18:23:55Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -3134,8 +3134,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T00:00:00+00:00",
-      "last_run_at": "2026-11-21T00:00:42Z",
+      "next_run_at": "2026-11-23T00:00:00+00:00",
+      "last_run_at": "2026-11-22T00:00:02Z",
       "deliver_to": null,
       "trigger_cmd": "P=$(XDG_RUNTIME_DIR=/run/user/0 systemctl --user show opencrabs.service -p MainPID --value 2>/dev/null); [ -z \"$P\" ] && { echo \"default daemon: no MainPID (unit down)\"; exit 0; }; [ ! -r /proc/$P/stat ] && { echo \"default daemon pid $P not readable\"; exit 0; }; A=$(awk '{print $14+$15}' /proc/$P/stat); sleep 5; B=$(awk '{print $14+$15}' /proc/$P/stat); D=$((B-A)); C=$(awk -v d=$D 'BEGIN{printf \"%.2f\", d/500}'); [ $D -gt 100 ] && echo \"default daemon BURNING: $D jiffies/5s (${C} core)\"; W=$(ls -la /proc/$P/fd/ 2>/dev/null | grep -c 'opencrabs.db-wal (deleted)'); [ \"$W\" -gt 0 ] && echo \"default daemon still on UNLINKED WAL inode\"; true",
       "profile": "ops",
@@ -3166,8 +3166,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T15:05:00+00:00",
-      "last_run_at": "2026-11-21T15:05:59Z",
+      "next_run_at": "2026-11-23T15:05:00+00:00",
+      "last_run_at": "2026-11-22T15:05:24Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -3182,8 +3182,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T06:05:00+00:00",
-      "last_run_at": "2026-11-21T06:05:07Z",
+      "next_run_at": "2026-11-23T06:05:00+00:00",
+      "last_run_at": "2026-11-22T06:05:01Z",
       "deliver_to": null,
       "trigger_cmd": null,
       "profile": "ops",
@@ -3198,8 +3198,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": true,
-      "next_run_at": "2026-11-22T00:05:00+00:00",
-      "last_run_at": "2026-11-21T18:05:02Z",
+      "next_run_at": "2026-11-23T00:05:00+00:00",
+      "last_run_at": "2026-11-22T18:05:54Z",
       "deliver_to": null,
       "trigger_cmd": "/root/vds-servers/tools/triage_preflight.py --delta --mark",
       "profile": "ops",
@@ -3406,8 +3406,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T09:00:00+00:00",
-      "last_run_at": "2026-11-21T09:00:24Z",
+      "next_run_at": "2026-11-23T09:00:00+00:00",
+      "last_run_at": "2026-11-22T09:00:38Z",
       "deliver_to": "session:e4f96a33-45ac-412e-8788-1b678cf2addb",
       "trigger_cmd": null,
       "profile": "ops",
@@ -3457,6 +3457,22 @@
       "next_run_at": "2027-11-20T21:10:00+00:00",
       "last_run_at": "2026-11-20T21:10:50Z",
       "deliver_to": "session:0117dd29-5f4b-4184-9bf4-d19dc74ac266",
+      "trigger_cmd": null,
+      "profile": "ops",
+      "owner": "opencrabs-dev",
+      "owner_basis": "deliver_to -> lane"
+    },
+    {
+      "id": "8fb99bdb-3945-450a-8a61-4ea1489170ea",
+      "name": "oc-detached-poll2-read",
+      "cron_expr": "15 6 23 Nov *",
+      "timezone": "UTC",
+      "enabled": 1,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-11-23T06:15:00+00:00",
+      "last_run_at": null,
+      "deliver_to": "session:d18ce16a-75a0-447c-90c7-ab7dabce4411",
       "trigger_cmd": null,
       "profile": "ops",
       "owner": "opencrabs-dev",
@@ -3822,10 +3838,26 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T06:20:00+00:00",
-      "last_run_at": "2026-11-21T06:21:01Z",
+      "next_run_at": "2026-11-23T06:20:00+00:00",
+      "last_run_at": "2026-11-22T06:20:21Z",
       "deliver_to": "session:0117dd29-5f4b-4184-9bf4-d19dc74ac266",
       "trigger_cmd": "cd /root/.opencrabs/profiles/ops/skills/opencrabs-dev && V=$(sed -n 's/^version: *//p' SKILL.md | head -1) && CL=$(grep -m1 -oE '^## v[0-9]+\\.[0-9]+\\.[0-9]+' CHANGELOG.md | sed 's/## v//') && CV=$(./tools/state/oc-ledger check-version 2>&1 | tail -1) && TAGS=$(git tag -l \"v$V\" | wc -l) && printf '%s version=%s changelog_newest=%s tag_count=%s check=%s\\n' \"$(date -u +%FT%TZ)\" \"$V\" \"$CL\" \"$TAGS\" \"$CV\" >> /root/.opencrabs/profiles/ops/opencrabs-dev/reviews/version-heartbeat.log && { if [ \"$V\" = \"$CL\" ] && [ \"$TAGS\" -ge 1 ] && printf '%s' \"$CV\" | grep -q '^ok'; then exit 0; else tail -1 /root/.opencrabs/profiles/ops/opencrabs-dev/reviews/version-heartbeat.log; fi; }",
+      "profile": "ops",
+      "owner": "opencrabs-dev",
+      "owner_basis": "deliver_to -> lane"
+    },
+    {
+      "id": "566ebe98-8d72-4d69-a104-1afe5c74ae23",
+      "name": "opencrabs-dev-805-truncation-watch",
+      "cron_expr": "25 */6 * * *",
+      "timezone": "UTC",
+      "enabled": 1,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-11-23T00:25:00+00:00",
+      "last_run_at": "2026-11-22T18:25:55Z",
+      "deliver_to": "session:cbdfde4a-b3fe-457a-817b-5113b938f12d",
+      "trigger_cmd": "L=/root/.opencrabs/profiles/ops/logs/opencrabs.$(date -u +%F); grep -hE 'WARN.*opencrabs::brain::agent::service::compaction: src/brain/agent/service/compaction\\.rs:[0-9]+: Hard truncation (cut|freed nothing)' \"$L\" 2>/dev/null | head -5",
       "profile": "ops",
       "owner": "opencrabs-dev",
       "owner_basis": "deliver_to -> lane"
@@ -3874,6 +3906,38 @@
       "last_run_at": "2026-11-19T00:40:20Z",
       "deliver_to": "session:cbdfde4a-b3fe-457a-817b-5113b938f12d",
       "trigger_cmd": "DB=/root/.opencrabs/profiles/ops/opencrabs.db; M=/tmp/886-watch.fired; [ -f \"$M\" ] && exit 0; sqlite3 -readonly \"$DB\" \"SELECT id||'|'||session_id||'|'||datetime(created_at,'unixepoch') FROM messages WHERE role='user' AND content LIKE '%CONTEXT COMPACTION%' AND created_at > 1795028827 ORDER BY created_at ASC LIMIT 1;\" > /tmp/886-watch.out 2>/dev/null; if [ -s /tmp/886-watch.out ]; then touch \"$M\"; cat /tmp/886-watch.out; fi",
+      "profile": "ops",
+      "owner": "opencrabs-dev",
+      "owner_basis": "deliver_to -> lane"
+    },
+    {
+      "id": "a1347278-f0d4-4f34-82a4-eb987ac100d2",
+      "name": "opencrabs-dev-943-tail-watch",
+      "cron_expr": "25 */6 * * *",
+      "timezone": "UTC",
+      "enabled": 0,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-11-22T12:25:00+00:00",
+      "last_run_at": null,
+      "deliver_to": "session:cbdfde4a-b3fe-457a-817b-5113b938f12d",
+      "trigger_cmd": "PAT='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+]+ +.*(INFO|WARN) .*opencrabs::brain::agent::(context|service::context): src/brain/agent/(service/)?context\\.rs:[0-9]+: (Compaction scope:|Compaction delta: dropping)'; for f in /root/.opencrabs/profiles/ops/logs/opencrabs.$(date -u +%Y-%m-%d) /root/.opencrabs/profiles/ops/logs/opencrabs.$(date -u -d yesterday +%Y-%m-%d); do [ -f \"$f\" ] && awk -v since=\"2026-11-22T09:41:22\" '$0 > since' \"$f\" | grep -E \"$PAT\"; done",
+      "profile": "ops",
+      "owner": "opencrabs-dev",
+      "owner_basis": "deliver_to -> lane"
+    },
+    {
+      "id": "a2e0ca70-bac9-4799-b584-7b48f6fd79e6",
+      "name": "opencrabs-dev-947-promote-watch",
+      "cron_expr": "25 */6 * * *",
+      "timezone": "UTC",
+      "enabled": 1,
+      "set_goal": 0,
+      "has_goal_template": false,
+      "next_run_at": "2026-11-23T00:25:00+00:00",
+      "last_run_at": "2026-11-22T18:25:55Z",
+      "deliver_to": "session:cbdfde4a-b3fe-457a-817b-5113b938f12d",
+      "trigger_cmd": "L=/root/.opencrabs/profiles/ops/logs/opencrabs.$(date -u +%F); grep -hE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.+]+ +INFO .*opencrabs::brain::agent::service::tool_loop: src/brain/agent/service/tool_loop\\.rs:[0-9]+: compaction: promoted [0-9]+ read skill' \"$L\" 2>/dev/null | grep -v 'Block 0: Text' | tail -5",
       "profile": "ops",
       "owner": "opencrabs-dev",
       "owner_basis": "deliver_to -> lane"
@@ -3934,8 +3998,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T06:05:00+00:00",
-      "last_run_at": "2026-11-21T20:37:04Z",
+      "next_run_at": "2026-11-23T06:05:00+00:00",
+      "last_run_at": "2026-11-22T06:05:01Z",
       "deliver_to": null,
       "trigger_cmd": "timeout 25 /root/avito-realty-bot/scripts/daily_broadcast.sh; rc=$?; echo \"launch_exit=$rc\"; exit $rc",
       "profile": "ops",
@@ -3982,8 +4046,8 @@
       "enabled": 1,
       "set_goal": 0,
       "has_goal_template": false,
-      "next_run_at": "2026-11-22T18:00:00+00:00",
-      "last_run_at": "2026-11-21T18:00:10Z",
+      "next_run_at": "2026-11-23T18:00:00+00:00",
+      "last_run_at": "2026-11-22T18:00:25Z",
       "deliver_to": "telegram:-1004286036984",
       "trigger_cmd": "python3 /root/.opencrabs/profiles/family/projects/tamara-raschety/cron_gate.py",
       "profile": "family",
