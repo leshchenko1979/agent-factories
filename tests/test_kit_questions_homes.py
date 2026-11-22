@@ -82,6 +82,23 @@ PARAMETER_LAYER: tuple[tuple[str, str], ...] = (
         r'^\s+#\s+\* entry\["subject"\] is CREATION-ONLY \(:\d+\): an immutable, set-level',
         "#627's second rationale line, same per-home line reference as the entry above.",
     ),
+    (
+        r'^\s+"tool": (?:PROG|LOG_TOOL),$',
+        "the unified-log `tool` KEY -- the template logs its literal PROG; the executing "
+        "copy logs LOG_TOOL, the register key that must not follow argv[0] (T-2). The "
+        "VALUE is a per-home parameter; the field is the same on both.",
+    ),
+    (
+        r'^\s+"pid": os\.getpid\(\),$',
+        "the unified-log row's `pid` field -- an ADDITION on the executing copy (T-2), "
+        "which journals the writer's pid so a row can be attributed to a process; the "
+        "shipped copy's schema carries no pid.",
+    ),
+    (
+        r'^\s+ck\(bool\(rows\) and rows\[0\]\.get\("tool"\) == (?:PROG|LOG_TOOL)$',
+        "the unified-log selftest's expected key -- each home asserts the name it logs "
+        "(PROG literal on the template, LOG_TOOL on the executing copy).",
+    ),
 )
 
 # ---------------------------------------------------------------------------
@@ -219,6 +236,38 @@ LOCAL_BLOCKS: tuple[dict, ...] = (
             r'^\s+return None, "renderer source missing"$',
         ),
         "executing": None,
+    },
+    {
+        "label": (
+            "the executing copy's T-2 REGISTER-KEY CONSTANT -- an ADDITION on one side only "
+            "(measured 2026-11-22; the profile copy carries it from 2026-11-20T01:48Z, and "
+            "nothing upstreamed it). The shipped template's `PROG` is a LITERAL, so "
+            "`tool: PROG` is already the canonical register key and needs no pin; the "
+            "executing copy DERIVES PROG from argv[0] (it is invoked as `oc-questions`), "
+            "which is exactly what makes a second constant necessary. Declared so the "
+            "pin's rationale is bounded, not so a missing constant would pass."
+        ),
+        "template": None,
+        "executing": (
+            r"^# T-2: the name the REGISTER knows us by\.",
+            r"^LOG_TOOL = ",
+        ),
+    },
+    {
+        "label": (
+            "the executing copy's OWN T-2 SELFTEST -- 26 lines the shipped home does not "
+            "carry at all: it copies the tool to a differently-named path and requires the "
+            "logged `tool` field to stay the register key rather than follow argv[0]. An "
+            "ADDITION on one side only, and EXECUTING-ONLY for a reason: the template's "
+            "literal PROG cannot follow argv[0], so the mutant this leg kills does not "
+            "exist there. The region ends at the leg's own last assertion, so it cannot "
+            "grow without a new declaration."
+        ),
+        "template": None,
+        "executing": (
+            r"^\s+# T-2\. THE PIN:",
+            r'^\s+% \(arows\[0\]\.get\("tool"\) if arows else None\)\)$',
+        ),
     },
 )
 
