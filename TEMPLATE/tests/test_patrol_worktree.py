@@ -33,6 +33,9 @@ from patrol_fixtures import (  # noqa: F401
     _NO_RULING_EXEMPTIONS,
     _OWES_NONE_PROMPT,
     _PROBE_TARGET,
+    _PROBE_WRITE_BOUNDARY_CHAT,
+    _PROBE_WRITE_BOUNDARY_LANES,
+    _PROBE_WRITE_BOUNDARY_SCANNED,
     _delivery,
     _duty_leg,
     _duty_row,
@@ -241,6 +244,15 @@ def test_probe_an_empty_prefix_set_makes_the_three_cron_legs_NOT_RUN() -> None:
             board_intake_exemptions_path=_NO_INTAKE_EXEMPTIONS,
         # #507: the criterion-path store, injected for the same reason.
         criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
+        # #671: the write-boundary leg reads the LIVE daemon log and the live
+        # `session_bindings`, so an arm that injects nothing is asserting whichever sessions
+        # this box happened to run in the last 24h. Same defect and same fix as the NOT RUN
+        # arm above; `log_dir` does not reach this leg, which resolves its own profile root.
+        write_boundary_events_fn=lambda: ([], dict(_PROBE_WRITE_BOUNDARY_SCANNED)),
+        write_boundary_bindings_fn=lambda: ([], []),
+        write_boundary_fragment_fn=lambda: {"lanes": list(_PROBE_WRITE_BOUNDARY_LANES)},
+        write_boundary_profile_root=Path(tmp) / "logs",
+        write_boundary_chat=_PROBE_WRITE_BOUNDARY_CHAT,
         )
         text = out.getvalue()
 
@@ -586,6 +598,18 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
         criterion_exemptions_fn=lambda: _NO_CRITERION_EXEMPTIONS,
         # #655: the board-intake exemption store, injected for the same reason.
         board_intake_exemptions_path=_NO_INTAKE_EXEMPTIONS,
+        # #671: the write-boundary leg's reads are injected here too. It reads the LIVE
+        # daemon log and the LIVE `session_bindings`, so before this every NOT RUN arm was
+        # asserting whichever sessions this box happened to have run in the last window --
+        # the verdict belonged to the daemon log, not to the fixture. `log_dir` does NOT
+        # reach this leg (it resolves its own `profile_root` from the registry), so the
+        # population has to be stated here or it is read live. ALL FIVE are passed: a
+        # partial injection still reads live state through the ones left out.
+        write_boundary_events_fn=lambda: ([], dict(_PROBE_WRITE_BOUNDARY_SCANNED)),
+        write_boundary_bindings_fn=lambda: ([], []),
+        write_boundary_fragment_fn=lambda: {"lanes": list(_PROBE_WRITE_BOUNDARY_LANES)},
+        write_boundary_profile_root=_EMPTY_LOG_DIR,
+        write_boundary_chat=_PROBE_WRITE_BOUNDARY_CHAT,
         ruling_scope_fn=lambda: RUNNER.UNBOUNDED_SCOPE,
         ruling_exemptions_path=_NO_RULING_EXEMPTIONS,
     )
@@ -594,6 +618,73 @@ def test_a_NOT_RUN_worktree_leg_RENDERS_its_reason_never_a_clean_verdict() -> No
     assert "LEG worktree — NOT RUN" in text, text
     assert "NOT RUN: the worktree census could not be read — probe" in text, text
     assert "worktrees: " not in text, text
+
+def test_the_write_boundary_read_never_reaches_the_daemon_log() -> None:
+    """#671 criterion 3: the log reader is never called, asserted by making it RAISE.
+
+    The arm above asserts a NOT RUN render over a full `main()` run. Before #671 it injected
+    only the worktree leg, so the write-boundary leg read the LIVE daemon log and the live
+    `session_bindings`, and the probe's verdict was a function of who happened to write to
+    this repo inside the 24-hour window -- measured, two unbound sessions that had written
+    11.5 hours BEFORE the commit under test reddened it.
+
+    A green result cannot prove absence here: the live population is clean on a quiet box,
+    which is exactly how this survived. So the reader is patched to RAISE and the arm still
+    requires a verdict -- if the leg reaches for it, the run breaks or the call is recorded.
+    """
+    calls: list[object] = []
+
+    def _boom(*a, **k):
+        calls.append(a)
+        raise AssertionError("the write-boundary leg reached the LIVE daemon log reader")
+
+    with mock.patch.object(RUNNER, "daemon_log_paths", _boom):
+        issues = [_issue(1, "OPEN")]
+        rows = _swept(("intake", "#1", 1), ("ruling", "#1", 2))
+        rc, out, err = _run(issues, rows)
+
+    assert rc in (0, 1), out + err
+    assert "Traceback" not in out + err, out + err
+    assert "LEG write-boundary" in out, out
+    assert calls == [], f"the live daemon log was read {len(calls)} time(s): {calls!r}"
+
+def test_an_uninjected_write_boundary_read_reds_naming_the_foreign_writer() -> None:
+    """#671 criterion 2: prove the injection is LOAD-BEARING, not decoration.
+
+    Driven with the write-boundary inputs deliberately withheld (the pre-#671 state) and the
+    live readers replaced by a foreign session writing under this repo. The arm must RED and
+    name that session; with the injection in place the same foreign writer is never seen.
+    """
+    foreign = "aaaa1111-bbbb-2222-cccc-333344445555"
+    events = [{"session": foreign, "kind": "tracked", "path": "/tools/x.py"}]
+    scanned = dict(_PROBE_WRITE_BOUNDARY_SCANNED)
+
+    with mock.patch.object(RUNNER, "daemon_log_paths", lambda root: ([Path("/x/log")], [])), \
+         mock.patch.object(RUNNER, "daemon_write_events",
+                           lambda paths, repo=None, since=None: (list(events), dict(scanned))):
+        uninjected = RUNNER.write_boundary_leg(
+            read_at="probe", slug="owner/repo",
+            # The root is STATED so this arm cannot go NOT RUN for want of a manifest
+            # declaration: a member tree whose fleet manifest carries no `profile_root`
+            # would otherwise skip the very read this arm exists to exercise.
+            profile_root=Path("/probe-root"),
+            bindings_fn=lambda: ([], []),
+            fragment_fn=lambda: {"lanes": list(_PROBE_WRITE_BOUNDARY_LANES)},
+            factory_chat=_PROBE_WRITE_BOUNDARY_CHAT,
+        )
+
+    assert uninjected["status"] == "ASSERTED", uninjected
+    assert any(foreign in p for p in uninjected["problems"]), uninjected["problems"]
+
+    injected = RUNNER.write_boundary_leg(
+        read_at="probe", slug="owner/repo",
+        events_fn=lambda: ([], dict(scanned)),
+        bindings_fn=lambda: ([], []),
+        fragment_fn=lambda: {"lanes": list(_PROBE_WRITE_BOUNDARY_LANES)},
+        factory_chat=_PROBE_WRITE_BOUNDARY_CHAT,
+    )
+    assert injected["status"] == "ASSERTED", injected
+    assert injected["problems"] == [], injected["problems"]
 
 def test_the_worktree_leg_is_the_thing_that_moves_the_report() -> None:
     """The NON-VACUITY control: the same fixture with and without a hazard.
