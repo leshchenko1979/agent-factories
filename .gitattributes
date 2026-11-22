@@ -1,0 +1,19 @@
+# Append-only JSONL stores — merged by git's built-in `union` driver.
+#
+# Both files below are append-only by construction: every row is written by one writer
+# (`tools/ledger.py append`, `tools/insights.py`) under a lock, so two lanes appending
+# concurrently can never have EDITED the same line — they can only have added different
+# lines at the same end. That is precisely the shape `union` merges: it takes lines from
+# BOTH sides instead of emitting conflict markers, so a concurrent-append conflict resolves
+# to both rows, never to a file carrying `<<<<<<<` inside a JSON stream.
+#
+# The driver removes the CONFLICT, not the RACE. A row's `n` is assigned at append, so two
+# branches that both took the same `n` still owe a re-mint of one of them
+# (`docs/instruments/ledger.md` §9.1) — a union merge will happily keep both rows, and two
+# rows sharing an `n` is a defect the merge cannot see.
+#
+# `union` is built in: no `merge.union.driver` config is needed, and setting one to `true`
+# would REPLACE the 3-way union with a no-op that keeps whichever side git happened to
+# check out. The attribute alone is the whole mechanism.
+evidence/ledger.jsonl merge=union
+evidence/insights.jsonl merge=union
