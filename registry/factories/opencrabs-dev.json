@@ -25,7 +25,7 @@
     {
       "name": "Build and swap a new daemon binary",
       "audience": "agent",
-      "entry": "the Editor lane's oc-deploy ship --sha <full-sha> --execute",
+      "entry": "the Editor lane's oc-build ship --sha <full-sha> --execute",
       "cadence": "on request"
     },
     {

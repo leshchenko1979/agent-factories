@@ -536,7 +536,7 @@ Attribution basis: deliver_to -> lane.
 
 | name | audience | entry | cadence |
 |---|---|---|---|
-| Build and swap a new daemon binary | agent | the Editor lane's oc-deploy ship --sha <full-sha> --execute | on request |
+| Build and swap a new daemon binary | agent | the Editor lane's oc-build ship --sha <full-sha> --execute | on request |
 | Process-law amendment | agent | session_notify to the HQ lane | on request |
 | CLI tool defect intake and fix | agent | session_notify to the Toolsmith lane | on request |
 | Version release and ledger consensus | agent | oc-ledger sync --version <v> | per skill version bump |

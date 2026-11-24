@@ -114,6 +114,11 @@ FOREIGN_TOOLCHAIN_NAMES = (
     "oc-ledger", "oc-prchecks", "oc-order-validate", "oc-deploy", "oc-attrib",
     "oc-snap", "oc-drift-check", "oc-notify-fanout", "oc-wt",
 )
+# `oc-deploy` STAYS in the tuple above because the tuple is a DATED MEASUREMENT -- the nine
+# names measured absent at the #85 ruling, cross-referenced at `evidence/rework.md:339` -- and
+# not a claim about what is live. It was deleted from its owning factory on 2026-11-24
+# (#168 cut 5), so it now resolves on no host BY DESIGN; the name must not be read as a live
+# tool. (The `evidence/` record is dated and is not edited.)
 
 # The PREFIX is what this leg matches. The nine names above are the MEASUREMENT, not the
 # scope: a gate keyed to a fixed list admits the next member of the family, which is how
@@ -207,10 +212,12 @@ def _probe_foreign_toolchain() -> list[str]:
             )
 
         # A declared token must NOT be what the prefix matched -- i.e. the declared set is a
-        # real allowlist, not a blanket mute.
-        (root / "dirty.md").write_text("oc-cause-count: 1\nand `oc-deploy ship`\n")
+        # real allowlist, not a blanket mute. The foreign example is `oc-snap`, not
+        # `oc-deploy`: oc-deploy was deleted upstream on 2026-11-24 and exists nowhere, and a
+        # probe must not showcase a dead tool as if it were live.
+        (root / "dirty.md").write_text("oc-cause-count: 1\nand `oc-snap ship`\n")
         got, _ = foreign_toolchain_problems(root)
-        if len(got) != 1 or "oc-deploy" not in got[0]:
+        if len(got) != 1 or "oc-snap" not in got[0]:
             problems.append(
                 f"probe: a declared token muted a real one on the same file, got {got}"
             )
